@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { MoreVertical } from "lucide-react";
 import { CustomerProfileForm } from "@/components/customer-profile-form";
-import { AiSuggestions } from "@/components/ai-suggestions";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,11 +40,8 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                 <Button>Save Changes</Button>
             </PageHeader>
             <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-3 space-y-6">
                    <CustomerProfileForm customer={customer} allLabels={labels} />
-                </div>
-                <div className="lg:col-span-1 space-y-6">
-                    <AiSuggestions customer={customer} availableLabels={labels} />
                 </div>
             </div>
         </>
