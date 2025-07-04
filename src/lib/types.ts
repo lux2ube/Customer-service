@@ -13,10 +13,14 @@ export interface Client {
     avatarUrl: string;
 }
 
-// Placeholder for future implementation
 export interface Transaction {
     id: string;
-    // ... other fields
+    createdAt: string;
+    type: 'Deposit' | 'Withdraw';
+    clientId: string;
+    clientName: string; // Denormalized for easy display in tables
+    amount: number;
+    status: 'Pending' | 'Confirmed' | 'Cancelled';
 }
 
 // Placeholder for future implementation

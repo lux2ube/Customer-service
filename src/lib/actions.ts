@@ -21,6 +21,11 @@ export type FormState = {
         name?: string[];
         phone?: string[];
         verificationStatus?: string[];
+        // Transaction form errors
+        type?: string[];
+        clientId?: string[];
+        amount?: string[];
+        status?: string[];
     }
 } | undefined
 
@@ -101,4 +106,57 @@ export async function deleteClientAction(id: string) {
         console.error('Failed to delete client:', e);
     }
     redirect('/clients');
+}
+
+
+const TransactionSchema = z.object({
+    type: z.enum(['Deposit', 'Withdraw'], { required_error: "Transaction type is required." }),
+    clientId: z.string().min(1, 'Client is required.'),
+    amount: z.coerce.number({invalid_type_error: "Amount must be a number."}).gt(0, 'Amount must be positive.'),
+    status: z.enum(['Pending', 'Confirmed', 'Cancelled'], { required_error: "Status is required." }),
+});
+
+export async function saveTransaction(prevState: FormState, formData: FormData): Promise<FormState> {
+    const validatedFields = TransactionSchema.safeParse({
+        type: formData.get('type'),
+        clientId: formData.get('clientId'),
+        amount: formData.get('amount'),
+        status: formData.get('status'),
+    });
+
+    if (!validatedFields.success) {
+        return {
+            message: 'Failed to create transaction. Please check the fields.',
+            errors: validatedFields.error.flatten().fieldErrors,
+        }
+    }
+
+    try {
+        // Get client name for denormalization
+        const clientRef = ref(db, `users/${validatedFields.data.clientId}`);
+        const snapshot = await get(clientRef);
+        if (!snapshot.exists()) {
+            return { message: 'Invalid client selected.' };
+        }
+        const clientName = snapshot.val().name;
+
+        // Prepare transaction data
+        const transactionData = {
+            ...validatedFields.data,
+            clientName,
+            createdAt: new Date().toISOString(),
+        };
+
+        const transactionsRef = ref(db, 'transactions');
+        const newTransactionRef = push(transactionsRef);
+        await set(newTransactionRef, transactionData);
+
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'Failed to save transaction.';
+        return { message: `Database Error: ${errorMessage}` };
+    }
+    
+    revalidatePath('/transactions');
+    revalidatePath('/'); // For dashboard KPIs
+    redirect('/transactions');
 }
