@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -49,6 +50,10 @@ export function TransactionsTable() {
         default: return 'secondary';
     }
   }
+  
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  }
 
   return (
     <div className="rounded-md border bg-card">
@@ -83,7 +88,7 @@ export function TransactionsTable() {
                     {new Intl.NumberFormat().format(tx.amount)} {tx.currency}
                   </TableCell>
                    <TableCell className="font-mono">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(tx.amount_usd || 0)}
+                    {formatCurrency(tx.amount_usd || 0)}
                   </TableCell>
                   <TableCell>
                       <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>

@@ -1,4 +1,5 @@
 
+
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
 
@@ -43,9 +44,9 @@ export interface Transaction {
     cryptoWalletName?: string; // for display
     amount: number;
     currency: 'YER' | 'USD' | 'SAR' | 'USDT';
-    amount_usd?: number;
-    fee_usd?: number;
-    amount_usdt?: number;
+    amount_usd: number;
+    fee_usd: number;
+    amount_usdt: number;
     attachment_url?: string;
     notes?: string;
     remittance_number?: string;
@@ -61,7 +62,7 @@ export interface Account {
     name: string;
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
-    parentId?: string;
+    parentId?: string | null;
     // Balance fields will be calculated properties, not stored directly
 }
 

@@ -6,6 +6,7 @@ import { db } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import type { Client } from './types';
 
 export type FormState =
   | {
@@ -229,30 +230,50 @@ const TransactionSchema = z.object({
     hash: z.string().optional(),
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
-    flags: z.string().optional(),
+    flags: z.string().optional().transform(v => v ? [v] : []), // Store as array
 });
 
 
 export async function createTransaction(transactionId: string | null, prevState: TransactionFormState, formData: FormData) {
-    const validatedFields = TransactionSchema.safeParse(Object.fromEntries(formData.entries()));
+    const rawData = Object.fromEntries(formData.entries());
+    const validatedFields = TransactionSchema.safeParse(rawData);
     
     if (!validatedFields.success) {
+        console.log(validatedFields.error.flatten().fieldErrors);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',
         };
     }
 
+    // Get Client Name for denormalization
+    let clientName = '';
+    try {
+        const clientRef = ref(db, `clients/${validatedFields.data.clientId}`);
+        const snapshot = await get(clientRef);
+        if (snapshot.exists()) {
+            clientName = (snapshot.val() as Client).name;
+        }
+    } catch (e) {
+        // Could fail, but we can proceed without the name
+        console.error("Could not fetch client name for transaction");
+    }
+
+    const dataToSave = {
+        ...validatedFields.data,
+        clientName, // Add client name to the record
+    };
+
     try {
         if (transactionId) {
             const transactionRef = ref(db, `transactions/${transactionId}`);
             const snapshot = await get(transactionRef);
             const existingData = snapshot.val();
-            await update(transactionRef, { ...existingData, ...validatedFields.data });
+            await update(transactionRef, { ...existingData, ...dataToSave });
         } else {
             const newTransactionRef = push(ref(db, 'transactions'));
             await set(newTransactionRef, {
-                ...validatedFields.data,
+                ...dataToSave,
                 createdAt: new Date().toISOString(),
             });
         }
@@ -285,7 +306,7 @@ const AccountSchema = z.object({
   name: z.string().min(1, { message: "Account name is required." }),
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
-  parentId: z.string().optional(),
+  parentId: z.string().optional().nullable(), // Allow empty string or null
 });
 
 export async function createAccount(prevState: AccountFormState, formData: FormData) {
@@ -294,7 +315,7 @@ export async function createAccount(prevState: AccountFormState, formData: FormD
         name: formData.get('name'),
         type: formData.get('type'),
         isGroup: formData.get('isGroup') === 'on',
-        parentId: formData.get('parentId'),
+        parentId: formData.get('parentId') || null,
     });
 
     if (!validatedFields.success) {

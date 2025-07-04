@@ -26,8 +26,9 @@ function SubmitButton() {
 export function AccountForm({ account, parentAccounts }: { account?: Account, parentAccounts: Account[] }) {
     const { toast } = useToast();
     
-    const action = createAccount;
-    const [state, formAction] = useFormState<AccountFormState, FormData>(action, undefined);
+    // The action needs to handle both create and update. Since the ID is part of the form,
+    // we can use the same server action for both.
+    const [state, formAction] = useFormState<AccountFormState, FormData>(createAccount, undefined);
     
     React.useEffect(() => {
         if (state?.message) {
@@ -72,9 +73,10 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="parentId">Parent Account (Group)</Label>
-                            <Select name="parentId" defaultValue={account?.parentId}>
+                            <Select name="parentId" defaultValue={account?.parentId || ''}>
                                 <SelectTrigger><SelectValue placeholder="Select a parent account..."/></SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="">None</SelectItem>
                                     {parentAccounts.map(parent => (
                                         <SelectItem key={parent.id} value={parent.id}>{parent.name} ({parent.id})</SelectItem>
                                     ))}

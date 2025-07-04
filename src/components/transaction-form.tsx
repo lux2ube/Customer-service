@@ -25,7 +25,7 @@ import { Separator } from './ui/separator';
 function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} size="lg">
+        <Button type="submit" disabled={pending} size="lg" className="w-full">
             {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Transaction</>}
         </Button>
     );
@@ -41,12 +41,12 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
 
-    // Form state
+    // Form state that drives calculations
     const [amount, setAmount] = React.useState(transaction?.amount || 0);
     const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
     const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>(transaction?.type || 'Deposit');
     
-    // Calculated values
+    // Calculated values for the preview
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
@@ -84,13 +84,9 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         };
     }, []);
 
+    // Perform calculations whenever an input changes
     React.useEffect(() => {
-        if (!settings || !amount || !currency) {
-            setUsdValue(0);
-            setFee(0);
-            setUsdtAmount(0);
-            return;
-        };
+        if (!settings) return;
 
         let calculatedUsdValue = 0;
         switch(currency) {
@@ -104,7 +100,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         let calculatedFee = 0;
         if (transactionType === 'Deposit') {
             calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
-        } else {
+        } else { // Withdraw
             calculatedFee = settings.withdraw_fee_fixed || 0;
         }
         setFee(calculatedFee);
@@ -114,22 +110,29 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     }, [amount, currency, transactionType, settings]);
 
     React.useEffect(() => {
-        if (state?.message && state.errors) {
+        if (state?.message) {
             toast({ variant: 'destructive', title: 'Error Recording Transaction', description: state.message });
         }
     }, [state, toast]);
+
+    const handleBankAccountSelect = (accountId: string) => {
+        const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
+        if (selectedAccount) {
+            setCurrency(selectedAccount.currency);
+        }
+    }
 
     return (
         <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>{transaction ? 'Edit' : 'New'} Transaction</CardTitle>
+                        <CardTitle>Required Data</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="date">Date</Label>
+                                <Label htmlFor="date">Date and Time</Label>
                                 <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
@@ -144,7 +147,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             </div>
                             <div className="space-y-2">
                                 <Label>Transaction Type</Label>
-                                <Select name="type" required defaultValue={transaction?.type} onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
+                                <Select name="type" required defaultValue={transactionType} onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
                                     <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Deposit">Deposit</SelectItem>
@@ -155,17 +158,23 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         </div>
                         <div className="space-y-2">
                            <Label>Client</Label>
-                            <DataCombobox name="clientId" data={clients} placeholder="Select a client..." defaultValue={transaction?.clientId} />
+                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
                             {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                <Label>Bank Account</Label>
-                                <DataCombobox name="bankAccountId" data={bankAccounts} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} />
+                                <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
                             </div>
                             <div className="space-y-2">
                                <Label>Crypto Wallet</Label>
-                                <Select name="cryptoWalletId" defaultValue={transaction?.cryptoWalletId}><SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger></Select>
+                                <Select name="cryptoWalletId" defaultValue={transaction?.cryptoWalletId}>
+                                    <SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {/* This would be populated from a 'crypto_wallets' collection */}
+                                        <SelectItem value="wallet1">Main USDT Wallet (BEP-20)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 
@@ -177,8 +186,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             </div>
                             <div className="space-y-2">
                                 <Label>Currency</Label>
-                                <Select name="currency" required defaultValue={transaction?.currency} onValueChange={v => setCurrency(v)}>
-                                    <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
+                                <Select name="currency" required value={currency} onValueChange={setCurrency}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="USD">USD</SelectItem>
                                         <SelectItem value="YER">YER</SelectItem>
@@ -231,7 +240,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                                 </Select>
                             </div>
                              <div className="space-y-2">
-                                <Label>Flags</Label>
+                                <Label>Need Flag Review</Label>
                                 <Select name="flags" defaultValue={transaction?.flags ? transaction.flags[0] : undefined}>
                                      <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                     <SelectContent>
@@ -249,6 +258,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                 <Card>
                     <CardHeader>
                         <CardTitle>Payment Preview</CardTitle>
+                        <CardDescription>Values are calculated automatically.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className='flex justify-between items-center'>
@@ -265,9 +275,10 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             <Label className="font-bold">Final USDT Amount</Label>
                             <span className="font-mono text-xl font-bold">${usdtAmount.toFixed(2)}</span>
                         </div>
-                        <input type="hidden" name="amount_usd" value={usdValue} />
-                        <input type="hidden" name="fee_usd" value={fee} />
-                        <input type="hidden" name="amount_usdt" value={usdtAmount} />
+                        {/* Hidden inputs to pass calculated values to the server action */}
+                        <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
+                        <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
+                        <input type="hidden" name="amount_usdt" value={usdtAmount.toFixed(2)} />
                     </CardContent>
                     <CardFooter>
                         <SubmitButton />
@@ -278,7 +289,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     );
 }
 
-function DataCombobox({ name, data, placeholder, defaultValue }: { name: string, data: {id: string, name: string}[], placeholder: string, defaultValue?: string }) {
+function DataCombobox({ name, data, placeholder, defaultValue, onSelect }: { name: string, data: {id: string, name: string}[], placeholder: string, defaultValue?: string, onSelect?: (value: string) => void }) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(defaultValue || "");
 
@@ -302,7 +313,11 @@ function DataCombobox({ name, data, placeholder, defaultValue }: { name: string,
                 <CommandItem
                     key={d.id}
                     value={`${d.id} ${d.name}`}
-                    onSelect={() => { setValue(d.id); setOpen(false); }}>
+                    onSelect={() => { 
+                        setValue(d.id);
+                        setOpen(false);
+                        onSelect?.(d.id);
+                    }}>
                     <Check className={cn("mr-2 h-4 w-4", value === d.id ? "opacity-100" : "opacity-0")}/>
                     <span>{d.name}</span>
                 </CommandItem>
