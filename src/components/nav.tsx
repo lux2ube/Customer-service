@@ -8,23 +8,19 @@ import {
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Home,
+  LayoutDashboard,
   Users,
-  Handshake,
-  DollarSign,
-  ListTodo,
-  UsersRound,
+  ArrowRightLeft,
+  Landmark,
   BarChart3,
   Settings,
 } from 'lucide-react';
 
 const menuItems = [
-  { href: '/', label: 'Dashboard', icon: Home },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
-  { href: '/leads', label: 'Leads', icon: Handshake },
-  { href: '/deals', label: 'Deals', icon: DollarSign },
-  { href: '/tasks', label: 'Tasks', icon: ListTodo },
-  { href: '/team', label: 'Team', icon: UsersRound },
+  { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
+  { href: '/bank-accounts', label: 'Bank Accounts', icon: Landmark },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

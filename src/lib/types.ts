@@ -1,20 +1,26 @@
 export interface Client {
     id: string;
     name: string;
-    email: string;
     phone: string;
-    address: string;
-    notes: string;
+    kycDocumentUrl?: string;
+    verificationStatus: 'Active' | 'Inactive';
+    reviewFlags: {
+        aml: boolean;
+        volume: boolean;
+        scam: boolean;
+    };
     created_at: string;
     avatarUrl: string;
 }
 
-export interface Lead {
+// Placeholder for future implementation
+export interface Transaction {
     id: string;
-    name: string;
-    email: string;
-    phone: string;
-    source: string;
-    status: 'New' | 'Contacted' | 'Qualified' | 'Unqualified';
-    created_at: string;
+    // ... other fields
+}
+
+// Placeholder for future implementation
+export interface BankAccount {
+    id: string;
+    // ... other fields
 }

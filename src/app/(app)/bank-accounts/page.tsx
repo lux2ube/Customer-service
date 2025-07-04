@@ -1,19 +1,19 @@
 import { PageHeader } from "@/components/page-header";
 
-export default function TeamPage() {
+export default function BankAccountsPage() {
     return (
         <>
             <PageHeader 
-                title="Team / Users"
-                description="Manage team members and roles."
+                title="Bank Accounts"
+                description="Manage your company's bank accounts."
             />
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm h-full">
                 <div className="flex flex-col items-center gap-1 text-center">
                     <h3 className="text-2xl font-bold tracking-tight">
-                        Team module is under construction.
+                        Bank Accounts module is under construction.
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                        Come back soon to manage your team.
+                        Come back soon to manage bank accounts.
                     </p>
                 </div>
             </div>

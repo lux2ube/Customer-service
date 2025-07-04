@@ -9,15 +9,15 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { Client } from '@/lib/types';
-import { Search } from 'lucide-react';
+import { Search, Shield, Flag } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export function ClientsTable() {
   const [allClients, setAllClients] = React.useState<Client[]>([]);
@@ -52,7 +52,7 @@ export function ClientsTable() {
     }
     return allClients.filter(client =>
         client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.email.toLowerCase().includes(searchTerm.toLowerCase())
+        (client.phone && client.phone.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [allClients, searchTerm]);
 
@@ -62,7 +62,7 @@ export function ClientsTable() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or email..."
+            placeholder="Search by name or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 w-full"
@@ -77,13 +77,15 @@ export function ClientsTable() {
               <TableHead className="w-[80px]">Avatar</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Phone</TableHead>
+              <TableHead>Verification</TableHead>
+              <TableHead>Flags</TableHead>
               <TableHead>Created At</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   Loading data from Firebase...
                 </TableCell>
               </TableRow>
@@ -98,15 +100,27 @@ export function ClientsTable() {
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">{client.name}</div>
-                    <div className="text-sm text-muted-foreground">{client.email}</div>
                   </TableCell>
                   <TableCell>{client.phone}</TableCell>
+                  <TableCell>
+                      <Badge variant={client.verificationStatus === 'Active' ? 'default' : 'secondary'}>
+                          <Shield className="mr-1 h-3 w-3" />
+                          {client.verificationStatus}
+                      </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                        {client.reviewFlags?.aml && <Badge variant="destructive"><Flag className="h-3 w-3" /></Badge>}
+                        {client.reviewFlags?.volume && <Badge variant="destructive"><Flag className="h-3 w-3" /></Badge>}
+                        {client.reviewFlags?.scam && <Badge variant="destructive"><Flag className="h-3 w-3" /></Badge>}
+                    </div>
+                  </TableCell>
                   <TableCell>{client.created_at ? format(new Date(client.created_at), 'PPP') : 'N/A'}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   No clients found in your database.
                 </TableCell>
               </TableRow>

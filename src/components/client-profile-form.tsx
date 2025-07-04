@@ -4,14 +4,15 @@ import { Client } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label as UiLabel } from './ui/label';
-import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { X, UploadCloud, Save } from 'lucide-react';
+import { X, UploadCloud, Save, Shield, Flag } from 'lucide-react';
 import React from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { saveClient, type FormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 
 interface ClientProfileFormProps {
   client: Client;
@@ -36,7 +37,7 @@ function SubmitButton({ isCreating }: { isCreating: boolean }) {
 }
 
 export function ClientProfileForm({ client, isCreating = false }: ClientProfileFormProps) {
-    const [kycFilePreview, setKycFilePreview] = React.useState<string | null>(null);
+    const [kycFilePreview, setKycFilePreview] = React.useState<string | null>(client.kycDocumentUrl || null);
     const { toast } = useToast();
     
     const saveClientWithId = saveClient.bind(null, client.id);
@@ -77,8 +78,8 @@ export function ClientProfileForm({ client, isCreating = false }: ClientProfileF
         
         <Card>
             <CardHeader>
-                <CardTitle>Profile</CardTitle>
-                <CardDescription>Basic client information.</CardDescription>
+                <CardTitle>Client Profile</CardTitle>
+                <CardDescription>Basic client information and status.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
@@ -97,24 +98,23 @@ export function ClientProfileForm({ client, isCreating = false }: ClientProfileF
                             {state?.errors?.name && <p id="name-error" className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                         <div className="space-y-2">
-                            <UiLabel htmlFor="email">Email</UiLabel>
-                            <Input id="email" name="email" type="email" defaultValue={client.email} aria-describedby="email-error" />
-                             {state?.errors?.email && <p id="email-error" className="text-sm text-destructive">{state.errors.email[0]}</p>}
-                        </div>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <UiLabel htmlFor="phone">Phone</UiLabel>
-                            <Input id="phone" name="phone" type="tel" defaultValue={client.phone} />
-                        </div>
-                        <div className="space-y-2">
-                            <UiLabel htmlFor="address">Address</UiLabel>
-                            <Input id="address" name="address" defaultValue={client.address} />
+                            <UiLabel htmlFor="phone">Phone Number</UiLabel>
+                            <Input id="phone" name="phone" type="tel" defaultValue={client.phone} aria-describedby="phone-error" />
+                             {state?.errors?.phone && <p id="phone-error" className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
                     </div>
                      <div className="space-y-2">
-                        <UiLabel htmlFor="notes">Notes</UiLabel>
-                        <Textarea id="notes" name="notes" defaultValue={client.notes} rows={4} />
+                        <UiLabel htmlFor="verificationStatus">Verification Status</UiLabel>
+                        <Select name="verificationStatus" defaultValue={client.verificationStatus}>
+                            <SelectTrigger id="verificationStatus" aria-describedby="status-error">
+                                <SelectValue placeholder="Select a status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Active">Active</SelectItem>
+                                <SelectItem value="Inactive">Inactive</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {state?.errors?.verificationStatus && <p id="status-error" className="text-sm text-destructive">{state.errors.verificationStatus[0]}</p>}
                     </div>
                 </div>
             </CardContent>
@@ -149,6 +149,27 @@ export function ClientProfileForm({ client, isCreating = false }: ClientProfileF
                     <Input id="kyc-upload" type="file" className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, application/pdf"/>
                 </div>
                 )}
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Review Flags</CardTitle>
+                <CardDescription>Mark client for specific reviews if needed.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="aml" name="aml" defaultChecked={client.reviewFlags?.aml} />
+                    <UiLabel htmlFor="aml" className="font-normal">Flag for AML Review</UiLabel>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="volume" name="volume" defaultChecked={client.reviewFlags?.volume}/>
+                    <UiLabel htmlFor="volume" className="font-normal">Flag for High Volume</UiLabel>
+                </div>
+                 <div className="flex items-center space-x-2">
+                    <Checkbox id="scam" name="scam" defaultChecked={client.reviewFlags?.scam}/>
+                    <UiLabel htmlFor="scam" className="font-normal">Flag for Potential Scam</UiLabel>
+                </div>
             </CardContent>
         </Card>
         

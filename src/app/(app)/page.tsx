@@ -3,15 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, DollarSign, TrendingUp, ListTodo, Handshake } from "lucide-react";
+import { Users, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 
 export default function DashboardPage() {
     const [clientCount, setClientCount] = useState<number>(0);
-    const [leadCount, setLeadCount] = useState<number>(0);
     const [loadingClients, setLoadingClients] = useState(true);
-    const [loadingLeads, setLoadingLeads] = useState(true);
 
     useEffect(() => {
         const usersRef = ref(db, 'users');
@@ -20,16 +18,9 @@ export default function DashboardPage() {
             setLoadingClients(false);
         });
 
-        const leadsRef = ref(db, 'leads');
-        const unsubscribeLeads = onValue(leadsRef, (snapshot) => {
-            setLeadCount(snapshot.size);
-            setLoadingLeads(false);
-        });
-
         // Cleanup subscription on unmount
         return () => {
             unsubscribeClients();
-            unsubscribeLeads();
         };
     }, []);
 
@@ -37,9 +28,9 @@ export default function DashboardPage() {
         <>
             <PageHeader
                 title="Dashboard"
-                description="Overview: metrics, recent activity, quick actions"
+                description="Overview of your financial operations."
             />
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
@@ -56,36 +47,22 @@ export default function DashboardPage() {
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-                        <Handshake className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Total Deposit</CardTitle>
+                        <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        {loadingLeads ? (
-                             <div className="text-2xl font-bold">-</div>
-                        ) : (
-                            <div className="text-2xl font-bold">{leadCount}</div>
-                        )}
-                        <p className="text-xs text-muted-foreground">Live count from Firebase</p>
+                        <div className="text-2xl font-bold">$1,250,350</div>
+                        <p className="text-xs text-muted-foreground">Calculated from transactions</p>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Total Withdraw</CardTitle>
+                        <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">$25,350</div>
-                        <p className="text-xs text-muted-foreground">+12.1% from last month</p>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Tasks Due</CardTitle>
-                        <ListTodo className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">5</div>
-                        <p className="text-xs text-muted-foreground">2 overdue</p>
+                        <div className="text-2xl font-bold">$850,120</div>
+                        <p className="text-xs text-muted-foreground">Calculated from transactions</p>
                     </CardContent>
                 </Card>
             </div>

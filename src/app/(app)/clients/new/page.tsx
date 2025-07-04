@@ -7,10 +7,13 @@ export default function NewClientPage() {
     const newClient: Client = {
         id: '',
         name: '',
-        email: '',
         phone: '',
-        address: '',
-        notes: '',
+        verificationStatus: 'Inactive',
+        reviewFlags: {
+            aml: false,
+            volume: false,
+            scam: false,
+        },
         created_at: '',
         avatarUrl: 'https://placehold.co/100x100.png',
     };
