@@ -20,10 +20,10 @@ export default function ClientsPage() {
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm h-full">
                 <div className="flex flex-col items-center gap-1 text-center">
                     <h3 className="text-2xl font-bold tracking-tight">
-                        Client module is being restored.
+                        This module is under construction.
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                        Client data will be displayed here.
+                        You will be able to manage your clients here.
                     </p>
                 </div>
             </div>

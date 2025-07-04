@@ -14,6 +14,8 @@ import {
   Landmark,
   BarChart3,
   Settings,
+  BookCopy,
+  Network,
 } from 'lucide-react';
 
 const menuItems = [
@@ -21,6 +23,10 @@ const menuItems = [
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
   { href: '/bank-accounts', label: 'Bank Accounts', icon: Landmark },
+  { type: 'divider' },
+  { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
+  { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
+  { type: 'divider' },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -30,20 +36,25 @@ export function Nav() {
 
   return (
     <SidebarMenu>
-      {menuItems.map((item) => (
-        <SidebarMenuItem key={item.href}>
-          <SidebarMenuButton
-            asChild
-            isActive={pathname.startsWith(item.href) && (item.href !== '/' || pathname === '/')}
-            tooltip={item.label}
-          >
-            <Link href={item.href}>
-              <item.icon />
-              <span>{item.label}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ))}
+      {menuItems.map((item, index) => {
+        if (item.type === 'divider') {
+          return <hr key={`divider-${index}`} className="my-2 border-sidebar-border" />;
+        }
+        return (
+          <SidebarMenuItem key={item.href}>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname.startsWith(item.href) && (item.href !== '/' || pathname === '/')}
+              tooltip={item.label}
+            >
+              <Link href={item.href!}>
+                <item.icon />
+                <span>{item.label}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )
+      })}
     </SidebarMenu>
   );
 }
