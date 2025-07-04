@@ -17,16 +17,7 @@ const ClientSchema = z.object({
 
 export type FormState = {
     message: string;
-    errors?: {
-        name?: string[];
-        phone?: string[];
-        verificationStatus?: string[];
-        // Transaction form errors
-        type?: string[];
-        clientId?: string[];
-        amount?: string[];
-        status?: string[];
-    }
+    errors?: z.ZodError['formErrors']['fieldErrors'];
 } | undefined
 
 export async function saveClient(id: string | null, prevState: FormState, formData: FormData): Promise<FormState> {
@@ -110,40 +101,58 @@ export async function deleteClientAction(id: string) {
 
 
 const TransactionSchema = z.object({
-    type: z.enum(['Deposit', 'Withdraw'], { required_error: "Transaction type is required." }),
+    transactionDate: z.string().min(1, 'Date is required.'),
+    type: z.enum(['Deposit', 'Withdraw']),
     clientId: z.string().min(1, 'Client is required.'),
-    amount: z.coerce.number({invalid_type_error: "Amount must be a number."}).gt(0, 'Amount must be positive.'),
-    status: z.enum(['Pending', 'Confirmed', 'Cancelled'], { required_error: "Status is required." }),
+    bankAccountId: z.string().min(1, "Bank Account is required.").optional(),
+    amount: z.coerce.number().gt(0, 'Amount must be positive.'),
+    cryptoWalletId: z.string().optional(),
+    usdtAmount: z.coerce.number().optional(),
+    notes: z.string().optional(),
+    remittanceNumber: z.string().optional(),
+    cryptoHash: z.string().optional(),
+    clientWalletAddress: z.string().optional(),
+    status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
+    flagAml: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
+    flagKyc: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
+    flagOther: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
 });
 
+
 export async function saveTransaction(prevState: FormState, formData: FormData): Promise<FormState> {
-    const validatedFields = TransactionSchema.safeParse({
-        type: formData.get('type'),
-        clientId: formData.get('clientId'),
-        amount: formData.get('amount'),
-        status: formData.get('status'),
-    });
+    // Note: File upload (transactionImage) is not handled in this server action yet.
+    const validatedFields = TransactionSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
+        console.log(validatedFields.error.flatten().fieldErrors);
         return {
             message: 'Failed to create transaction. Please check the fields.',
             errors: validatedFields.error.flatten().fieldErrors,
         }
     }
+    
+    const { flagAml, flagKyc, flagOther, ...txData } = validatedFields.data;
 
     try {
         // Get client name for denormalization
-        const clientRef = ref(db, `users/${validatedFields.data.clientId}`);
+        const clientRef = ref(db, `users/${txData.clientId}`);
         const snapshot = await get(clientRef);
         if (!snapshot.exists()) {
             return { message: 'Invalid client selected.' };
         }
         const clientName = snapshot.val().name;
 
+        // TODO: Get Bank Account currency and Crypto wallet for denormalization
+        
         // Prepare transaction data
         const transactionData = {
-            ...validatedFields.data,
+            ...txData,
             clientName,
+            reviewFlags: {
+                aml: flagAml,
+                kyc: flagKyc,
+                other: flagOther,
+            },
             createdAt: new Date().toISOString(),
         };
 

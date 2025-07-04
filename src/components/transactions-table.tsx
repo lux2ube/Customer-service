@@ -32,7 +32,7 @@ export function TransactionsTable() {
         const transactionsList: Transaction[] = Object.keys(data).map(key => ({
           id: key,
           ...data[key]
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by most recent
+        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by internal creation date
         setAllTransactions(transactionsList);
       } else {
         setAllTransactions([]);
@@ -100,7 +100,7 @@ export function TransactionsTable() {
             ) : filteredTransactions.length > 0 ? (
               filteredTransactions.map(tx => (
                 <TableRow key={tx.id} className="cursor-pointer" onClick={() => { /* Placeholder for future navigation to tx detail */}}>
-                  <TableCell>{tx.createdAt ? format(new Date(tx.createdAt), 'PPP p') : 'N/A'}</TableCell>
+                  <TableCell>{tx.transactionDate ? format(new Date(tx.transactionDate), 'PPP') : 'N/A'}</TableCell>
                   <TableCell>
                     <div className="font-medium">{tx.clientName}</div>
                   </TableCell>

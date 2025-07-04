@@ -11,20 +11,45 @@ export interface Client {
     };
     created_at: string;
     avatarUrl: string;
+    walletAddress?: string;
+}
+
+export interface BankAccount {
+    id: string;
+    name: string;
+    currency: 'YER' | 'USD' | 'SAR';
+}
+
+export interface CryptoWallet {
+    id: string;
+    name: string;
+    address: string;
 }
 
 export interface Transaction {
     id: string;
-    createdAt: string;
+    transactionDate: string;
     type: 'Deposit' | 'Withdraw';
     clientId: string;
-    clientName: string; // Denormalized for easy display in tables
+    clientName: string; // Denormalized for easy display
+    bankAccountId?: string;
     amount: number;
-    status: 'Pending' | 'Confirmed' | 'Cancelled';
-}
+    currency?: 'YER' | 'USD' | 'SAR'; // Denormalized from bank account
+    cryptoWalletId?: string;
+    usdtAmount?: number;
+    exchangeRate?: number;
+    fee?: number;
+    transactionImageUrl?: string;
+    notes?: string;
 
-// Placeholder for future implementation
-export interface BankAccount {
-    id: string;
-    // ... other fields
+    remittanceNumber?: string;
+    cryptoHash?: string;
+    clientWalletAddress?: string;
+    status: 'Pending' | 'Confirmed' | 'Cancelled';
+    reviewFlags?: {
+        aml: boolean;
+        kyc: boolean;
+        other: boolean;
+    };
+    createdAt: string; // Internal timestamp for sorting
 }
