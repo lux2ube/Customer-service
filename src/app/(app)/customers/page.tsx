@@ -1,19 +1,15 @@
 import { PageHeader } from "@/components/page-header";
 import { CustomersTable } from "@/components/customers-table";
-import { getCustomers, getLabels } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import Link from "next/link";
 
-export default async function CustomersPage() {
-    const customers = await getCustomers();
-    const labels = await getLabels();
-
+export default function CustomersPage() {
     return (
         <>
             <PageHeader 
                 title="Customers"
-                description="View, search, and manage your customers."
+                description="View, search, and manage your customers in real-time."
             >
                 <Button asChild>
                     <Link href="/customers/new">
@@ -22,7 +18,7 @@ export default async function CustomersPage() {
                     </Link>
                 </Button>
             </PageHeader>
-            <CustomersTable customers={customers} labels={labels} />
+            <CustomersTable />
         </>
     );
 }

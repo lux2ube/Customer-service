@@ -5,20 +5,6 @@ export interface Customer {
     phone: string;
     address: string;
     notes: string;
-    labels: string[]; // array of label IDs
-    createdAt: string;
-    lastSeen: string;
+    created_at: string;
     avatarUrl: string;
-}
-
-export interface Label {
-    id: string;
-    name: string;
-    color: string; // hex color
-}
-
-export interface List {
-    id: string;
-    name: string;
-    customerIds: string[]; // array of customer IDs
 }

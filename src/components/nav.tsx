@@ -10,15 +10,11 @@ import Link from 'next/link';
 import {
   Home,
   Users,
-  List,
-  Tags,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/lists', label: 'Lists', icon: List },
-  { href: '/labels', label: 'Labels', icon: Tags },
 ];
 
 export function Nav() {

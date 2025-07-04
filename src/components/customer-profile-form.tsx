@@ -1,12 +1,11 @@
 'use client';
 
-import { Customer, Label } from '@/lib/types';
+import { Customer } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label as UiLabel } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { X, UploadCloud, Save } from 'lucide-react';
 import React from 'react';
@@ -16,7 +15,6 @@ import { useToast } from '@/hooks/use-toast';
 
 interface CustomerProfileFormProps {
   customer: Customer;
-  allLabels: Label[];
   isCreating?: boolean;
 }
 
@@ -37,10 +35,14 @@ function SubmitButton({ isCreating }: { isCreating: boolean }) {
     )
 }
 
-export function CustomerProfileForm({ customer, allLabels, isCreating = false }: CustomerProfileFormProps) {
-    const [currentLabels, setCurrentLabels] = React.useState<string[]>(customer.labels);
+export function CustomerProfileForm({ customer, isCreating = false }: CustomerProfileFormProps) {
     const [kycFilePreview, setKycFilePreview] = React.useState<string | null>(null);
     const { toast } = useToast();
+    
+    // Bind the customer ID to the server action
+    const saveCustomerWithId = saveCustomer.bind(null, customer.id);
+    const [state, formAction] = useFormState<FormState, FormData>(saveCustomerWithId, undefined);
+
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -56,27 +58,10 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
             }
             toast({
                 title: "File Selected",
-                description: `${file.name} is ready. In a real app, this would be uploaded upon saving.`,
+                description: `${file.name} is ready for upload. Note: File upload is not implemented in this prototype.`,
             });
         }
     };
-    
-    const labelMap = React.useMemo(() => {
-        return allLabels.reduce((acc, label) => {
-          acc[label.id] = label;
-          return acc;
-        }, {} as Record<string, Label>);
-      }, [allLabels]);
-
-    const toggleLabel = (labelId: string) => {
-        setCurrentLabels(prev => 
-            prev.includes(labelId) ? prev.filter(id => id !== labelId) : [...prev, labelId]
-        );
-    };
-    
-    const availableLabelsToAdd = allLabels.filter(l => !currentLabels.includes(l.id));
-
-    const [state, formAction] = useFormState<FormState, FormData>(saveCustomer, undefined);
 
     React.useEffect(() => {
         if (state?.message && state.errors) {
@@ -90,10 +75,6 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
 
   return (
     <form action={formAction} className="space-y-6">
-        {!isCreating && <input type="hidden" name="id" value={customer.id} />}
-        {currentLabels.map(labelId => (
-          <input type="hidden" name="labels" key={labelId} value={labelId} />
-        ))}
         
         <Card>
             <CardHeader>
@@ -135,41 +116,6 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
                      <div className="space-y-2">
                         <UiLabel htmlFor="notes">Notes</UiLabel>
                         <Textarea id="notes" name="notes" defaultValue={customer.notes} rows={4} />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader>
-                <CardTitle>Labels</CardTitle>
-                <CardDescription>Categorize this customer with labels.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                    <UiLabel>Current Labels</UiLabel>
-                    <div className="flex flex-wrap gap-2">
-                        {currentLabels.length > 0 ? currentLabels.map(labelId => (
-                            labelMap[labelId] ?
-                            <Badge key={labelId} variant="secondary" className="text-sm py-1 px-3 flex items-center gap-2" style={{ backgroundColor: labelMap[labelId]?.color, color: '#000' }}>
-                                {labelMap[labelId]?.name}
-                                <button type="button" onClick={() => toggleLabel(labelId)} className="rounded-full hover:bg-black/10 p-0.5">
-                                    <X className="h-3 w-3" />
-                                </button>
-                            </Badge>
-                            : null
-                        )) : <p className="text-sm text-muted-foreground">No labels assigned.</p>}
-                    </div>
-
-                    <UiLabel>Available Labels</UiLabel>
-                    <div className="flex flex-wrap gap-2">
-                        {availableLabelsToAdd.map(label => (
-                            <button type="button" key={label.id} onClick={() => toggleLabel(label.id)}>
-                                <Badge variant="outline" className="text-sm py-1 px-3 hover:bg-secondary cursor-pointer">
-                                    + {label.name}
-                                </Badge>
-                            </button>
-                        ))}
                     </div>
                 </div>
             </CardContent>

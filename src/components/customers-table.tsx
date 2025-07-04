@@ -9,60 +9,52 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import type { Customer, Label } from '@/lib/types';
-import { Search, ListFilter } from 'lucide-react';
+import type { Customer } from '@/lib/types';
+import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { format } from 'date-fns';
 
-interface CustomersTableProps {
-  customers: Customer[];
-  labels: Label[];
-}
-
-export function CustomersTable({ customers, labels }: CustomersTableProps) {
+export function CustomersTable() {
+  const [allCustomers, setAllCustomers] = React.useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [labelFilters, setLabelFilters] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const router = useRouter();
 
-  const labelMap = React.useMemo(() => {
-    return labels.reduce((acc, label) => {
-      acc[label.id] = label;
-      return acc;
-    }, {} as Record<string, Label>);
-  }, [labels]);
+  React.useEffect(() => {
+    const usersRef = ref(db, 'users/');
+    const unsubscribe = onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const customersList: Customer[] = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setAllCustomers(customersList);
+      } else {
+        setAllCustomers([]);
+      }
+      setLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
 
   const filteredCustomers = React.useMemo(() => {
-    return customers.filter(customer => {
-      const matchesSearch =
+    if (!searchTerm) {
+      return allCustomers;
+    }
+    return allCustomers.filter(customer =>
         customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.email.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesLabels =
-        labelFilters.length === 0 ||
-        labelFilters.every(labelId => customer.labels.includes(labelId));
-
-      return matchesSearch && matchesLabels;
-    });
-  }, [customers, searchTerm, labelFilters]);
-  
-  const toggleLabelFilter = (labelId: string) => {
-    setLabelFilters(prev =>
-      prev.includes(labelId)
-        ? prev.filter(id => id !== labelId)
-        : [...prev, labelId]
+        customer.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  };
+  }, [allCustomers, searchTerm]);
 
   return (
     <div className="w-full">
@@ -74,75 +66,48 @@ export function CustomersTable({ customers, labels }: CustomersTableProps) {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 w-full"
+            disabled={loading}
           />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <ListFilter className="h-4 w-4" />
-              Filter Labels
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Filter by label</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {labels.map(label => (
-              <DropdownMenuCheckboxItem
-                key={label.id}
-                checked={labelFilters.includes(label.id)}
-                onCheckedChange={() => toggleLabelFilter(label.id)}
-              >
-                {label.name}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
       <div className="rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[80px]">Avatar</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Labels</TableHead>
-              <TableHead>Last Seen</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Created At</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredCustomers.length > 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  Loading data from Firebase...
+                </TableCell>
+              </TableRow>
+            ) : filteredCustomers.length > 0 ? (
               filteredCustomers.map(customer => (
                 <TableRow key={customer.id} onClick={() => router.push(`/customers/${customer.id}`)} className="cursor-pointer">
                   <TableCell>
                     <Avatar>
                       <AvatarImage src={customer.avatarUrl} alt={customer.name} />
-                      <AvatarFallback>{customer.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{customer.name ? customer.name.charAt(0) : '?'}</AvatarFallback>
                     </Avatar>
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">{customer.name}</div>
                     <div className="text-sm text-muted-foreground">{customer.email}</div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {customer.labels.map(labelId => (
-                        labelMap[labelId] ? 
-                        <Badge key={labelId} variant="secondary" style={{
-                           backgroundColor: labelMap[labelId]?.color, 
-                           color: '#000'
-                        }}>
-                          {labelMap[labelId]?.name}
-                        </Badge>
-                        : null
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>{new Date(customer.lastSeen).toLocaleDateString()}</TableCell>
+                  <TableCell>{customer.phone}</TableCell>
+                  <TableCell>{customer.created_at ? format(new Date(customer.created_at), 'PPP') : 'N/A'}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center">
-                  No customers found.
+                  No customers found in your database.
                 </TableCell>
               </TableRow>
             )}

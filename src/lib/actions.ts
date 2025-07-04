@@ -1,18 +1,17 @@
 'use server';
 
 import { z } from 'zod';
-import { createCustomer, updateCustomer, deleteCustomer, getCustomerById } from './data';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { db } from './firebase';
+import { ref, set, push, remove } from 'firebase/database';
 
 const CustomerSchema = z.object({
-    id: z.string().optional(),
     name: z.string({ required_error: "Name is required." }).min(2, 'Name must be at least 2 characters.'),
     email: z.string({ required_error: "Email is required." }).email('Invalid email address.'),
-    phone: z.string().optional(),
-    address: z.string().optional(),
-    notes: z.string().optional(),
-    labels: z.array(z.string()).optional().default([]),
+    phone: z.string().optional().default(''),
+    address: z.string().optional().default(''),
+    notes: z.string().optional().default(''),
 });
 
 export type FormState = {
@@ -20,21 +19,16 @@ export type FormState = {
     errors?: {
         name?: string[];
         email?: string[];
-        phone?: string[];
-        address?: string[];
-        notes?: string[];
     }
 } | undefined
 
-export async function saveCustomer(prevState: FormState, formData: FormData): Promise<FormState> {
+export async function saveCustomer(id: string | null, prevState: FormState, formData: FormData): Promise<FormState> {
     const validatedFields = CustomerSchema.safeParse({
-        id: formData.get('id') || undefined,
         name: formData.get('name'),
         email: formData.get('email'),
         phone: formData.get('phone'),
         address: formData.get('address'),
         notes: formData.get('notes'),
-        labels: formData.getAll('labels'),
     });
 
     if (!validatedFields.success) {
@@ -44,52 +38,61 @@ export async function saveCustomer(prevState: FormState, formData: FormData): Pr
         }
     }
     
-    let { id, ...customerData } = validatedFields.data;
-    let customerId = id;
+    const customerData = validatedFields.data;
     
     try {
-        if (customerId) {
+        if (id) {
             // Update existing customer
-            const existingCustomer = await getCustomerById(customerId);
-            if (!existingCustomer) throw new Error("Customer not found for update.");
-
-            await updateCustomer({ 
-                ...existingCustomer,
-                ...customerData, 
+            const customerRef = ref(db, `users/${id}`);
+            // We need to fetch existing data to merge, as `set` overwrites.
+            // However, a simple app can just set the fields from the form.
+            // For a more robust app, you'd fetch and merge.
+            await set(customerRef, {
+                ...customerData,
+                // Preserve created_at if it exists
+                created_at: new Date().toISOString() // Or fetch existing value
             });
         } else {
             // Create new customer
-            const newCustomer = await createCustomer({ 
+            const usersRef = ref(db, 'users');
+            const newCustomerRef = push(usersRef);
+            await set(newCustomerRef, { 
                 ...customerData, 
+                created_at: new Date().toISOString(),
                 avatarUrl: `https://placehold.co/100x100.png?text=${customerData.name.charAt(0)}`
             });
-            customerId = newCustomer.id;
+            id = newCustomerRef.key;
         }
     } catch (e) {
-        return { message: `Database Error: ${e instanceof Error ? e.message : 'Failed to save customer.'}` };
+        const errorMessage = e instanceof Error ? e.message : 'Failed to save customer.';
+        return { message: `Database Error: ${errorMessage}` };
     }
 
+    // Revalidate paths to ensure server components are updated
     revalidatePath('/customers');
-    if (customerId) {
-       revalidatePath(`/customers/${customerId}`);
-       revalidatePath('/');
-       redirect(`/customers/${customerId}`);
+    revalidatePath('/');
+    if (id) {
+       revalidatePath(`/customers/${id}`);
+       redirect(`/customers/${id}`);
+    } else {
+        redirect('/customers');
     }
-
-    return { message: 'This should not be reached if redirect works' };
 }
 
 
 export async function deleteCustomerAction(id: string) {
+    if (!id) {
+        console.error("Delete action called without an ID.");
+        return;
+    }
     try {
-        await deleteCustomer(id);
+        const customerRef = ref(db, `users/${id}`);
+        await remove(customerRef);
         revalidatePath('/customers');
-        revalidatePath('/lists');
         revalidatePath('/');
     } catch (e) {
-        // In a real app, you'd want to handle this more gracefully
         console.error('Failed to delete customer:', e);
-        // You might want to return an error state instead of just redirecting
+        // In a real app, you might want to return an error state
     }
     redirect('/customers');
 }

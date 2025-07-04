@@ -1,5 +1,7 @@
-import { getCustomerById, getLabels } from "@/lib/data";
-import { notFound } from "next/navigation";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { notFound, useParams } from 'next/navigation';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { MoreVertical } from "lucide-react";
@@ -11,12 +13,48 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DeleteCustomerDialog } from "@/components/delete-customer-dialog";
-  
+import type { Customer } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
-    const customer = await getCustomerById(params.id);
-    const labels = await getLabels();
+export default function CustomerDetailPage() {
+    const params = useParams();
+    const id = params.id as string;
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [loading, setLoading] = useState(true);
 
+    useEffect(() => {
+        if (!id) return;
+
+        const customerRef = ref(db, `users/${id}`);
+        const unsubscribe = onValue(customerRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setCustomer({ id: snapshot.key, ...snapshot.val() });
+            } else {
+                setCustomer(null);
+            }
+            setLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+    }, [id]);
+
+    if (loading) {
+        return (
+            <>
+                <PageHeader 
+                    title={<Skeleton className="h-8 w-48" />}
+                    description={<Skeleton className="h-4 w-64" />}
+                />
+                <div className="space-y-6">
+                   <Skeleton className="h-96 w-full" />
+                </div>
+            </>
+        );
+    }
+    
     if (!customer) {
         notFound();
     }
@@ -25,7 +63,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         <>
             <PageHeader 
                 title={customer.name}
-                description={`Customer since ${new Date(customer.createdAt).toLocaleDateString()}`}
+                description={`Customer since ${new Date(customer.created_at).toLocaleDateString()}`}
             >
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -34,7 +72,6 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Add to List</DropdownMenuItem>
                         <DeleteCustomerDialog customerId={customer.id}>
                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
                                 Delete Customer
@@ -44,7 +81,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                 </DropdownMenu>
             </PageHeader>
             <div className="space-y-6">
-                <CustomerProfileForm customer={customer} allLabels={labels} />
+                <CustomerProfileForm customer={customer} />
             </div>
         </>
     );

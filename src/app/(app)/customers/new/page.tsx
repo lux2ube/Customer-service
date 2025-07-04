@@ -1,11 +1,8 @@
 import { PageHeader } from "@/components/page-header";
 import { CustomerProfileForm } from "@/components/customer-profile-form";
-import { getLabels } from "@/lib/data";
 import { Customer } from "@/lib/types";
 
-export default async function NewCustomerPage() {
-    const labels = await getLabels();
-
+export default function NewCustomerPage() {
     // Create a blank customer object for the form
     const newCustomer: Customer = {
         id: '',
@@ -14,9 +11,7 @@ export default async function NewCustomerPage() {
         phone: '',
         address: '',
         notes: '',
-        labels: [],
-        createdAt: '',
-        lastSeen: '',
+        created_at: '',
         avatarUrl: 'https://placehold.co/100x100.png',
     };
 
@@ -27,7 +22,7 @@ export default async function NewCustomerPage() {
                 description="Fill in the details to create a new customer profile."
             />
             <div className="space-y-6">
-                <CustomerProfileForm customer={newCustomer} allLabels={labels} isCreating={true} />
+                <CustomerProfileForm customer={newCustomer} isCreating={true} />
             </div>
         </>
     );
