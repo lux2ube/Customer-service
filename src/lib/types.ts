@@ -1,30 +1,53 @@
-export type AccountType = 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
+export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
+export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None';
 
-export interface Account {
-    id: string; // e.g. "101"
-    name: string; // e.g. "Cash - YER"
-    type: AccountType;
-    isGroup: boolean; // To identify group headers
-    balance?: number; // Will be calculated
+export interface Client {
+    id: string;
+    name: string;
+    phone: string;
+    kyc_document_url?: string;
+    verification_status: VerificationStatus;
+    review_flags: ReviewFlag[];
+    createdAt: string;
 }
 
-export interface JournalEntry {
+export interface BankAccount {
+    id: string;
+    name: string;
+    currency: 'YER' | 'USD' | 'SAR';
+    createdAt: string;
+}
+
+export interface CryptoWallet {
+    id: string;
+    name: string;
+    currency: 'USDT';
+    address: string;
+    createdAt: string;
+}
+
+
+export interface Transaction {
     id: string;
     date: string;
-    description: string;
-    debit_account: string; // Account ID
-    credit_account: string; // Account ID
+    type: 'Deposit' | 'Withdraw';
+    clientId: string;
+    clientName?: string; // For display
+    bankAccountId?: string;
+    bankAccountName?: string; // for display
+    cryptoWalletId?: string;
+    cryptoWalletName?: string; // for display
     amount: number;
     currency: 'YER' | 'USD' | 'SAR' | 'USDT';
-    exchange_rate?: number;
-    usd_value?: number;
+    amount_usd?: number;
     fee_usd?: number;
-    usdt_amount?: number;
-    status: 'pending' | 'confirmed' | 'cancelled' | 'flagged';
-    flags?: ('AML' | 'KYC' | 'Manual Review')[];
-    hash?: string;
-    wallet_address?: string;
+    amount_usdt?: number;
     attachment_url?: string;
-    added_by?: string;
-    createdAt: string; // Internal timestamp
+    notes?: string;
+    remittance_number?: string;
+    hash?: string;
+    client_wallet_address?: string;
+    status: 'Pending' | 'Confirmed' | 'Cancelled';
+    flags: ('AML' | 'KYC' | 'Other')[];
+    createdAt: string;
 }

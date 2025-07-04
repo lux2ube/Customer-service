@@ -8,7 +8,7 @@ export default function SettingsPage() {
     return (
         <>
             <PageHeader 
-                title="Accounting Settings"
+                title="Settings"
                 description="Manage currencies, exchange rates, fees, and other system preferences."
             />
             <div className="grid gap-6 lg:grid-cols-2">
