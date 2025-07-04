@@ -1,10 +1,11 @@
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
-export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None';
+export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
 
 export interface Client {
     id: string;
     name: string;
     phone: string;
+    kyc_type?: 'ID' | 'Passport';
     kyc_document_url?: string;
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];
@@ -14,7 +15,9 @@ export interface Client {
 export interface BankAccount {
     id: string;
     name: string;
+    account_number?: string;
     currency: 'YER' | 'USD' | 'SAR';
+    status: 'Active' | 'Inactive';
     createdAt: string;
 }
 

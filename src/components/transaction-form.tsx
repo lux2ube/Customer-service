@@ -1,0 +1,304 @@
+'use client';
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Button } from './ui/button';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown } from 'lucide-react';
+import React from 'react';
+import { useFormState, useFormStatus } from 'react-dom';
+import { createTransaction, type TransactionFormState } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { Textarea } from './ui/textarea';
+import type { Client, BankAccount, Settings } from '@/lib/types';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { Separator } from './ui/separator';
+
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending} size="lg">
+            {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Transaction</>}
+        </Button>
+    );
+}
+
+export function TransactionForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useFormState<TransactionFormState, FormData>(createTransaction, undefined);
+    const [date, setDate] = React.useState<Date | undefined>(new Date());
+    const [clients, setClients] = React.useState<Client[]>([]);
+    const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+    const [settings, setSettings] = React.useState<Settings | null>(null);
+
+    // Form state
+    const [amount, setAmount] = React.useState(0);
+    const [currency, setCurrency] = React.useState('USD');
+    const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>('Deposit');
+    
+    // Calculated values
+    const [usdValue, setUsdValue] = React.useState(0);
+    const [fee, setFee] = React.useState(0);
+    const [usdtAmount, setUsdtAmount] = React.useState(0);
+
+    React.useEffect(() => {
+        const clientsRef = ref(db, 'clients');
+        const unsubscribeClients = onValue(clientsRef, (snapshot) => {
+            setClients(snapshot.exists() ? Object.values(snapshot.val()) : []);
+        });
+
+        const bankAccountsRef = ref(db, 'bank_accounts');
+        const unsubscribeBankAccounts = onValue(bankAccountsRef, (snapshot) => {
+            setBankAccounts(snapshot.exists() ? Object.values(snapshot.val()) : []);
+        });
+
+        const settingsRef = ref(db, 'settings');
+        const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
+            setSettings(snapshot.val());
+        });
+
+        return () => {
+            unsubscribeClients();
+            unsubscribeBankAccounts();
+            unsubscribeSettings();
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (!settings || !amount || !currency) {
+            setUsdValue(0);
+            setFee(0);
+            setUsdtAmount(0);
+            return;
+        };
+
+        let calculatedUsdValue = 0;
+        switch(currency) {
+            case 'USD': calculatedUsdValue = amount; break;
+            case 'USDT': calculatedUsdValue = amount * settings.usdt_usd; break;
+            case 'YER': calculatedUsdValue = amount * settings.yer_usd; break;
+            case 'SAR': calculatedUsdValue = amount * settings.sar_usd; break;
+        }
+        setUsdValue(calculatedUsdValue);
+        
+        let calculatedFee = 0;
+        if (transactionType === 'Deposit') {
+            calculatedFee = calculatedUsdValue * (settings.deposit_fee_percent / 100);
+        } else {
+            calculatedFee = settings.withdraw_fee_fixed;
+        }
+        setFee(calculatedFee);
+
+        setUsdtAmount(calculatedUsdValue - calculatedFee);
+
+    }, [amount, currency, transactionType, settings]);
+
+    React.useEffect(() => {
+        if (state?.message && state.errors) {
+            toast({ variant: 'destructive', title: 'Error Recording Transaction', description: state.message });
+        }
+    }, [state, toast]);
+
+    return (
+        <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Required Data</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="date">Date</Label>
+                                <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {date ? format(date, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+                                </Popover>
+                                <input type="hidden" name="date" value={date?.toISOString()} />
+                                {state?.errors?.date && <p className="text-sm text-destructive">{state.errors.date[0]}</p>}
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Transaction Type</Label>
+                                <Select name="type" required onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
+                                    <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Deposit">Deposit</SelectItem>
+                                        <SelectItem value="Withdraw">Withdraw</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                           <Label>Client</Label>
+                            <DataCombobox name="clientId" data={clients} placeholder="Select a client..." />
+                            {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                               <Label>Bank Account</Label>
+                                <DataCombobox name="bankAccountId" data={bankAccounts} placeholder="Select a bank account..." />
+                            </div>
+                            <div className="space-y-2">
+                               <Label>Crypto Wallet</Label>
+                                <Select name="cryptoWalletId"><SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger></Select>
+                            </div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="amount">Amount</Label>
+                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required onChange={e => setAmount(Number(e.target.value))}/>
+                                {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Currency</Label>
+                                <Select name="currency" required onValueChange={v => setCurrency(v)}>
+                                    <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="USD">USD</SelectItem>
+                                        <SelectItem value="YER">YER</SelectItem>
+                                        <SelectItem value="SAR">SAR</SelectItem>
+                                        <SelectItem value="USDT">USDT</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
+                            </div>
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="attachment_url">Upload Transaction Image</Label>
+                            <Input id="attachment_url" name="attachment_url" type="file" />
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Optional Data</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                         <div className="space-y-2">
+                            <Label htmlFor="notes">Notes</Label>
+                            <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="remittance_number">Remittance Number</Label>
+                                <Input id="remittance_number" name="remittance_number" />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="hash">Crypto Hash</Label>
+                                <Input id="hash" name="hash" />
+                            </div>
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
+                            <Input id="client_wallet_address" name="client_wallet_address" />
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label>Status</Label>
+                                <Select name="status" defaultValue="Pending">
+                                    <SelectTrigger><SelectValue/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Pending">Pending</SelectItem>
+                                        <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                        <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                             <div className="space-y-2">
+                                <Label>Flags</Label>
+                                <Select name="flags">
+                                     <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="AML">AML</SelectItem>
+                                        <SelectItem value="KYC">KYC</SelectItem>
+                                        <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+            <div className="lg:col-span-1 space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Payment Preview</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className='flex justify-between items-center'>
+                            <Label>Amount in USD</Label>
+                            <span className="font-mono text-lg">${usdValue.toFixed(2)}</span>
+                        </div>
+                        <Separator />
+                        <div className='flex justify-between items-center'>
+                            <Label>Fee</Label>
+                            <span className="font-mono text-lg">${fee.toFixed(2)}</span>
+                        </div>
+                         <Separator />
+                        <div className='flex justify-between items-center'>
+                            <Label className="font-bold">Final USDT Amount</Label>
+                            <span className="font-mono text-xl font-bold">${usdtAmount.toFixed(2)}</span>
+                        </div>
+                        <input type="hidden" name="amount_usd" value={usdValue} />
+                        <input type="hidden" name="fee_usd" value={fee} />
+                        <input type="hidden" name="amount_usdt" value={usdtAmount} />
+                    </CardContent>
+                    <CardFooter>
+                        <SubmitButton />
+                    </CardFooter>
+                </Card>
+            </div>
+        </form>
+    );
+}
+
+function DataCombobox({ name, data, placeholder }: { name: string, data: {id: string, name: string}[], placeholder: string }) {
+  const [open, setOpen] = React.useState(false);
+  const [value, setValue] = React.useState("");
+
+  return (
+    <>
+    <input type="hidden" name={name} value={value} />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+          {value ? data.find((d) => d.id === value)?.name : placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder="Search..." />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+                {data.map((d) => (
+                <CommandItem
+                    key={d.id}
+                    value={`${d.id} ${d.name}`}
+                    onSelect={() => { setValue(d.id); setOpen(false); }}>
+                    <Check className={cn("mr-2 h-4 w-4", value === d.id ? "opacity-100" : "opacity-0")}/>
+                    <span>{d.name}</span>
+                </CommandItem>
+                ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+    </>
+  )
+}

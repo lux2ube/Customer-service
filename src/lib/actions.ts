@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { db } from './firebase';
-import { push, ref, set } from 'firebase/database';
+import { push, ref, set, update } from 'firebase/database';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
@@ -79,4 +79,180 @@ export async function createJournalEntry(prevState: FormState, formData: FormDat
     
     revalidatePath('/accounting/journal');
     redirect('/accounting/journal');
+}
+
+
+// --- Client Actions ---
+export type ClientFormState =
+  | {
+      errors?: {
+        name?: string[];
+        phone?: string[];
+        verification_status?: string[];
+      };
+      message?: string;
+    }
+  | undefined;
+
+const ClientSchema = z.object({
+    name: z.string().min(1, { message: 'Name is required.' }),
+    phone: z.string().min(1, { message: 'Phone is required.' }),
+    kyc_type: z.enum(['ID', 'Passport']).optional(),
+    kyc_document_url: z.string().optional(),
+    verification_status: z.enum(['Active', 'Inactive', 'Pending']),
+    review_flags: z.array(z.string()).optional(),
+});
+
+export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData) {
+    const validatedFields = ClientSchema.safeParse({
+        name: formData.get('name'),
+        phone: formData.get('phone'),
+        kyc_type: formData.get('kyc_type'),
+        verification_status: formData.get('verification_status'),
+        review_flags: formData.getAll('review_flags'),
+    });
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save client. Please check the fields.',
+        };
+    }
+
+    const data = {
+        ...validatedFields.data,
+        createdAt: new Date().toISOString(),
+    };
+
+    try {
+        if (clientId) {
+            await update(ref(db, `clients/${clientId}`), data);
+        } else {
+            const newClientRef = push(ref(db, 'clients'));
+            await set(newClientRef, data);
+        }
+    } catch (error) {
+        return { message: 'Database Error: Failed to save client.' }
+    }
+    
+    revalidatePath('/clients');
+    redirect('/clients');
+}
+
+// --- Bank Account Actions ---
+export type BankAccountFormState =
+  | {
+      errors?: {
+        name?: string[];
+        account_number?: string[];
+        currency?: string[];
+        status?: string[];
+      };
+      message?: string;
+    }
+  | undefined;
+
+const BankAccountSchema = z.object({
+    name: z.string().min(1, { message: 'Account name is required.' }),
+    account_number: z.string().optional(),
+    currency: z.enum(['USD', 'YER', 'SAR']),
+    status: z.enum(['Active', 'Inactive']),
+});
+
+export async function createBankAccount(accountId: string | null, prevState: BankAccountFormState, formData: FormData) {
+    const validatedFields = BankAccountSchema.safeParse({
+        name: formData.get('name'),
+        account_number: formData.get('account_number'),
+        currency: formData.get('currency'),
+        status: formData.get('status'),
+    });
+
+     if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save bank account. Please check the fields.',
+        };
+    }
+
+     const data = {
+        ...validatedFields.data,
+        createdAt: new Date().toISOString(),
+    };
+
+    try {
+        if (accountId) {
+             await update(ref(db, `bank_accounts/${accountId}`), data);
+        } else {
+            const newAccountRef = push(ref(db, 'bank_accounts'));
+            await set(newAccountRef, data);
+        }
+    } catch (error) {
+        return { message: 'Database Error: Failed to save bank account.' }
+    }
+    
+    revalidatePath('/bank-accounts');
+    redirect('/bank-accounts');
+}
+
+
+// --- Transaction Actions ---
+export type TransactionFormState =
+  | {
+      errors?: {
+        date?: string[];
+        clientId?: string[];
+        type?: string[];
+        amount?: string[];
+        currency?: string[];
+      };
+      message?: string;
+    }
+  | undefined;
+
+const TransactionSchema = z.object({
+    date: z.string({ invalid_type_error: 'Please select a date.' }),
+    clientId: z.string().min(1, { message: 'Please select a client.' }),
+    type: z.enum(['Deposit', 'Withdraw']),
+    amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
+    currency: z.enum(['USD', 'YER', 'SAR', 'USDT']),
+    bankAccountId: z.string().optional(),
+    cryptoWalletId: z.string().optional(),
+    amount_usd: z.coerce.number(),
+    fee_usd: z.coerce.number(),
+    amount_usdt: z.coerce.number(),
+    attachment_url: z.string().optional(),
+    notes: z.string().optional(),
+    remittance_number: z.string().optional(),
+    hash: z.string().optional(),
+    client_wallet_address: z.string().optional(),
+    status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
+    flags: z.string().optional(),
+});
+
+
+export async function createTransaction(prevState: TransactionFormState, formData: FormData) {
+    const validatedFields = TransactionSchema.safeParse(Object.fromEntries(formData.entries()));
+    
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to create transaction. Please check the fields.',
+        };
+    }
+
+    try {
+        const newTransactionRef = push(ref(db, 'transactions'));
+        await set(newTransactionRef, {
+            ...validatedFields.data,
+            createdAt: new Date().toISOString(),
+        });
+    } catch (error) {
+        console.log(error);
+        return {
+            message: 'Database Error: Failed to create transaction.'
+        }
+    }
+    
+    revalidatePath('/transactions');
+    redirect('/transactions');
 }
