@@ -12,15 +12,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import type { Customer } from '@/lib/types';
+import type { Client } from '@/lib/types';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
 
-export function CustomersTable() {
-  const [allCustomers, setAllCustomers] = React.useState<Customer[]>([]);
+export function ClientsTable() {
+  const [allClients, setAllClients] = React.useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const router = useRouter();
@@ -30,13 +30,13 @@ export function CustomersTable() {
     const unsubscribe = onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const customersList: Customer[] = Object.keys(data).map(key => ({
+        const clientsList: Client[] = Object.keys(data).map(key => ({
           id: key,
           ...data[key]
         }));
-        setAllCustomers(customersList);
+        setAllClients(clientsList);
       } else {
-        setAllCustomers([]);
+        setAllClients([]);
       }
       setLoading(false);
     });
@@ -46,15 +46,15 @@ export function CustomersTable() {
   }, []);
 
 
-  const filteredCustomers = React.useMemo(() => {
+  const filteredClients = React.useMemo(() => {
     if (!searchTerm) {
-      return allCustomers;
+      return allClients;
     }
-    return allCustomers.filter(customer =>
-        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+    return allClients.filter(client =>
+        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        client.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [allCustomers, searchTerm]);
+  }, [allClients, searchTerm]);
 
   return (
     <div className="w-full">
@@ -87,27 +87,27 @@ export function CustomersTable() {
                   Loading data from Firebase...
                 </TableCell>
               </TableRow>
-            ) : filteredCustomers.length > 0 ? (
-              filteredCustomers.map(customer => (
-                <TableRow key={customer.id} onClick={() => router.push(`/customers/${customer.id}`)} className="cursor-pointer">
+            ) : filteredClients.length > 0 ? (
+              filteredClients.map(client => (
+                <TableRow key={client.id} onClick={() => router.push(`/clients/${client.id}`)} className="cursor-pointer">
                   <TableCell>
                     <Avatar>
-                      <AvatarImage src={customer.avatarUrl} alt={customer.name} />
-                      <AvatarFallback>{customer.name ? customer.name.charAt(0) : '?'}</AvatarFallback>
+                      <AvatarImage src={client.avatarUrl} alt={client.name} />
+                      <AvatarFallback>{client.name ? client.name.charAt(0) : '?'}</AvatarFallback>
                     </Avatar>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium">{customer.name}</div>
-                    <div className="text-sm text-muted-foreground">{customer.email}</div>
+                    <div className="font-medium">{client.name}</div>
+                    <div className="text-sm text-muted-foreground">{client.email}</div>
                   </TableCell>
-                  <TableCell>{customer.phone}</TableCell>
-                  <TableCell>{customer.created_at ? format(new Date(customer.created_at), 'PPP') : 'N/A'}</TableCell>
+                  <TableCell>{client.phone}</TableCell>
+                  <TableCell>{client.created_at ? format(new Date(client.created_at), 'PPP') : 'N/A'}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center">
-                  No customers found in your database.
+                  No clients found in your database.
                 </TableCell>
               </TableRow>
             )}

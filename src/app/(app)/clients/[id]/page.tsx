@@ -5,34 +5,34 @@ import { notFound, useParams } from 'next/navigation';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { MoreVertical } from "lucide-react";
-import { CustomerProfileForm } from "@/components/customer-profile-form";
+import { ClientProfileForm } from "@/components/client-profile-form";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { DeleteCustomerDialog } from "@/components/delete-customer-dialog";
-import type { Customer } from '@/lib/types';
+import { DeleteClientDialog } from "@/components/delete-client-dialog";
+import type { Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export default function CustomerDetailPage() {
+export default function ClientDetailPage() {
     const params = useParams();
     const id = params.id as string;
-    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [client, setClient] = useState<Client | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!id) return;
 
-        const customerRef = ref(db, `users/${id}`);
-        const unsubscribe = onValue(customerRef, (snapshot) => {
+        const clientRef = ref(db, `users/${id}`);
+        const unsubscribe = onValue(clientRef, (snapshot) => {
             if (snapshot.exists()) {
-                setCustomer({ id: snapshot.key, ...snapshot.val() });
+                setClient({ id: snapshot.key, ...snapshot.val() });
             } else {
-                setCustomer(null);
+                setClient(null);
             }
             setLoading(false);
         });
@@ -55,15 +55,15 @@ export default function CustomerDetailPage() {
         );
     }
     
-    if (!customer) {
+    if (!client) {
         notFound();
     }
 
     return (
         <>
             <PageHeader 
-                title={customer.name}
-                description={`Customer since ${new Date(customer.created_at).toLocaleDateString()}`}
+                title={client.name}
+                description={`Client since ${new Date(client.created_at).toLocaleDateString()}`}
             >
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -72,16 +72,16 @@ export default function CustomerDetailPage() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DeleteCustomerDialog customerId={customer.id}>
+                        <DeleteClientDialog clientId={client.id}>
                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
-                                Delete Customer
+                                Delete Client
                             </DropdownMenuItem>
-                        </DeleteCustomerDialog>
+                        </DeleteClientDialog>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </PageHeader>
             <div className="space-y-6">
-                <CustomerProfileForm customer={customer} />
+                <ClientProfileForm client={client} />
             </div>
         </>
     );

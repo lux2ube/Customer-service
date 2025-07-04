@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { db } from './firebase';
 import { ref, set, push, remove } from 'firebase/database';
 
-const CustomerSchema = z.object({
+const ClientSchema = z.object({
     name: z.string({ required_error: "Name is required." }).min(2, 'Name must be at least 2 characters.'),
     email: z.string({ required_error: "Email is required." }).email('Invalid email address.'),
     phone: z.string().optional().default(''),
@@ -22,8 +22,8 @@ export type FormState = {
     }
 } | undefined
 
-export async function saveCustomer(id: string | null, prevState: FormState, formData: FormData): Promise<FormState> {
-    const validatedFields = CustomerSchema.safeParse({
+export async function saveClient(id: string | null, prevState: FormState, formData: FormData): Promise<FormState> {
+    const validatedFields = ClientSchema.safeParse({
         name: formData.get('name'),
         email: formData.get('email'),
         phone: formData.get('phone'),
@@ -33,66 +33,66 @@ export async function saveCustomer(id: string | null, prevState: FormState, form
 
     if (!validatedFields.success) {
         return {
-            message: 'Failed to save customer. Please check the fields.',
+            message: 'Failed to save client. Please check the fields.',
             errors: validatedFields.error.flatten().fieldErrors,
         }
     }
     
-    const customerData = validatedFields.data;
+    const clientData = validatedFields.data;
     
     try {
         if (id) {
-            // Update existing customer
-            const customerRef = ref(db, `users/${id}`);
+            // Update existing client
+            const clientRef = ref(db, `users/${id}`);
             // We need to fetch existing data to merge, as `set` overwrites.
             // However, a simple app can just set the fields from the form.
             // For a more robust app, you'd fetch and merge.
-            await set(customerRef, {
-                ...customerData,
+            await set(clientRef, {
+                ...clientData,
                 // Preserve created_at if it exists
                 created_at: new Date().toISOString() // Or fetch existing value
             });
         } else {
-            // Create new customer
+            // Create new client
             const usersRef = ref(db, 'users');
-            const newCustomerRef = push(usersRef);
-            await set(newCustomerRef, { 
-                ...customerData, 
+            const newClientRef = push(usersRef);
+            await set(newClientRef, { 
+                ...clientData, 
                 created_at: new Date().toISOString(),
-                avatarUrl: `https://placehold.co/100x100.png?text=${customerData.name.charAt(0)}`
+                avatarUrl: `https://placehold.co/100x100.png?text=${clientData.name.charAt(0)}`
             });
-            id = newCustomerRef.key;
+            id = newClientRef.key;
         }
     } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : 'Failed to save customer.';
+        const errorMessage = e instanceof Error ? e.message : 'Failed to save client.';
         return { message: `Database Error: ${errorMessage}` };
     }
 
     // Revalidate paths to ensure server components are updated
-    revalidatePath('/customers');
+    revalidatePath('/clients');
     revalidatePath('/');
     if (id) {
-       revalidatePath(`/customers/${id}`);
-       redirect(`/customers/${id}`);
+       revalidatePath(`/clients/${id}`);
+       redirect(`/clients/${id}`);
     } else {
-        redirect('/customers');
+        redirect('/clients');
     }
 }
 
 
-export async function deleteCustomerAction(id: string) {
+export async function deleteClientAction(id: string) {
     if (!id) {
         console.error("Delete action called without an ID.");
         return;
     }
     try {
-        const customerRef = ref(db, `users/${id}`);
-        await remove(customerRef);
-        revalidatePath('/customers');
+        const clientRef = ref(db, `users/${id}`);
+        await remove(clientRef);
+        revalidatePath('/clients');
         revalidatePath('/');
     } catch (e) {
-        console.error('Failed to delete customer:', e);
+        console.error('Failed to delete client:', e);
         // In a real app, you might want to return an error state
     }
-    redirect('/customers');
+    redirect('/clients');
 }

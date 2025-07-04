@@ -12,11 +12,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "./ui/button";
-import { deleteCustomerAction } from "@/lib/actions";
+import { deleteClientAction } from "@/lib/actions";
 
-export function DeleteCustomerDialog({ customerId, children }: { customerId: string, children: React.ReactNode }) {
+export function DeleteClientDialog({ clientId, children }: { clientId: string, children: React.ReactNode }) {
   // We use bind to pre-fill the first argument of the server action
-  const formAction = deleteCustomerAction.bind(null, customerId);
+  const formAction = deleteClientAction.bind(null, clientId);
   
   return (
     <AlertDialog>
@@ -28,7 +28,7 @@ export function DeleteCustomerDialog({ customerId, children }: { customerId: str
           <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
           <AlertDialogDescription>
             This action cannot be undone. This will permanently delete this
-            customer and remove them from any lists.
+            client and remove them from any lists.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

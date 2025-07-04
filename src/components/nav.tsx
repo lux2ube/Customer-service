@@ -10,11 +10,23 @@ import Link from 'next/link';
 import {
   Home,
   Users,
+  Handshake,
+  DollarSign,
+  ListTodo,
+  UsersRound,
+  BarChart3,
+  Settings,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: Home },
-  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/leads', label: 'Leads', icon: Handshake },
+  { href: '/deals', label: 'Deals', icon: DollarSign },
+  { href: '/tasks', label: 'Tasks', icon: ListTodo },
+  { href: '/team', label: 'Team', icon: UsersRound },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function Nav() {

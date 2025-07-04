@@ -1,24 +1,24 @@
 import { PageHeader } from "@/components/page-header";
-import { CustomersTable } from "@/components/customers-table";
+import { ClientsTable } from "@/components/clients-table";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import Link from "next/link";
 
-export default function CustomersPage() {
+export default function ClientsPage() {
     return (
         <>
             <PageHeader 
-                title="Customers"
-                description="View, search, and manage your customers in real-time."
+                title="Clients"
+                description="View, search, and manage your clients in real-time."
             >
                 <Button asChild>
-                    <Link href="/customers/new">
+                    <Link href="/clients/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Add Customer
+                        Add Client
                     </Link>
                 </Button>
             </PageHeader>
-            <CustomersTable />
+            <ClientsTable />
         </>
     );
 }
