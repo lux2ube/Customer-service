@@ -8,17 +8,11 @@ import {
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
-  Users,
-  Tags,
-  List,
+  Home,
 } from 'lucide-react';
 
 const menuItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/labels', label: 'Labels', icon: Tags },
-  { href: '/lists', label: 'Custom Lists', icon: List },
+  { href: '/', label: 'Home', icon: Home },
 ];
 
 export function Nav() {

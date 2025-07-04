@@ -1,55 +1,18 @@
-import { PageHeader } from "@/components/page-header";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, List, UserPlus } from 'lucide-react';
-import { getDashboardData } from "@/lib/data";
-import { DashboardChart } from "@/components/dashboard-chart";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Rocket } from "lucide-react";
 
-export default async function DashboardPage() {
-    const data = await getDashboardData();
-
+export default async function HomePage() {
     return (
-        <>
-            <PageHeader
-                title="Dashboard"
-                description="An overview of your customer base."
-            />
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{data.customerCount}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">New This Month</CardTitle>
-                        <UserPlus className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">+{data.newCustomersThisMonth}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Custom Lists</CardTitle>
-                        <List className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{data.listsCount}</div>
-                    </CardContent>
-                </Card>
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm">
+            <div className="flex flex-col items-center gap-4 text-center">
+                <Rocket className="h-16 w-16 text-primary" />
+                <h1 className="text-3xl font-bold tracking-tight">
+                    Let's Build Something Awesome
+                </h1>
+                <p className="text-muted-foreground max-w-md">
+                    This is your new starting point. Tell me what you want to create, and we'll build it together, step by step.
+                </p>
             </div>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Customer Distribution by Label</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <DashboardChart data={data.distribution} />
-                </CardContent>
-            </Card>
-        </>
+      </div>
     );
 }

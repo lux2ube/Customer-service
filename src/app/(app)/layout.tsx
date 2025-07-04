@@ -24,7 +24,7 @@ export default function AppLayout({
             {/* Can add breadcrumbs or page title here */}
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex flex-1 flex-col p-4 md:p-6">
           {children}
         </main>
       </SidebarInset>
