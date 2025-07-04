@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -15,7 +16,7 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, BankAccount, Settings } from '@/lib/types';
+import type { Client, BankAccount, Settings, Transaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -30,33 +31,45 @@ function SubmitButton() {
     );
 }
 
-export function TransactionForm() {
+export function TransactionForm({ transaction }: { transaction?: Transaction }) {
     const { toast } = useToast();
-    const [state, formAction] = useFormState<TransactionFormState, FormData>(createTransaction, undefined);
-    const [date, setDate] = React.useState<Date | undefined>(new Date());
+    const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
+    const [state, formAction] = useFormState<TransactionFormState, FormData>(action, undefined);
+    
+    const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [clients, setClients] = React.useState<Client[]>([]);
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
 
     // Form state
-    const [amount, setAmount] = React.useState(0);
-    const [currency, setCurrency] = React.useState('USD');
-    const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>('Deposit');
+    const [amount, setAmount] = React.useState(transaction?.amount || 0);
+    const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
+    const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>(transaction?.type || 'Deposit');
     
     // Calculated values
-    const [usdValue, setUsdValue] = React.useState(0);
-    const [fee, setFee] = React.useState(0);
-    const [usdtAmount, setUsdtAmount] = React.useState(0);
+    const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
+    const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
+    const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
         const unsubscribeClients = onValue(clientsRef, (snapshot) => {
-            setClients(snapshot.exists() ? Object.values(snapshot.val()) : []);
+             const data = snapshot.val();
+             if (data) {
+                setClients(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+             } else {
+                setClients([]);
+             }
         });
 
         const bankAccountsRef = ref(db, 'bank_accounts');
         const unsubscribeBankAccounts = onValue(bankAccountsRef, (snapshot) => {
-            setBankAccounts(snapshot.exists() ? Object.values(snapshot.val()) : []);
+            const data = snapshot.val();
+             if (data) {
+                setBankAccounts(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+             } else {
+                setBankAccounts([]);
+             }
         });
 
         const settingsRef = ref(db, 'settings');
@@ -82,17 +95,17 @@ export function TransactionForm() {
         let calculatedUsdValue = 0;
         switch(currency) {
             case 'USD': calculatedUsdValue = amount; break;
-            case 'USDT': calculatedUsdValue = amount * settings.usdt_usd; break;
-            case 'YER': calculatedUsdValue = amount * settings.yer_usd; break;
-            case 'SAR': calculatedUsdValue = amount * settings.sar_usd; break;
+            case 'USDT': calculatedUsdValue = amount * (settings.usdt_usd || 1); break;
+            case 'YER': calculatedUsdValue = amount * (settings.yer_usd || 0); break;
+            case 'SAR': calculatedUsdValue = amount * (settings.sar_usd || 0); break;
         }
         setUsdValue(calculatedUsdValue);
         
         let calculatedFee = 0;
         if (transactionType === 'Deposit') {
-            calculatedFee = calculatedUsdValue * (settings.deposit_fee_percent / 100);
+            calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
         } else {
-            calculatedFee = settings.withdraw_fee_fixed;
+            calculatedFee = settings.withdraw_fee_fixed || 0;
         }
         setFee(calculatedFee);
 
@@ -111,7 +124,7 @@ export function TransactionForm() {
             <div className="lg:col-span-2 space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Required Data</CardTitle>
+                        <CardTitle>{transaction ? 'Edit' : 'New'} Transaction</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
@@ -131,7 +144,7 @@ export function TransactionForm() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Transaction Type</Label>
-                                <Select name="type" required onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
+                                <Select name="type" required defaultValue={transaction?.type} onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
                                     <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Deposit">Deposit</SelectItem>
@@ -142,29 +155,29 @@ export function TransactionForm() {
                         </div>
                         <div className="space-y-2">
                            <Label>Client</Label>
-                            <DataCombobox name="clientId" data={clients} placeholder="Select a client..." />
+                            <DataCombobox name="clientId" data={clients} placeholder="Select a client..." defaultValue={transaction?.clientId} />
                             {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                <Label>Bank Account</Label>
-                                <DataCombobox name="bankAccountId" data={bankAccounts} placeholder="Select a bank account..." />
+                                <DataCombobox name="bankAccountId" data={bankAccounts} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} />
                             </div>
                             <div className="space-y-2">
                                <Label>Crypto Wallet</Label>
-                                <Select name="cryptoWalletId"><SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger></Select>
+                                <Select name="cryptoWalletId" defaultValue={transaction?.cryptoWalletId}><SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger></Select>
                             </div>
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount</Label>
-                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required onChange={e => setAmount(Number(e.target.value))}/>
+                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required defaultValue={transaction?.amount} onChange={e => setAmount(Number(e.target.value))}/>
                                 {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label>Currency</Label>
-                                <Select name="currency" required onValueChange={v => setCurrency(v)}>
+                                <Select name="currency" required defaultValue={transaction?.currency} onValueChange={v => setCurrency(v)}>
                                     <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="USD">USD</SelectItem>
@@ -189,26 +202,26 @@ export function TransactionForm() {
                     <CardContent className="space-y-6">
                          <div className="space-y-2">
                             <Label htmlFor="notes">Notes</Label>
-                            <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." />
+                            <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." defaultValue={transaction?.notes}/>
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label htmlFor="remittance_number">Remittance Number</Label>
-                                <Input id="remittance_number" name="remittance_number" />
+                                <Input id="remittance_number" name="remittance_number" defaultValue={transaction?.remittance_number}/>
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="hash">Crypto Hash</Label>
-                                <Input id="hash" name="hash" />
+                                <Input id="hash" name="hash" defaultValue={transaction?.hash} />
                             </div>
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
-                            <Input id="client_wallet_address" name="client_wallet_address" />
+                            <Input id="client_wallet_address" name="client_wallet_address" defaultValue={transaction?.client_wallet_address}/>
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label>Status</Label>
-                                <Select name="status" defaultValue="Pending">
+                                <Select name="status" defaultValue={transaction?.status || "Pending"}>
                                     <SelectTrigger><SelectValue/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Pending">Pending</SelectItem>
@@ -219,7 +232,7 @@ export function TransactionForm() {
                             </div>
                              <div className="space-y-2">
                                 <Label>Flags</Label>
-                                <Select name="flags">
+                                <Select name="flags" defaultValue={transaction?.flags ? transaction.flags[0] : undefined}>
                                      <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="AML">AML</SelectItem>
@@ -265,9 +278,9 @@ export function TransactionForm() {
     );
 }
 
-function DataCombobox({ name, data, placeholder }: { name: string, data: {id: string, name: string}[], placeholder: string }) {
+function DataCombobox({ name, data, placeholder, defaultValue }: { name: string, data: {id: string, name: string}[], placeholder: string, defaultValue?: string }) {
   const [open, setOpen] = React.useState(false);
-  const [value, setValue] = React.useState("");
+  const [value, setValue] = React.useState(defaultValue || "");
 
   return (
     <>

@@ -1,8 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
 import { db } from './firebase';
-import { push, ref, set, update } from 'firebase/database';
+import { push, ref, set, update, get } from 'firebase/database';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
@@ -119,17 +120,18 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         };
     }
 
-    const data = {
-        ...validatedFields.data,
-        createdAt: new Date().toISOString(),
-    };
-
     try {
         if (clientId) {
-            await update(ref(db, `clients/${clientId}`), data);
+            const clientRef = ref(db, `clients/${clientId}`);
+            const snapshot = await get(clientRef);
+            const existingData = snapshot.val();
+            await update(clientRef, { ...existingData, ...validatedFields.data });
         } else {
             const newClientRef = push(ref(db, 'clients'));
-            await set(newClientRef, data);
+            await set(newClientRef, {
+                ...validatedFields.data,
+                createdAt: new Date().toISOString()
+            });
         }
     } catch (error) {
         return { message: 'Database Error: Failed to save client.' }
@@ -174,17 +176,18 @@ export async function createBankAccount(accountId: string | null, prevState: Ban
         };
     }
 
-     const data = {
-        ...validatedFields.data,
-        createdAt: new Date().toISOString(),
-    };
-
     try {
         if (accountId) {
-             await update(ref(db, `bank_accounts/${accountId}`), data);
+             const accountRef = ref(db, `bank_accounts/${accountId}`);
+             const snapshot = await get(accountRef);
+             const existingData = snapshot.val();
+             await update(accountRef, { ...existingData, ...validatedFields.data });
         } else {
             const newAccountRef = push(ref(db, 'bank_accounts'));
-            await set(newAccountRef, data);
+            await set(newAccountRef, {
+                ...validatedFields.data,
+                createdAt: new Date().toISOString(),
+            });
         }
     } catch (error) {
         return { message: 'Database Error: Failed to save bank account.' }
@@ -230,7 +233,7 @@ const TransactionSchema = z.object({
 });
 
 
-export async function createTransaction(prevState: TransactionFormState, formData: FormData) {
+export async function createTransaction(transactionId: string | null, prevState: TransactionFormState, formData: FormData) {
     const validatedFields = TransactionSchema.safeParse(Object.fromEntries(formData.entries()));
     
     if (!validatedFields.success) {
@@ -241,11 +244,18 @@ export async function createTransaction(prevState: TransactionFormState, formDat
     }
 
     try {
-        const newTransactionRef = push(ref(db, 'transactions'));
-        await set(newTransactionRef, {
-            ...validatedFields.data,
-            createdAt: new Date().toISOString(),
-        });
+        if (transactionId) {
+            const transactionRef = ref(db, `transactions/${transactionId}`);
+            const snapshot = await get(transactionRef);
+            const existingData = snapshot.val();
+            await update(transactionRef, { ...existingData, ...validatedFields.data });
+        } else {
+            const newTransactionRef = push(ref(db, 'transactions'));
+            await set(newTransactionRef, {
+                ...validatedFields.data,
+                createdAt: new Date().toISOString(),
+            });
+        }
     } catch (error) {
         console.log(error);
         return {
