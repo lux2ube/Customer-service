@@ -1,55 +1,30 @@
-export interface Client {
-    id: string;
-    name: string;
-    phone: string;
-    kycDocumentUrl?: string;
-    verificationStatus: 'Active' | 'Inactive';
-    reviewFlags: {
-        aml: boolean;
-        volume: boolean;
-        scam: boolean;
-    };
-    created_at: string;
-    avatarUrl: string;
-    walletAddress?: string;
+export type AccountType = 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
+
+export interface Account {
+    id: string; // e.g. "101"
+    name: string; // e.g. "Cash - YER"
+    type: AccountType;
+    isGroup: boolean; // To identify group headers
+    balance?: number; // Will be calculated
 }
 
-export interface BankAccount {
+export interface JournalEntry {
     id: string;
-    name: string;
-    currency: 'YER' | 'USD' | 'SAR';
-}
-
-export interface CryptoWallet {
-    id: string;
-    name: string;
-    address: string;
-}
-
-export interface Transaction {
-    id: string;
-    transactionDate: string;
-    type: 'Deposit' | 'Withdraw';
-    clientId: string;
-    clientName: string; // Denormalized for easy display
-    bankAccountId?: string;
+    date: string;
+    description: string;
+    debit_account: string; // Account ID
+    credit_account: string; // Account ID
     amount: number;
-    currency?: 'YER' | 'USD' | 'SAR'; // Denormalized from bank account
-    cryptoWalletId?: string;
-    usdtAmount?: number;
-    exchangeRate?: number;
-    fee?: number;
-    transactionImageUrl?: string;
-    notes?: string;
-
-    remittanceNumber?: string;
-    cryptoHash?: string;
-    clientWalletAddress?: string;
-    status: 'Pending' | 'Confirmed' | 'Cancelled';
-    reviewFlags?: {
-        aml: boolean;
-        kyc: boolean;
-        other: boolean;
-    };
-    createdAt: string; // Internal timestamp for sorting
+    currency: 'YER' | 'USD' | 'SAR' | 'USDT';
+    exchange_rate?: number;
+    usd_value?: number;
+    fee_usd?: number;
+    usdt_amount?: number;
+    status: 'pending' | 'confirmed' | 'cancelled' | 'flagged';
+    flags?: ('AML' | 'KYC' | 'Manual Review')[];
+    hash?: string;
+    wallet_address?: string;
+    attachment_url?: string;
+    added_by?: string;
+    createdAt: string; // Internal timestamp
 }
