@@ -1,6 +1,8 @@
 import type { Customer, Label, CustomList } from './types';
 
-export const labels: Label[] = [
+// Changed to `let` to allow mutations by server actions in this prototype.
+// In a real app, this would be a database.
+export let labels: Label[] = [
   { id: 'l1', name: 'VIP', color: '#FFD700' },
   { id: 'l2', name: 'New Lead', color: '#00C49F' },
   { id: 'l3', name: 'Churn Risk', color: '#FF8042' },
@@ -8,7 +10,7 @@ export const labels: Label[] = [
   { id: 'l5', name: 'Inactive', color: '#b0b0b0' },
 ];
 
-export const customers: Customer[] = [
+export let customers: Customer[] = [
   {
     id: 'c1',
     name: 'Alice Johnson',
@@ -30,6 +32,8 @@ export const customers: Customer[] = [
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l2'],
     phone: '234-567-8901',
+    address: '234 Elm St, Springfield',
+    notes: ''
   },
   {
     id: 'c3',
@@ -39,6 +43,7 @@ export const customers: Customer[] = [
     lastSeen: '2024-05-10',
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l3', 'l5'],
+    phone: '345-678-9012',
     address: '456 Oak Ave, Metropolis',
     notes: 'Contract renewal due in December. Has expressed budget concerns.'
   },
@@ -50,6 +55,9 @@ export const customers: Customer[] = [
     lastSeen: '2024-07-21',
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l1', 'l2', 'l4'],
+    phone: '456-789-0123',
+    address: '567 Birch Rd, Star City',
+    notes: ''
   },
   {
     id: 'c5',
@@ -60,6 +68,7 @@ export const customers: Customer[] = [
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l2'],
     phone: '567-890-1234',
+    address: '678 Cedar Blvd, Central City',
     notes: 'Met at the trade show. Very interested in our enterprise solution.'
   },
   {
@@ -70,7 +79,9 @@ export const customers: Customer[] = [
     lastSeen: '2024-07-19',
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l4'],
-    address: '789 Pine Ln, Gotham'
+    phone: '678-901-2345',
+    address: '789 Pine Ln, Gotham',
+    notes: ''
   },
   {
     id: 'c7',
@@ -80,6 +91,8 @@ export const customers: Customer[] = [
     lastSeen: '2024-04-01',
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: ['l5'],
+    phone: '789-012-3456',
+    address: '890 Walnut Dr, Coast City',
     notes: 'No response to recent emails. Needs re-engagement.'
   },
   {
@@ -90,10 +103,13 @@ export const customers: Customer[] = [
     lastSeen: '2024-06-30',
     avatarUrl: 'https://placehold.co/40x40.png',
     labels: [],
+    phone: '890-123-4567',
+    address: '901 Spruce Ave, Keystone',
+    notes: ''
   }
 ];
 
-export const customLists: CustomList[] = [
+export let customLists: CustomList[] = [
   { id: 'list1', name: 'Q4 Follow-ups', customerIds: ['c1', 'c5'] },
   { id: 'list2', name: 'High-Priority Renewals', customerIds: ['c3'] },
   { id: 'list3', name: '2024 New Leads', customerIds: ['c2', 'c4', 'c5', 'c8'] },

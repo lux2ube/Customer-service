@@ -10,6 +10,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { DeleteCustomerDialog } from "@/components/delete-customer-dialog";
   
 
 export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
@@ -34,15 +35,16 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem>Add to List</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">Delete Customer</DropdownMenuItem>
+                        <DeleteCustomerDialog customerId={customer.id}>
+                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                Delete Customer
+                            </DropdownMenuItem>
+                        </DeleteCustomerDialog>
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <Button>Save Changes</Button>
             </PageHeader>
-            <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-3 space-y-6">
-                   <CustomerProfileForm customer={customer} allLabels={labels} />
-                </div>
+            <div className="space-y-6">
+                <CustomerProfileForm customer={customer} allLabels={labels} />
             </div>
         </>
     );
