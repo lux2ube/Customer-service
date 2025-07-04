@@ -51,3 +51,21 @@ export interface Transaction {
     flags: ('AML' | 'KYC' | 'Other')[];
     createdAt: string;
 }
+
+export interface Account {
+    id: string;
+    name: string;
+    type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
+    isGroup: boolean;
+}
+
+export interface JournalEntry {
+  id: string;
+  date: string;
+  description: string;
+  debit_account: string;
+  credit_account: string;
+  amount: number;
+  currency: 'USD' | 'YER' | 'SAR' | 'USDT';
+  createdAt: string;
+}
