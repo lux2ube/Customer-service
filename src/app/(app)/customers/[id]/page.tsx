@@ -36,7 +36,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem>Add to List</DropdownMenuItem>
                         <DeleteCustomerDialog customerId={customer.id}>
-                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
                                 Delete Customer
                             </DropdownMenuItem>
                         </DeleteCustomerDialog>

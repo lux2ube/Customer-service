@@ -10,14 +10,31 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { X, UploadCloud, Save } from 'lucide-react';
 import React from 'react';
-import { useFormState } from 'react-dom';
-import { saveCustomer } from '@/lib/actions';
+import { useFormState, useFormStatus } from 'react-dom';
+import { saveCustomer, type FormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
 interface CustomerProfileFormProps {
   customer: Customer;
   allLabels: Label[];
   isCreating?: boolean;
+}
+
+function SubmitButton({ isCreating }: { isCreating: boolean }) {
+    const { pending } = useFormStatus();
+
+    return (
+        <Button type="submit" disabled={pending}>
+            {pending ? (
+                <>{isCreating ? 'Creating...' : 'Saving...'}</>
+            ) : (
+                <>
+                    <Save className="mr-2 h-4 w-4" />
+                    {isCreating ? 'Create Customer' : 'Save Changes'}
+                </>
+            )}
+        </Button>
+    )
 }
 
 export function CustomerProfileForm({ customer, allLabels, isCreating = false }: CustomerProfileFormProps) {
@@ -59,14 +76,13 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
     
     const availableLabelsToAdd = allLabels.filter(l => !currentLabels.includes(l.id));
 
-    const [state, formAction] = useFormState(saveCustomer, { message: '' });
+    const [state, formAction] = useFormState<FormState, FormData>(saveCustomer, undefined);
 
     React.useEffect(() => {
-        if (state.message) {
-             const isSuccess = state.message.includes('successfully');
+        if (state?.message && state.errors) {
              toast({
-                variant: isSuccess ? 'default' : 'destructive',
-                title: isSuccess ? 'Success!' : 'Error',
+                variant: 'destructive',
+                title: 'Error Saving Customer',
                 description: state.message,
             });
         }
@@ -89,7 +105,7 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
                     <div className="flex items-center gap-4">
                         <Avatar className="h-16 w-16">
                             <AvatarImage src={customer.avatarUrl} />
-                            <AvatarFallback>{customer.name.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>{customer.name.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <Input type="file" id="avatar" className="hidden" />
                         <Button type="button" variant="outline" onClick={() => document.getElementById('avatar')?.click()}>Change Avatar</Button>
@@ -97,11 +113,13 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <UiLabel htmlFor="name">Full Name</UiLabel>
-                            <Input id="name" name="name" defaultValue={customer.name} />
+                            <Input id="name" name="name" defaultValue={customer.name} aria-describedby="name-error" />
+                            {state?.errors?.name && <p id="name-error" className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <UiLabel htmlFor="email">Email</UiLabel>
-                            <Input id="email" name="email" type="email" defaultValue={customer.email} />
+                            <Input id="email" name="email" type="email" defaultValue={customer.email} aria-describedby="email-error" />
+                             {state?.errors?.email && <p id="email-error" className="text-sm text-destructive">{state.errors.email[0]}</p>}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
@@ -132,12 +150,14 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
                     <UiLabel>Current Labels</UiLabel>
                     <div className="flex flex-wrap gap-2">
                         {currentLabels.length > 0 ? currentLabels.map(labelId => (
+                            labelMap[labelId] ?
                             <Badge key={labelId} variant="secondary" className="text-sm py-1 px-3 flex items-center gap-2" style={{ backgroundColor: labelMap[labelId]?.color, color: '#000' }}>
                                 {labelMap[labelId]?.name}
                                 <button type="button" onClick={() => toggleLabel(labelId)} className="rounded-full hover:bg-black/10 p-0.5">
                                     <X className="h-3 w-3" />
                                 </button>
                             </Badge>
+                            : null
                         )) : <p className="text-sm text-muted-foreground">No labels assigned.</p>}
                     </div>
 
@@ -188,10 +208,7 @@ export function CustomerProfileForm({ customer, allLabels, isCreating = false }:
         </Card>
         
         <div className="flex justify-end gap-2 sticky bottom-0 bg-background/80 backdrop-blur-sm py-4 -mx-6 px-6">
-            <Button type="submit">
-                <Save className="mr-2 h-4 w-4" />
-                {isCreating ? 'Create Customer' : 'Save Changes'}
-            </Button>
+           <SubmitButton isCreating={isCreating} />
         </div>
     </form>
   );

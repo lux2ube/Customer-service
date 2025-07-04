@@ -9,10 +9,16 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Home,
+  Users,
+  List,
+  Tags,
 } from 'lucide-react';
 
 const menuItems = [
-  { href: '/', label: 'Home', icon: Home },
+  { href: '/', label: 'Dashboard', icon: Home },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/lists', label: 'Lists', icon: List },
+  { href: '/labels', label: 'Labels', icon: Tags },
 ];
 
 export function Nav() {
@@ -24,7 +30,7 @@ export function Nav() {
         <SidebarMenuItem key={item.href}>
           <SidebarMenuButton
             asChild
-            isActive={pathname === item.href}
+            isActive={pathname.startsWith(item.href) && (item.href !== '/' || pathname === '/')}
             tooltip={item.label}
           >
             <Link href={item.href}>

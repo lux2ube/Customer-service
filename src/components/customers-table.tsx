@@ -125,12 +125,14 @@ export function CustomersTable({ customers, labels }: CustomersTableProps) {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {customer.labels.map(labelId => (
+                        labelMap[labelId] ? 
                         <Badge key={labelId} variant="secondary" style={{
                            backgroundColor: labelMap[labelId]?.color, 
                            color: '#000'
                         }}>
                           {labelMap[labelId]?.name}
                         </Badge>
+                        : null
                       ))}
                     </div>
                   </TableCell>

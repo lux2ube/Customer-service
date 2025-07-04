@@ -16,10 +16,12 @@ export function LabelManager({ initialLabels }: LabelManagerProps) {
   const [labels, setLabels] = useState<Label[]>(initialLabels);
   const [newLabel, setNewLabel] = useState('');
 
+  // Note: In a real app, these actions would be server actions.
+  // For this prototype, we're managing state locally.
   const addLabel = () => {
     if (newLabel.trim() === '') return;
     const newLabelObject: Label = {
-      id: `l${labels.length + 1}`,
+      id: `l${labels.length + 1 + Math.random()}`,
       name: newLabel,
       color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
     };
