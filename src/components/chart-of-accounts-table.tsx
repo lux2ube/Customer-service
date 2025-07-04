@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -9,67 +10,138 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { Account } from '@/lib/types';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
-
-
-const initialAccounts: Account[] = [
-    // Assets
-    { id: '100', name: 'Assets', type: 'Assets', isGroup: true },
-    { id: '101', name: 'Cash - YER', type: 'Assets', isGroup: false },
-    { id: '102', name: 'Cash - USD', type: 'Assets', isGroup: false },
-    { id: '103', name: 'Cash - SAR', type: 'Assets', isGroup: false },
-    { id: '110', name: 'Bank - YER', type: 'Assets', isGroup: false },
-    { id: '111', name: 'Bank - USD', type: 'Assets', isGroup: false },
-    { id: '112', name: 'Bank - SAR', type: 'Assets', isGroup: false },
-    { id: '120', name: 'USDT Wallet (BEP20)', type: 'Assets', isGroup: false },
-    { id: '130', name: 'Pending Fiat Receivables', type: 'Assets', isGroup: false },
-    { id: '140', name: 'Pending Crypto Receivables', type: 'Assets', isGroup: false },
-
-    // Liabilities
-    { id: '200', name: 'Liabilities', type: 'Liabilities', isGroup: true },
-    { id: '201', name: 'Client USDT Liability', type: 'Liabilities', isGroup: false },
-    { id: '202', name: 'Pending Withdrawals', type: 'Liabilities', isGroup: false },
-    { id: '210', name: 'AML-Held Accounts', type: 'Liabilities', isGroup: false },
-    { id: '220', name: 'Regulatory Liabilities', type: 'Liabilities', isGroup: false },
-
-    // Equity
-    { id: '300', name: 'Equity', type: 'Equity', isGroup: true },
-    { id: '301', name: 'Owner’s Equity', type: 'Equity', isGroup: false },
-    { id: '302', name: 'Retained Earnings', type: 'Equity', isGroup: false },
-
-    // Income
-    { id: '400', name: 'Income', type: 'Income', isGroup: true },
-    { id: '401', name: 'Deposit Fees (USD)', type: 'Income', isGroup: false },
-    { id: '402', name: 'Withdraw Fees (USD)', type: 'Income', isGroup: false },
-    { id: '403', name: 'Exchange Margin Profit', type: 'Income', isGroup: false },
-
-    // Expenses
-    { id: '500', name: 'Expenses', type: 'Expenses', isGroup: true },
-    { id: '501', name: 'Gas Fees (BNB Network)', type: 'Expenses', isGroup: false },
-    { id: '502', name: 'Bank Transfer Fees', type: 'Expenses', isGroup: false },
-    { id: '503', name: 'Operations / Admin', type: 'Expenses', isGroup: false },
-    { id: '504', name: 'KYC Compliance Costs', type: 'Expenses', isGroup: false },
-];
+import { db } from '@/lib/firebase';
+import { ref, onValue, query, orderByChild } from 'firebase/database';
+import { Button } from './ui/button';
+import { Pencil, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { deleteAccount } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
 
 
 export function ChartOfAccountsTable() {
-  const [accounts, setAccounts] = React.useState<Account[]>(initialAccounts);
-  const [loading, setLoading] = React.useState(false); // In future, will fetch from DB
+  const [accounts, setAccounts] = React.useState<Account[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [accountToDelete, setAccountToDelete] = React.useState<Account | null>(null);
+  const { toast } = useToast();
+
+  React.useEffect(() => {
+    // We order by ID (account code) to keep the list structured.
+    const accountsRef = query(ref(db, 'accounts'), orderByChild('id'));
+    const unsubscribe = onValue(accountsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            const list: Account[] = Object.keys(data).map(key => ({
+                id: key,
+                ...data[key]
+            })).sort((a, b) => a.id.localeCompare(b.id)); // Sort by ID string
+            setAccounts(list);
+        } else {
+            setAccounts([]);
+        }
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const getBadgeVariant = (type: Account['type']) => {
     switch(type) {
         case 'Assets': return 'default';
         case 'Liabilities': return 'destructive';
         case 'Equity': return 'outline';
-        case 'Income': return 'default'; // Should be a different color, e.g., green
+        case 'Income': return 'default';
         case 'Expenses': return 'secondary';
         default: return 'secondary';
     }
   }
 
+  const handleDeleteClick = (account: Account) => {
+    setAccountToDelete(account);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (accountToDelete) {
+      const result = await deleteAccount(accountToDelete.id);
+      if (result?.message) {
+        toast({
+          variant: 'destructive',
+          title: 'Error Deleting Account',
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: 'Account Deleted',
+          description: `Account "${accountToDelete.name}" has been deleted.`,
+        });
+      }
+      setDeleteDialogOpen(false);
+      setAccountToDelete(null);
+    }
+  };
+
+  const renderAccounts = () => {
+    const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as Account[] }]));
+    const rootAccounts: Account[] = [];
+
+    for (const account of accounts) {
+      if (account.parentId && accountMap.has(account.parentId)) {
+        accountMap.get(account.parentId)!.children.push(accountMap.get(account.id)!);
+      } else {
+        rootAccounts.push(accountMap.get(account.id)!);
+      }
+    }
+    
+    const renderRow = (account: any, level = 0) => {
+      const isGroup = account.isGroup;
+      return (
+        <React.Fragment key={account.id}>
+          <TableRow className={cn(isGroup && 'bg-muted/50')}>
+            <TableCell className={cn('font-medium', isGroup && 'font-bold')}>{account.id}</TableCell>
+            <TableCell style={{ paddingLeft: `${1 + level * 1.5}rem` }} className={cn(isGroup && 'font-bold')}>{account.name}</TableCell>
+            <TableCell>
+                <Badge variant={getBadgeVariant(account.type)}>{account.type}</Badge>
+            </TableCell>
+            <TableCell className="text-right font-mono">
+                {/* Balance will be implemented later */}
+            </TableCell>
+            <TableCell className="text-right">
+                <Button asChild variant="ghost" size="icon">
+                    <Link href={`/accounting/chart-of-accounts/edit/${account.id}`}>
+                        <Pencil className="h-4 w-4" />
+                    </Link>
+                </Button>
+                 <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(account)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+            </TableCell>
+          </TableRow>
+          {account.children.sort((a: Account, b: Account) => a.id.localeCompare(b.id)).map((child: Account) => renderRow(child, level + 1))}
+        </React.Fragment>
+      );
+    }
+    
+    return rootAccounts.map(acc => renderRow(acc));
+  };
+
+
   return (
+    <>
     <div className="rounded-md border bg-card">
         <Table>
           <TableHeader>
@@ -78,31 +150,21 @@ export function ChartOfAccountsTable() {
               <TableHead>Account Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead className="text-right">Balance</TableHead>
+              <TableHead className="w-[120px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   Loading accounts...
                 </TableCell>
               </TableRow>
             ) : accounts.length > 0 ? (
-              accounts.map(account => (
-                <TableRow key={account.id} className={cn(account.isGroup && 'bg-muted/50')}>
-                  <TableCell className={cn('font-medium', account.isGroup && 'font-bold')}>{account.id}</TableCell>
-                  <TableCell className={cn('font-medium', !account.isGroup && 'pl-8', account.isGroup && 'font-bold' )}>{account.name}</TableCell>
-                  <TableCell>
-                      <Badge variant={getBadgeVariant(account.type)}>{account.type}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                      {account.isGroup ? '' : '$0.00'}
-                  </TableCell>
-                </TableRow>
-              ))
+              renderAccounts()
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   No accounts found. Add one to get started.
                 </TableCell>
               </TableRow>
@@ -110,5 +172,21 @@ export function ChartOfAccountsTable() {
           </TableBody>
         </Table>
       </div>
+       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the account
+              "{accountToDelete?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

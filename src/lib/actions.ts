@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db } from './firebase';
-import { push, ref, set, update, get } from 'firebase/database';
+import { push, ref, set, update, get, remove } from 'firebase/database';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
@@ -265,4 +265,69 @@ export async function createTransaction(transactionId: string | null, prevState:
     
     revalidatePath('/transactions');
     redirect('/transactions');
+}
+
+// --- Chart of Accounts Actions ---
+
+export type AccountFormState =
+  | {
+      errors?: {
+        id?: string[];
+        name?: string[];
+        type?: string[];
+      };
+      message?: string;
+    }
+  | undefined;
+
+const AccountSchema = z.object({
+  id: z.string().regex(/^[0-9]+$/, { message: "Account code must be numeric." }),
+  name: z.string().min(1, { message: "Account name is required." }),
+  type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
+  isGroup: z.boolean().default(false),
+  parentId: z.string().optional(),
+});
+
+export async function createAccount(prevState: AccountFormState, formData: FormData) {
+    const validatedFields = AccountSchema.safeParse({
+        id: formData.get('id'),
+        name: formData.get('name'),
+        type: formData.get('type'),
+        isGroup: formData.get('isGroup') === 'on',
+        parentId: formData.get('parentId'),
+    });
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save account. Please check the fields.',
+        };
+    }
+
+    const { id, ...data } = validatedFields.data;
+
+    try {
+        const accountRef = ref(db, `accounts/${id}`);
+        // For accounts, the ID is user-defined, so we use `set` for both create and update.
+        await set(accountRef, data);
+    } catch (error) {
+        return { message: 'Database Error: Failed to save account.' }
+    }
+    
+    revalidatePath('/accounting/chart-of-accounts');
+    redirect('/accounting/chart-of-accounts');
+}
+
+export async function deleteAccount(accountId: string) {
+    if (!accountId) {
+        return { message: 'Invalid account ID.' };
+    }
+    try {
+        const accountRef = ref(db, `accounts/${accountId}`);
+        await remove(accountRef);
+        revalidatePath('/accounting/chart-of-accounts');
+        return { success: true };
+    } catch (error) {
+        return { message: 'Database Error: Failed to delete account.' };
+    }
 }

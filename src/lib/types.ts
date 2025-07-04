@@ -1,3 +1,4 @@
+
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
 
@@ -60,6 +61,8 @@ export interface Account {
     name: string;
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
+    parentId?: string;
+    // Balance fields will be calculated properties, not stored directly
 }
 
 export interface JournalEntry {

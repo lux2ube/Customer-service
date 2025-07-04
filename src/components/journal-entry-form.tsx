@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -17,33 +18,8 @@ import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Account } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-
-
-// This should be fetched or stored in a central place in the future
-const initialAccounts: Account[] = [
-    { id: '101', name: 'Cash - YER', type: 'Assets', isGroup: false },
-    { id: '102', name: 'Cash - USD', type: 'Assets', isGroup: false },
-    { id: '103', name: 'Cash - SAR', type: 'Assets', isGroup: false },
-    { id: '110', name: 'Bank - YER', type: 'Assets', isGroup: false },
-    { id: '111', name: 'Bank - USD', type: 'Assets', isGroup: false },
-    { id: '112', name: 'Bank - SAR', type: 'Assets', isGroup: false },
-    { id: '120', name: 'USDT Wallet (BEP20)', type: 'Assets', isGroup: false },
-    { id: '130', name: 'Pending Fiat Receivables', type: 'Assets', isGroup: false },
-    { id: '140', name: 'Pending Crypto Receivables', type: 'Assets', isGroup: false },
-    { id: '201', name: 'Client USDT Liability', type: 'Liabilities', isGroup: false },
-    { id: '202', name: 'Pending Withdrawals', type: 'Liabilities', isGroup: false },
-    { id: '210', name: 'AML-Held Accounts', type: 'Liabilities', isGroup: false },
-    { id: '220', name: 'Regulatory Liabilities', type: 'Liabilities', isGroup: false },
-    { id: '301', name: 'Owner’s Equity', type: 'Equity', isGroup: false },
-    { id: '302', name: 'Retained Earnings', type: 'Equity', isGroup: false },
-    { id: '401', name: 'Deposit Fees (USD)', type: 'Income', isGroup: false },
-    { id: '402', name: 'Withdraw Fees (USD)', type: 'Income', isGroup: false },
-    { id: '403', name: 'Exchange Margin Profit', type: 'Income', isGroup: false },
-    { id: '501', name: 'Gas Fees (BNB Network)', type: 'Expenses', isGroup: false },
-    { id: '502', name: 'Bank Transfer Fees', type: 'Expenses', isGroup: false },
-    { id: '503', name: 'Operations / Admin', type: 'Expenses', isGroup: false },
-    { id: '504', name: 'KYC Compliance Costs', type: 'Expenses', isGroup: false },
-];
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
 
 function SubmitButton() {
@@ -60,6 +36,23 @@ export function JournalEntryForm() {
     const { toast } = useToast();
     const [state, formAction] = useFormState<FormState, FormData>(createJournalEntry, undefined);
     const [date, setDate] = React.useState<Date | undefined>(new Date());
+    const [accounts, setAccounts] = React.useState<Account[]>([]);
+    
+    React.useEffect(() => {
+        const accountsRef = ref(db, 'accounts');
+        const unsubscribe = onValue(accountsRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                // Filter out group accounts, as you can only post to detail accounts
+                setAccounts(allAccounts.filter(acc => !acc.isGroup));
+            } else {
+                setAccounts([]);
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
     
     React.useEffect(() => {
         if (state?.message && state.errors) {
@@ -106,12 +99,12 @@ export function JournalEntryForm() {
                 <div className="grid md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <Label>Debit Account (Increase Assets / Expenses)</Label>
-                        <AccountCombobox name="debit_account" accounts={initialAccounts} />
+                        <AccountCombobox name="debit_account" accounts={accounts} />
                         {state?.errors?.debit_account && <p className="text-sm text-destructive">{state.errors.debit_account[0]}</p>}
                     </div>
                      <div className="space-y-2">
                         <Label>Credit Account (Increase Liab. / Equity / Inc.)</Label>
-                        <AccountCombobox name="credit_account" accounts={initialAccounts} />
+                        <AccountCombobox name="credit_account" accounts={accounts} />
                         {state?.errors?.credit_account && <p className="text-sm text-destructive">{state.errors.credit_account[0]}</p>}
                     </div>
                 </div>
