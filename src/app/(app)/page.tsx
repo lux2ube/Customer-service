@@ -3,23 +3,34 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, DollarSign, TrendingUp, ListTodo } from "lucide-react";
+import { Users, DollarSign, TrendingUp, ListTodo, Handshake } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 
 export default function DashboardPage() {
     const [clientCount, setClientCount] = useState<number>(0);
-    const [loading, setLoading] = useState(true);
+    const [leadCount, setLeadCount] = useState<number>(0);
+    const [loadingClients, setLoadingClients] = useState(true);
+    const [loadingLeads, setLoadingLeads] = useState(true);
 
     useEffect(() => {
         const usersRef = ref(db, 'users');
-        const unsubscribe = onValue(usersRef, (snapshot) => {
+        const unsubscribeClients = onValue(usersRef, (snapshot) => {
             setClientCount(snapshot.size);
-            setLoading(false);
+            setLoadingClients(false);
+        });
+
+        const leadsRef = ref(db, 'leads');
+        const unsubscribeLeads = onValue(leadsRef, (snapshot) => {
+            setLeadCount(snapshot.size);
+            setLoadingLeads(false);
         });
 
         // Cleanup subscription on unmount
-        return () => unsubscribe();
+        return () => {
+            unsubscribeClients();
+            unsubscribeLeads();
+        };
     }, []);
 
     return (
@@ -35,7 +46,7 @@ export default function DashboardPage() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        {loading ? (
+                        {loadingClients ? (
                              <div className="text-2xl font-bold">-</div>
                         ) : (
                             <div className="text-2xl font-bold">{clientCount}</div>
@@ -45,12 +56,16 @@ export default function DashboardPage() {
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Deals</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+                        <Handshake className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">12</div>
-                        <p className="text-xs text-muted-foreground">+5% from last month</p>
+                        {loadingLeads ? (
+                             <div className="text-2xl font-bold">-</div>
+                        ) : (
+                            <div className="text-2xl font-bold">{leadCount}</div>
+                        )}
+                        <p className="text-xs text-muted-foreground">Live count from Firebase</p>
                     </CardContent>
                 </Card>
                  <Card>

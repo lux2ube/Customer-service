@@ -8,3 +8,13 @@ export interface Client {
     created_at: string;
     avatarUrl: string;
 }
+
+export interface Lead {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    source: string;
+    status: 'New' | 'Contacted' | 'Qualified' | 'Unqualified';
+    created_at: string;
+}
