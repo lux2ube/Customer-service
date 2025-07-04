@@ -69,3 +69,11 @@ export interface JournalEntry {
   currency: 'USD' | 'YER' | 'SAR' | 'USDT';
   createdAt: string;
 }
+
+export interface Settings {
+    yer_usd: number;
+    sar_usd: number;
+    usdt_usd: number;
+    deposit_fee_percent: number;
+    withdraw_fee_fixed: number;
+}
