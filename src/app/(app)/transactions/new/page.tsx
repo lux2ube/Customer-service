@@ -18,13 +18,17 @@ async function getClients(): Promise<Client[]> {
     return [];
 }
 
-// Mock data for now, as these modules are not yet built
 async function getBankAccounts(): Promise<BankAccount[]> {
-    return [
-        { id: 'b1', name: 'Al-Kuraimi Bank', currency: 'YER' },
-        { id: 'b2', name: 'CAC Bank', currency: 'SAR' },
-        { id: 'b3', name: 'Tadhamon Bank', currency: 'USD' },
-    ]
+    const accountsRef = ref(db, 'bank_accounts/');
+    const snapshot = await get(accountsRef);
+    if (snapshot.exists()) {
+        const data = snapshot.val();
+        return Object.keys(data).map(key => ({
+            id: key,
+            ...data[key]
+        }));
+    }
+    return [];
 }
 
 async function getCryptoWallets(): Promise<CryptoWallet[]> {

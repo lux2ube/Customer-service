@@ -99,6 +99,64 @@ export async function deleteClientAction(id: string) {
     redirect('/clients');
 }
 
+const BankAccountSchema = z.object({
+    name: z.string().min(1, 'Account name is required.'),
+    currency: z.enum(['YER', 'SAR', 'USD'], { required_error: 'Currency is required.'}),
+});
+
+export async function saveBankAccount(id: string | null, prevState: FormState, formData: FormData): Promise<FormState> {
+    const validatedFields = BankAccountSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            message: 'Failed to save bank account.',
+            errors: validatedFields.error.flatten().fieldErrors,
+        }
+    }
+    
+    const accountData = validatedFields.data;
+    let accountId = id;
+    
+    try {
+        if (accountId) {
+            // Update existing
+            const accountRef = ref(db, `bank_accounts/${accountId}`);
+            await set(accountRef, accountData);
+        } else {
+            // Create new
+            const accountsRef = ref(db, 'bank_accounts');
+            const newAccountRef = push(accountsRef);
+            await set(newAccountRef, { 
+                ...accountData, 
+                createdAt: new Date().toISOString(),
+            });
+            accountId = newAccountRef.key;
+        }
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'Database error.';
+        return { message: `Error: ${errorMessage}` };
+    }
+
+    revalidatePath('/bank-accounts');
+    revalidatePath('/transactions/new');
+    return { message: `Successfully ${id ? 'updated' : 'added'} bank account.` };
+}
+
+export async function deleteBankAccountAction(id: string) {
+    if (!id) {
+        console.error("Delete action called without an ID.");
+        return;
+    }
+    try {
+        const accountRef = ref(db, `bank_accounts/${id}`);
+        await remove(accountRef);
+        revalidatePath('/bank-accounts');
+        revalidatePath('/transactions/new');
+    } catch (e) {
+        console.error('Failed to delete bank account:', e);
+    }
+}
+
 
 const TransactionSchema = z.object({
     transactionDate: z.string().min(1, 'Date is required.'),
