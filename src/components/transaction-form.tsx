@@ -16,7 +16,7 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, BankAccount, Settings, Transaction } from '@/lib/types';
+import type { Client, Account, Settings, Transaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -38,7 +38,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     
     const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [clients, setClients] = React.useState<Client[]>([]);
-    const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+    const [assetAccounts, setAssetAccounts] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
 
     // Form state that drives calculations
@@ -62,13 +62,17 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
              }
         });
 
-        const bankAccountsRef = ref(db, 'bank_accounts');
-        const unsubscribeBankAccounts = onValue(bankAccountsRef, (snapshot) => {
+        const accountsRef = ref(db, 'accounts');
+        const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
             const data = snapshot.val();
              if (data) {
-                setBankAccounts(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+                const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                // Filter for non-group asset accounts that have a currency
+                setAssetAccounts(allAccounts.filter(acc => 
+                    !acc.isGroup && acc.type === 'Assets' && acc.currency
+                ));
              } else {
-                setBankAccounts([]);
+                setAssetAccounts([]);
              }
         });
 
@@ -79,7 +83,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
         return () => {
             unsubscribeClients();
-            unsubscribeBankAccounts();
+            unsubscribeAccounts();
             unsubscribeSettings();
         };
     }, []);
@@ -116,8 +120,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     }, [state, toast]);
 
     const handleBankAccountSelect = (accountId: string) => {
-        const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
-        if (selectedAccount) {
+        const selectedAccount = assetAccounts.find(acc => acc.id === accountId);
+        if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
         }
     }
@@ -164,7 +168,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                <Label>Bank Account</Label>
-                                <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
+                                <DataCombobox name="bankAccountId" data={assetAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
                             </div>
                             <div className="space-y-2">
                                <Label>Crypto Wallet</Label>
@@ -180,28 +184,17 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="amount">Amount</Label>
+                                <Label htmlFor="amount">Amount ({currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required defaultValue={transaction?.amount} onChange={e => setAmount(Number(e.target.value))}/>
                                 {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                             </div>
-                            <div className="space-y-2">
-                                <Label>Currency</Label>
-                                <Select name="currency" required value={currency} onValueChange={setCurrency}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="USD">USD</SelectItem>
-                                        <SelectItem value="YER">YER</SelectItem>
-                                        <SelectItem value="SAR">SAR</SelectItem>
-                                        <SelectItem value="USDT">USDT</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
+                             <div className="space-y-2">
+                                <Label htmlFor="attachment_url">Upload Transaction Image</Label>
+                                <Input id="attachment_url" name="attachment_url" type="file" />
                             </div>
                         </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="attachment_url">Upload Transaction Image</Label>
-                            <Input id="attachment_url" name="attachment_url" type="file" />
-                        </div>
+                         {/* Hidden input to pass currency to server action */}
+                         <input type="hidden" name="currency" value={currency} />
                     </CardContent>
                 </Card>
                  <Card>

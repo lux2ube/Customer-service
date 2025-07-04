@@ -14,15 +14,6 @@ export interface Client {
     createdAt: string;
 }
 
-export interface BankAccount {
-    id: string;
-    name: string;
-    account_number?: string;
-    currency: 'YER' | 'USD' | 'SAR';
-    status: 'Active' | 'Inactive';
-    createdAt: string;
-}
-
 export interface CryptoWallet {
     id: string;
     name: string;
@@ -63,6 +54,7 @@ export interface Account {
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
     parentId?: string | null;
+    currency?: 'YER' | 'USD' | 'SAR' | 'USDT';
     // Balance fields will be calculated properties, not stored directly
 }
 

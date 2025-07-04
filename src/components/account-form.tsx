@@ -84,10 +84,26 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             </Select>
                         </div>
                     </div>
-                     <div className="flex items-center space-x-2 pt-4">
-                        <Checkbox id="isGroup" name="isGroup" defaultChecked={account?.isGroup} />
-                        <Label htmlFor="isGroup" className="font-normal">This is a group account</Label>
-                        <p className="text-xs text-muted-foreground">(Cannot post transactions to group accounts)</p>
+                     <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="currency">Currency (Optional)</Label>
+                            <Select name="currency" defaultValue={account?.currency || ''}>
+                                <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                    <SelectItem value="YER">YER</SelectItem>
+                                    <SelectItem value="SAR">SAR</SelectItem>
+                                    <SelectItem value="USDT">USDT</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
+                        </div>
+                         <div className="flex items-center space-x-2 pt-8">
+                            <Checkbox id="isGroup" name="isGroup" defaultChecked={account?.isGroup} />
+                            <Label htmlFor="isGroup" className="font-normal">This is a group account</Label>
+                            <p className="text-xs text-muted-foreground">(Cannot post to)</p>
+                        </div>
                     </div>
 
                 </CardContent>

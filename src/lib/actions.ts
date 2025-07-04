@@ -6,7 +6,7 @@ import { db } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client } from './types';
+import type { Client, Account } from './types';
 
 export type FormState =
   | {
@@ -142,63 +142,6 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     redirect('/clients');
 }
 
-// --- Bank Account Actions ---
-export type BankAccountFormState =
-  | {
-      errors?: {
-        name?: string[];
-        account_number?: string[];
-        currency?: string[];
-        status?: string[];
-      };
-      message?: string;
-    }
-  | undefined;
-
-const BankAccountSchema = z.object({
-    name: z.string().min(1, { message: 'Account name is required.' }),
-    account_number: z.string().optional(),
-    currency: z.enum(['USD', 'YER', 'SAR']),
-    status: z.enum(['Active', 'Inactive']),
-});
-
-export async function createBankAccount(accountId: string | null, prevState: BankAccountFormState, formData: FormData) {
-    const validatedFields = BankAccountSchema.safeParse({
-        name: formData.get('name'),
-        account_number: formData.get('account_number'),
-        currency: formData.get('currency'),
-        status: formData.get('status'),
-    });
-
-     if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to save bank account. Please check the fields.',
-        };
-    }
-
-    try {
-        if (accountId) {
-             const accountRef = ref(db, `bank_accounts/${accountId}`);
-             const snapshot = await get(accountRef);
-             const existingData = snapshot.val();
-             await update(accountRef, { ...existingData, ...validatedFields.data });
-        } else {
-            const newAccountRef = push(ref(db, 'bank_accounts'));
-            await set(newAccountRef, {
-                ...validatedFields.data,
-                createdAt: new Date().toISOString(),
-            });
-        }
-    } catch (error) {
-        return { message: 'Database Error: Failed to save bank account.' }
-    }
-    
-    revalidatePath('/bank-accounts');
-    redirect('/bank-accounts');
-}
-
-
 // --- Transaction Actions ---
 export type TransactionFormState =
   | {
@@ -255,13 +198,28 @@ export async function createTransaction(transactionId: string | null, prevState:
             clientName = (snapshot.val() as Client).name;
         }
     } catch (e) {
-        // Could fail, but we can proceed without the name
         console.error("Could not fetch client name for transaction");
     }
+
+    // Get Bank Account Name for denormalization
+    let bankAccountName = '';
+    if (validatedFields.data.bankAccountId) {
+        try {
+            const bankAccountRef = ref(db, `accounts/${validatedFields.data.bankAccountId}`);
+            const snapshot = await get(bankAccountRef);
+            if (snapshot.exists()) {
+                bankAccountName = (snapshot.val() as Account).name;
+            }
+        } catch (e) {
+            console.error("Could not fetch bank account name for transaction");
+        }
+    }
+
 
     const dataToSave = {
         ...validatedFields.data,
         clientName, // Add client name to the record
+        bankAccountName, // Add bank account name to the record
     };
 
     try {
@@ -296,6 +254,7 @@ export type AccountFormState =
         id?: string[];
         name?: string[];
         type?: string[];
+        currency?: string[];
       };
       message?: string;
     }
@@ -307,16 +266,25 @@ const AccountSchema = z.object({
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
   parentId: z.string().optional().nullable(), // Allow empty string or null
+  currency: z.enum(['USD', 'YER', 'SAR', 'USDT']).optional().nullable(),
 });
 
 export async function createAccount(prevState: AccountFormState, formData: FormData) {
-    const validatedFields = AccountSchema.safeParse({
+    const rawData = {
         id: formData.get('id'),
         name: formData.get('name'),
         type: formData.get('type'),
         isGroup: formData.get('isGroup') === 'on',
         parentId: formData.get('parentId') || null,
-    });
+        currency: formData.get('currency') || null,
+    };
+    
+    // If currency is an empty string, convert it to null
+    if (rawData.currency === '') {
+        rawData.currency = null;
+    }
+
+    const validatedFields = AccountSchema.safeParse(rawData);
 
     if (!validatedFields.success) {
         return {
