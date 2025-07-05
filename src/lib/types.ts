@@ -85,7 +85,8 @@ export interface Settings {
     sar_usd: number;
     usdt_usd: number;
     deposit_fee_percent: number;
-    withdraw_fee_fixed: number;
+    withdraw_fee_percent: number;
+    minimum_fee_usd: number;
     bsc_api_key?: string;
     bsc_wallet_address?: string;
 }

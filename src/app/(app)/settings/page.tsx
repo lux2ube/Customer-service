@@ -19,7 +19,8 @@ const initialSettings: Settings = {
     sar_usd: 0.2666,
     usdt_usd: 1.00,
     deposit_fee_percent: 2,
-    withdraw_fee_fixed: 5,
+    withdraw_fee_percent: 1.5,
+    minimum_fee_usd: 1,
     bsc_api_key: '',
     bsc_wallet_address: '',
 };
@@ -149,8 +150,12 @@ export default function SettingsPage() {
                                 <Input id="deposit_fee_percent" type="number" value={settings.deposit_fee_percent || ''} onChange={handleInputChange} />
                             </div>
                             <div className="flex items-center gap-4">
-                                <Label htmlFor="withdraw_fee_fixed" className="w-48">Withdraw Fee (Fixed USD)</Label>
-                                <Input id="withdraw_fee_fixed" type="number" value={settings.withdraw_fee_fixed || ''} onChange={handleInputChange} />
+                                <Label htmlFor="withdraw_fee_percent" className="w-48">Withdraw Fee (%)</Label>
+                                <Input id="withdraw_fee_percent" type="number" value={settings.withdraw_fee_percent || ''} onChange={handleInputChange} />
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <Label htmlFor="minimum_fee_usd" className="w-48">Minimum Fee (USD)</Label>
+                                <Input id="minimum_fee_usd" type="number" value={settings.minimum_fee_usd || ''} onChange={handleInputChange} />
                             </div>
                         </CardContent>
                     </Card>

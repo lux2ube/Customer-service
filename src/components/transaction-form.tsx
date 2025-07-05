@@ -110,6 +110,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         
         let calculatedFee = 0;
         let calculatedExpense = 0;
+        const minimumFee = settings.minimum_fee_usd || 1;
 
         if (transactionType === 'Deposit') {
             if (isUsdtManuallyEdited) {
@@ -120,7 +121,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                     calculatedExpense = -diff; // Expense is the absolute value of the negative difference
                 }
             } else {
-                calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
+                const percentageFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
+                calculatedFee = Math.max(percentageFee, minimumFee);
                 const newUsdtAmount = Number((calculatedUsdValue - calculatedFee).toFixed(2));
                 if (usdtAmount !== newUsdtAmount) {
                     setUsdtAmount(newUsdtAmount);
@@ -135,7 +137,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                     calculatedExpense = -diff;
                 }
             } else {
-                calculatedFee = settings.withdraw_fee_fixed || 0;
+                const percentageFee = calculatedUsdValue * ((settings.withdraw_fee_percent || 0) / 100);
+                calculatedFee = Math.max(percentageFee, minimumFee);
                 const newUsdtAmount = Number((calculatedUsdValue + calculatedFee).toFixed(2));
                 if (usdtAmount !== newUsdtAmount) {
                      setUsdtAmount(newUsdtAmount);
