@@ -58,7 +58,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
-    const [lastEditedField, setLastEditedField] = React.useState<'amount' | 'usdt'>(transaction?.hash ? 'usdt' : 'amount');
+    const [lastEditedField, setLastEditedField] = React.useState<'amount' | 'usdt' | null>(null);
 
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -122,7 +122,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     // Effect for performing financial calculations
     React.useEffect(() => {
+        // Don't run on initial load; wait for a user interaction.
+        if (!lastEditedField) {
+            return;
+        }
+
         if (!settings) return;
+
+        const isSyncedTransaction = !!transaction?.hash;
 
         const getRate = (curr: string) => {
             switch(curr) {
@@ -137,95 +144,75 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const rate = getRate(currency);
         if (rate === 0) return;
 
-        const isSyncedTransaction = !!transaction?.hash;
+        const minimumFee = settings.minimum_fee_usd || 1;
+        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
+        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
+        
+        let finalUsd = 0;
+        let finalFee = 0;
+        let finalExpense = 0;
 
         if (isSyncedTransaction) {
-            // Logic for synced transactions: Amounts are independent, fee/expense is the difference.
-            const finalUsdValue = amount * rate;
-            let difference = 0;
-            if (transactionType === 'Deposit') {
-                difference = finalUsdValue - usdtAmount;
-            } else { // Withdraw
-                difference = usdtAmount - finalUsdValue;
-            }
-
-            let finalFee = 0;
-            let finalExpense = 0;
-
-            if (difference >= 0) {
-                finalFee = difference;
-            } else {
-                finalExpense = -difference;
-            }
-
-            setUsdValue(finalUsdValue);
-            setFee(finalFee);
-            setExpense(finalExpense);
-        } else {
-            // Logic for manual transactions: two-way calculation based on last edited field.
-            const minimumFee = settings.minimum_fee_usd || 1;
-            const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
-            const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
-
-            let finalUsdValue = 0;
-            let finalFee = 0;
-            let finalExpense = 0;
-
-            if (lastEditedField === 'usdt') {
-                // Reverse calculate: from USDT to Amount
+            // --- SYNCED TRANSACTION LOGIC ---
+            if (lastEditedField === 'amount') {
+                // Rule: "never change final usdt according to any change in the amount"
+                // This means USDT is fixed, amount changes, so the difference is fee/expense.
+                finalUsd = amount * rate;
+                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
+                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
+                else { finalFee = 0; finalExpense = -difference; }
+            } else { // lastEditedField === 'usdt'
+                // Rule: "but changing usdt do" -> Reverse calculates the local amount from USDT
+                let derivedUsd = 0;
+                // Reverse calculate from USDT using fee rules
                 if (transactionType === 'Deposit') {
                     const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
                     if ((usdFromFeePercent * depositFeePercent) > minimumFee) {
-                        finalUsdValue = usdFromFeePercent;
+                        derivedUsd = usdFromFeePercent;
                     } else {
-                        finalUsdValue = usdtAmount + minimumFee;
+                        derivedUsd = usdtAmount + minimumFee;
                     }
                 } else { // Withdraw
                     const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
                     if ((usdFromFeePercent * withdrawFeePercent) > minimumFee) {
-                        finalUsdValue = usdFromFeePercent;
+                        derivedUsd = usdFromFeePercent;
                     } else {
-                        finalUsdValue = usdtAmount - minimumFee;
+                        derivedUsd = usdtAmount - minimumFee;
                     }
                 }
+                const newAmount = derivedUsd / rate;
+                setAmount(Number(newAmount.toFixed(2))); // Update the local amount field
+                finalUsd = derivedUsd;
                 
-                const newAmount = finalUsdValue / rate;
-                setAmount(Number(newAmount.toFixed(2)));
-                
-            } else { // Forward calculate: from Amount to USDT
-                finalUsdValue = amount * rate;
+                // Recalculate fee/expense based on the new derived values
+                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
+                if (difference >= 0) { finalFee = difference; } else { finalExpense = -difference; }
             }
-
-            // Now that we have a definitive USD value, calculate fees and final USDT
-            if (lastEditedField === 'usdt') {
-                const difference = (transactionType === 'Deposit') ? finalUsdValue - usdtAmount : usdtAmount - finalUsdValue;
-                if (difference >= 0) {
-                    finalFee = difference;
-                    finalExpense = 0;
-                } else {
-                    finalFee = 0;
-                    finalExpense = -difference;
-                }
-            } else {
-                let percentageFee = (transactionType === 'Deposit') ? finalUsdValue * depositFeePercent : finalUsdValue * withdrawFeePercent;
-                let calculatedFee = Math.max(percentageFee, minimumFee);
+        } else {
+            // --- MANUAL TRANSACTION LOGIC ---
+            if (lastEditedField === 'amount') {
+                // Rule: "amount change lead to usdt change"
+                finalUsd = amount * rate;
+                const percentageFee = (transactionType === 'Deposit') ? finalUsd * depositFeePercent : finalUsd * withdrawFeePercent;
+                finalFee = Math.max(percentageFee, minimumFee);
                 
-                let finalUsdtAmount = 0;
-                if (transactionType === 'Deposit') {
-                    finalUsdtAmount = finalUsdValue - calculatedFee;
-                } else { // Withdraw
-                    finalUsdtAmount = finalUsdValue + calculatedFee;
-                }
-                finalFee = calculatedFee;
-                setUsdtAmount(Number(finalUsdtAmount.toFixed(2)));
+                const finalUsdt = (transactionType === 'Deposit') ? finalUsd - finalFee : finalUsd + finalFee;
+                setUsdtAmount(Number(finalUsdt.toFixed(2))); // Update the USDT amount field
+            } else { // lastEditedField === 'usdt'
+                // Rule: "usdt change lead to fee or expense change"
+                finalUsd = amount * rate; // amount is fixed
+                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
+                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
+                else { finalFee = 0; finalExpense = -difference; }
             }
-
-            setUsdValue(finalUsdValue);
-            setFee(finalFee);
-            setExpense(finalExpense);
         }
 
+        setUsdValue(finalUsd);
+        setFee(finalFee);
+        setExpense(finalExpense);
+
     }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField, transaction]);
+
 
     // Effect for handling server action responses
     React.useEffect(() => {
@@ -437,7 +424,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     <Card>
                         <CardHeader>
                             <CardTitle>Payment Preview</CardTitle>
-                            <CardDescription>Values are calculated automatically. Final USDT amount can be overridden.</CardDescription>
+                            <CardDescription>Values are calculated automatically based on your interaction.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className='flex justify-between items-center'>
