@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
-import { Save, Trash2 } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
-import { addBlacklistItem, deleteBlacklistItem } from '@/lib/actions';
+import { Save, Trash2, FileScan, Loader2 } from 'lucide-react';
+import { useFormStatus, useActionState } from 'react-dom';
+import { addBlacklistItem, deleteBlacklistItem, scanClientsWithBlacklist, type ScanState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { BlacklistItem } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -27,11 +27,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-function SubmitButton() {
+function AddButton() {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending}>
             {pending ? 'Adding...' : <><Save className="mr-2 h-4 w-4" />Add to Blacklist</>}
+        </Button>
+    );
+}
+
+function ScanButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" variant="outline" disabled={pending}>
+            {pending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scanning...</>
+            ) : (
+                <><FileScan className="mr-2 h-4 w-4" />Scan All Clients</>
+            )}
         </Button>
     );
 }
@@ -44,6 +57,18 @@ export function BlacklistManager() {
     const [loading, setLoading] = React.useState(true);
     const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
     const [itemToDelete, setItemToDelete] = React.useState<BlacklistItem | null>(null);
+
+    const [scanState, scanAction] = useActionState<ScanState, void>(scanClientsWithBlacklist, undefined);
+
+    React.useEffect(() => {
+        if (scanState?.message) {
+            toast({
+                title: scanState.error ? 'Scan Failed' : 'Scan Complete',
+                description: scanState.message,
+                variant: scanState.error ? 'destructive' : 'default',
+            });
+        }
+    }, [scanState, toast]);
 
     React.useEffect(() => {
         const blacklistRef = ref(db, 'blacklist/');
@@ -122,9 +147,23 @@ export function BlacklistManager() {
                         </div>
                     </CardContent>
                     <CardFooter className="flex justify-end">
-                        <SubmitButton />
+                        <AddButton />
                     </CardFooter>
                 </form>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Manual Actions</CardTitle>
+                    <CardDescription>
+                        Run a manual scan to apply the current blacklist to all existing clients. This is useful after adding new items.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form action={scanAction}>
+                        <ScanButton />
+                    </form>
+                </CardContent>
             </Card>
 
             <Card>

@@ -911,6 +911,7 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
 
 // --- Blacklist Actions ---
 export type BlacklistFormState = { message?: string } | undefined;
+export type ScanState = { message?: string; error?: boolean; } | undefined;
 
 const BlacklistItemSchema = z.object({
     type: z.enum(['Name', 'Phone', 'Address']),
@@ -945,5 +946,74 @@ export async function deleteBlacklistItem(id: string): Promise<BlacklistFormStat
         return {};
     } catch (error) {
         return { message: 'Database error: Failed to delete item.' };
+    }
+}
+
+export async function scanClientsWithBlacklist(): Promise<ScanState> {
+    try {
+        const [clientsSnapshot, blacklistSnapshot] = await Promise.all([
+            get(ref(db, 'clients')),
+            get(ref(db, 'blacklist'))
+        ]);
+
+        if (!clientsSnapshot.exists() || !blacklistSnapshot.exists()) {
+            return { message: "No clients or blacklist items to scan.", error: false };
+        }
+
+        const clientsData: Record<string, Client> = clientsSnapshot.val();
+        const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
+
+        const nameBlacklist = blacklistItems.filter(item => item.type === 'Name');
+        const phoneBlacklist = blacklistItems.filter(item => item.type === 'Phone');
+        
+        let flaggedCount = 0;
+        const updates: { [key: string]: any } = {};
+
+        for (const clientId in clientsData) {
+            const client = { id: clientId, ...clientsData[clientId] };
+            let needsUpdate = false;
+            let currentFlags = client.review_flags || [];
+            
+            // Check against name blacklist
+            for (const item of nameBlacklist) {
+                const clientWords = new Set(client.name.toLowerCase().split(/\s+/));
+                const blacklistWords = item.value.toLowerCase().split(/\s+/);
+
+                if (blacklistWords.every(word => clientWords.has(word))) {
+                    if (!currentFlags.includes('Blacklisted')) {
+                        currentFlags.push('Blacklisted');
+                        needsUpdate = true;
+                    }
+                    break;
+                }
+            }
+            
+            // Check against phone blacklist
+            for (const item of phoneBlacklist) {
+                 if (client.phone === item.value) {
+                    if (!currentFlags.includes('Blacklisted')) {
+                        currentFlags.push('Blacklisted');
+                        needsUpdate = true;
+                    }
+                    break;
+                }
+            }
+
+            if (needsUpdate) {
+                updates[`/clients/${clientId}/review_flags`] = currentFlags;
+                flaggedCount++;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/clients');
+        return { message: `Scan complete. Scanned ${Object.keys(clientsData).length} clients and flagged ${flaggedCount} new clients.`, error: false };
+
+    } catch (error: any) {
+        console.error("Blacklist Scan Error:", error);
+        return { message: error.message || "An unknown error occurred during the scan.", error: true };
     }
 }
