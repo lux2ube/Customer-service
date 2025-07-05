@@ -27,7 +27,7 @@ function SubmitButton() {
 export function AccountForm({ account, parentAccounts }: { account?: Account, parentAccounts: Account[] }) {
     const { toast } = useToast();
     
-    const action = account ? createAccount.bind(null, account.id) : createAccount.bind(null, null);
+    const action = createAccount.bind(null, account?.id || null);
     const [state, formAction] = useActionState<AccountFormState, FormData>(action, undefined);
     
     React.useEffect(() => {
@@ -73,7 +73,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="parentId">Parent Account (Group)</Label>
-                            <Select name="parentId" defaultValue={account?.parentId || undefined}>
+                            <Select name="parentId" defaultValue={account?.parentId || 'none'}>
                                 <SelectTrigger><SelectValue placeholder="Select a parent account..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
@@ -87,7 +87,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                      <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="currency">Currency (Optional)</Label>
-                            <Select name="currency" defaultValue={account?.currency || undefined}>
+                            <Select name="currency" defaultValue={account?.currency || 'none'}>
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>

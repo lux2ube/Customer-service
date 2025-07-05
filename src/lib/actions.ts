@@ -2,8 +2,9 @@
 'use server';
 
 import { z } from 'zod';
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account } from './types';
@@ -91,6 +92,7 @@ export type ClientFormState =
         name?: string[];
         phone?: string[];
         verification_status?: string[];
+        kyc_document_url?: string[];
       };
       message?: string;
     }
@@ -99,20 +101,42 @@ export type ClientFormState =
 const ClientSchema = z.object({
     name: z.string().min(1, { message: 'Name is required.' }),
     phone: z.string().min(1, { message: 'Phone is required.' }),
-    kyc_type: z.enum(['ID', 'Passport']).optional(),
-    kyc_document_url: z.string().optional(),
+    kyc_type: z.enum(['ID', 'Passport']).optional().nullable(),
+    kyc_document_url: z.string().url({ message: "Invalid URL." }).optional().nullable(),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
 });
 
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData) {
-    const validatedFields = ClientSchema.safeParse({
+    const newId = clientId || push(ref(db, 'clients')).key;
+    if (!newId) throw new Error("Could not generate a client ID.");
+    
+    // 1. Handle File Upload
+    const kycFile = formData.get('kyc_document_url') as File | null;
+    let kycUrlString: string | undefined = undefined;
+
+    if (kycFile && kycFile.size > 0) {
+        try {
+            const fileRef = storageRef(storage, `clients/${newId}/${kycFile.name}`);
+            const snapshot = await uploadBytes(fileRef, kycFile);
+            kycUrlString = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("KYC upload failed:", error);
+            return { message: 'Database Error: Failed to upload KYC document.' };
+        }
+    }
+
+    // 2. Prepare data for validation
+    const dataToValidate = {
         name: formData.get('name'),
         phone: formData.get('phone'),
-        kyc_type: formData.get('kyc_type'),
+        kyc_type: formData.get('kyc_type') || null,
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
-    });
+        kyc_document_url: kycUrlString,
+    };
+
+    const validatedFields = ClientSchema.safeParse(dataToValidate);
 
     if (!validatedFields.success) {
         return {
@@ -120,17 +144,26 @@ export async function createClient(clientId: string | null, prevState: ClientFor
             message: 'Failed to save client. Please check the fields.',
         };
     }
+    
+    let finalData: Partial<Client> = validatedFields.data;
 
+    // If editing and no new file was uploaded, we must retain the old URL.
+    if (clientId && !finalData.kyc_document_url) {
+        const clientRef = ref(db, `clients/${clientId}`);
+        const snapshot = await get(clientRef);
+        const existingData = snapshot.val();
+        finalData.kyc_document_url = existingData?.kyc_document_url;
+    }
+
+
+    // 3. Save to Database
     try {
         if (clientId) {
-            const clientRef = ref(db, `clients/${clientId}`);
-            const snapshot = await get(clientRef);
-            const existingData = snapshot.val();
-            await update(clientRef, { ...existingData, ...validatedFields.data });
+            await update(ref(db, `clients/${clientId}`), finalData);
         } else {
-            const newClientRef = push(ref(db, 'clients'));
+            const newClientRef = ref(db, `clients/${newId}`);
             await set(newClientRef, {
-                ...validatedFields.data,
+                ...finalData,
                 createdAt: new Date().toISOString()
             });
         }
@@ -151,6 +184,7 @@ export type TransactionFormState =
         type?: string[];
         amount?: string[];
         currency?: string[];
+        attachment_url?: string[];
       };
       message?: string;
     }
@@ -167,19 +201,44 @@ const TransactionSchema = z.object({
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number(),
     amount_usdt: z.coerce.number(),
-    attachment_url: z.string().optional(),
+    attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),
     remittance_number: z.string().optional(),
     hash: z.string().optional(),
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
-    flags: z.string().optional().transform(v => v ? [v] : []), // Store as array
+    flags: z.array(z.string()).optional(),
 });
 
 
 export async function createTransaction(transactionId: string | null, prevState: TransactionFormState, formData: FormData) {
-    const rawData = Object.fromEntries(formData.entries());
-    const validatedFields = TransactionSchema.safeParse(rawData);
+    const newId = transactionId || push(ref(db, 'transactions')).key;
+    if (!newId) throw new Error("Could not generate a transaction ID.");
+
+    // 1. Handle file upload
+    const attachmentFile = formData.get('attachment_url') as File | null;
+    let attachmentUrlString: string | undefined = undefined;
+
+    if (attachmentFile && attachmentFile.size > 0) {
+        try {
+            const fileRef = storageRef(storage, `transactions/${newId}/${attachmentFile.name}`);
+            const snapshot = await uploadBytes(fileRef, attachmentFile);
+            attachmentUrlString = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("Attachment upload failed:", error);
+            return { message: 'Database Error: Failed to upload attachment.' };
+        }
+    }
+
+    // 2. Prepare data for validation
+    const flag = formData.get('flags');
+    const dataToValidate = {
+        ...Object.fromEntries(formData.entries()),
+        attachment_url: attachmentUrlString,
+        flags: flag ? [flag] : [],
+    };
+    
+    const validatedFields = TransactionSchema.safeParse(dataToValidate);
     
     if (!validatedFields.success) {
         console.log(validatedFields.error.flatten().fieldErrors);
@@ -188,11 +247,22 @@ export async function createTransaction(transactionId: string | null, prevState:
             message: 'Failed to create transaction. Please check the fields.',
         };
     }
+    
+    let dataToSave = { ...validatedFields.data };
+    
+    // If editing and no new file was uploaded, we must retain the old URL.
+    if (transactionId && !dataToSave.attachment_url) {
+        const transactionRef = ref(db, `transactions/${transactionId}`);
+        const snapshot = await get(transactionRef);
+        const existingData = snapshot.val();
+        dataToSave.attachment_url = existingData?.attachment_url;
+    }
+
 
     // Get Client Name for denormalization
     let clientName = '';
     try {
-        const clientRef = ref(db, `clients/${validatedFields.data.clientId}`);
+        const clientRef = ref(db, `clients/${dataToSave.clientId}`);
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
             clientName = (snapshot.val() as Client).name;
@@ -203,9 +273,9 @@ export async function createTransaction(transactionId: string | null, prevState:
 
     // Get Bank Account Name for denormalization
     let bankAccountName = '';
-    if (validatedFields.data.bankAccountId) {
+    if (dataToSave.bankAccountId) {
         try {
-            const bankAccountRef = ref(db, `accounts/${validatedFields.data.bankAccountId}`);
+            const bankAccountRef = ref(db, `accounts/${dataToSave.bankAccountId}`);
             const snapshot = await get(bankAccountRef);
             if (snapshot.exists()) {
                 bankAccountName = (snapshot.val() as Account).name;
@@ -215,23 +285,20 @@ export async function createTransaction(transactionId: string | null, prevState:
         }
     }
 
-
-    const dataToSave = {
-        ...validatedFields.data,
-        clientName, // Add client name to the record
-        bankAccountName, // Add bank account name to the record
+    const finalData = {
+        ...dataToSave,
+        clientName,
+        bankAccountName,
     };
 
     try {
         if (transactionId) {
             const transactionRef = ref(db, `transactions/${transactionId}`);
-            const snapshot = await get(transactionRef);
-            const existingData = snapshot.val();
-            await update(transactionRef, { ...existingData, ...dataToSave });
+            await update(transactionRef, finalData);
         } else {
-            const newTransactionRef = push(ref(db, 'transactions'));
+            const newTransactionRef = ref(db, `transactions/${newId}`);
             await set(newTransactionRef, {
-                ...dataToSave,
+                ...finalData,
                 createdAt: new Date().toISOString(),
             });
         }
@@ -266,7 +333,7 @@ const AccountSchema = z.object({
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
   parentId: z.string().optional().nullable(),
-  currency: z.enum(['USD', 'YER', 'SAR', 'USDT']).optional().nullable(),
+  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', '']).optional().nullable(),
 });
 
 export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData) {
