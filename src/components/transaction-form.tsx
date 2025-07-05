@@ -51,6 +51,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     // Calculated values for the preview
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
+    const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
 
@@ -107,28 +108,43 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         }
         setUsdValue(calculatedUsdValue);
         
+        let calculatedFee = 0;
+        let calculatedExpense = 0;
+
         if (transactionType === 'Deposit') {
             if (isUsdtManuallyEdited) {
-                const calculatedFee = calculatedUsdValue - usdtAmount;
-                setFee(calculatedFee);
+                const diff = calculatedUsdValue - usdtAmount;
+                if (diff >= 0) {
+                    calculatedFee = diff;
+                } else {
+                    calculatedExpense = -diff; // Expense is the absolute value of the negative difference
+                }
             } else {
-                const calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
-                setFee(calculatedFee);
+                calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
                 const newUsdtAmount = Number((calculatedUsdValue - calculatedFee).toFixed(2));
                 if (usdtAmount !== newUsdtAmount) {
                     setUsdtAmount(newUsdtAmount);
                 }
             }
         } else { // Withdraw
-            const calculatedFee = settings.withdraw_fee_fixed || 0;
-            setFee(calculatedFee);
-            if (!isUsdtManuallyEdited) {
+            if (isUsdtManuallyEdited) {
+                const diff = usdtAmount - calculatedUsdValue;
+                 if (diff >= 0) {
+                    calculatedFee = diff;
+                } else {
+                    calculatedExpense = -diff;
+                }
+            } else {
+                calculatedFee = settings.withdraw_fee_fixed || 0;
                 const newUsdtAmount = Number((calculatedUsdValue + calculatedFee).toFixed(2));
                 if (usdtAmount !== newUsdtAmount) {
                      setUsdtAmount(newUsdtAmount);
                 }
             }
         }
+        
+        setFee(calculatedFee);
+        setExpense(calculatedExpense);
 
     }, [amount, currency, transactionType, settings, isUsdtManuallyEdited, usdtAmount]);
 
@@ -241,6 +257,15 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             <Label>Fee</Label>
                             <span className="font-mono text-lg">${fee.toFixed(2)}</span>
                         </div>
+                        {expense > 0 && (
+                            <>
+                                <Separator />
+                                <div className='flex justify-between items-center text-destructive'>
+                                    <Label className="font-bold text-destructive">Expense / Loss</Label>
+                                    <span className="font-mono text-lg font-bold">${expense.toFixed(2)}</span>
+                                </div>
+                            </>
+                        )}
                          <Separator />
                         <div className='flex justify-between items-center'>
                             <Label htmlFor="amount_usdt" className="font-bold">Final USDT Amount</Label>
@@ -257,6 +282,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         {/* Hidden inputs to pass calculated values to the server action */}
                         <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
                         <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
+                        <input type="hidden" name="expense_usd" value={expense.toFixed(2)} />
                     </CardContent>
                     <CardFooter>
                         <SubmitButton />

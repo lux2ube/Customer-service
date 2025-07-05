@@ -221,6 +221,7 @@ const TransactionSchema = z.object({
     cryptoWalletId: z.string().optional().nullable(),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number(),
+    expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),

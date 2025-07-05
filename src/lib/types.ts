@@ -37,6 +37,7 @@ export interface Transaction {
     currency: 'YER' | 'USD' | 'SAR' | 'USDT';
     amount_usd: number;
     fee_usd: number;
+    expense_usd?: number;
     amount_usdt: number;
     attachment_url?: string;
     notes?: string;
