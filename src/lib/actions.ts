@@ -8,6 +8,11 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument } from './types';
+import { 
+    initializeWhatsAppClient as initWhatsApp, 
+    getWhatsAppClientStatus as getWhatsAppStatus, 
+    sendWhatsAppMessage 
+} from './whatsapp';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -812,5 +817,71 @@ export async function importClients(prevState: ImportState, formData: FormData):
     } catch (error: any) {
         console.error("Client Import Error:", error);
         return { message: error.message || "An unknown error occurred during import.", error: true };
+    }
+}
+
+// --- WhatsApp Actions ---
+
+export async function initializeWhatsAppClient() {
+    await initWhatsApp();
+}
+
+export async function getWhatsAppClientStatus() {
+    const status = await getWhatsAppStatus();
+    // Return a plain object, not a class instance
+    return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
+}
+
+export type WhatsAppSendState = { message?: string; success?: boolean; } | undefined;
+
+export async function sendWhatsAppNotification(transactionId: string): Promise<WhatsAppSendState> {
+    if (!transactionId) {
+        return { message: 'Transaction ID is missing.', success: false };
+    }
+
+    try {
+        // 1. Get Transaction Details
+        const txRef = ref(db, `transactions/${transactionId}`);
+        const txSnapshot = await get(txRef);
+        if (!txSnapshot.exists()) {
+            return { message: `Transaction with ID ${transactionId} not found.`, success: false };
+        }
+        const transaction: Transaction = { id: transactionId, ...txSnapshot.val() };
+
+        // 2. Get Client Phone Number
+        const clientRef = ref(db, `clients/${transaction.clientId}`);
+        const clientSnapshot = await get(clientRef);
+        if (!clientSnapshot.exists()) {
+            return { message: `Client with ID ${transaction.clientId} not found.`, success: false };
+        }
+        const client: Client = clientSnapshot.val();
+        const phoneNumber = client.phone;
+
+        if (!phoneNumber) {
+            return { message: `Client ${client.name} does not have a phone number.`, success: false };
+        }
+
+        // 3. Construct Message
+        const formattedAmount = new Intl.NumberFormat('en-US').format(transaction.amount);
+        const formattedUsdAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.amount_usd);
+
+        let message = `*Transaction Notification*\n\n` +
+                      `Hello ${client.name},\n\n` +
+                      `Here's a confirmation of your recent transaction:\n\n` +
+                      `*ID:* ${transaction.id}\n` +
+                      `*Type:* ${transaction.type}\n` +
+                      `*Amount:* ${formattedAmount} ${transaction.currency} (${formattedUsdAmount})\n` +
+                      `*Status:* ${transaction.status}\n\n` +
+                      `Thank you for your business.`;
+
+        // 4. Send Message via WhatsApp
+        await sendWhatsAppMessage(phoneNumber, message);
+
+        revalidatePath(`/transactions/${transactionId}/edit`);
+        return { message: 'WhatsApp notification sent successfully!', success: true };
+
+    } catch (error: any) {
+        console.error("Failed to send WhatsApp notification:", error);
+        return { message: error.message || "An unknown error occurred.", success: false };
     }
 }
