@@ -1,14 +1,13 @@
 
-
 'use server';
 
 import { z } from 'zod';
-import { db, storage } from './firebase';
+import { db } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account } from './types';
+import type { Client, Account, Settings } from './types';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -136,22 +135,13 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) throw new Error("Could not generate a client ID.");
     
-    // 1. Handle File Upload
     const kycFile = formData.get('kyc_document_url') as File | null;
     let kycUrlString: string | undefined = undefined;
 
     if (kycFile && kycFile.size > 0) {
-        try {
-            const fileRef = storageRef(storage, `clients/${newId}/${kycFile.name}`);
-            const snapshot = await uploadBytes(fileRef, kycFile);
-            kycUrlString = await getDownloadURL(snapshot.ref);
-        } catch (error) {
-            console.error("KYC upload failed:", error);
-            return { message: 'Database Error: Failed to upload KYC document.' };
-        }
+        return { message: 'File uploads are not implemented in this action.' };
     }
 
-    // 2. Prepare data for validation
     const dataToValidate = {
         name: formData.get('name'),
         phone: formData.get('phone'),
@@ -172,7 +162,6 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     
     let finalData: Partial<Client> = validatedFields.data;
 
-    // If editing and no new file was uploaded, we must retain the old URL.
     if (clientId && !finalData.kyc_document_url) {
         const clientRef = ref(db, `clients/${clientId}`);
         const snapshot = await get(clientRef);
@@ -182,7 +171,6 @@ export async function createClient(clientId: string | null, prevState: ClientFor
 
     const dataForFirebase = stripUndefined(finalData);
 
-    // 3. Save to Database
     try {
         if (clientId) {
             await update(ref(db, `clients/${clientId}`), dataForFirebase);
@@ -241,22 +229,13 @@ export async function createTransaction(transactionId: string | null, prevState:
     const newId = transactionId || push(ref(db, 'transactions')).key;
     if (!newId) throw new Error("Could not generate a transaction ID.");
 
-    // 1. Handle file upload
     const attachmentFile = formData.get('attachment_url') as File | null;
     let attachmentUrlString: string | undefined = undefined;
 
     if (attachmentFile && attachmentFile.size > 0) {
-        try {
-            const fileRef = storageRef(storage, `transactions/${newId}/${attachmentFile.name}`);
-            const snapshot = await uploadBytes(fileRef, attachmentFile);
-            attachmentUrlString = await getDownloadURL(snapshot.ref);
-        } catch (error) {
-            console.error("Attachment upload failed:", error);
-            return { message: 'Database Error: Failed to upload attachment.' };
-        }
+        return { message: 'File uploads are not implemented in this action.' };
     }
 
-    // 2. Prepare data for validation
     const flag = formData.get('flags');
     const dataToValidate = {
         ...Object.fromEntries(formData.entries()),
@@ -276,7 +255,6 @@ export async function createTransaction(transactionId: string | null, prevState:
     
     let dataToSave = { ...validatedFields.data };
     
-    // If editing and no new file was uploaded, we must retain the old URL.
     if (transactionId && !dataToSave.attachment_url) {
         const transactionRef = ref(db, `transactions/${transactionId}`);
         const snapshot = await get(transactionRef);
@@ -285,7 +263,6 @@ export async function createTransaction(transactionId: string | null, prevState:
     }
 
 
-    // Get Client Name for denormalization
     let clientName = '';
     try {
         const clientRef = ref(db, `clients/${dataToSave.clientId}`);
@@ -297,7 +274,6 @@ export async function createTransaction(transactionId: string | null, prevState:
         console.error("Could not fetch client name for transaction");
     }
 
-    // Get Bank Account Name for denormalization
     let bankAccountName = '';
     if (dataToSave.bankAccountId) {
         try {
@@ -311,7 +287,6 @@ export async function createTransaction(transactionId: string | null, prevState:
         }
     }
 
-    // Get Crypto Wallet Name for denormalization
     let cryptoWalletName = '';
     if (dataToSave.cryptoWalletId) {
         try {
@@ -376,7 +351,7 @@ const AccountSchema = z.object({
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
   parentId: z.string().optional().nullable(),
-  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', '']).optional().nullable(),
+  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', 'none']).optional().nullable(),
 });
 
 export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData) {
@@ -439,5 +414,88 @@ export async function deleteAccount(accountId: string) {
         return { success: true };
     } catch (error) {
         return { message: 'Database Error: Failed to delete account.' };
+    }
+}
+
+
+// --- BscScan Sync Action ---
+export type SyncState = { message?: string; error?: boolean; } | undefined;
+
+const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const USDT_DECIMALS = 18;
+
+export async function syncBscTransactions(prevState: SyncState, formData: FormData): Promise<SyncState> {
+    try {
+        const settingsSnapshot = await get(ref(db, 'settings'));
+        if (!settingsSnapshot.exists()) {
+            return { message: 'Settings not found. Please configure API key and wallet address.', error: true };
+        }
+        const settings: Settings = settingsSnapshot.val();
+        const { bsc_api_key, bsc_wallet_address } = settings;
+
+        if (!bsc_api_key || !bsc_wallet_address) {
+            return { message: 'BscScan API Key or Wallet Address is not set in Settings.', error: true };
+        }
+        
+        const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${bsc_wallet_address}&page=1&offset=200&sort=desc&apikey=${bsc_api_key}`;
+        
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+            return { message: `BscScan API request failed: ${response.statusText}`, error: true };
+        }
+        const data = await response.json();
+        
+        if (data.status !== "1") {
+            return { message: `BscScan API Error: ${data.message}`, error: true };
+        }
+
+        const transactionsSnapshot = await get(ref(db, 'transactions'));
+        const existingTxs = transactionsSnapshot.val() || {};
+        const existingHashes = new Set(Object.values(existingTxs).map((tx: any) => tx.hash));
+
+        const incomingTxs = data.result.filter((tx: any) => tx.to.toLowerCase() === bsc_wallet_address.toLowerCase());
+
+        let newTxCount = 0;
+        const updates: { [key: string]: any } = {};
+
+        for (const tx of incomingTxs) {
+            if (!existingHashes.has(tx.hash)) {
+                const newTxId = push(ref(db, 'transactions')).key;
+                if (!newTxId) continue;
+
+                const amount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
+
+                const newTxData = {
+                    id: newTxId,
+                    date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+                    type: 'Deposit',
+                    clientId: 'unassigned-bscscan',
+                    clientName: 'Unassigned (BSCScan)',
+                    amount: amount,
+                    currency: 'USDT',
+                    amount_usd: amount,
+                    fee_usd: 0,
+                    amount_usdt: amount,
+                    hash: tx.hash,
+                    status: 'Confirmed',
+                    notes: `Synced from BscScan. From: ${tx.from}`,
+                    createdAt: new Date().toISOString(),
+                    flags: [],
+                };
+                updates[`/transactions/${newTxId}`] = stripUndefined(newTxData);
+                newTxCount++;
+            }
+        }
+
+        if (newTxCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/transactions');
+        return { message: `${newTxCount} new transaction(s) were successfully synced.`, error: false };
+
+    } catch (error: any) {
+        console.error("BscScan Sync Error:", error);
+        return { message: error.message || "An unknown error occurred during sync.", error: true };
     }
 }

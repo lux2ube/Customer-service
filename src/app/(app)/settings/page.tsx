@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -19,6 +20,8 @@ const initialSettings: Settings = {
     usdt_usd: 1.00,
     deposit_fee_percent: 2,
     withdraw_fee_fixed: 5,
+    bsc_api_key: '',
+    bsc_wallet_address: '',
 };
 
 export default function SettingsPage() {
@@ -152,6 +155,22 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </div>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>API Integrations</CardTitle>
+                        <CardDescription>Connect to external services like BscScan.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center gap-4">
+                            <Label htmlFor="bsc_api_key" className="w-48">BscScan API Key</Label>
+                            <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <Label htmlFor="bsc_wallet_address" className="w-48">USDT Wallet Address</Label>
+                            <Input id="bsc_wallet_address" type="text" placeholder="0x..." value={settings.bsc_wallet_address || ''} onChange={handleInputChange} />
+                        </div>
+                    </CardContent>
+                </Card>
                 <div className="flex justify-start">
                      <Button onClick={handleSave} disabled={saving}>
                         <Save className="mr-2 h-4 w-4" />

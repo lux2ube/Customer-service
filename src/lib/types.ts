@@ -80,4 +80,6 @@ export interface Settings {
     usdt_usd: number;
     deposit_fee_percent: number;
     withdraw_fee_fixed: number;
+    bsc_api_key?: string;
+    bsc_wallet_address?: string;
 }
