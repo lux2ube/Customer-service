@@ -52,7 +52,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
-    // For synced transactions, treat the USDT amount as manually entered to prevent auto-recalculation.
     const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
 
     React.useEffect(() => {
@@ -71,7 +70,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
             const data = snapshot.val();
              if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                // Filter for non-group asset accounts that have a currency
                 setBankAccounts(allAccounts.filter(acc => 
                     !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
                 ));
@@ -98,7 +96,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
     // Perform calculations whenever an input changes
     React.useEffect(() => {
-        if (!settings || isUsdtManuallyEdited) return;
+        if (!settings) return;
 
         let calculatedUsdValue = 0;
         switch(currency) {
@@ -109,17 +107,30 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         }
         setUsdValue(calculatedUsdValue);
         
-        let calculatedFee = 0;
         if (transactionType === 'Deposit') {
-            calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
+            if (isUsdtManuallyEdited) {
+                const calculatedFee = calculatedUsdValue - usdtAmount;
+                setFee(calculatedFee);
+            } else {
+                const calculatedFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
+                setFee(calculatedFee);
+                const newUsdtAmount = Number((calculatedUsdValue - calculatedFee).toFixed(2));
+                if (usdtAmount !== newUsdtAmount) {
+                    setUsdtAmount(newUsdtAmount);
+                }
+            }
         } else { // Withdraw
-            calculatedFee = settings.withdraw_fee_fixed || 0;
+            const calculatedFee = settings.withdraw_fee_fixed || 0;
+            setFee(calculatedFee);
+            if (!isUsdtManuallyEdited) {
+                const newUsdtAmount = Number((calculatedUsdValue + calculatedFee).toFixed(2));
+                if (usdtAmount !== newUsdtAmount) {
+                     setUsdtAmount(newUsdtAmount);
+                }
+            }
         }
-        setFee(calculatedFee);
 
-        setUsdtAmount(Number((calculatedUsdValue - calculatedFee).toFixed(2)));
-
-    }, [amount, currency, transactionType, settings, isUsdtManuallyEdited]);
+    }, [amount, currency, transactionType, settings, isUsdtManuallyEdited, usdtAmount]);
 
     React.useEffect(() => {
         if (state?.message) {
@@ -203,7 +214,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required defaultValue={transaction?.amount} onChange={handleAmountChange}/>
+                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required value={amount} onChange={handleAmountChange}/>
                                 {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                             </div>
                              <div className="space-y-2">
