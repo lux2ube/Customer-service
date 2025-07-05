@@ -156,8 +156,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setAmount(Number(e.target.value));
-        // For non-synced tx, changing fiat amount should auto-calculate USDT.
-        // For synced tx, USDT amount is fixed, so we don't reset the flag.
         if (!transaction?.hash) {
             setIsUsdtManuallyEdited(false);
         }
@@ -183,10 +181,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                 setIsUsdtManuallyEdited(false);
             }
         }
-    }
-
-    const getClientFullName = (client: Client) => {
-        return [client.firstName, client.secondName, client.thirdName, client.lastName].filter(Boolean).join(' ');
     }
 
     return (
@@ -225,7 +219,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         </div>
                         <div className="space-y-2">
                            <Label>Client</Label>
-                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${getClientFullName(c)} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
+                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
                             {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">

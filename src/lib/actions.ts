@@ -116,8 +116,7 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
 export type ClientFormState =
   | {
       errors?: {
-        firstName?: string[];
-        lastName?: string[];
+        name?: string[];
         phone?: string[];
         verification_status?: string[];
         kyc_document_url?: string[];
@@ -127,10 +126,7 @@ export type ClientFormState =
   | undefined;
 
 const ClientSchema = z.object({
-    firstName: z.string().min(1, { message: 'First name is required.' }),
-    secondName: z.string().optional(),
-    thirdName: z.string().optional(),
-    lastName: z.string().min(1, { message: 'Last name is required.' }),
+    name: z.string().min(1, { message: 'Name is required.' }),
     phone: z.string().min(1, { message: 'Phone is required.' }),
     kyc_type: z.enum(['ID', 'Passport']).optional().nullable(),
     kyc_document_url: z.string().url({ message: "Invalid URL." }).optional().nullable(),
@@ -157,10 +153,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     }
 
     const dataToValidate = {
-        firstName: formData.get('firstName'),
-        secondName: formData.get('secondName'),
-        thirdName: formData.get('thirdName'),
-        lastName: formData.get('lastName'),
+        name: formData.get('name'),
         phone: formData.get('phone'),
         kyc_type: formData.get('kyc_type') || null,
         verification_status: formData.get('verification_status'),
@@ -294,7 +287,7 @@ export async function createTransaction(transactionId: string | null, prevState:
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
             const client = snapshot.val() as Client;
-            clientName = [client.firstName, client.secondName, client.thirdName, client.lastName].filter(Boolean).join(' ');
+            clientName = client.name;
         }
     } catch (e) {
         console.error("Could not fetch client name for transaction");
@@ -684,11 +677,10 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
             const { uniqueId, dateOfAddition, firstName, secondName, thirdName, lastName, phoneNumber } = validatedData.data;
 
+            const name = [firstName, secondName, thirdName, lastName].filter(Boolean).join(' ');
+
             const newClient: Omit<Client, 'id'> = {
-                firstName,
-                secondName,
-                thirdName,
-                lastName,
+                name: name,
                 phone: phoneNumber,
                 verification_status: 'Active', // Default status for imported clients
                 review_flags: [],
