@@ -194,13 +194,19 @@ export function ChartOfAccountsTable() {
             <TableCell className="text-right font-mono">
               {balanceInfo !== undefined && (
                 isGroup ? (
+                  // Group accounts always show aggregated USD balance
                   <span>
                     {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.usd)}
                   </span>
                 ) : (
+                  // Leaf accounts show native currency balance
                   account.currency && (
                     <span>
-                      {new Intl.NumberFormat().format(balanceInfo.native)} {account.currency}
+                      {
+                        account.currency === 'USD' ?
+                          new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.native) :
+                          `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceInfo.native)} ${account.currency}`
+                      }
                     </span>
                   )
                 )
