@@ -306,7 +306,7 @@ export type TransactionFormState =
 
 const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
-    clientId: z.string().min(1, { message: 'Please select a client.' }),
+    clientId: z.string().optional(),
     type: z.enum(['Deposit', 'Withdraw']),
     amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
     currency: z.enum(['USD', 'YER', 'SAR', 'USDT']),
@@ -359,8 +359,43 @@ export async function createTransaction(transactionId: string | null, prevState:
         };
     }
     
+    let dataToSave = { ...validatedFields.data };
+    let finalClientId = dataToSave.clientId;
+
+    // If no client was selected, try to find one by wallet address
+    if (!finalClientId && dataToSave.client_wallet_address) {
+        try {
+            const clientsSnapshot = await get(ref(db, 'clients'));
+            const clientsData: Record<string, Client> = clientsSnapshot.val() || {};
+            const addressToClientMap: Record<string, string> = {};
+            for (const clientId in clientsData) {
+                const client = clientsData[clientId];
+                if (client.bep20_addresses) {
+                    for (const address of client.bep20_addresses) {
+                        addressToClientMap[address.toLowerCase()] = clientId;
+                    }
+                }
+            }
+            const matchedClientId = addressToClientMap[dataToSave.client_wallet_address.toLowerCase()];
+            if (matchedClientId) {
+                finalClientId = matchedClientId;
+            }
+        } catch (e) {
+            console.error("Error looking up client by address:", e);
+        }
+    }
+
+    // After attempting to find a client, we must have one.
+    if (!finalClientId) {
+        return {
+            errors: { clientId: ["A client must be selected, or one must be found via a known wallet address."] },
+            message: 'Failed to create transaction. Client is required.',
+        };
+    }
+    dataToSave.clientId = finalClientId;
+    
     let isBlacklisted = false;
-    const clientAddress = validatedFields.data.client_wallet_address;
+    const clientAddress = dataToSave.client_wallet_address;
     if (clientAddress) {
         try {
             const blacklistSnapshot = await get(ref(db, 'blacklist'));
@@ -380,8 +415,6 @@ export async function createTransaction(transactionId: string | null, prevState:
             console.error("Blacklist check for transaction failed:", e);
         }
     }
-
-    let dataToSave = { ...validatedFields.data };
 
     if (isBlacklisted) {
         if (!dataToSave.flags) dataToSave.flags = [];
@@ -688,6 +721,18 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         const existingTxs = transactionsSnapshot.val() || {};
         const existingHashes = new Set(Object.values(existingTxs).map((tx: any) => tx.hash));
 
+        const clientsSnapshot = await get(ref(db, 'clients'));
+        const clientsData: Record<string, Client> = clientsSnapshot.val() || {};
+        const addressToClientMap: Record<string, { id: string, name: string }> = {};
+        for (const clientId in clientsData) {
+            const client = clientsData[clientId];
+            if (client.bep20_addresses) {
+                for (const address of client.bep20_addresses) {
+                    addressToClientMap[address.toLowerCase()] = { id: clientId, name: client.name };
+                }
+            }
+        }
+
         let newTxCount = 0;
         const updates: { [key: string]: any } = {};
 
@@ -708,6 +753,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             }
 
             const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
+            const clientAddress = transactionType === 'Withdraw' ? tx.from : tx.to;
+            const foundClient = addressToClientMap[clientAddress.toLowerCase()];
 
             const newTxId = push(ref(db, 'transactions')).key;
             if (!newTxId) continue;
@@ -720,8 +767,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 id: newTxId,
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
                 type: transactionType,
-                clientId: 'unassigned-bscscan',
-                clientName: 'Unassigned (BSCScan)',
+                clientId: foundClient ? foundClient.id : 'unassigned-bscscan',
+                clientName: foundClient ? foundClient.name : 'Unassigned (BSCScan)',
                 cryptoWalletId: '1003',
                 cryptoWalletName: cryptoWalletName,
                 amount: syncedAmount,
@@ -733,7 +780,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 hash: tx.hash,
                 status: 'Confirmed',
                 notes: note,
-                client_wallet_address: transactionType === 'Withdraw' ? tx.from : tx.to,
+                client_wallet_address: clientAddress,
                 createdAt: new Date().toISOString(),
                 flags: [],
             };
