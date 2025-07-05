@@ -339,23 +339,25 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </Card>
             </div>
             <div className="lg:col-span-1 space-y-6">
-                {transaction && client && client.phone && (
+                {transaction && client && (
                      <Card>
                         <CardHeader>
                             <CardTitle>Actions</CardTitle>
-                            <CardDescription>Generate invoices or pre-fill a WhatsApp message.</CardDescription>
+                            <CardDescription>Generate invoices or send messages.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <Button asChild className="w-full">
                                 <Link href={`/transactions/${transaction.id}/invoice`} target="_blank">
                                     <FileText className="mr-2 h-4 w-4" />
-                                    View Shareable Invoice
+                                    View Printable Invoice
                                 </Link>
                             </Button>
-                            <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
-                                <MessageCircle className="mr-2 h-4 w-4" />
-                                Generate WhatsApp Link
-                            </Button>
+                            {client.phone && (
+                                <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
+                                    <MessageCircle className="mr-2 h-4 w-4" />
+                                    Send Text via WhatsApp
+                                </Button>
+                            )}
                         </CardContent>
                     </Card>
                 )}
