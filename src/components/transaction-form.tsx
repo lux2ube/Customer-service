@@ -109,36 +109,59 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     // Effect to set initial form data and handle pristine syncs
     React.useEffect(() => {
         if (isDataLoading) {
-            return; // Wait for data to load
+            return;
         }
-
+    
         if (transaction) {
-            // Check if this is a "pristine" synced transaction (has a hash, but amount is 0/unset)
-            const isPristineSync = !!transaction.hash && !transaction.amount;
-            pristineRef.current = isPristineSync;
-
+            // This is an existing transaction being edited.
             const initialData = { ...initialFormData, ...transaction };
-            
-            if (isPristineSync) {
-                // For pristine syncs, clear the amount for the user to enter it.
-                initialData.amount = 0;
-                
-                // Try to pre-select favorite bank account
-                if (client?.favoriteBankAccountId) {
-                    const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-                    if (favAccount) {
-                        initialData.bankAccountId = favAccount.id;
-                        initialData.currency = favAccount.currency || 'USD';
-                    }
+    
+            const isSynced = !!transaction.hash;
+    
+            // Auto-select favorite bank account for synced transactions that don't have one set yet.
+            if (isSynced && !initialData.bankAccountId && client?.favoriteBankAccountId) {
+                const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
+                if (favAccount) {
+                    initialData.bankAccountId = favAccount.id;
+                    initialData.currency = favAccount.currency || 'USD';
                 }
             }
-
+            
+            // Handle pristine state for clearing amount field
+            const isPristineSync = isSynced && !transaction.amount;
+            pristineRef.current = isPristineSync;
+            if (isPristineSync) {
+                initialData.amount = 0; // Clear amount for user to enter
+            } else if (transaction.amount) {
+                // If it's not pristine, make sure we calculate the derived values correctly based on the stored amount
+                const rate = getRate(initialData.currency);
+                if (rate > 0) {
+                     const storedAmountUSD = initialData.amount * rate;
+                     const fixedUsdtAmount = initialData.amount_usdt;
+                     let newFeeUSD = 0;
+                     let newExpenseUSD = 0;
+                     if (initialData.type === 'Deposit') {
+                        const difference = storedAmountUSD - fixedUsdtAmount;
+                        if (difference >= 0) newFeeUSD = difference;
+                        else newExpenseUSD = -difference;
+                     } else { // Withdraw
+                        const difference = fixedUsdtAmount - storedAmountUSD;
+                        if (difference >= 0) newFeeUSD = difference;
+                        else newExpenseUSD = -difference;
+                     }
+                     initialData.amount_usd = storedAmountUSD;
+                     initialData.fee_usd = newFeeUSD;
+                     initialData.expense_usd = newExpenseUSD;
+                }
+            }
+    
             setFormData(initialData);
+    
         } else {
             // This is a brand new, manual transaction.
             setFormData(initialFormData);
         }
-    }, [transaction, client, bankAccounts, isDataLoading]);
+    }, [transaction, client, bankAccounts, isDataLoading, getRate]);
     
     // Server action response handler
     React.useEffect(() => {
@@ -205,7 +228,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const rate = getRate(prev.currency);
             if (rate <= 0) return { ...prev, amount: newAmountNum };
 
-            const newAmountUSD = newAmountNum * rate;
+            let newAmountUSD = newAmountNum * rate;
             let finalFee = 0;
             let newUsdtAmount = 0;
             
@@ -215,16 +238,16 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // Withdraw
-                const feePercent = (settings.withdraw_fee_percent || 0) / 100;
+                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
                 if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
-                    newUsdtAmount = newAmountUSD; // fallback
+                    newAmountUSD = newAmountUSD; // fallback
                     finalFee = 0;
                 } else {
-                    const grossUsdtAmount = newAmountUSD / (1 - feePercent);
-                    const calculatedFee = grossUsdtAmount - newAmountUSD;
+                    const grossAmount = newAmountUSD / (1 - feePercent);
+                    const calculatedFee = grossAmount * feePercent;
                     finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                    newUsdtAmount = newAmountUSD + finalFee;
                 }
+                newUsdtAmount = newAmountUSD - finalFee;
             }
 
             return {
@@ -288,7 +311,34 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                  return { ...prev, bankAccountId: accountId, currency: newCurrency, amount: prev.amount || 0 };
              }
              
-             const newAmount = prev.amount_usd / rate;
+             let newAmount = prev.amount_usd / rate;
+             
+             // Recalculate fees for manual transactions if currency changes
+             if (!prev.hash) {
+                 const newAmountUSD = prev.amount_usd;
+                 let finalFee = 0;
+                 let newUsdtAmount = 0;
+                 if (prev.type === 'Deposit') {
+                     const feePercent = (settings?.deposit_fee_percent || 0) / 100;
+                     finalFee = Math.max(newAmountUSD * feePercent, settings?.minimum_fee_usd || 0);
+                     newUsdtAmount = newAmountUSD - finalFee;
+                 } else { // Withdraw
+                     const feePercent = (settings?.withdraw_fee_percent || 0) / 100;
+                     if (feePercent >= 0 && feePercent < 1) {
+                         const grossAmount = newAmountUSD / (1 - feePercent);
+                         finalFee = Math.max(grossAmount * feePercent, settings?.minimum_fee_usd || 0);
+                     }
+                     newUsdtAmount = newAmountUSD - finalFee;
+                 }
+                 return {
+                    ...prev,
+                    bankAccountId: accountId,
+                    currency: newCurrency,
+                    amount: parseFloat(newAmount.toFixed(2)),
+                    fee_usd: parseFloat(finalFee.toFixed(2)),
+                    amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
+                 }
+             }
 
             return {
                 ...prev,
@@ -301,15 +351,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const handleClientSelect = (clientId: string) => {
         handleFieldChange('clientId', clientId);
+        const selectedClient = clients.find(c => c.id === clientId);
 
-        if (!transaction) { // Only run for new manual transactions
-            const selectedClient = clients.find(c => c.id === clientId);
-            if (selectedClient?.favoriteBankAccountId) {
-                const favAccountId = selectedClient.favoriteBankAccountId;
-                // Check if account exists in the list
-                if (bankAccounts.some(acc => acc.id === favAccountId)) {
-                    handleBankAccountSelect(favAccountId);
-                }
+        if (selectedClient?.favoriteBankAccountId) {
+            const favAccountId = selectedClient.favoriteBankAccountId;
+            if (bankAccounts.some(acc => acc.id === favAccountId)) {
+                handleBankAccountSelect(favAccountId);
             }
         }
     };
