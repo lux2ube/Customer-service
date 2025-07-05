@@ -35,7 +35,9 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
     });
 
     const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+        // Show negative numbers in parentheses for accounting format
+        const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(value));
+        return value < 0 ? `(${formatted})` : formatted;
     }
     
     const calculatedData = React.useMemo((): CalculatedReport => {

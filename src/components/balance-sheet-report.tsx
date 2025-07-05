@@ -172,7 +172,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
                     {rows.map(row => (
                         <TableRow key={row.accountId} className={cn(row.isGroup && 'bg-muted/50')}>
                             <TableCell style={{ paddingLeft: `${1 + row.level * 1.5}rem` }} className={cn(row.isGroup && 'font-bold')}>{row.accountName}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(row.amount)}</TableCell>
+                            <TableCell className="text-right font-mono">{!row.isGroup ? formatCurrency(row.amount) : ''}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
