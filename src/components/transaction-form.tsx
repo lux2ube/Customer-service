@@ -111,33 +111,37 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            let initialData: Transaction;
-
+            // This is a synced transaction if it has a hash
             if (transaction.hash) {
-                // This is a synced transaction
-                initialData = {
-                    ...transaction,
-                    amount: 0, // Always start with empty local amount for synced tx
-                    amount_usd: 0,
-                    fee_usd: 0,
-                    expense_usd: 0,
-                };
+                // A "pristine" sync has USDT as its currency. Once edited and saved, it will have a local currency.
+                // This lets us know whether to prompt for manual input or show the saved value.
+                const isPristineSync = transaction.currency === 'USDT';
 
-                // Check if the client has a favorite bank account and auto-select it
+                const initialData = {
+                    ...transaction,
+                    // If it's a pristine sync, amount is 0 to force user entry. Otherwise, load the previously saved amount.
+                    amount: isPristineSync ? 0 : (transaction.amount || 0),
+                };
+                
+                // Always try to select the favorite bank account for synced transactions.
                 if (client?.favoriteBankAccountId) {
                     const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
                     if (favAccount) {
                         initialData.bankAccountId = favAccount.id;
-                        initialData.currency = favAccount.currency || 'USD';
+                        // Only change currency if it's a pristine sync, otherwise respect saved currency.
+                        if (isPristineSync) {
+                           initialData.currency = favAccount.currency || 'USD';
+                        }
                     }
                 }
-            } else {
-                // This is a manual transaction
-                initialData = { ...transaction };
-            }
-            setFormData(initialData);
+                setFormData(initialData);
 
+            } else {
+                // This is a manual transaction, load it as is.
+                setFormData({ ...transaction });
+            }
         } else {
+            // This is a new transaction.
             setFormData(initialFormData);
         }
     }, [transaction, client, bankAccounts, isDataLoading]);
@@ -158,29 +162,48 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const newAmountNum = getNumberValue(e.target.value);
 
         setFormData(prev => {
-            if (!settings || !prev.currency || !prev.hash) return { ...prev, amount: newAmountNum };
+            if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
 
             const rate = getRate(prev.currency);
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            const difference = newAmountUSD - prev.amount_usdt;
 
-            let newFeeUSD = 0;
-            let newExpenseUSD = 0;
+            // For synced tx, fee/expense is the difference
+            if (prev.hash) {
+                const difference = newAmountUSD - prev.amount_usdt;
+                let newFeeUSD = 0;
+                let newExpenseUSD = 0;
 
-            if (difference >= 0) {
-                newFeeUSD = difference;
-            } else {
-                newExpenseUSD = -difference; // expense is the absolute value of the negative difference
+                if (difference >= 0) {
+                    newFeeUSD = difference;
+                } else {
+                    newExpenseUSD = -difference; // expense is the absolute value
+                }
+                
+                return {
+                    ...prev,
+                    amount: newAmountNum,
+                    amount_usd: parseFloat(newAmountUSD.toFixed(2)),
+                    fee_usd: parseFloat(newFeeUSD.toFixed(2)),
+                    expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
+                };
             }
+            
+            // For manual transactions, calculate based on fee percentage
+            const feePercent = prev.type === 'Deposit' ? settings.deposit_fee_percent : settings.withdraw_fee_percent;
+            const calculatedFee = newAmountUSD * (feePercent / 100);
+            const finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
+
+            const newUsdtAmount = prev.type === 'Deposit' ? newAmountUSD - finalFee : newAmountUSD + finalFee;
 
             return {
                 ...prev,
                 amount: newAmountNum,
                 amount_usd: parseFloat(newAmountUSD.toFixed(2)),
-                fee_usd: parseFloat(newFeeUSD.toFixed(2)),
-                expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
+                fee_usd: parseFloat(finalFee.toFixed(2)),
+                expense_usd: 0, // Manual entries don't have expense
+                amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
             };
         });
     };
@@ -196,7 +219,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }));
     };
     
-    const handleFieldChange = (field: keyof Omit<Transaction, 'amount' | 'amount_usdt' | 'fee_usd' | 'expense_usd'>, value: any) => {
+    const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
@@ -322,7 +345,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             <CardTitle>Financial Details</CardTitle>
                             <CardDescription>
                                 {isSynced 
-                                ? "Enter the local currency Amount to auto-calculate the Fee and Expense." 
+                                ? "This was synced from BscScan. Please enter the local currency Amount." 
                                 : "Enter the local currency Amount to auto-calculate all other financial details."}
                             </CardDescription>
                         </CardHeader>
@@ -334,15 +357,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="amount_usd">Amount (USD)</Label>
-                                <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly />
+                                <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly={isSynced} />
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="fee_usd">Fee (USD)</Label>
-                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly/>
+                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly={isSynced}/>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="expense_usd">Expense / Loss (USD)</Label>
-                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly/>
+                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly={isSynced}/>
                             </div>
                             <div className="md:col-span-2 space-y-2">
                                 <Label htmlFor="amount_usdt">Final USDT Amount</Label>
