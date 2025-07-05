@@ -30,7 +30,6 @@ const menuItems = [
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { type: 'divider' },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
 ];

@@ -8,12 +8,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem } from './types';
-import { 
-    initializeWhatsAppClient as initWhatsApp, 
-    getWhatsAppClientStatus as getWhatsAppStatus,
-    sendWhatsAppMedia,
-    logoutWhatsApp
-} from './whatsapp';
+
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -848,65 +843,6 @@ export async function importClients(prevState: ImportState, formData: FormData):
         return { message: error.message || "An unknown error occurred during import.", error: true };
     }
 }
-
-// --- WhatsApp Actions ---
-
-export async function initializeWhatsAppClient() {
-    await initWhatsApp();
-}
-
-export async function getWhatsAppClientStatus() {
-    return await getWhatsAppStatus();
-}
-
-export async function logoutWhatsAppClient() {
-    try {
-        await logoutWhatsApp();
-        revalidatePath('/whatsapp');
-        return { success: true, message: 'Successfully logged out and cleared session.' };
-    } catch (error: any) {
-        return { success: false, message: error.message || 'Failed to logout.' };
-    }
-}
-
-export type WhatsAppImageSendState = { message?: string; error?: boolean; success?: boolean; } | undefined;
-
-export async function sendWhatsAppInvoiceImage(transactionId: string, imageDataUrl: string): Promise<Exclude<WhatsAppImageSendState, undefined>> {
-    if (!transactionId) {
-        return { message: 'Transaction ID is missing.', error: true };
-    }
-    if (!imageDataUrl || !imageDataUrl.startsWith('data:image/png;base64,')) {
-        return { message: 'Invalid image data provided.', error: true };
-    }
-
-    try {
-        const transactionRef = ref(db, `transactions/${transactionId}`);
-        const transactionSnapshot = await get(transactionRef);
-        if (!transactionSnapshot.exists()) {
-            return { message: 'Transaction not found.', error: true };
-        }
-        const transaction: Transaction = { id: transactionId, ...transactionSnapshot.val() };
-        
-        const clientRef = ref(db, `clients/${transaction.clientId}`);
-        const clientSnapshot = await get(clientRef);
-        if (!clientSnapshot.exists()) {
-            return { message: 'Client not found for this transaction.', error: true };
-        }
-        const client: Client = { id: transaction.clientId, ...clientSnapshot.val() };
-        
-        if (!client.phone) {
-            return { message: "Client doesn't have a phone number.", error: true };
-        }
-
-        await sendWhatsAppMedia(client.phone, imageDataUrl, `Invoice for transaction ${transactionId}`);
-        return { message: 'Invoice image sent successfully to client.', success: true, error: false };
-
-    } catch (error: any) {
-        console.error("Error sending WhatsApp image via server action:", error);
-        return { message: error.message || 'An unknown server error occurred.', error: true };
-    }
-}
-
 
 // --- Blacklist Actions ---
 export type BlacklistFormState = { message?: string } | undefined;
