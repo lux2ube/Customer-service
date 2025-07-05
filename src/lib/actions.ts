@@ -122,6 +122,7 @@ export type ClientFormState =
         kyc_files?: string[];
       };
       message?: string;
+      success?: boolean;
     }
   | undefined;
 
@@ -132,7 +133,7 @@ const ClientSchema = z.object({
     review_flags: z.array(z.string()).optional(),
 });
 
-export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData) {
+export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) throw new Error("Could not generate a client ID.");
     
@@ -208,30 +209,38 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     redirect('/clients');
 }
 
-export async function deleteKycDocument(clientId: string, documentName: string) {
-    if (!clientId || !documentName) {
-        return { message: 'Invalid client or document ID.' };
-    }
-    try {
-        // 1. Delete file from Storage
-        const fileRef = storageRef(storage, `kyc_documents/${clientId}/${documentName}`);
-        await deleteObject(fileRef);
+export async function manageClient(clientId: string, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+    const intent = formData.get('intent') as string | null;
 
-        // 2. Remove document from Realtime Database
-        const clientRef = ref(db, `clients/${clientId}`);
-        const snapshot = await get(clientRef);
-        if (snapshot.exists()) {
-            const clientData = snapshot.val() as Client;
-            const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
-            await update(clientRef, { kyc_documents: updatedDocs });
+    if (intent?.startsWith('delete:')) {
+        const documentName = intent.split(':')[1];
+        if (!documentName) {
+            return { message: 'Document name not provided for deletion.' };
         }
+        try {
+            // 1. Delete file from Storage
+            const fileRef = storageRef(storage, `kyc_documents/${clientId}/${documentName}`);
+            await deleteObject(fileRef);
 
-        revalidatePath(`/clients/${clientId}/edit`);
-        return { success: true };
-    } catch (error) {
-        console.error("Failed to delete document: ", error);
-        return { message: 'Database Error: Failed to delete document.' };
+            // 2. Remove document from Realtime Database
+            const clientRef = ref(db, `clients/${clientId}`);
+            const snapshot = await get(clientRef);
+            if (snapshot.exists()) {
+                const clientData = snapshot.val() as Client;
+                const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
+                await update(clientRef, { kyc_documents: updatedDocs });
+            }
+
+            revalidatePath(`/clients/${clientId}/edit`);
+            return { success: true, message: "Document deleted successfully." };
+        } catch (error) {
+            console.error("Failed to delete document: ", error);
+            return { message: 'Database Error: Failed to delete document.' };
+        }
     }
+
+    // Default action is to update the client
+    return createClient(clientId, prevState, formData);
 }
 
 

@@ -9,7 +9,7 @@ import { Save, Trash2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createClient, type ClientFormState, deleteKycDocument } from '@/lib/actions';
+import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
@@ -31,12 +31,15 @@ function SubmitButton() {
 export function ClientForm({ client }: { client?: Client }) {
     const { toast } = useToast();
     
-    const action = client ? createClient.bind(null, client.id) : createClient.bind(null, null);
+    const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
     const [state, formAction] = useActionState<ClientFormState, FormData>(action, undefined);
     
     React.useEffect(() => {
         if (state?.message) {
-             toast({ variant: 'destructive', title: 'Error Saving Client', description: state.message });
+             toast({ variant: 'destructive', title: 'Error', description: state.message });
+        }
+        if (state?.success) {
+            toast({ title: 'Success', description: state.message });
         }
     }, [state, toast]);
 
@@ -112,11 +115,15 @@ export function ClientForm({ client }: { client?: Client }) {
                                                     {doc.name}
                                                 </Link>
                                             </Button>
-                                            <form action={deleteKycDocument.bind(null, client.id, doc.name)}>
-                                                <Button type="submit" variant="ghost" size="icon">
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
-                                            </form>
+                                            <Button
+                                                type="submit"
+                                                name="intent"
+                                                value={`delete:${doc.name}`}
+                                                variant="ghost"
+                                                size="icon"
+                                            >
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
                                         </li>
                                     ))}
                                 </ul>
