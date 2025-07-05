@@ -103,6 +103,23 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         };
     }, []);
 
+    // Effect to pre-fill favorite bank account on load for transactions that don't have one
+    React.useEffect(() => {
+        // Run only when clients are loaded, for an existing transaction that doesn't have a bank account
+        if (clients.length > 0 && bankAccounts.length > 0 && transaction && !transaction.bankAccountId && transaction.clientId) {
+            const currentClient = clients.find(c => c.id === transaction.clientId);
+            if (currentClient?.favoriteBankAccountId) {
+                const favoriteAccount = bankAccounts.find(ba => ba.id === currentClient.favoriteBankAccountId);
+                if (favoriteAccount) {
+                    setSelectedBankAccountId(favoriteAccount.id);
+                    if (favoriteAccount.currency) {
+                        setCurrency(favoriteAccount.currency);
+                    }
+                }
+            }
+        }
+    }, [clients, bankAccounts, transaction]);
+
     // Effect for performing financial calculations
     React.useEffect(() => {
         if (!settings) return;
@@ -544,3 +561,4 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
+
