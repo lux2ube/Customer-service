@@ -7,7 +7,8 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2 } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { createTransaction, type TransactionFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -57,7 +58,7 @@ const initialFormData: Transaction = {
 export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
-    const [state, formAction] = useFormState<TransactionFormState, FormData>(action, undefined);
+    const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
 
     // Data state
     const [clients, setClients] = React.useState<Client[]>([]);
@@ -70,6 +71,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
+    const pristineRef = React.useRef(false);
 
     const [formData, setFormData] = React.useState<Transaction>(initialFormData);
 
@@ -111,35 +113,22 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            // This is a synced transaction if it has a hash
-            if (transaction.hash) {
-                // A "pristine" sync has USDT as its currency. Once edited and saved, it will have a local currency.
-                // This lets us know whether to prompt for manual input or show the saved value.
-                const isPristineSync = transaction.currency === 'USDT';
+            const isPristineSync = transaction.hash && transaction.currency === 'USDT';
+            pristineRef.current = isPristineSync;
+            const initialData = { ...transaction };
 
-                const initialData = {
-                    ...transaction,
-                    // If it's a pristine sync, amount is 0 to force user entry. Otherwise, load the previously saved amount.
-                    amount: isPristineSync ? 0 : (transaction.amount || 0),
-                };
-                
-                // Always try to select the favorite bank account for synced transactions.
-                if (client?.favoriteBankAccountId) {
+            if (isPristineSync) {
+                 if (client?.favoriteBankAccountId) {
                     const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
                     if (favAccount) {
                         initialData.bankAccountId = favAccount.id;
-                        // Only change currency if it's a pristine sync, otherwise respect saved currency.
-                        if (isPristineSync) {
-                           initialData.currency = favAccount.currency || 'USD';
-                        }
+                        initialData.currency = favAccount.currency || 'USD';
                     }
                 }
-                setFormData(initialData);
-
-            } else {
-                // This is a manual transaction, load it as is.
-                setFormData({ ...transaction });
+                // Amount is kept from DB if it exists, otherwise it's 0 (empty)
+                initialData.amount = transaction.amount || 0;
             }
+            setFormData(initialData);
         } else {
             // This is a new transaction.
             setFormData(initialFormData);
@@ -160,6 +149,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
+        pristineRef.current = false; // The user has interacted, it's no longer pristine
 
         setFormData(prev => {
             if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
@@ -269,7 +259,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const isSynced = !!formData.hash;
-
+    const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
+    
     return (
         <>
             {transaction && client && (
@@ -352,7 +343,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         <CardContent className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({formData.currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" required value={formData.amount || ''} onChange={handleAmountChange}/>
+                                <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleAmountChange}/>
                                 <input type="hidden" name="currency" value={formData.currency} />
                             </div>
                             <div className="space-y-2">
@@ -502,3 +493,5 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
+
+    
