@@ -52,6 +52,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
+    const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(false);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
@@ -96,7 +97,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
     // Perform calculations whenever an input changes
     React.useEffect(() => {
-        if (!settings) return;
+        if (!settings || isUsdtManuallyEdited) return;
 
         let calculatedUsdValue = 0;
         switch(currency) {
@@ -115,9 +116,9 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         }
         setFee(calculatedFee);
 
-        setUsdtAmount(calculatedUsdValue - calculatedFee);
+        setUsdtAmount(Number((calculatedUsdValue - calculatedFee).toFixed(2)));
 
-    }, [amount, currency, transactionType, settings]);
+    }, [amount, currency, transactionType, settings, isUsdtManuallyEdited]);
 
     React.useEffect(() => {
         if (state?.message) {
@@ -125,10 +126,26 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         }
     }, [state, toast]);
 
+    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setAmount(Number(e.target.value));
+        setIsUsdtManuallyEdited(false);
+    }
+
+    const handleTypeChange = (v: 'Deposit' | 'Withdraw') => {
+        setTransactionType(v);
+        setIsUsdtManuallyEdited(false);
+    }
+    
+    const handleUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setUsdtAmount(Number(e.target.value));
+        setIsUsdtManuallyEdited(true);
+    }
+
     const handleBankAccountSelect = (accountId: string) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
+            setIsUsdtManuallyEdited(false);
         }
     }
 
@@ -157,7 +174,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             </div>
                             <div className="space-y-2">
                                 <Label>Transaction Type</Label>
-                                <Select name="type" required defaultValue={transactionType} onValueChange={(v: 'Deposit' | 'Withdraw') => setTransactionType(v)}>
+                                <Select name="type" required defaultValue={transactionType} onValueChange={handleTypeChange}>
                                     <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Deposit">Deposit</SelectItem>
@@ -185,7 +202,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required defaultValue={transaction?.amount} onChange={e => setAmount(Number(e.target.value))}/>
+                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required defaultValue={transaction?.amount} onChange={handleAmountChange}/>
                                 {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                             </div>
                              <div className="space-y-2">
@@ -197,6 +214,44 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                          <input type="hidden" name="currency" value={currency} />
                     </CardContent>
                 </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Payment Preview</CardTitle>
+                        <CardDescription>Values are calculated automatically. Final USDT amount can be overridden.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className='flex justify-between items-center'>
+                            <Label>Amount in USD</Label>
+                            <span className="font-mono text-lg">${usdValue.toFixed(2)}</span>
+                        </div>
+                        <Separator />
+                        <div className='flex justify-between items-center'>
+                            <Label>Fee</Label>
+                            <span className="font-mono text-lg">${fee.toFixed(2)}</span>
+                        </div>
+                         <Separator />
+                        <div className='flex justify-between items-center'>
+                            <Label htmlFor="amount_usdt" className="font-bold">Final USDT Amount</Label>
+                             <Input
+                                id="amount_usdt"
+                                name="amount_usdt"
+                                type="number"
+                                step="any"
+                                value={usdtAmount}
+                                onChange={handleUsdtAmountChange}
+                                className="w-48 text-right font-mono text-lg font-bold"
+                            />
+                        </div>
+                        {/* Hidden inputs to pass calculated values to the server action */}
+                        <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
+                        <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
+                    </CardContent>
+                    <CardFooter>
+                        <SubmitButton />
+                    </CardFooter>
+                </Card>
+            </div>
+            <div className="lg:col-span-1 space-y-6">
                  <Card>
                     <CardHeader>
                         <CardTitle>Optional Data</CardTitle>
@@ -245,37 +300,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                             </div>
                         </div>
                     </CardContent>
-                </Card>
-            </div>
-            <div className="lg:col-span-1 space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Payment Preview</CardTitle>
-                        <CardDescription>Values are calculated automatically.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className='flex justify-between items-center'>
-                            <Label>Amount in USD</Label>
-                            <span className="font-mono text-lg">${usdValue.toFixed(2)}</span>
-                        </div>
-                        <Separator />
-                        <div className='flex justify-between items-center'>
-                            <Label>Fee</Label>
-                            <span className="font-mono text-lg">${fee.toFixed(2)}</span>
-                        </div>
-                         <Separator />
-                        <div className='flex justify-between items-center'>
-                            <Label className="font-bold">Final USDT Amount</Label>
-                            <span className="font-mono text-xl font-bold">${usdtAmount.toFixed(2)}</span>
-                        </div>
-                        {/* Hidden inputs to pass calculated values to the server action */}
-                        <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
-                        <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
-                        <input type="hidden" name="amount_usdt" value={usdtAmount.toFixed(2)} />
-                    </CardContent>
-                    <CardFooter>
-                        <SubmitButton />
-                    </CardFooter>
                 </Card>
             </div>
         </form>
