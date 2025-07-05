@@ -52,7 +52,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
-    const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(false);
+    // For synced transactions, treat the USDT amount as manually entered to prevent auto-recalculation.
+    const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
