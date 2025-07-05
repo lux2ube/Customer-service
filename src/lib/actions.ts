@@ -7,7 +7,7 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings } from './types';
+import type { Client, Account, Settings, Transaction } from './types';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -489,7 +489,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const newTxData = {
                 id: newTxId,
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
-                type: 'Deposit',
+                type: 'Withdraw',
                 clientId: 'unassigned-bscscan',
                 clientName: 'Unassigned (BSCScan)',
                 amount: amount,
