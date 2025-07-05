@@ -1,3 +1,4 @@
+
 'use server';
 
 import { Client, LocalAuth } from 'whatsapp-web.js';
@@ -15,17 +16,8 @@ let qrCodeDataUrl: string | null = null;
 
 const SESSION_DIR = '.wwebjs_auth';
 
-async function doesSessionExist() {
-    try {
-        await fs.access(path.join(process.cwd(), SESSION_DIR));
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export async function initializeWhatsAppClient() {
-    if (client && status !== 'DISCONNECTED') {
+    if (client && (status === 'CONNECTING' || status === 'CONNECTED')) {
         console.log('Client already initialized or initializing.');
         return;
     }
@@ -43,9 +35,10 @@ export async function initializeWhatsAppClient() {
     });
 
     client.on('qr', async (qr) => {
-        console.log('QR Code received');
+        console.log('QR Code received. Generating data URL.');
         status = 'QR_REQUIRED';
         qrCodeDataUrl = await qrcode.toDataURL(qr);
+        console.log('QR Code data URL is ready.');
     });
 
     client.on('ready', () => {
@@ -72,16 +65,27 @@ export async function initializeWhatsAppClient() {
         }
         client = null;
         qrCodeDataUrl = null;
+        // Do NOT clear session data on a regular disconnect.
+        // This allows for reconnection without a new QR scan.
+    });
+
+    client.on('auth_failure', async (msg) => {
+        console.error('AUTHENTICATION FAILURE', msg);
+        status = 'DISCONNECTED';
+        qrCodeDataUrl = null;
+        client = null;
         try {
+            // The session is likely corrupt. Delete it to force a new QR scan.
             await fs.rm(path.join(process.cwd(), SESSION_DIR), { recursive: true, force: true });
-            console.log('Cleared WhatsApp session due to disconnection.');
+            console.log('Cleared corrupt WhatsApp session due to auth failure.');
         } catch (error) {
-            console.error('Error clearing WhatsApp session:', error);
+            console.error('Error clearing corrupt session:', error);
         }
     });
 
     try {
         await client.initialize();
+        console.log("Client initialization process started.");
     } catch (error) {
         console.error('Failed to initialize WhatsApp client:', error);
         client = null;
@@ -90,26 +94,16 @@ export async function initializeWhatsAppClient() {
 }
 
 export async function getWhatsAppClientStatus() {
-    if (status === 'DISCONNECTED' && !client && (await doesSessionExist())) {
-       console.log("Session exists, but client is disconnected. Attempting to re-initialize.");
-       await initializeWhatsAppClient();
-       // Give it a moment to reconnect without blocking the user for too long
-       await new Promise(resolve => setTimeout(resolve, 3000));
-    }
+    // This function purely reports the current state of the singleton.
     return { status, qrCodeDataUrl };
 }
 
 export async function sendWhatsAppMessage(toNumber: string, message: string) {
     if (status !== 'CONNECTED' || !client) {
-        await initializeWhatsAppClient();
-        
-        console.log("Waiting for client to connect before sending message...");
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        
-        if (status !== 'CONNECTED' || !client) {
-            console.error('WhatsApp client not connected after wait. Aborting send.');
-            throw new Error('WhatsApp client is not connected. Please connect via the WhatsApp page.');
-        }
+        // Fail fast if the client is not connected.
+        // Don't attempt to auto-reconnect here, as it's not a good user experience.
+        console.error('Attempted to send message while client is not connected.');
+        throw new Error('WhatsApp client is not connected. Please go to the WhatsApp page to connect.');
     }
 
     try {

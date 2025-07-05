@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -18,10 +19,14 @@ export function WhatsAppConnector() {
     const checkStatus = useCallback(async () => {
         const result = await getWhatsAppClientStatus();
         if (result) {
+            // This prevents the UI from flickering back to DISCONNECTED if the server is just slow
+            if (status === 'CONNECTING' && result.status === 'DISCONNECTED') {
+                return;
+            }
             setStatus(result.status);
             setQrCode(result.qrCodeDataUrl);
         }
-    }, []);
+    }, [status]);
 
     useEffect(() => {
         // Initial check
@@ -38,12 +43,19 @@ export function WhatsAppConnector() {
         return () => clearInterval(interval);
     }, [checkStatus, status]);
 
-    const handleConnect = async () => {
-        setIsLoading(true);
+    useEffect(() => {
+        if (status !== 'CONNECTING') {
+            setIsLoading(false);
+        }
+        if (status === 'CONNECTING') {
+            setIsLoading(true);
+        }
+    }, [status]);
+
+    const handleConnect = () => {
+        // Set loading state and let the polling handle UI updates
         setStatus('CONNECTING');
-        await initializeWhatsAppClient();
-        await checkStatus(); // Re-check status immediately
-        setIsLoading(false);
+        initializeWhatsAppClient();
     };
 
     const getStatusContent = () => {
