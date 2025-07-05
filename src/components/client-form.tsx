@@ -108,10 +108,19 @@ export function ClientForm({ client }: { client?: Client }) {
                             Addresses are automatically added from confirmed deposit transactions.
                         </p>
                         {client?.bep20_addresses && client.bep20_addresses.length > 0 ? (
-                            <ul className="divide-y divide-border rounded-md border bg-background p-3 space-y-2">
+                            <ul className="divide-y divide-border rounded-md border bg-background">
                                 {client.bep20_addresses.map((address, index) => (
-                                    <li key={index} className="font-mono text-sm pt-2 first:pt-0">
-                                        {address}
+                                    <li key={index} className="flex items-center justify-between p-3">
+                                        <span className="font-mono text-sm break-all">{address}</span>
+                                        <Button
+                                            type="submit"
+                                            name="intent"
+                                            value={`delete_address:${address}`}
+                                            variant="ghost"
+                                            size="icon"
+                                        >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
                                     </li>
                                 ))}
                             </ul>

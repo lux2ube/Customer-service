@@ -282,6 +282,28 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
             else if (errorMessage) userMessage = `Deletion failed with error: ${errorMessage}. Please check server logs.`;
             return { message: userMessage };
         }
+    } else if (intent?.startsWith('delete_address:')) {
+        const addressToDelete = intent.substring('delete_address:'.length);
+        if (!addressToDelete) {
+            return { message: 'Address not provided for deletion.' };
+        }
+
+        try {
+            const clientRef = ref(db, `clients/${clientId}`);
+            const snapshot = await get(clientRef);
+
+            if (snapshot.exists()) {
+                const clientData = snapshot.val() as Client;
+                const updatedAddresses = clientData.bep20_addresses?.filter(addr => addr !== addressToDelete) || [];
+                await update(clientRef, { bep20_addresses: updatedAddresses });
+            }
+
+            revalidatePath(`/clients/${clientId}/edit`);
+            return { success: true, message: "Address removed successfully." };
+        } catch (error) {
+            console.error("Failed to delete address:", error);
+            return { message: 'Database Error: Failed to remove address.' };
+        }
     }
 
     // Default action is to update/create the client
