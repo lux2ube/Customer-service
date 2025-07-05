@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, Download, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -22,7 +22,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Separator } from './ui/separator';
-import Link from 'next/link';
+import { Invoice } from '@/components/invoice';
+import html2canvas from 'html2canvas';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -55,6 +56,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
+
+    // New state for download button
+    const [isDownloading, setIsDownloading] = React.useState(false);
+    const invoiceRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
@@ -226,193 +231,238 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    return (
-        <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Required Data</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="date">Date and Time</Label>
-                                <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {date ? format(date, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
-                                </Popover>
-                                <input type="hidden" name="date" value={date?.toISOString()} />
-                                {state?.errors?.date && <p className="text-sm text-destructive">{state.errors.date[0]}</p>}
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Transaction Type</Label>
-                                <Select name="type" required defaultValue={transactionType} onValueChange={handleTypeChange}>
-                                    <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Deposit">Deposit</SelectItem>
-                                        <SelectItem value="Withdraw">Withdraw</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                           <Label>Client</Label>
-                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
-                            {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                               <Label>Bank Account</Label>
-                                <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
-                            </div>
-                            <div className="space-y-2">
-                               <Label>Crypto Wallet</Label>
-                                <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." defaultValue={transaction?.cryptoWalletId}/>
-                            </div>
-                        </div>
+    const handleDownloadInvoice = async () => {
+        if (!invoiceRef.current || !transaction) return;
+        setIsDownloading(true);
+        try {
+            const canvas = await html2canvas(invoiceRef.current, { 
+                scale: 2,
+                useCORS: true, 
+            });
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = `invoice-${transaction.id.slice(-8).toUpperCase()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error("Error generating invoice image:", error);
+            toast({
+                variant: "destructive",
+                title: "Download Failed",
+                description: "Could not generate invoice image. See console for details.",
+            });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
 
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="amount">Amount ({currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required value={amount} onChange={handleAmountChange}/>
-                                {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
-                            </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="attachment_url">Upload Transaction Image</Label>
-                                <Input id="attachment_url" name="attachment_url" type="file" />
-                            </div>
-                        </div>
-                         {/* Hidden input to pass currency to server action */}
-                         <input type="hidden" name="currency" value={currency} />
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Payment Preview</CardTitle>
-                        <CardDescription>Values are calculated automatically. Final USDT amount can be overridden.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className='flex justify-between items-center'>
-                            <Label>Amount in USD</Label>
-                            <span className="font-mono text-lg">${usdValue.toFixed(2)}</span>
-                        </div>
-                        <Separator />
-                        <div className='flex justify-between items-center'>
-                            <Label>Fee</Label>
-                            <span className="font-mono text-lg">${fee.toFixed(2)}</span>
-                        </div>
-                        {expense > 0 && (
-                            <>
-                                <Separator />
-                                <div className='flex justify-between items-center text-destructive'>
-                                    <Label className="font-bold text-destructive">Expense / Loss</Label>
-                                    <span className="font-mono text-lg font-bold">${expense.toFixed(2)}</span>
-                                </div>
-                            </>
-                        )}
-                         <Separator />
-                        <div className='flex justify-between items-center'>
-                            <Label htmlFor="amount_usdt" className="font-bold">Final USDT Amount</Label>
-                             <Input
-                                id="amount_usdt"
-                                name="amount_usdt"
-                                type="number"
-                                step="any"
-                                value={usdtAmount}
-                                onChange={handleUsdtAmountChange}
-                                className="w-48 text-right font-mono text-lg font-bold"
-                            />
-                        </div>
-                        {/* Hidden inputs to pass calculated values to the server action */}
-                        <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
-                        <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
-                        <input type="hidden" name="expense_usd" value={expense.toFixed(2)} />
-                    </CardContent>
-                    <CardFooter>
-                        <SubmitButton />
-                    </CardFooter>
-                </Card>
-            </div>
-            <div className="lg:col-span-1 space-y-6">
-                {transaction && client && (
-                     <Card>
+    const companyDetails = {
+        name: 'Customer Central',
+        address: '123 Business Rd, Suite 100\nBusiness City, 12345',
+        phone: '(555) 555-5555'
+    };
+
+    return (
+        <>
+            {/* Hidden Invoice for image generation */}
+            {transaction && client && (
+                <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
+                    <div className="max-w-4xl">
+                        <Invoice ref={invoiceRef} transaction={transaction} client={client} company={companyDetails} />
+                    </div>
+                </div>
+            )}
+
+            <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                    <Card>
                         <CardHeader>
-                            <CardTitle>Actions</CardTitle>
-                            <CardDescription>Generate invoices or send messages.</CardDescription>
+                            <CardTitle>Required Data</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <Button asChild className="w-full">
-                                <Link href={`/transactions/${transaction.id}/invoice`} target="_blank">
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    View Printable Invoice
-                                </Link>
-                            </Button>
-                            {client.phone && (
-                                <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
-                                    <MessageCircle className="mr-2 h-4 w-4" />
-                                    Send Text via WhatsApp
-                                </Button>
-                            )}
+                        <CardContent className="space-y-6">
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="date">Date and Time</Label>
+                                    <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {date ? format(date, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+                                    </Popover>
+                                    <input type="hidden" name="date" value={date?.toISOString()} />
+                                    {state?.errors?.date && <p className="text-sm text-destructive">{state.errors.date[0]}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Transaction Type</Label>
+                                    <Select name="type" required defaultValue={transactionType} onValueChange={handleTypeChange}>
+                                        <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Deposit">Deposit</SelectItem>
+                                            <SelectItem value="Withdraw">Withdraw</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                            <Label>Client</Label>
+                                <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
+                                {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                <Label>Bank Account</Label>
+                                    <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
+                                </div>
+                                <div className="space-y-2">
+                                <Label>Crypto Wallet</Label>
+                                    <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." defaultValue={transaction?.cryptoWalletId}/>
+                                </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="amount">Amount ({currency})</Label>
+                                    <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" required value={amount} onChange={handleAmountChange}/>
+                                    {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="attachment_url">Upload Transaction Image</Label>
+                                    <Input id="attachment_url" name="attachment_url" type="file" />
+                                </div>
+                            </div>
+                            {/* Hidden input to pass currency to server action */}
+                            <input type="hidden" name="currency" value={currency} />
                         </CardContent>
                     </Card>
-                )}
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Optional Data</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                         <div className="space-y-2">
-                            <Label htmlFor="notes">Notes</Label>
-                            <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." defaultValue={transaction?.notes}/>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Payment Preview</CardTitle>
+                            <CardDescription>Values are calculated automatically. Final USDT amount can be overridden.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className='flex justify-between items-center'>
+                                <Label>Amount in USD</Label>
+                                <span className="font-mono text-lg">${usdValue.toFixed(2)}</span>
+                            </div>
+                            <Separator />
+                            <div className='flex justify-between items-center'>
+                                <Label>Fee</Label>
+                                <span className="font-mono text-lg">${fee.toFixed(2)}</span>
+                            </div>
+                            {expense > 0 && (
+                                <>
+                                    <Separator />
+                                    <div className='flex justify-between items-center text-destructive'>
+                                        <Label className="font-bold text-destructive">Expense / Loss</Label>
+                                        <span className="font-mono text-lg font-bold">${expense.toFixed(2)}</span>
+                                    </div>
+                                </>
+                            )}
+                            <Separator />
+                            <div className='flex justify-between items-center'>
+                                <Label htmlFor="amount_usdt" className="font-bold">Final USDT Amount</Label>
+                                <Input
+                                    id="amount_usdt"
+                                    name="amount_usdt"
+                                    type="number"
+                                    step="any"
+                                    value={usdtAmount}
+                                    onChange={handleUsdtAmountChange}
+                                    className="w-48 text-right font-mono text-lg font-bold"
+                                />
+                            </div>
+                            {/* Hidden inputs to pass calculated values to the server action */}
+                            <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
+                            <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
+                            <input type="hidden" name="expense_usd" value={expense.toFixed(2)} />
+                        </CardContent>
+                        <CardFooter>
+                            <SubmitButton />
+                        </CardFooter>
+                    </Card>
+                </div>
+                <div className="lg:col-span-1 space-y-6">
+                    {transaction && client && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Actions</CardTitle>
+                                <CardDescription>Download invoice or send messages.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading} className="w-full">
+                                    {isDownloading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Download className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isDownloading ? 'Downloading...' : 'Download Invoice as Image'}
+                                </Button>
+                                {client.phone && (
+                                    <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
+                                        <MessageCircle className="mr-2 h-4 w-4" />
+                                        Send Text via WhatsApp
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Optional Data</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="remittance_number">Remittance Number</Label>
-                                <Input id="remittance_number" name="remittance_number" defaultValue={transaction?.remittance_number}/>
+                                <Label htmlFor="notes">Notes</Label>
+                                <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." defaultValue={transaction?.notes}/>
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="hash">Crypto Hash</Label>
-                                <Input id="hash" name="hash" defaultValue={transaction?.hash} />
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="remittance_number">Remittance Number</Label>
+                                    <Input id="remittance_number" name="remittance_number" defaultValue={transaction?.remittance_number}/>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="hash">Crypto Hash</Label>
+                                    <Input id="hash" name="hash" defaultValue={transaction?.hash} />
+                                </div>
                             </div>
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
-                            <Input id="client_wallet_address" name="client_wallet_address" defaultValue={transaction?.client_wallet_address}/>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label>Status</Label>
-                                <Select name="status" defaultValue={transaction?.status || "Pending"}>
-                                    <SelectTrigger><SelectValue/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Pending">Pending</SelectItem>
-                                        <SelectItem value="Confirmed">Confirmed</SelectItem>
-                                        <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
+                                <Input id="client_wallet_address" name="client_wallet_address" defaultValue={transaction?.client_wallet_address}/>
                             </div>
-                             <div className="space-y-2">
-                                <Label>Need Flag Review</Label>
-                                <Select name="flags" defaultValue={transaction?.flags ? transaction.flags[0] : undefined}>
-                                     <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="AML">AML</SelectItem>
-                                        <SelectItem value="KYC">KYC</SelectItem>
-                                        <SelectItem value="Blacklisted">Blacklisted</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label>Status</Label>
+                                    <Select name="status" defaultValue={transaction?.status || "Pending"}>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Pending">Pending</SelectItem>
+                                            <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Need Flag Review</Label>
+                                    <Select name="flags" defaultValue={transaction?.flags ? transaction.flags[0] : undefined}>
+                                        <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="AML">AML</SelectItem>
+                                            <SelectItem value="KYC">KYC</SelectItem>
+                                            <SelectItem value="Blacklisted">Blacklisted</SelectItem>
+                                            <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </form>
+                        </CardContent>
+                    </Card>
+                </div>
+            </form>
+        </>
     );
 }
 
