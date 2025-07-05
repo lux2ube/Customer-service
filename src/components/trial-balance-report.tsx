@@ -11,6 +11,7 @@ import { format, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Account, JournalEntry, Transaction } from '@/lib/types';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead, TableFooter } from '@/components/ui/table';
+import { ExportButton } from './export-button';
 
 interface ReportRow {
     accountId: string;
@@ -127,6 +128,16 @@ export function TrialBalanceReport({ initialAccounts, initialJournalEntries, ini
                         <Calendar initialFocus mode="single" selected={date} onSelect={setDate} />
                     </PopoverContent>
                 </Popover>
+                <ExportButton 
+                    data={calculatedData.rows}
+                    filename={`trial-balance-as-of-${date ? format(date, "yyyy-MM-dd") : 'today'}`}
+                    headers={{
+                        accountId: "Account ID",
+                        accountName: "Account Name",
+                        debit: "Debit (USD)",
+                        credit: "Credit (USD)",
+                    }}
+                />
             </div>
             <Card>
                 <CardHeader>

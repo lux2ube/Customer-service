@@ -11,6 +11,7 @@ import { format, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Account, JournalEntry, Transaction } from '@/lib/types';
 import { Table, TableBody, TableCell, TableRow, TableFooter } from '@/components/ui/table';
+import { ExportButton } from './export-button';
 
 interface ReportRow {
     accountId: string;
@@ -162,7 +163,6 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
             equityRows.push({ accountId: 'net-income', accountName: 'Retained Earnings (Net Income)', isGroup: false, level: 1, amount: netIncome });
         }
         
-        // --- CORRECTED TOTALS CALCULATION ---
         const rootAssetAccounts = initialAccounts.filter(a => a.type === 'Assets' && !a.parentId);
         const totalAssets = rootAssetAccounts.reduce((sum, acc) => sum + (allBalances[acc.id] || 0), 0);
         
@@ -175,6 +175,28 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
         
         return { assetRows, totalAssets, liabilityRows, totalLiabilities, equityRows, totalEquity };
     }, [date, initialAccounts, initialJournalEntries, initialTransactions]);
+
+    const exportableData = React.useMemo(() => {
+        const { assetRows, liabilityRows, equityRows, totalAssets, totalLiabilities, totalEquity } = calculatedData;
+        const formatForExport = (row: ReportRow) => ({
+            accountName: `${' '.repeat(row.level * 2)}${row.accountName}`,
+            amount: row.isGroup ? '' : row.amount.toFixed(2)
+        });
+
+        return [
+            { accountName: 'Assets', amount: '' },
+            ...assetRows.map(formatForExport),
+            { accountName: 'Total Assets', amount: totalAssets.toFixed(2) },
+            { accountName: '', amount: '' }, // spacer
+            { accountName: 'Liabilities', amount: '' },
+            ...liabilityRows.map(formatForExport),
+            { accountName: 'Total Liabilities', amount: totalLiabilities.toFixed(2) },
+            { accountName: '', amount: '' }, // spacer
+            { accountName: 'Equity', amount: '' },
+            ...equityRows.map(formatForExport),
+            { accountName: 'Total Equity', amount: totalEquity.toFixed(2) },
+        ];
+    }, [calculatedData]);
 
     const totalLiabilitiesAndEquity = calculatedData.totalLiabilities + calculatedData.totalEquity;
 
@@ -214,6 +236,14 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
                         <Calendar initialFocus mode="single" selected={date} onSelect={setDate} />
                     </PopoverContent>
                 </Popover>
+                <ExportButton 
+                    data={exportableData}
+                    filename={`balance-sheet-as-of-${date ? format(date, "yyyy-MM-dd") : 'today'}`}
+                    headers={{
+                        accountName: "Account",
+                        amount: "Amount (USD)",
+                    }}
+                />
             </div>
             <Card>
                 <CardHeader>

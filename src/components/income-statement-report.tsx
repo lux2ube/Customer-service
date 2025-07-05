@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import type { Account, JournalEntry } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Separator } from './ui/separator';
+import { ExportButton } from './export-button';
 
 interface ReportRow {
     accountName: string;
@@ -99,6 +100,17 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
         return { revenueRows, totalRevenue, expenseRows, totalExpenses, netIncome };
 
     }, [dateRange, initialAccounts, initialJournalEntries]);
+    
+    const exportableData = React.useMemo(() => {
+        const { revenueRows, expenseRows, totalRevenue, totalExpenses, netIncome } = calculatedData;
+        return [
+            ...revenueRows.map(row => ({ type: 'Revenue', ...row, amount: row.amount.toFixed(2) })),
+            ...expenseRows.map(row => ({ type: 'Expense', ...row, amount: row.amount.toFixed(2) })),
+            { type: '---', accountId: 'TOTAL_REVENUE', accountName: 'Total Revenue', amount: totalRevenue.toFixed(2) },
+            { type: '---', accountId: 'TOTAL_EXPENSES', accountName: 'Total Expenses', amount: totalExpenses.toFixed(2) },
+            { type: '---', accountId: 'NET_INCOME', accountName: 'Net Income', amount: netIncome.toFixed(2) },
+        ];
+    }, [calculatedData]);
 
     return (
         <div className="space-y-6">
@@ -136,6 +148,16 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                         />
                     </PopoverContent>
                 </Popover>
+                <ExportButton 
+                    data={exportableData}
+                    filename={`income-statement-${dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : 'start'}-to-${dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : 'end'}`}
+                    headers={{
+                        type: "Type",
+                        accountId: "Account ID",
+                        accountName: "Account Name",
+                        amount: "Amount (USD)",
+                    }}
+                />
             </div>
             <Card>
                 <CardHeader>

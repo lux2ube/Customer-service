@@ -12,6 +12,7 @@ import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { ExportButton } from './export-button';
 
 interface ClientSummary {
     clientId: string;
@@ -97,7 +98,7 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
             <Card>
                 <CardHeader>
                     <CardTitle>Client Balance Summary</CardTitle>
-                    <div className="flex flex-col md:flex-row gap-4 mt-4">
+                    <div className="flex flex-col md:flex-row gap-4 mt-4 items-center">
                         <Input 
                             placeholder="Search by client name..."
                             value={search}
@@ -137,6 +138,17 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
                                 />
                             </PopoverContent>
                         </Popover>
+                        <ExportButton 
+                            data={filteredSummaries}
+                            filename={`client-balance-summary-${dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : 'start'}-to-${dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : 'end'}`}
+                            headers={{
+                                clientId: "Client ID",
+                                clientName: "Client Name",
+                                totalDeposits: "Total Deposits (USD)",
+                                totalWithdrawals: "Total Withdrawals (USD)",
+                                netBalance: "Net Balance (USD)",
+                            }}
+                        />
                     </div>
                 </CardHeader>
                 <CardContent>

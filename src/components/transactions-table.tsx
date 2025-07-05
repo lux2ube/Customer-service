@@ -11,9 +11,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import type { Transaction } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
-import { format, isWithinInterval, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X } from 'lucide-react';
@@ -26,33 +24,17 @@ import { cn } from '@/lib/utils';
 
 type SortableKeys = keyof Transaction;
 
-export function TransactionsTable() {
-  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
-  const [loading, setLoading] = React.useState(true);
+interface TransactionsTableProps {
+    transactions: Transaction[];
+    loading: boolean;
+    onFilteredDataChange: (data: Transaction[]) => void;
+}
 
+export function TransactionsTable({ transactions, loading, onFilteredDataChange }: TransactionsTableProps) {
   // Filter and sort state
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
-
-  React.useEffect(() => {
-    const transactionsRef = ref(db, 'transactions/');
-    const unsubscribe = onValue(transactionsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list: Transaction[] = Object.keys(data).map(key => ({
-          id: key,
-          ...data[key]
-        }));
-        setTransactions(list);
-      } else {
-        setTransactions([]);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const handleSort = (key: SortableKeys) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -89,7 +71,7 @@ export function TransactionsTable() {
     if (dateRange?.from) {
         filtered = filtered.filter(tx => {
             const txDate = new Date(tx.date);
-            const fromDate = startOfDay(dateRange.from!);
+            const fromDate = dateRange.from!;
             // If only 'from' is selected, range is from that day to future.
             let toDate: Date;
             if (dateRange.to) {
@@ -126,6 +108,10 @@ export function TransactionsTable() {
 
     return filtered;
   }, [transactions, search, dateRange, sortConfig]);
+
+  React.useEffect(() => {
+    onFilteredDataChange(filteredAndSortedTransactions);
+  }, [filteredAndSortedTransactions, onFilteredDataChange]);
 
   const getStatusVariant = (status: Transaction['status']) => {
     switch(status) {

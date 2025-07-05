@@ -11,36 +11,13 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import type { Client } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import Link from 'next/link';
 import { Pencil } from 'lucide-react';
 
-export function ClientsTable() {
-  const [clients, setClients] = React.useState<Client[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    const clientsRef = ref(db, 'clients/');
-    const unsubscribe = onValue(clientsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list: Client[] = Object.keys(data).map(key => ({
-          id: key,
-          ...data[key]
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setClients(list);
-      } else {
-        setClients([]);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+export function ClientsTable({ clients, loading }: { clients: Client[], loading: boolean }) {
 
   const getStatusVariant = (status: Client['verification_status']) => {
     switch(status) {
