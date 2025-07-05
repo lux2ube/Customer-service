@@ -115,6 +115,20 @@ export async function getWhatsAppClientStatus() {
     return { status, qrCodeDataUrl };
 }
 
+export async function logoutWhatsApp() {
+    console.log("Logout requested. Destroying client and clearing session...");
+    await destroyClient();
+    status = 'DISCONNECTED';
+    qrCodeDataUrl = null;
+    try {
+        await fs.rm(path.join(process.cwd(), SESSION_DIR), { recursive: true, force: true });
+        console.log('Cleared WhatsApp session directory.');
+    } catch (error) {
+        console.error('Error clearing session directory:', error);
+        // Don't re-throw, as the client is already destroyed. Just log it.
+    }
+}
+
 export async function sendWhatsAppMessage(toNumber: string, message: string) {
     if (status !== 'CONNECTED' || !client) {
         console.error('Attempted to send message while client is not connected.');

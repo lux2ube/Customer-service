@@ -4,8 +4,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { getWhatsAppClientStatus, initializeWhatsAppClient } from '@/lib/actions';
-import { Loader2 } from 'lucide-react';
+import { getWhatsAppClientStatus, initializeWhatsAppClient, logoutWhatsAppClient } from '@/lib/actions';
+import { Loader2, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from './ui/badge';
 
@@ -15,6 +15,7 @@ export function WhatsAppConnector() {
     const [serverStatus, setServerStatus] = useState<WhatsAppStatus | 'INITIALIZING'>('INITIALIZING');
     const [qrCode, setQrCode] = useState<string | null>(null);
     const [isConnectActionRunning, setIsConnectActionRunning] = useState(false);
+    const [isLogoutActionRunning, setIsLogoutActionRunning] = useState(false);
     const intervalRef = useRef<NodeJS.Timeout>();
 
     const handleConnect = async () => {
@@ -26,6 +27,19 @@ export function WhatsAppConnector() {
             console.error("Error initiating connection:", error);
         } finally {
             setIsConnectActionRunning(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        if (isLogoutActionRunning) return;
+        setIsLogoutActionRunning(true);
+        try {
+            await logoutWhatsAppClient();
+            // Polling will handle the status update
+        } catch (error) {
+            console.error("Error logging out:", error);
+        } finally {
+            setIsLogoutActionRunning(false);
         }
     };
 
@@ -130,9 +144,22 @@ export function WhatsAppConnector() {
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>Connection Status</CardTitle>
-                    <Badge variant={getStatusBadgeVariant()}>
-                        {serverStatus === 'INITIALIZING' ? 'LOADING' : serverStatus.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                        <Badge variant={getStatusBadgeVariant()}>
+                            {serverStatus === 'INITIALIZING' ? 'LOADING' : serverStatus.replace('_', ' ')}
+                        </Badge>
+                        {serverStatus !== 'DISCONNECTED' && serverStatus !== 'INITIALIZING' && (
+                             <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={handleLogout}
+                                disabled={isLogoutActionRunning}
+                            >
+                                {isLogoutActionRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                                Logout
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="flex justify-center items-center min-h-[250px]">

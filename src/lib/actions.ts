@@ -11,7 +11,8 @@ import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem
 import { 
     initializeWhatsAppClient as initWhatsApp, 
     getWhatsAppClientStatus as getWhatsAppStatus,
-    sendWhatsAppMedia
+    sendWhatsAppMedia,
+    logoutWhatsApp
 } from './whatsapp';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -857,6 +858,16 @@ export async function initializeWhatsAppClient() {
 export async function getWhatsAppClientStatus() {
     const status = await getWhatsAppStatus();
     return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
+}
+
+export async function logoutWhatsAppClient() {
+    try {
+        await logoutWhatsApp();
+        revalidatePath('/whatsapp');
+        return { success: true, message: 'Successfully logged out and cleared session.' };
+    } catch (error: any) {
+        return { success: false, message: error.message || 'Failed to logout.' };
+    }
 }
 
 export type WhatsAppImageSendState = { message?: string; error?: boolean; success?: boolean; } | undefined;
