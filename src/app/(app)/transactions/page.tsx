@@ -57,7 +57,7 @@ export default function TransactionsPage() {
                 title="Transactions"
                 description="Manage all financial transactions."
             >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <SyncButton />
                     <ExportButton 
                         data={exportableData} 

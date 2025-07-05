@@ -100,6 +100,7 @@ export default function SettingsPage() {
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
+                                <Skeleton className="h-10 w-full" />
                             </CardContent>
                         </Card>
                     </div>
@@ -125,16 +126,16 @@ export default function SettingsPage() {
                             <CardDescription>Set the conversion rates relative to USD.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="yer_usd" className="w-24">YER / USD</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="yer_usd">YER / USD</Label>
                                 <Input id="yer_usd" type="number" step="any" value={settings.yer_usd || ''} onChange={handleInputChange} />
                             </div>
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="sar_usd" className="w-24">SAR / USD</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="sar_usd">SAR / USD</Label>
                                 <Input id="sar_usd" type="number" step="any" value={settings.sar_usd || ''} onChange={handleInputChange} />
                             </div>
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="usdt_usd" className="w-24">USDT / USD</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="usdt_usd">USDT / USD</Label>
                                 <Input id="usdt_usd" type="number" value={settings.usdt_usd || ''} disabled />
                             </div>
                         </CardContent>
@@ -145,16 +146,16 @@ export default function SettingsPage() {
                             <CardDescription>Configure the fees for deposits and withdrawals.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="deposit_fee_percent" className="w-48">Deposit Fee (%)</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="deposit_fee_percent">Deposit Fee (%)</Label>
                                 <Input id="deposit_fee_percent" type="number" value={settings.deposit_fee_percent || ''} onChange={handleInputChange} />
                             </div>
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="withdraw_fee_percent" className="w-48">Withdraw Fee (%)</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="withdraw_fee_percent">Withdraw Fee (%)</Label>
                                 <Input id="withdraw_fee_percent" type="number" value={settings.withdraw_fee_percent || ''} onChange={handleInputChange} />
                             </div>
-                            <div className="flex items-center gap-4">
-                                <Label htmlFor="minimum_fee_usd" className="w-48">Minimum Fee (USD)</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="minimum_fee_usd">Minimum Fee (USD)</Label>
                                 <Input id="minimum_fee_usd" type="number" value={settings.minimum_fee_usd || ''} onChange={handleInputChange} />
                             </div>
                         </CardContent>
@@ -166,12 +167,12 @@ export default function SettingsPage() {
                         <CardDescription>Connect to external services like BscScan.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex items-center gap-4">
-                            <Label htmlFor="bsc_api_key" className="w-48">BscScan API Key</Label>
+                        <div className="space-y-2">
+                            <Label htmlFor="bsc_api_key">BscScan API Key</Label>
                             <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />
                         </div>
-                        <div className="flex items-center gap-4">
-                            <Label htmlFor="bsc_wallet_address" className="w-48">USDT Wallet Address</Label>
+                        <div className="space-y-2">
+                            <Label htmlFor="bsc_wallet_address">USDT Wallet Address</Label>
                             <Input id="bsc_wallet_address" type="text" placeholder="0x..." value={settings.bsc_wallet_address || ''} onChange={handleInputChange} />
                         </div>
                     </CardContent>

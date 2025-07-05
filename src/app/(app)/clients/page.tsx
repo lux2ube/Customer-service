@@ -57,7 +57,7 @@ export default function ClientsPage() {
                 title="Clients"
                 description="Manage customer profiles and history."
             >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <ImportClientsButton />
                     <ExportButton 
                         data={exportableData} 
