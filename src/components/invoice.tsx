@@ -22,9 +22,11 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
     };
 
     const typeMap: Record<string, string> = {
-        Deposit: 'تحويل مشترك',
-        Withdraw: 'تحويل مشترك'
+        Deposit: 'إيداع',
+        Withdraw: 'سحب'
     };
+
+    const formatUsd = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
     
     return (
         <div ref={ref} className="bg-gray-800 p-4 font-sans" dir="rtl">
@@ -40,47 +42,75 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
                 </header>
 
                 <section className="bg-gray-100 rounded-lg p-3 text-center mb-6">
-                    <span className="text-2xl font-bold text-green-600">{transaction.amount}</span>
+                    <span className="text-2xl font-bold text-green-600">{transaction.amount.toLocaleString()}</span>
                     <span className="mx-2 text-lg font-semibold">{currencyMap[transaction.currency] || transaction.currency}</span>
                 </section>
 
-                <section className="space-y-4 text-sm">
-                    <div className="flex justify-between items-center border-b pb-4">
+                <section className="space-y-3 text-sm">
+                    {/* --- Basic Info --- */}
+                    <div className="flex justify-between items-center border-b pb-3">
                         <dt className="text-gray-500">رقم مرجع العملية</dt>
-                        <dd className="font-mono flex items-center gap-2">
-                            <span>{transaction.id.slice(-12)}</span>
-                            <Copy className="h-4 w-4 text-gray-400" />
+                        <dd className="font-mono flex items-center gap-2 text-xs">
+                            <span>{transaction.id}</span>
+                            <Copy className="h-4 w-4 text-gray-400 cursor-pointer" />
                         </dd>
                     </div>
-                    <div className="flex justify-between items-center border-b pb-4">
+                    <div className="flex justify-between items-center border-b pb-3">
                         <dt className="text-gray-500">العملية</dt>
                         <dd className="font-semibold">{typeMap[transaction.type]}</dd>
                     </div>
-                    <div className="flex justify-between items-center border-b pb-4">
+                    <div className="flex justify-between items-center border-b pb-3">
                         <dt className="text-gray-500">تاريخ العملية</dt>
                         <dd className="font-semibold font-mono">
-                            {format(new Date(transaction.date), '(HH:mm) dd/MM/yyyy')}
+                            {format(new Date(transaction.date), 'dd/MM/yyyy (HH:mm)')}
                         </dd>
                     </div>
 
-                    {transaction.type === 'Withdraw' && (
-                        <div className="text-right pt-2">
-                            <dt className="text-gray-500 mb-1">المستفيد:</dt>
-                            <dd className="font-bold text-base">{client.name}</dd>
-                            <dd className="font-mono text-gray-600">{client.phone}</dd>
+                    {/* --- Financial Details --- */}
+                    <div className="flex justify-between items-center border-b pb-3">
+                        <dt className="text-gray-500">المبلغ بالدولار</dt>
+                        <dd className="font-semibold font-mono">{formatUsd(transaction.amount_usd)}</dd>
+                    </div>
+                    <div className="flex justify-between items-center border-b pb-3">
+                        <dt className="text-gray-500">الرسوم</dt>
+                        <dd className="font-semibold font-mono">{formatUsd(transaction.fee_usd)}</dd>
+                    </div>
+                    <div className="flex justify-between items-center border-b pb-3">
+                        <dt className="text-gray-500">المبلغ النهائي USDT</dt>
+                        <dd className="font-semibold font-mono">{transaction.amount_usdt.toFixed(2)}</dd>
+                    </div>
+                     
+                    {/* --- Account & Wallet Info --- */}
+                    {transaction.bankAccountName && (
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <dt className="text-gray-500">{transaction.type === 'Deposit' ? 'حساب الإيداع' : 'حساب السحب'}</dt>
+                            <dd className="font-semibold">{transaction.bankAccountName}</dd>
                         </div>
                     )}
-                     {transaction.type === 'Deposit' && (
-                        <div className="text-right pt-2">
-                            <dt className="text-gray-500 mb-1">المودع:</dt>
-                            <dd className="font-bold text-base">{client.name}</dd>
-                            <dd className="font-mono text-gray-600">{client.phone}</dd>
+                    {transaction.cryptoWalletName && (
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <dt className="text-gray-500">المحفظة</dt>
+                            <dd className="font-semibold">{transaction.cryptoWalletName}</dd>
+                        </div>
+                    )}
+                    {transaction.client_wallet_address && (
+                        <div className="flex justify-between items-center border-b pb-3 gap-2">
+                            <dt className="text-gray-500 shrink-0">عنوان العميل</dt>
+                            <dd className="font-mono text-xs break-all text-left" dir="ltr">{transaction.client_wallet_address}</dd>
                         </div>
                     )}
                     
+                    {/* --- Party Details --- */}
+                    <div className="text-right pt-2 border-b pb-3">
+                        <dt className="text-gray-500 mb-1">
+                            {transaction.type === 'Deposit' ? 'المودع:' : 'المستفيد:'}
+                        </dt>
+                        <dd className="font-bold text-base">{client.name}</dd>
+                        <dd className="font-mono text-gray-600">{client.phone}</dd>
+                    </div>
                      <div className="text-right pt-2">
                         <dt className="text-gray-500 mb-1">
-                            {transaction.type === 'Withdraw' ? 'المودع:' : 'المستفيد:'}
+                            {transaction.type === 'Deposit' ? 'المستفيد:' : 'المودع:'}
                         </dt>
                         <dd className="font-bold text-base">Customer Central</dd>
                         <dd className="font-mono text-gray-600">Company Account</dd>
@@ -88,18 +118,18 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
                 </section>
 
                  <footer className="flex justify-around mt-8">
-                    <div className="text-center">
-                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block">
+                    <button className="text-center group">
+                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block group-hover:bg-gray-200 transition-colors">
                              <Share2 className="h-6 w-6 text-gray-700" />
                         </div>
                         <p className="text-sm font-semibold">مشاركة</p>
-                    </div>
-                     <div className="text-center">
-                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block">
+                    </button>
+                     <button className="text-center group">
+                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block group-hover:bg-gray-200 transition-colors">
                              <Download className="h-6 w-6 text-red-500" />
                         </div>
                         <p className="text-sm font-semibold">حفظ</p>
-                    </div>
+                    </button>
                  </footer>
 
             </div>
