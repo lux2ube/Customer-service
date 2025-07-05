@@ -638,7 +638,7 @@ const ImportedClientSchema = z.object({
   phoneNumber: z.string().min(1),
 });
 
-const ImportSchema = z.union([ImportedClientSchema, z.array(ImportedClientSchema)]);
+const ImportSchema = z.array(ImportedClientSchema);
 
 export async function importClients(prevState: ImportState, formData: FormData): Promise<ImportState> {
     const file = formData.get('jsonFile') as File | null;
@@ -659,10 +659,10 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
         if (!validatedData.success) {
             console.error(validatedData.error);
-            return { message: 'JSON file has invalid format or missing required fields.', error: true };
+            return { message: 'JSON file must be an array of client objects. Some objects may have an invalid format or missing required fields.', error: true };
         }
         
-        const clientsToProcess = Array.isArray(validatedData.data) ? validatedData.data : [validatedData.data];
+        const clientsToProcess = validatedData.data;
         const updates: { [key: string]: any } = {};
         let importedCount = 0;
 
