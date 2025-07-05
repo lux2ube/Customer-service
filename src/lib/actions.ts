@@ -171,7 +171,17 @@ export async function createClient(clientId: string | null, prevState: ClientFor
                 console.error("Firebase Storage upload FAILED for file:", file.name);
                 console.error("Full error object:", error);
                 console.error("-----------------------------------");
-                return { message: `File upload failed for "${file.name}". Please check server logs and Firebase Storage rules.` };
+                
+                const errorMessage = (error as any)?.code;
+                let userMessage = `File upload failed. Please check server logs.`;
+
+                if (errorMessage === 'storage/unauthorized') {
+                    userMessage = 'Upload failed due to permissions. Please update your Firebase Storage Rules to allow writes.';
+                } else if (errorMessage) {
+                    userMessage = `Upload failed with error: ${errorMessage}. Please check server logs.`;
+                }
+                
+                return { message: userMessage };
             }
         }
     }
@@ -269,7 +279,17 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
             console.error("Firebase Storage document deletion FAILED for:", documentName);
             console.error("Full error object:", error);
             console.error("-----------------------------------");
-            return { message: `Database Error: Failed to delete document "${documentName}". Check server logs and permissions.` };
+            
+            const errorMessage = (error as any)?.code;
+            let userMessage = `Failed to delete document. Please check server logs.`;
+
+            if (errorMessage === 'storage/unauthorized') {
+                userMessage = 'Deletion failed due to permissions. Please update your Firebase Storage Rules to allow deletes.';
+            } else if (errorMessage) {
+                userMessage = `Deletion failed with error: ${errorMessage}. Please check server logs.`;
+            }
+
+            return { message: userMessage };
         }
     }
 
