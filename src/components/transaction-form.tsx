@@ -22,6 +22,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Separator } from './ui/separator';
+import { WhatsAppLinkGenerator } from './whatsapp-link-generator';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -32,7 +33,7 @@ function SubmitButton() {
     );
 }
 
-export function TransactionForm({ transaction }: { transaction?: Transaction }) {
+export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
@@ -299,6 +300,9 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                 </Card>
             </div>
             <div className="lg:col-span-1 space-y-6">
+                {transaction && client && (
+                    <WhatsAppLinkGenerator transaction={transaction} client={client} />
+                )}
                  <Card>
                     <CardHeader>
                         <CardTitle>Optional Data</CardTitle>
