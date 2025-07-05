@@ -199,8 +199,8 @@ export async function createClient(clientId: string | null, prevState: ClientFor
             for (const item of blacklistItems) {
                 if (item.type === 'Name') {
                     // Split client name and blacklisted name into words for more flexible matching.
-                    const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
-                    const blacklistWords = item.value.toLowerCase().split(/\s+/);
+                    const clientWords = new Set(clientName.toLowerCase().split(/\\s+/));
+                    const blacklistWords = item.value.toLowerCase().split(/\\s+/);
                     
                     // Check if all words from the blacklist entry are present in the client's name.
                     if (blacklistWords.every(word => clientWords.has(word))) {
@@ -949,7 +949,7 @@ export async function deleteBlacklistItem(id: string): Promise<BlacklistFormStat
     }
 }
 
-export async function scanClientsWithBlacklist(): Promise<ScanState> {
+export async function scanClientsWithBlacklist(prevState: ScanState, formData: FormData): Promise<ScanState> {
     try {
         const [clientsSnapshot, blacklistSnapshot] = await Promise.all([
             get(ref(db, 'clients')),
@@ -976,8 +976,8 @@ export async function scanClientsWithBlacklist(): Promise<ScanState> {
             
             // Check against name blacklist
             for (const item of nameBlacklist) {
-                const clientWords = new Set(client.name.toLowerCase().split(/\s+/));
-                const blacklistWords = item.value.toLowerCase().split(/\s+/);
+                const clientWords = new Set(client.name.toLowerCase().split(/\\s+/));
+                const blacklistWords = item.value.toLowerCase().split(/\\s+/);
 
                 if (blacklistWords.every(word => clientWords.has(word))) {
                     if (!currentFlags.includes('Blacklisted')) {

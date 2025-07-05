@@ -58,7 +58,7 @@ export function BlacklistManager() {
     const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
     const [itemToDelete, setItemToDelete] = React.useState<BlacklistItem | null>(null);
 
-    const [scanState, scanAction] = useActionState<ScanState, void>(scanClientsWithBlacklist, undefined);
+    const [scanState, scanAction] = useActionState<ScanState, FormData>(scanClientsWithBlacklist, undefined);
 
     React.useEffect(() => {
         if (scanState?.message) {
