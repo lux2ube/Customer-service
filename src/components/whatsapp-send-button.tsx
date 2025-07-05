@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useFormStatus, useActionState } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Button } from './ui/button';
 import { sendWhatsAppNotification, type WhatsAppSendState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
