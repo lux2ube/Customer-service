@@ -137,76 +137,95 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const rate = getRate(currency);
         if (rate === 0) return;
 
-        const minimumFee = settings.minimum_fee_usd || 1;
-        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
-        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
+        const isSyncedTransaction = !!transaction?.hash;
 
-        let finalUsdValue = 0;
-        let finalFee = 0;
-        let finalExpense = 0;
-
-        if (lastEditedField === 'usdt') {
-            // Reverse calculate: from USDT to Amount
+        if (isSyncedTransaction) {
+            // Logic for synced transactions: Amounts are independent, fee/expense is the difference.
+            const finalUsdValue = amount * rate;
+            let difference = 0;
             if (transactionType === 'Deposit') {
-                const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
-                if ((usdFromFeePercent * depositFeePercent) > minimumFee) {
-                    finalUsdValue = usdFromFeePercent;
-                } else {
-                    finalUsdValue = usdtAmount + minimumFee;
-                }
+                difference = finalUsdValue - usdtAmount;
             } else { // Withdraw
-                const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
-                if ((usdFromFeePercent * withdrawFeePercent) > minimumFee) {
-                    finalUsdValue = usdFromFeePercent;
-                } else {
-                    finalUsdValue = usdtAmount - minimumFee;
-                }
+                difference = usdtAmount - finalUsdValue;
             }
-            
-            const newAmount = finalUsdValue / rate;
-            setAmount(Number(newAmount.toFixed(2)));
-            
-        } else { // Forward calculate: from Amount to USDT
-            finalUsdValue = amount * rate;
-        }
 
-        // Now that we have a definitive USD value, calculate fees and final USDT
-        let percentageFee, calculatedFee;
+            let finalFee = 0;
+            let finalExpense = 0;
 
-        if (lastEditedField === 'usdt') {
-            // If USDT was the source, the fee is the difference
-            const difference = (transactionType === 'Deposit') ? finalUsdValue - usdtAmount : usdtAmount - finalUsdValue;
             if (difference >= 0) {
                 finalFee = difference;
-                finalExpense = 0;
             } else {
-                finalFee = 0;
                 finalExpense = -difference;
             }
+
+            setUsdValue(finalUsdValue);
+            setFee(finalFee);
+            setExpense(finalExpense);
         } else {
-            // If Amount was the source, calculate the fee based on rules
-            if (transactionType === 'Deposit') {
-                percentageFee = finalUsdValue * depositFeePercent;
-            } else { // Withdraw
-                percentageFee = finalUsdValue * withdrawFeePercent;
+            // Logic for manual transactions: two-way calculation based on last edited field.
+            const minimumFee = settings.minimum_fee_usd || 1;
+            const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
+            const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
+
+            let finalUsdValue = 0;
+            let finalFee = 0;
+            let finalExpense = 0;
+
+            if (lastEditedField === 'usdt') {
+                // Reverse calculate: from USDT to Amount
+                if (transactionType === 'Deposit') {
+                    const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
+                    if ((usdFromFeePercent * depositFeePercent) > minimumFee) {
+                        finalUsdValue = usdFromFeePercent;
+                    } else {
+                        finalUsdValue = usdtAmount + minimumFee;
+                    }
+                } else { // Withdraw
+                    const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
+                    if ((usdFromFeePercent * withdrawFeePercent) > minimumFee) {
+                        finalUsdValue = usdFromFeePercent;
+                    } else {
+                        finalUsdValue = usdtAmount - minimumFee;
+                    }
+                }
+                
+                const newAmount = finalUsdValue / rate;
+                setAmount(Number(newAmount.toFixed(2)));
+                
+            } else { // Forward calculate: from Amount to USDT
+                finalUsdValue = amount * rate;
             }
-            calculatedFee = Math.max(percentageFee, minimumFee);
-            
-            let finalUsdtAmount = 0;
-            if (transactionType === 'Deposit') {
-                finalUsdtAmount = finalUsdValue - calculatedFee;
-            } else { // Withdraw
-                finalUsdtAmount = finalUsdValue + calculatedFee;
+
+            // Now that we have a definitive USD value, calculate fees and final USDT
+            if (lastEditedField === 'usdt') {
+                const difference = (transactionType === 'Deposit') ? finalUsdValue - usdtAmount : usdtAmount - finalUsdValue;
+                if (difference >= 0) {
+                    finalFee = difference;
+                    finalExpense = 0;
+                } else {
+                    finalFee = 0;
+                    finalExpense = -difference;
+                }
+            } else {
+                let percentageFee = (transactionType === 'Deposit') ? finalUsdValue * depositFeePercent : finalUsdValue * withdrawFeePercent;
+                let calculatedFee = Math.max(percentageFee, minimumFee);
+                
+                let finalUsdtAmount = 0;
+                if (transactionType === 'Deposit') {
+                    finalUsdtAmount = finalUsdValue - calculatedFee;
+                } else { // Withdraw
+                    finalUsdtAmount = finalUsdValue + calculatedFee;
+                }
+                finalFee = calculatedFee;
+                setUsdtAmount(Number(finalUsdtAmount.toFixed(2)));
             }
-            finalFee = calculatedFee;
-            setUsdtAmount(Number(finalUsdtAmount.toFixed(2)));
+
+            setUsdValue(finalUsdValue);
+            setFee(finalFee);
+            setExpense(finalExpense);
         }
 
-        setUsdValue(finalUsdValue);
-        setFee(finalFee);
-        setExpense(finalExpense);
-
-    }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField]);
+    }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField, transaction]);
 
     // Effect for handling server action responses
     React.useEffect(() => {
@@ -591,5 +610,3 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
-
-
