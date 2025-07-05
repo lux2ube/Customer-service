@@ -20,6 +20,9 @@ const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
     return newObj;
 };
 
+const PROFIT_ACCOUNT_ID = '4001';
+const EXPENSE_ACCOUNT_ID = '5001';
+
 
 export type JournalEntryFormState =
   | {
@@ -341,8 +344,92 @@ export async function createTransaction(transactionId: string | null, prevState:
             message: 'Database Error: Failed to create transaction.'
         }
     }
+
+    const _createFeeExpenseJournalEntry = async (
+        debitAccountId: string,
+        creditAccountId: string,
+        amountUsd: number,
+        description: string
+    ) => {
+        if (amountUsd <= 0) return;
+
+        try {
+            const [debitSnapshot, creditSnapshot, settingsSnapshot] = await Promise.all([
+                get(ref(db, `accounts/${debitAccountId}`)),
+                get(ref(db, `accounts/${creditAccountId}`)),
+                get(ref(db, 'settings')),
+            ]);
+            
+            if (!debitSnapshot.exists() || !creditSnapshot.exists() || !settingsSnapshot.exists()) {
+                console.error(`Could not find accounts or settings for journal entry: ${debitAccountId}, ${creditAccountId}`);
+                return;
+            }
+
+            const debitAccount = { id: debitAccountId, ...debitSnapshot.val() } as Account;
+            const creditAccount = { id: creditAccountId, ...creditSnapshot.val() } as Account;
+            const settings = settingsSnapshot.val() as Settings;
+
+            const getRate = (currency?: string) => {
+                if (!currency || !settings) return 1;
+                switch(currency) {
+                    case 'YER': return settings.yer_usd || 0;
+                    case 'SAR': return settings.sar_usd || 0;
+                    case 'USDT': return settings.usdt_usd || 1;
+                    case 'USD': default: return 1;
+                }
+            };
+
+            const debitRate = getRate(debitAccount.currency);
+            const creditRate = getRate(creditAccount.currency);
+            
+            if (debitRate === 0 || creditRate === 0) {
+                 console.error(`Exchange rate is zero for journal entry accounts.`);
+                 return;
+            }
+
+            const debitAmount = amountUsd / debitRate;
+            const creditAmount = amountUsd / creditRate;
+
+            const newEntryRef = push(ref(db, 'journal_entries'));
+            await set(newEntryRef, {
+                date: finalData.date, // Use transaction date
+                description,
+                debit_account: debitAccountId,
+                credit_account: creditAccountId,
+                debit_amount: debitAmount,
+                credit_amount: creditAmount,
+                debit_currency: debitAccount.currency || 'USD',
+                credit_currency: creditAccount.currency || 'USD',
+                amount_usd: amountUsd,
+                debit_account_name: debitAccount.name,
+                credit_account_name: creditAccount.name,
+                createdAt: new Date().toISOString(),
+            });
+        } catch (e) {
+            console.error("Failed to create automated journal entry:", e);
+        }
+    };
+    
+    if (finalData.fee_usd && finalData.fee_usd > 0) {
+        const description = `Profit from transaction ${newId}`;
+        if (finalData.type === 'Deposit' && finalData.bankAccountId) {
+            await _createFeeExpenseJournalEntry(finalData.bankAccountId, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
+        } else if (finalData.type === 'Withdraw' && finalData.cryptoWalletId) {
+            await _createFeeExpenseJournalEntry(finalData.cryptoWalletId, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
+        }
+    }
+    
+    if (finalData.expense_usd && finalData.expense_usd > 0) {
+        const description = `Expense from transaction ${newId}`;
+        if (finalData.type === 'Deposit' && finalData.cryptoWalletId) {
+            await _createFeeExpenseJournalEntry(EXPENSE_ACCOUNT_ID, finalData.cryptoWalletId, finalData.expense_usd, description);
+        } else if (finalData.type === 'Withdraw' && finalData.bankAccountId) {
+            await _createFeeExpenseJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId, finalData.expense_usd, description);
+        }
+    }
     
     revalidatePath('/transactions');
+    revalidatePath('/accounting/journal');
     redirect('/transactions');
 }
 
@@ -488,8 +575,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            // If 'to' is our wallet, it's an incoming tx, which is a 'Withdraw' for the client (they get fiat, we get USDT)
-            // If 'from' is our wallet, it's an outgoing tx, which is a 'Deposit' for the client (they give fiat, we give USDT)
+            // If 'to' is our wallet, it's an incoming tx -> client is sending us crypto to get fiat -> 'Withdrawal'
+            // If 'from' is our wallet, it's an outgoing tx -> client sent us fiat to get crypto -> 'Deposit'
             const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
 
             const newTxId = push(ref(db, 'transactions')).key;
@@ -512,6 +599,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 currency: 'USDT',
                 amount_usd: syncedAmount, // The USD value is the same as the USDT value
                 fee_usd: 0,
+                expense_usd: 0,
                 amount_usdt: syncedAmount, // This is the final value that affects the wallet balance
                 hash: tx.hash,
                 status: 'Confirmed',
