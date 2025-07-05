@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account } from './types';
 
-export type FormState =
+export type JournalEntryFormState =
   | {
       errors?: {
         date?: string[];
@@ -33,7 +33,7 @@ const JournalEntrySchema = z.object({
 });
 
 
-export async function createJournalEntry(prevState: FormState, formData: FormData) {
+export async function createJournalEntry(prevState: JournalEntryFormState, formData: FormData) {
     const validatedFields = JournalEntrySchema.safeParse({
         date: formData.get('date'),
         description: formData.get('description'),
@@ -266,12 +266,12 @@ const AccountSchema = z.object({
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
   parentId: z.string().optional().nullable(), // Allow empty string or null
-  currency: z.enum(['USD', 'YER', 'SAR', 'USDT']).optional().nullable(),
+  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', '']).optional().nullable(),
 });
 
-export async function createAccount(prevState: AccountFormState, formData: FormData) {
+export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData) {
     const rawData = {
-        id: formData.get('id'),
+        id: accountId ?? formData.get('id'),
         name: formData.get('name'),
         type: formData.get('type'),
         isGroup: formData.get('isGroup') === 'on',
@@ -279,7 +279,6 @@ export async function createAccount(prevState: AccountFormState, formData: FormD
         currency: formData.get('currency') || null,
     };
     
-    // If currency is an empty string, convert it to null
     if (rawData.currency === '') {
         rawData.currency = null;
     }
@@ -295,9 +294,15 @@ export async function createAccount(prevState: AccountFormState, formData: FormD
 
     const { id, ...data } = validatedFields.data;
 
+    if (!id) {
+        return {
+            errors: { id: ["Account code is required."] },
+            message: 'Failed to save account.',
+        };
+    }
+
     try {
         const accountRef = ref(db, `accounts/${id}`);
-        // For accounts, the ID is user-defined, so we use `set` for both create and update.
         await set(accountRef, data);
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }

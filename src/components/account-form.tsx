@@ -26,12 +26,11 @@ function SubmitButton() {
 export function AccountForm({ account, parentAccounts }: { account?: Account, parentAccounts: Account[] }) {
     const { toast } = useToast();
     
-    // The action needs to handle both create and update. Since the ID is part of the form,
-    // we can use the same server action for both.
-    const [state, formAction] = useActionState<AccountFormState, FormData>(createAccount, undefined);
+    const action = account ? createAccount.bind(null, account.id) : createAccount.bind(null, null);
+    const [state, formAction] = useActionState<AccountFormState, FormData>(action, undefined);
     
     React.useEffect(() => {
-        if (state?.message) {
+        if (state?.message && state.errors) {
              toast({ variant: 'destructive', title: 'Error Saving Account', description: state.message });
         }
     }, [state, toast]);
