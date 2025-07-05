@@ -13,7 +13,7 @@ import type { Client, Account } from './types';
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
     const newObj: Record<string, any> = {};
     for (const key in obj) {
-        if (obj[key] !== undefined) {
+        if (obj[key] !== undefined && obj[key] !== null) {
             newObj[key] = obj[key];
         }
     }
@@ -298,10 +298,25 @@ export async function createTransaction(transactionId: string | null, prevState:
         }
     }
 
+    // Get Crypto Wallet Name for denormalization
+    let cryptoWalletName = '';
+    if (dataToSave.cryptoWalletId) {
+        try {
+            const cryptoWalletRef = ref(db, `accounts/${dataToSave.cryptoWalletId}`);
+            const snapshot = await get(cryptoWalletRef);
+            if (snapshot.exists()) {
+                cryptoWalletName = (snapshot.val() as Account).name;
+            }
+        } catch (e) {
+            console.error("Could not fetch crypto wallet name for transaction");
+        }
+    }
+
     const finalData = {
         ...dataToSave,
         clientName,
         bankAccountName,
+        cryptoWalletName,
     };
     
     const dataForFirebase = stripUndefined(finalData);
@@ -386,7 +401,11 @@ export async function createAccount(accountId: string | null, prevState: Account
 
     try {
         const accountRef = ref(db, `accounts/${id}`);
-        await set(accountRef, dataForFirebase);
+        if(accountId) {
+             await update(accountRef, dataForFirebase);
+        } else {
+            await set(accountRef, dataForFirebase);
+        }
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }
     }

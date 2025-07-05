@@ -39,7 +39,8 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     
     const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [clients, setClients] = React.useState<Client[]>([]);
-    const [assetAccounts, setAssetAccounts] = React.useState<Account[]>([]);
+    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
 
     // Form state that drives calculations
@@ -69,11 +70,15 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
              if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
                 // Filter for non-group asset accounts that have a currency
-                setAssetAccounts(allAccounts.filter(acc => 
-                    !acc.isGroup && acc.type === 'Assets' && acc.currency
+                setBankAccounts(allAccounts.filter(acc => 
+                    !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
+                ));
+                setCryptoWallets(allAccounts.filter(acc =>
+                    !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'
                 ));
              } else {
-                setAssetAccounts([]);
+                setBankAccounts([]);
+                setCryptoWallets([]);
              }
         });
 
@@ -121,7 +126,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
     }, [state, toast]);
 
     const handleBankAccountSelect = (accountId: string) => {
-        const selectedAccount = assetAccounts.find(acc => acc.id === accountId);
+        const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
         }
@@ -169,17 +174,11 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                <Label>Bank Account</Label>
-                                <DataCombobox name="bankAccountId" data={assetAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
+                                <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
                             </div>
                             <div className="space-y-2">
                                <Label>Crypto Wallet</Label>
-                                <Select name="cryptoWalletId" defaultValue={transaction?.cryptoWalletId}>
-                                    <SelectTrigger><SelectValue placeholder="Select a crypto wallet..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {/* This would be populated from a 'crypto_wallets' collection */}
-                                        <SelectItem value="wallet1">Main USDT Wallet (BEP-20)</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." defaultValue={transaction?.cryptoWalletId}/>
                             </div>
                         </div>
 
