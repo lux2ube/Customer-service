@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { useFormStatus, useFormState } from 'react-dom';
+import React, { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Button } from './ui/button';
 import { sendWhatsAppNotification, type WhatsAppSendState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,7 @@ function SubmitButton() {
 export function WhatsAppSendButton({ transactionId }: { transactionId: string }) {
     const { toast } = useToast();
     const action = sendWhatsAppNotification.bind(null, transactionId);
-    const [state, formAction] = useFormState<WhatsAppSendState, string>(action, undefined);
+    const [state, formAction] = useActionState<WhatsAppSendState, string>(action, undefined);
 
     React.useEffect(() => {
         if (state?.message) {
