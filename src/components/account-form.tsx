@@ -7,7 +7,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Save } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { createAccount, type AccountFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -28,7 +28,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
     
     // The action needs to handle both create and update. Since the ID is part of the form,
     // we can use the same server action for both.
-    const [state, formAction] = useFormState<AccountFormState, FormData>(createAccount, undefined);
+    const [state, formAction] = useActionState<AccountFormState, FormData>(createAccount, undefined);
     
     React.useEffect(() => {
         if (state?.message) {

@@ -7,7 +7,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { createTransaction, type TransactionFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -34,7 +34,7 @@ function SubmitButton() {
 export function TransactionForm({ transaction }: { transaction?: Transaction }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
-    const [state, formAction] = useFormState<TransactionFormState, FormData>(action, undefined);
+    const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
     
     const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [clients, setClients] = React.useState<Client[]>([]);

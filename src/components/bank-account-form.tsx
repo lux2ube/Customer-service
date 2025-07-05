@@ -6,7 +6,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Save } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { createBankAccount, type BankAccountFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -26,7 +26,7 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
     const { toast } = useToast();
     
     const action = account ? createBankAccount.bind(null, account.id) : createBankAccount.bind(null, null);
-    const [state, formAction] = useFormState<BankAccountFormState, FormData>(action, undefined);
+    const [state, formAction] = useActionState<BankAccountFormState, FormData>(action, undefined);
     
     React.useEffect(() => {
         if (state?.message) {

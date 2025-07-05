@@ -7,7 +7,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { createJournalEntry, type FormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -34,7 +34,7 @@ function SubmitButton() {
 
 export function JournalEntryForm() {
     const { toast } = useToast();
-    const [state, formAction] = useFormState<FormState, FormData>(createJournalEntry, undefined);
+    const [state, formAction] = useActionState<FormState, FormData>(createJournalEntry, undefined);
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     const [accounts, setAccounts] = React.useState<Account[]>([]);
     

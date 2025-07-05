@@ -6,7 +6,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Save } from 'lucide-react';
 import React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { createClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -29,7 +29,7 @@ export function ClientForm({ client }: { client?: Client }) {
     const { toast } = useToast();
     
     const action = client ? createClient.bind(null, client.id) : createClient.bind(null, null);
-    const [state, formAction] = useFormState<ClientFormState, FormData>(action, undefined);
+    const [state, formAction] = useActionState<ClientFormState, FormData>(action, undefined);
     
     React.useEffect(() => {
         if (state?.message) {
