@@ -29,12 +29,34 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
     
     const action = account ? createBankAccount.bind(null, account.id) : createBankAccount.bind(null, null);
     const [state, formAction] = useActionState<BankAccountFormState, FormData>(action, undefined);
+
+    const [formData, setFormData] = React.useState({
+        name: account?.name || '',
+        account_number: account?.account_number || '',
+        currency: account?.currency || 'USD',
+        status: account?.status || 'Active',
+    });
+
+    React.useEffect(() => {
+        if (account) {
+            setFormData({
+                name: account.name || '',
+                account_number: account.account_number || '',
+                currency: account.currency || 'USD',
+                status: account.status || 'Active',
+            });
+        }
+    }, [account]);
     
     React.useEffect(() => {
         if (state?.message) {
              toast({ variant: 'destructive', title: 'Error Saving Account', description: state.message });
         }
     }, [state, toast]);
+
+    const handleFieldChange = (field: keyof typeof formData, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
     return (
         <form action={formAction} className="space-y-6">
@@ -47,19 +69,37 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="name">Account Name</Label>
-                            <Input id="name" name="name" placeholder="e.g., Al-Amal Bank" defaultValue={account?.name} required />
+                            <Input 
+                                id="name" 
+                                name="name" 
+                                placeholder="e.g., Al-Amal Bank" 
+                                value={formData.name} 
+                                onChange={(e) => handleFieldChange('name', e.target.value)}
+                                required 
+                            />
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="account_number">Account Number</Label>
-                            <Input id="account_number" name="account_number" placeholder="e.g., 123456789" defaultValue={account?.account_number} />
+                            <Input 
+                                id="account_number" 
+                                name="account_number" 
+                                placeholder="e.g., 123456789" 
+                                value={formData.account_number}
+                                onChange={(e) => handleFieldChange('account_number', e.target.value)}
+                             />
                              {state?.errors?.account_number && <p className="text-sm text-destructive">{state.errors.account_number[0]}</p>}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
                          <div className="space-y-2">
                             <Label htmlFor="currency">Currency</Label>
-                            <Select name="currency" defaultValue={account?.currency || 'USD'} required>
+                            <Select 
+                                name="currency" 
+                                value={formData.currency} 
+                                onValueChange={(value) => handleFieldChange('currency', value)}
+                                required
+                            >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="USD">USD</SelectItem>
@@ -71,7 +111,12 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                         </div>
                         <div className="space-y-2">
                             <Label>Status</Label>
-                            <RadioGroup name="status" defaultValue={account?.status || 'Active'} className="flex items-center gap-4 pt-2">
+                            <RadioGroup 
+                                name="status" 
+                                value={formData.status} 
+                                onValueChange={(value) => handleFieldChange('status', value)}
+                                className="flex items-center gap-4 pt-2"
+                            >
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="Active" id="status-active" />
                                     <Label htmlFor="status-active" className="font-normal">Active</Label>

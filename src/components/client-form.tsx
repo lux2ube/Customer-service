@@ -34,6 +34,26 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
     
     const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
     const [state, formAction] = useActionState<ClientFormState, FormData>(action, undefined);
+
+    const [formData, setFormData] = React.useState({
+        name: client?.name || '',
+        phone: client?.phone || '',
+        verification_status: client?.verification_status || 'Pending',
+        review_flags: client?.review_flags || [],
+        favoriteBankAccountId: client?.favoriteBankAccountId || 'none',
+    });
+
+    React.useEffect(() => {
+        if (client) {
+            setFormData({
+                name: client.name || '',
+                phone: client.phone || '',
+                verification_status: client.verification_status || 'Pending',
+                review_flags: client.review_flags || [],
+                favoriteBankAccountId: client.favoriteBankAccountId || 'none',
+            });
+        }
+    }, [client]);
     
     React.useEffect(() => {
         if (state?.message) {
@@ -43,6 +63,15 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
             toast({ title: 'Success', description: state.message });
         }
     }, [state, toast]);
+
+    const handleFlagChange = (flag: ReviewFlag, checked: boolean) => {
+        setFormData(prev => {
+            const newFlags = checked 
+                ? [...prev.review_flags, flag]
+                : prev.review_flags.filter(f => f !== flag);
+            return { ...prev, review_flags: newFlags };
+        });
+    };
 
     return (
         <form action={formAction} className="space-y-6">
@@ -55,19 +84,38 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="name">Full Name</Label>
-                            <Input id="name" name="name" placeholder="e.g., John M. Doe" defaultValue={client?.name} required />
+                            <Input 
+                                id="name" 
+                                name="name" 
+                                placeholder="e.g., John M. Doe" 
+                                value={formData.name}
+                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                required 
+                            />
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="phone">Phone Number</Label>
-                            <Input id="phone" name="phone" placeholder="e.g., 555-1234" defaultValue={client?.phone} required />
+                            <Input 
+                                id="phone" 
+                                name="phone" 
+                                placeholder="e.g., 555-1234" 
+                                value={formData.phone}
+                                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                                required 
+                            />
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
-                             <RadioGroup name="verification_status" defaultValue={client?.verification_status || 'Pending'} className="flex items-center gap-4 pt-2">
+                             <RadioGroup 
+                                name="verification_status" 
+                                value={formData.verification_status}
+                                onValueChange={(value) => setFormData({...formData, verification_status: value as Client['verification_status']})}
+                                className="flex items-center gap-4 pt-2"
+                            >
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="Pending" id="status-pending" />
                                     <Label htmlFor="status-pending" className="font-normal">Pending</Label>
@@ -85,7 +133,11 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="favoriteBankAccountId">Favorite Bank Account</Label>
-                            <Select name="favoriteBankAccountId" defaultValue={client?.favoriteBankAccountId || 'none'}>
+                            <Select 
+                                name="favoriteBankAccountId" 
+                                value={formData.favoriteBankAccountId}
+                                onValueChange={(value) => setFormData({...formData, favoriteBankAccountId: value})}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select a favorite account..." />
                                 </SelectTrigger>
@@ -104,13 +156,14 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                     <div className="space-y-2">
                         <Label>Review Flags</Label>
                         <div className="flex flex-wrap items-center gap-4 pt-2">
-                            {reviewFlags.filter(f => f !== 'None').map(flag => (
+                            {reviewFlags.map(flag => (
                             <div key={flag} className="flex items-center space-x-2">
                                 <Checkbox 
                                     id={`flag-${flag}`} 
                                     name="review_flags" 
                                     value={flag} 
-                                    defaultChecked={client?.review_flags?.includes(flag)}
+                                    checked={formData.review_flags?.includes(flag)}
+                                    onCheckedChange={(checked) => handleFlagChange(flag, !!checked)}
                                 />
                                 <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
                             </div>

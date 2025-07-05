@@ -29,12 +29,38 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
     
     const action = createAccount.bind(null, account?.id || null);
     const [state, formAction] = useActionState<AccountFormState, FormData>(action, undefined);
+
+    const [formData, setFormData] = React.useState({
+        id: account?.id || '',
+        name: account?.name || '',
+        type: account?.type || 'Assets',
+        parentId: account?.parentId || 'none',
+        currency: account?.currency || 'none',
+        isGroup: account?.isGroup || false,
+    });
+
+    React.useEffect(() => {
+        if (account) {
+            setFormData({
+                id: account.id || '',
+                name: account.name || '',
+                type: account.type || 'Assets',
+                parentId: account.parentId || 'none',
+                currency: account.currency || 'none',
+                isGroup: account.isGroup || false,
+            });
+        }
+    }, [account]);
     
     React.useEffect(() => {
         if (state?.message && state.errors) {
              toast({ variant: 'destructive', title: 'Error Saving Account', description: state.message });
         }
     }, [state, toast]);
+
+    const handleFieldChange = (field: keyof typeof formData, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
     return (
         <form action={formAction} className="space-y-6">
@@ -47,19 +73,39 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                      <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="id">Account Code</Label>
-                            <Input id="id" name="id" placeholder="e.g., 101" defaultValue={account?.id} required disabled={!!account}/>
+                            <Input 
+                                id="id" 
+                                name="id" 
+                                placeholder="e.g., 101" 
+                                value={formData.id}
+                                onChange={(e) => handleFieldChange('id', e.target.value)}
+                                required 
+                                disabled={!!account}
+                            />
                              {state?.errors?.id && <p className="text-sm text-destructive">{state.errors.id[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="name">Account Name</Label>
-                            <Input id="name" name="name" placeholder="e.g., Cash - USD" defaultValue={account?.name} required />
+                            <Input 
+                                id="name" 
+                                name="name" 
+                                placeholder="e.g., Cash - USD" 
+                                value={formData.name} 
+                                onChange={(e) => handleFieldChange('name', e.target.value)}
+                                required 
+                            />
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                     </div>
                      <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="type">Account Type</Label>
-                            <Select name="type" defaultValue={account?.type} required>
+                            <Select 
+                                name="type" 
+                                value={formData.type}
+                                onValueChange={(value) => handleFieldChange('type', value)}
+                                required
+                            >
                                 <SelectTrigger><SelectValue placeholder="Select a type..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Assets">Assets</SelectItem>
@@ -73,7 +119,11 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="parentId">Parent Account (Group)</Label>
-                            <Select name="parentId" defaultValue={account?.parentId || 'none'}>
+                            <Select 
+                                name="parentId" 
+                                value={formData.parentId || 'none'}
+                                onValueChange={(value) => handleFieldChange('parentId', value)}
+                            >
                                 <SelectTrigger><SelectValue placeholder="Select a parent account..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
@@ -87,7 +137,11 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                      <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="currency">Currency (Optional)</Label>
-                            <Select name="currency" defaultValue={account?.currency || 'none'}>
+                            <Select 
+                                name="currency" 
+                                value={formData.currency || 'none'}
+                                onValueChange={(value) => handleFieldChange('currency', value)}
+                            >
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
@@ -100,7 +154,12 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
                         </div>
                          <div className="flex items-center space-x-2 pt-8">
-                            <Checkbox id="isGroup" name="isGroup" defaultChecked={account?.isGroup} />
+                            <Checkbox 
+                                id="isGroup" 
+                                name="isGroup" 
+                                checked={formData.isGroup} 
+                                onCheckedChange={(checked) => handleFieldChange('isGroup', !!checked)}
+                            />
                             <Label htmlFor="isGroup" className="font-normal">This is a group account</Label>
                             <p className="text-xs text-muted-foreground">(Cannot post to)</p>
                         </div>
