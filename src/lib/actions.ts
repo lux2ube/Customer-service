@@ -9,6 +9,18 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account } from './types';
 
+// Helper to strip undefined values from an object, which Firebase doesn't allow.
+const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
+    const newObj: Record<string, any> = {};
+    for (const key in obj) {
+        if (obj[key] !== undefined) {
+            newObj[key] = obj[key];
+        }
+    }
+    return newObj;
+};
+
+
 export type JournalEntryFormState =
   | {
       errors?: {
@@ -155,15 +167,16 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         finalData.kyc_document_url = existingData?.kyc_document_url;
     }
 
+    const dataForFirebase = stripUndefined(finalData);
 
     // 3. Save to Database
     try {
         if (clientId) {
-            await update(ref(db, `clients/${clientId}`), finalData);
+            await update(ref(db, `clients/${clientId}`), dataForFirebase);
         } else {
             const newClientRef = ref(db, `clients/${newId}`);
             await set(newClientRef, {
-                ...finalData,
+                ...dataForFirebase,
                 createdAt: new Date().toISOString()
             });
         }
@@ -290,15 +303,17 @@ export async function createTransaction(transactionId: string | null, prevState:
         clientName,
         bankAccountName,
     };
+    
+    const dataForFirebase = stripUndefined(finalData);
 
     try {
         if (transactionId) {
             const transactionRef = ref(db, `transactions/${transactionId}`);
-            await update(transactionRef, finalData);
+            await update(transactionRef, dataForFirebase);
         } else {
             const newTransactionRef = ref(db, `transactions/${newId}`);
             await set(newTransactionRef, {
-                ...finalData,
+                ...dataForFirebase,
                 createdAt: new Date().toISOString(),
             });
         }
@@ -367,9 +382,11 @@ export async function createAccount(accountId: string | null, prevState: Account
         };
     }
 
+    const dataForFirebase = stripUndefined(data);
+
     try {
         const accountRef = ref(db, `accounts/${id}`);
-        await set(accountRef, data);
+        await set(accountRef, dataForFirebase);
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }
     }
