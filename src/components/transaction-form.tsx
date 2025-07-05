@@ -156,12 +156,18 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setAmount(Number(e.target.value));
-        setIsUsdtManuallyEdited(false);
+        // For non-synced tx, changing fiat amount should auto-calculate USDT.
+        // For synced tx, USDT amount is fixed, so we don't reset the flag.
+        if (!transaction?.hash) {
+            setIsUsdtManuallyEdited(false);
+        }
     }
 
     const handleTypeChange = (v: 'Deposit' | 'Withdraw') => {
         setTransactionType(v);
-        setIsUsdtManuallyEdited(false);
+        if (!transaction?.hash) {
+            setIsUsdtManuallyEdited(false);
+        }
     }
     
     const handleUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +179,9 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
-            setIsUsdtManuallyEdited(false);
+            if (!transaction?.hash) {
+                setIsUsdtManuallyEdited(false);
+            }
         }
     }
 
