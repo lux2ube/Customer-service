@@ -113,7 +113,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            // A "pristine" sync is one that has been synced but never edited (amount is 0 or was not previously set)
+            // A "pristine" sync is one that has been synced but never edited
             const isPristineSync = transaction.hash && transaction.amount === 0;
             pristineRef.current = isPristineSync;
             
@@ -150,7 +150,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const num = parseFloat(String(value));
         return isNaN(num) ? 0 : num;
     }
-
+    
     const handleSyncedAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
 
@@ -161,15 +161,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            // For a synced tx, amount_usdt is fixed. The difference is fee/expense.
             const difference = prev.amount_usdt - newAmountUSD;
             
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
 
-            if (difference >= 0) { // USDT is more than local amount, so it's a fee (profit)
+            if (difference >= 0) {
                 newFeeUSD = difference;
-            } else { // USDT is less than local amount, so it's an expense/loss
+            } else {
                 newExpenseUSD = -difference;
             }
             
@@ -204,15 +203,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // It's a 'Withdraw'
                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                let grossUsdtAmount = newAmountUSD;
-                
+                let calculatedFee = 0;
+
                 if (feePercent > 0 && feePercent < 1) {
-                    grossUsdtAmount = newAmountUSD / (1 - feePercent);
+                    const grossUsdtAmount = newAmountUSD / (1 - feePercent);
+                    calculatedFee = grossUsdtAmount - newAmountUSD;
                 }
                 
-                let calculatedFee = grossUsdtAmount - newAmountUSD;
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                newUsdtAmount = newAmountUSD + finalFee;
+                newUsdtAmount = newAmountUSD + finalFee; 
             }
 
             return {
@@ -297,8 +296,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const isSynced = !!formData.hash;
     const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
-    const amountToDisplay = formData.amount || '';
     
+    // For pristine synced transactions, amount is empty. Otherwise, show the value.
+    const amountToDisplay = (pristineRef.current && isSynced) ? '' : (formData.amount || '');
+
     return (
         <>
             {transaction && client && (
@@ -398,7 +399,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="md:col-span-2 space-y-2">
                                 <Label htmlFor="amount_usdt">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} readOnly={isSynced} onChange={(e) => handleFieldChange('amount_usdt', getNumberValue(e.target.value))}/>
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} readOnly/>
                             </div>
                         </CardContent>
                         <CardFooter>
