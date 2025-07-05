@@ -162,16 +162,17 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
             equityRows.push({ accountId: 'net-income', accountName: 'Retained Earnings (Net Income)', isGroup: false, level: 1, amount: netIncome });
         }
         
-        const rootAsset = initialAccounts.find(a => a.type === 'Assets' && !a.parentId);
-        const totalAssets = rootAsset ? (allBalances[rootAsset.id] || 0) : 0;
+        // --- CORRECTED TOTALS CALCULATION ---
+        const rootAssetAccounts = initialAccounts.filter(a => a.type === 'Assets' && !a.parentId);
+        const totalAssets = rootAssetAccounts.reduce((sum, acc) => sum + (allBalances[acc.id] || 0), 0);
         
-        const rootLiabilities = initialAccounts.find(a => a.type === 'Liabilities' && !a.parentId);
-        const totalLiabilities = rootLiabilities ? -(allBalances[rootLiabilities.id] || 0) : 0;
+        const rootLiabilityAccounts = initialAccounts.filter(a => a.type === 'Liabilities' && !a.parentId);
+        const totalLiabilities = -rootLiabilityAccounts.reduce((sum, acc) => sum + (allBalances[acc.id] || 0), 0);
 
-        const rootEquity = initialAccounts.find(a => a.type === 'Equity' && !a.parentId);
-        const equityBaseTotal = rootEquity ? -(allBalances[rootEquity.id] || 0) : 0;
+        const rootEquityAccounts = initialAccounts.filter(a => a.type === 'Equity' && !a.parentId);
+        const equityBaseTotal = -rootEquityAccounts.reduce((sum, acc) => sum + (allBalances[acc.id] || 0), 0);
         const totalEquity = equityBaseTotal + netIncome;
-
+        
         return { assetRows, totalAssets, liabilityRows, totalLiabilities, equityRows, totalEquity };
     }, [date, initialAccounts, initialJournalEntries, initialTransactions]);
 
