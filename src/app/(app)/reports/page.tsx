@@ -28,6 +28,7 @@ const financialStatements = [
         title: "Balance Sheet",
         description: "Displays your company’s assets, liabilities, and equity at a single point in time, showing overall financial health and stability.",
         icon: <Scale className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/balance-sheet",
     },
     {
         title: "Cash Flow Statement",
