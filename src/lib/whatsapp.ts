@@ -11,7 +11,7 @@ import path from 'path';
 // However, with Firebase App Hosting and minInstances > 0, the process can stay warm.
 // The session is persisted to disk via LocalAuth, which is the most important part.
 let client: Client | null = null;
-let status: 'DISCONNECTED' | 'CONNECTING' | 'QR_REQUIRED' | 'CONNECTED' = 'DISCONNECTED';
+let status: 'DISCONNECTED' | 'CONNECTING' | 'GENERATING_QR' | 'QR_REQUIRED' | 'CONNECTED' = 'DISCONNECTED';
 let qrCodeDataUrl: string | null = null;
 
 const SESSION_DIR = '.wwebjs_auth';
@@ -31,8 +31,8 @@ async function destroyClient() {
 }
 
 export async function initializeWhatsAppClient() {
-    if (status === 'CONNECTING' || status === 'CONNECTED') {
-        console.log(`Client already ${status}. Initialization request ignored.`);
+    if (status === 'CONNECTING' || status === 'CONNECTED' || status === 'QR_REQUIRED' || status === 'GENERATING_QR') {
+        console.log(`Client is already in a connecting or connected state (${status}). Initialization request ignored.`);
         return;
     }
     
@@ -52,13 +52,14 @@ export async function initializeWhatsAppClient() {
     });
 
     client.on('qr', async (qr) => {
-        console.log('QR Code received. Generating data URL.');
+        console.log('QR Code received. State is now GENERATING_QR.');
+        status = 'GENERATING_QR';
+        qrCodeDataUrl = null; // Clear any old QR
         try {
-            // FIX: Wait for the data URL to be generated before updating the state
             const dataUrl = await qrcode.toDataURL(qr);
             qrCodeDataUrl = dataUrl;
             status = 'QR_REQUIRED';
-            console.log('QR Code data URL is ready.');
+            console.log('QR Code is ready. State is now QR_REQUIRED.');
         } catch (e) {
             console.error("Failed to generate QR code data URL", e);
             status = 'DISCONNECTED';

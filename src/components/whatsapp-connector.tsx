@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { getWhatsAppClientStatus, initializeWhatsAppClient } from '@/lib/actions';
@@ -9,71 +9,57 @@ import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from './ui/badge';
 
-type WhatsAppStatus = 'DISCONNECTED' | 'CONNECTING' | 'QR_REQUIRED' | 'CONNECTED';
+type WhatsAppStatus = 'DISCONNECTED' | 'CONNECTING' | 'GENERATING_QR' | 'QR_REQUIRED' | 'CONNECTED';
 
 export function WhatsAppConnector() {
-    const [status, setStatus] = useState<WhatsAppStatus | 'INITIALIZING'>('INITIALIZING');
+    const [serverStatus, setServerStatus] = useState<WhatsAppStatus | 'INITIALIZING'>('INITIALIZING');
     const [qrCode, setQrCode] = useState<string | null>(null);
+    const [isConnectActionRunning, setIsConnectActionRunning] = useState(false);
     const intervalRef = useRef<NodeJS.Timeout>();
 
-    const checkStatus = useCallback(async () => {
-        try {
-            const result = await getWhatsAppClientStatus();
-            setStatus(result.status);
-            setQrCode(result.qrCodeDataUrl);
-
-            // If we are connected, we can stop polling.
-            if (result.status === 'CONNECTED' && intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
-        } catch (error) {
-            console.error("Failed to get WhatsApp status:", error);
-            setStatus('DISCONNECTED');
-        }
-    }, []);
-
-    const handleConnect = useCallback(async () => {
-        // Don't do anything if we are already in the process of connecting
-        if (status === 'CONNECTING' || status === 'QR_REQUIRED') return;
-        
-        setStatus('CONNECTING');
+    const handleConnect = async () => {
+        if (isConnectActionRunning) return;
+        setIsConnectActionRunning(true);
         try {
             await initializeWhatsAppClient();
-            await checkStatus(); // Check status immediately
-
-            // If polling was stopped (e.g., after being connected), restart it
-            if (!intervalRef.current) {
-                intervalRef.current = setInterval(checkStatus, 3000);
-            }
         } catch (error) {
-            console.error("Failed to initialize WhatsApp client:", error);
-            setStatus('DISCONNECTED');
+            console.error("Error initiating connection:", error);
+        } finally {
+            setIsConnectActionRunning(false);
         }
-    }, [checkStatus, status]);
+    };
 
-    // This effect runs only once on mount to set up the polling.
     useEffect(() => {
-        checkStatus(); // Initial check
-        intervalRef.current = setInterval(checkStatus, 3000);
+        const pollStatus = async () => {
+            try {
+                const result = await getWhatsAppClientStatus();
+                setServerStatus(result.status);
+                setQrCode(result.qrCodeDataUrl);
+            } catch (e) {
+                console.error("Failed to get WhatsApp status:", e);
+                setServerStatus('DISCONNECTED');
+            }
+        };
 
-        // Cleanup on component unmount
+        pollStatus(); // Initial check
+        intervalRef.current = setInterval(pollStatus, 2500); // Poll every 2.5 seconds
+
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
             }
         };
-    }, [checkStatus]);
-
+    }, []);
 
     const getStatusContent = () => {
-        switch (status) {
+        switch (serverStatus) {
             case 'INITIALIZING':
             case 'CONNECTING':
                 return (
                      <div className="flex flex-col items-center gap-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         <CardDescription>
-                           {status === 'INITIALIZING' ? 'Checking connection status...' : 'Initializing client...'}
+                           {serverStatus === 'INITIALIZING' ? 'Checking connection status...' : 'Connecting to WhatsApp...'}
                         </CardDescription>
                     </div>
                 );
@@ -83,9 +69,19 @@ export function WhatsAppConnector() {
                         <CardDescription>
                             Your server is not connected to WhatsApp. Click the button to begin the connection process.
                         </CardDescription>
-                        <Button onClick={handleConnect} className="mt-4">
+                        <Button onClick={handleConnect} className="mt-4" disabled={isConnectActionRunning}>
+                            {isConnectActionRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Connect to WhatsApp
                         </Button>
+                    </div>
+                );
+             case 'GENERATING_QR':
+                return (
+                    <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <CardDescription>
+                           Generating QR Code...
+                        </CardDescription>
                     </div>
                 );
             case 'QR_REQUIRED':
@@ -122,7 +118,7 @@ export function WhatsAppConnector() {
     };
     
     const getStatusBadgeVariant = () => {
-        switch(status) {
+        switch(serverStatus) {
             case 'CONNECTED': return 'default';
             case 'DISCONNECTED': return 'destructive';
             default: return 'secondary';
@@ -135,7 +131,7 @@ export function WhatsAppConnector() {
                 <div className="flex justify-between items-center">
                     <CardTitle>Connection Status</CardTitle>
                     <Badge variant={getStatusBadgeVariant()}>
-                        {status === 'INITIALIZING' ? 'LOADING' : status.replace('_', ' ')}
+                        {serverStatus === 'INITIALIZING' ? 'LOADING' : serverStatus.replace('_', ' ')}
                     </Badge>
                 </div>
             </CardHeader>
