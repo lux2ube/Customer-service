@@ -73,10 +73,10 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="parentId">Parent Account (Group)</Label>
-                            <Select name="parentId" defaultValue={account?.parentId || ''}>
+                            <Select name="parentId" defaultValue={account?.parentId || undefined}>
                                 <SelectTrigger><SelectValue placeholder="Select a parent account..."/></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="none">None</SelectItem>
                                     {parentAccounts.map(parent => (
                                         <SelectItem key={parent.id} value={parent.id}>{parent.name} ({parent.id})</SelectItem>
                                     ))}
@@ -87,10 +87,10 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                      <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="currency">Currency (Optional)</Label>
-                            <Select name="currency" defaultValue={account?.currency || ''}>
+                            <Select name="currency" defaultValue={account?.currency || undefined}>
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="none">None</SelectItem>
                                     <SelectItem value="USD">USD</SelectItem>
                                     <SelectItem value="YER">YER</SelectItem>
                                     <SelectItem value="SAR">SAR</SelectItem>

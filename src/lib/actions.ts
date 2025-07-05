@@ -265,23 +265,22 @@ const AccountSchema = z.object({
   name: z.string().min(1, { message: "Account name is required." }),
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
-  parentId: z.string().optional().nullable(), // Allow empty string or null
-  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', '']).optional().nullable(),
+  parentId: z.string().optional().nullable(),
+  currency: z.enum(['USD', 'YER', 'SAR', 'USDT']).optional().nullable(),
 });
 
 export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData) {
+    const parentIdValue = formData.get('parentId');
+    const currencyValue = formData.get('currency');
+
     const rawData = {
         id: accountId ?? formData.get('id'),
         name: formData.get('name'),
         type: formData.get('type'),
         isGroup: formData.get('isGroup') === 'on',
-        parentId: formData.get('parentId') || null,
-        currency: formData.get('currency') || null,
+        parentId: parentIdValue === 'none' ? null : parentIdValue,
+        currency: currencyValue === 'none' ? null : currencyValue,
     };
-    
-    if (rawData.currency === '') {
-        rawData.currency = null;
-    }
 
     const validatedFields = AccountSchema.safeParse(rawData);
 
