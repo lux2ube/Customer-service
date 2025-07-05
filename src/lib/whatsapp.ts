@@ -16,11 +16,28 @@ let qrCodeDataUrl: string | null = null;
 
 const SESSION_DIR = '.wwebjs_auth';
 
+// Gracefully destroy the client if it exists
+async function destroyClient() {
+    if (client) {
+        console.log("Destroying existing client instance...");
+        try {
+            await client.destroy();
+        } catch (e) {
+            console.error("Error destroying client:", e);
+        } finally {
+            client = null;
+        }
+    }
+}
+
 export async function initializeWhatsAppClient() {
-    if (client && (status === 'CONNECTING' || status === 'CONNECTED')) {
-        console.log('Client already initialized or initializing.');
+    if (status === 'CONNECTING' || status === 'CONNECTED') {
+        console.log(`Client already ${status}. Initialization request ignored.`);
         return;
     }
+    
+    // Clean up any previous instance before starting a new one
+    await destroyClient();
 
     console.log('Initializing WhatsApp client...');
     status = 'CONNECTING';
@@ -54,26 +71,17 @@ export async function initializeWhatsAppClient() {
     });
 
     client.on('disconnected', async (reason) => {
-        console.log('WhatsApp client was disconnected', reason);
+        console.log('WhatsApp client was disconnected.', reason);
         status = 'DISCONNECTED';
-        if (client) {
-            try {
-                await client.destroy();
-            } catch (e) {
-                console.error("Error destroying client on disconnect:", e);
-            }
-        }
-        client = null;
         qrCodeDataUrl = null;
-        // Do NOT clear session data on a regular disconnect.
-        // This allows for reconnection without a new QR scan.
+        await destroyClient();
     });
 
     client.on('auth_failure', async (msg) => {
         console.error('AUTHENTICATION FAILURE', msg);
         status = 'DISCONNECTED';
         qrCodeDataUrl = null;
-        client = null;
+        await destroyClient();
         try {
             // The session is likely corrupt. Delete it to force a new QR scan.
             await fs.rm(path.join(process.cwd(), SESSION_DIR), { recursive: true, force: true });
@@ -88,7 +96,7 @@ export async function initializeWhatsAppClient() {
         console.log("Client initialization process started.");
     } catch (error) {
         console.error('Failed to initialize WhatsApp client:', error);
-        client = null;
+        await destroyClient();
         status = 'DISCONNECTED';
     }
 }
@@ -100,8 +108,6 @@ export async function getWhatsAppClientStatus() {
 
 export async function sendWhatsAppMessage(toNumber: string, message: string) {
     if (status !== 'CONNECTED' || !client) {
-        // Fail fast if the client is not connected.
-        // Don't attempt to auto-reconnect here, as it's not a good user experience.
         console.error('Attempted to send message while client is not connected.');
         throw new Error('WhatsApp client is not connected. Please go to the WhatsApp page to connect.');
     }
@@ -109,6 +115,7 @@ export async function sendWhatsAppMessage(toNumber: string, message: string) {
     try {
         // Format number: +1234567890 -> 1234567890@c.us
         const chatId = `${toNumber.replace(/\D/g, '')}@c.us`;
+        console.log(`Attempting to send message to ${chatId}`);
         const response = await client.sendMessage(chatId, message);
         console.log('Message sent successfully:', response.id.id);
         return { success: true, messageId: response.id.id };
