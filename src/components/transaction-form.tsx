@@ -114,7 +114,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         if (transaction) {
             // Check if this is a "pristine" synced transaction (has a hash, but amount is 0/unset)
-            const isPristineSync = !!transaction.hash && transaction.amount === 0;
+            const isPristineSync = !!transaction.hash && !transaction.amount;
             pristineRef.current = isPristineSync;
 
             const initialData = { ...initialFormData, ...transaction };
@@ -156,6 +156,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     // It calculates USD value, then determines fee/expense based on the fixed USDT amount.
     const handleSyncedAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
+        pristineRef.current = false; // It's no longer pristine once edited
 
         setFormData(prev => {
             if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
@@ -168,7 +169,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             let newExpenseUSD = 0;
             const fixedUsdtAmount = prev.amount_usdt; // The amount from BscScan is the source of truth
 
-            // Deposit: Fee is the difference between what we received in USD and what the final USDT value is.
             if (prev.type === 'Deposit') {
                 const difference = newAmountUSD - fixedUsdtAmount;
                 if (difference >= 0) {
@@ -177,7 +177,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     newExpenseUSD = -difference; // Negative difference is a loss/expense
                 }
             } 
-            // Withdraw: Fee is the difference between the final USDT value and what we sent in USD.
             else { 
                 const difference = fixedUsdtAmount - newAmountUSD;
                  if (difference >= 0) {
@@ -217,15 +216,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // Withdraw
                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                let grossUsdtAmount = newAmountUSD;
-                if (feePercent > 0 && feePercent < 1) {
-                    // We need to calculate the fee based on the total amount withdrawn, not just what the user receives.
-                    // Let G be Gross USDT, A be Amount USD, F be fee percent. G = A + G*F => G(1-F) = A => G = A / (1-F)
-                    grossUsdtAmount = newAmountUSD / (1 - feePercent);
+                if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
+                    newUsdtAmount = newAmountUSD; // fallback
+                    finalFee = 0;
+                } else {
+                    const grossUsdtAmount = newAmountUSD / (1 - feePercent);
+                    const calculatedFee = grossUsdtAmount - newAmountUSD;
+                    finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
+                    newUsdtAmount = newAmountUSD + finalFee;
                 }
-                const calculatedFee = grossUsdtAmount - newAmountUSD;
-                finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                newUsdtAmount = newAmountUSD + finalFee; 
             }
 
             return {
@@ -286,7 +285,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
              const newCurrency = selectedAccount.currency || 'USD';
              const rate = getRate(newCurrency);
              if (rate <= 0 || prev.amount_usd === 0) {
-                 return { ...prev, bankAccountId: accountId, currency: newCurrency, amount: 0 };
+                 return { ...prev, bankAccountId: accountId, currency: newCurrency, amount: prev.amount || 0 };
              }
              
              const newAmount = prev.amount_usd / rate;
@@ -298,6 +297,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 amount: parseFloat(newAmount.toFixed(2)),
             }
         });
+    };
+
+    const handleClientSelect = (clientId: string) => {
+        handleFieldChange('clientId', clientId);
+
+        if (!transaction) { // Only run for new manual transactions
+            const selectedClient = clients.find(c => c.id === clientId);
+            if (selectedClient?.favoriteBankAccountId) {
+                const favAccountId = selectedClient.favoriteBankAccountId;
+                // Check if account exists in the list
+                if (bankAccounts.some(acc => acc.id === favAccountId)) {
+                    handleBankAccountSelect(favAccountId);
+                }
+            }
+        }
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
@@ -352,8 +366,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const isSynced = !!formData.hash;
     const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
     
-    // For a pristine sync, amount field should appear empty for user to fill.
-    // Otherwise, it should show the value from state (either from DB or from user typing).
     const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
 
     return (
@@ -405,7 +417,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} 
                                     placeholder="Search by name or phone..." 
                                     value={formData.clientId} 
-                                    onSelect={(v) => handleFieldChange('clientId', v)}
+                                    onSelect={handleClientSelect}
                                 />
                             </div>
                             <div className="grid md:grid-cols-2 gap-6">
