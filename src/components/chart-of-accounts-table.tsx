@@ -20,11 +20,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import type { Account } from '@/lib/types';
+import type { Account, Transaction, JournalEntry } from '@/lib/types';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { Button } from './ui/button';
 import { Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -34,30 +34,103 @@ import { useToast } from '@/hooks/use-toast';
 
 export function ChartOfAccountsTable() {
   const [accounts, setAccounts] = React.useState<Account[]>([]);
+  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [journalEntries, setJournalEntries] = React.useState<JournalEntry[]>([]);
+  const [balances, setBalances] = React.useState<Record<string, { native: number; usd: number }>>({});
   const [loading, setLoading] = React.useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [accountToDelete, setAccountToDelete] = React.useState<Account | null>(null);
   const { toast } = useToast();
 
   React.useEffect(() => {
-    // We order by ID (account code) to keep the list structured.
-    const accountsRef = query(ref(db, 'accounts'), orderByChild('id'));
-    const unsubscribe = onValue(accountsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            const list: Account[] = Object.keys(data).map(key => ({
-                id: key,
-                ...data[key]
-            })).sort((a, b) => a.id.localeCompare(b.id)); // Sort by ID string
-            setAccounts(list);
-        } else {
-            setAccounts([]);
-        }
-        setLoading(false);
+    const accountsRef = ref(db, 'accounts');
+    const transactionsRef = ref(db, 'transactions');
+    const journalEntriesRef = ref(db, 'journal_entries');
+
+    const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
+      const data = snapshot.val();
+      const list: Account[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })).sort((a, b) => a.id.localeCompare(b.id)) : [];
+      setAccounts(list);
     });
 
-    return () => unsubscribe();
+    const unsubscribeTransactions = onValue(transactionsRef, (snapshot) => {
+      const data = snapshot.val();
+      const list: Transaction[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+      setTransactions(list);
+    });
+    
+    const unsubscribeJournal = onValue(journalEntriesRef, (snapshot) => {
+      const data = snapshot.val();
+      const list: JournalEntry[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+      setJournalEntries(list);
+    });
+
+    // Use get() for the initial load to manage the loading state correctly.
+    // The onValue listeners above will handle real-time updates afterward.
+    Promise.all([
+      get(accountsRef),
+      get(transactionsRef),
+      get(journalEntriesRef),
+    ]).then(() => setLoading(false));
+
+    return () => {
+      unsubscribeAccounts();
+      unsubscribeTransactions();
+      unsubscribeJournal();
+    };
   }, []);
+
+  React.useEffect(() => {
+    if (loading) return;
+
+    // 1. Calculate balances for leaf nodes (accounts that can have transactions)
+    const leafBalances: Record<string, { native: number; usd: number }> = {};
+    accounts.forEach(acc => {
+      if (!acc.isGroup) {
+        leafBalances[acc.id] = { native: 0, usd: 0 };
+      }
+    });
+
+    // Process transactions to update balances
+    transactions.forEach(tx => {
+      if (tx.status !== 'Confirmed') return;
+      const accountId = tx.bankAccountId || tx.cryptoWalletId;
+      if (accountId && leafBalances[accountId]) {
+        const multiplier = tx.type === 'Deposit' ? 1 : -1;
+        leafBalances[accountId].native += tx.amount * multiplier;
+        leafBalances[accountId].usd += tx.amount_usd * multiplier;
+      }
+    });
+
+    // Process journal entries to update balances
+    journalEntries.forEach(entry => {
+      if (leafBalances[entry.debit_account]) {
+        leafBalances[entry.debit_account].native += entry.debit_amount;
+        leafBalances[entry.debit_account].usd += entry.amount_usd;
+      }
+      if (leafBalances[entry.credit_account]) {
+        leafBalances[entry.credit_account].native -= entry.credit_amount;
+        leafBalances[entry.credit_account].usd -= entry.amount_usd;
+      }
+    });
+
+    // 2. Aggregate balances up to parent group accounts
+    const aggregatedBalances = { ...leafBalances };
+    const reversedAccounts = [...accounts].reverse(); // Process children before parents
+
+    reversedAccounts.forEach(account => {
+      if (account.isGroup) {
+        const children = accounts.filter(child => child.parentId === account.id);
+        const totalUsd = children.reduce((sum, child) => {
+          return sum + (aggregatedBalances[child.id]?.usd || 0);
+        }, 0);
+        aggregatedBalances[account.id] = { native: totalUsd, usd: totalUsd };
+      }
+    });
+    
+    setBalances(aggregatedBalances);
+  }, [accounts, transactions, journalEntries, loading]);
+
 
   const getBadgeVariant = (type: Account['type']) => {
     switch(type) {
@@ -109,6 +182,7 @@ export function ChartOfAccountsTable() {
     
     const renderRow = (account: any, level = 0) => {
       const isGroup = account.isGroup;
+      const balanceInfo = balances[account.id];
       return (
         <React.Fragment key={account.id}>
           <TableRow className={cn(isGroup && 'bg-muted/50')}>
@@ -118,7 +192,19 @@ export function ChartOfAccountsTable() {
                 <Badge variant={getBadgeVariant(account.type)}>{account.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono">
-                {/* Balance will be implemented later */}
+              {balanceInfo !== undefined && (
+                isGroup ? (
+                  <span>
+                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.usd)}
+                  </span>
+                ) : (
+                  account.currency && (
+                    <span>
+                      {new Intl.NumberFormat().format(balanceInfo.native)} {account.currency}
+                    </span>
+                  )
+                )
+              )}
             </TableCell>
             <TableCell className="text-right">
                 <Button asChild variant="ghost" size="icon">
@@ -157,7 +243,7 @@ export function ChartOfAccountsTable() {
             {loading ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center">
-                  Loading accounts...
+                  Loading accounts and calculating balances...
                 </TableCell>
               </TableRow>
             ) : accounts.length > 0 ? (
@@ -178,7 +264,7 @@ export function ChartOfAccountsTable() {
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the account
-              "{accountToDelete?.name}".
+              "{accountToDelete?.name}". Any transactions associated with this account may become orphaned.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
