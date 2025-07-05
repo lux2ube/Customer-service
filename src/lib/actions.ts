@@ -450,6 +450,29 @@ export async function createTransaction(transactionId: string | null, prevState:
         }
     }
 
+    // After successfully saving the transaction, check if we need to update the client's BEP20 addresses.
+    if (finalData.type === 'Deposit' && finalData.status === 'Confirmed' && finalData.client_wallet_address) {
+        try {
+            const clientRef = ref(db, `clients/${finalData.clientId}`);
+            const clientSnapshot = await get(clientRef);
+            if (clientSnapshot.exists()) {
+                const clientData = clientSnapshot.val() as Client;
+                const existingAddresses = clientData.bep20_addresses || [];
+                const newAddress = finalData.client_wallet_address;
+
+                // Add the new address only if it doesn't already exist
+                if (!existingAddresses.includes(newAddress)) {
+                    const updatedAddresses = [...existingAddresses, newAddress];
+                    await update(clientRef, { bep20_addresses: updatedAddresses });
+                    console.log(`Updated BEP20 addresses for client ${finalData.clientId}`);
+                }
+            }
+        } catch (e) {
+            console.error(`Failed to update BEP20 address for client ${finalData.clientId}:`, e);
+            // We don't want to fail the whole transaction for this, so we just log the error.
+        }
+    }
+
     const _createFeeExpenseJournalEntry = async (
         debitAccountId: string,
         creditAccountId: string,

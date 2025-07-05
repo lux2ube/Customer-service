@@ -102,6 +102,26 @@ export function ClientForm({ client }: { client?: Client }) {
 
                     <Separator />
 
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-medium">BEP20 Addresses</h3>
+                        <p className="text-sm text-muted-foreground">
+                            Addresses are automatically added from confirmed deposit transactions.
+                        </p>
+                        {client?.bep20_addresses && client.bep20_addresses.length > 0 ? (
+                            <ul className="divide-y divide-border rounded-md border bg-background p-3 space-y-2">
+                                {client.bep20_addresses.map((address, index) => (
+                                    <li key={index} className="font-mono text-sm pt-2 first:pt-0">
+                                        {address}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-muted-foreground p-3 border rounded-md">No BEP20 addresses recorded for this client.</p>
+                        )}
+                    </div>
+
+                    <Separator />
+
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium">KYC Documents</h3>
                         {client?.kyc_documents && client.kyc_documents.length > 0 && (

@@ -17,6 +17,7 @@ export interface Client {
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];
     createdAt: string;
+    bep20_addresses?: string[];
 }
 
 export interface CryptoWallet {
