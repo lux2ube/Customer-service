@@ -13,6 +13,7 @@ import path from 'path';
 let client: Client | null = null;
 let status: 'DISCONNECTED' | 'CONNECTING' | 'GENERATING_QR' | 'QR_REQUIRED' | 'CONNECTED' = 'DISCONNECTED';
 let qrCodeDataUrl: string | null = null;
+let lastError: string | null = null;
 let connectionTimeout: NodeJS.Timeout | null = null; // Add timeout handle
 
 const SESSION_DIR = '.wwebjs_auth';
@@ -51,10 +52,12 @@ export async function initializeWhatsAppClient() {
     console.log('Initializing WhatsApp client...');
     status = 'CONNECTING';
     qrCodeDataUrl = null;
+    lastError = null; // Reset error on new attempt
 
     // Set a timeout to prevent getting stuck in a connecting state
     connectionTimeout = setTimeout(async () => {
         console.log('WhatsApp connection timed out. Resetting state.');
+        lastError = 'Connection timed out after 60 seconds. Please try again.';
         await destroyClient();
         status = 'DISCONNECTED';
     }, 60000); // 60-second timeout
@@ -80,6 +83,7 @@ export async function initializeWhatsAppClient() {
             clearConnectionTimeout();
         } catch (e) {
             console.error("Failed to generate QR code data URL", e);
+            lastError = 'Failed to generate QR code.';
             status = 'DISCONNECTED';
             qrCodeDataUrl = null;
         }
@@ -90,6 +94,7 @@ export async function initializeWhatsAppClient() {
         clearConnectionTimeout(); // Connection successful
         status = 'CONNECTED';
         qrCodeDataUrl = null;
+        lastError = null;
     });
 
     client.on('authenticated', () => {
@@ -97,10 +102,12 @@ export async function initializeWhatsAppClient() {
         clearConnectionTimeout(); // Connection successful
         status = 'CONNECTED';
         qrCodeDataUrl = null;
+        lastError = null;
     });
 
     client.on('disconnected', async (reason) => {
         console.log('WhatsApp client was disconnected.', reason);
+        lastError = 'Client was disconnected. Please try connecting again.';
         await destroyClient();
         status = 'DISCONNECTED';
         qrCodeDataUrl = null;
@@ -108,6 +115,7 @@ export async function initializeWhatsAppClient() {
 
     client.on('auth_failure', async (msg) => {
         console.error('AUTHENTICATION FAILURE', msg);
+        lastError = 'Authentication failed. Your session may be corrupt. Please clear the session and try again.';
         await destroyClient();
         status = 'DISCONNECTED';
         qrCodeDataUrl = null;
@@ -125,6 +133,7 @@ export async function initializeWhatsAppClient() {
         console.log("Client initialization process started.");
     } catch (error) {
         console.error('Failed to initialize WhatsApp client:', error);
+        lastError = 'Failed to initialize. The server environment may be missing dependencies for browser automation. Check server logs.';
         await destroyClient();
         status = 'DISCONNECTED';
     }
@@ -132,7 +141,7 @@ export async function initializeWhatsAppClient() {
 
 export async function getWhatsAppClientStatus() {
     // This function purely reports the current state of the singleton.
-    return { status, qrCodeDataUrl };
+    return { status, qrCodeDataUrl, lastError };
 }
 
 export async function logoutWhatsApp() {
@@ -140,6 +149,7 @@ export async function logoutWhatsApp() {
     await destroyClient();
     status = 'DISCONNECTED';
     qrCodeDataUrl = null;
+    lastError = null;
     try {
         await fs.rm(path.join(process.cwd(), SESSION_DIR), { recursive: true, force: true });
         console.log('Cleared WhatsApp session directory.');

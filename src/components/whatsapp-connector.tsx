@@ -8,12 +8,14 @@ import { getWhatsAppClientStatus, initializeWhatsAppClient, logoutWhatsAppClient
 import { Loader2, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from './ui/badge';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 type WhatsAppStatus = 'DISCONNECTED' | 'CONNECTING' | 'GENERATING_QR' | 'QR_REQUIRED' | 'CONNECTED';
 
 export function WhatsAppConnector() {
     const [serverStatus, setServerStatus] = useState<WhatsAppStatus | 'INITIALIZING'>('INITIALIZING');
     const [qrCode, setQrCode] = useState<string | null>(null);
+    const [lastError, setLastError] = useState<string | null>(null);
     const [isConnectActionRunning, setIsConnectActionRunning] = useState(false);
     const [isLogoutActionRunning, setIsLogoutActionRunning] = useState(false);
     const intervalRef = useRef<NodeJS.Timeout>();
@@ -49,6 +51,7 @@ export function WhatsAppConnector() {
                 const result = await getWhatsAppClientStatus();
                 setServerStatus(result.status);
                 setQrCode(result.qrCodeDataUrl);
+                setLastError(result.lastError);
             } catch (e) {
                 console.error("Failed to get WhatsApp status:", e);
                 setServerStatus('DISCONNECTED');
@@ -79,7 +82,13 @@ export function WhatsAppConnector() {
                 );
             case 'DISCONNECTED':
                 return (
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-center text-center">
+                        {lastError && (
+                            <Alert variant="destructive" className="mb-4">
+                                <AlertTitle>Connection Failed</AlertTitle>
+                                <AlertDescription>{lastError}</AlertDescription>
+                            </Alert>
+                        )}
                         <CardDescription>
                             Your server is not connected to WhatsApp. Click the button to begin the connection process.
                         </CardDescription>
@@ -142,13 +151,13 @@ export function WhatsAppConnector() {
     return (
         <Card>
             <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start">
                     <CardTitle>Connection Status</CardTitle>
                     <div className="flex items-center gap-2">
                         <Badge variant={getStatusBadgeVariant()}>
                             {serverStatus === 'INITIALIZING' ? 'LOADING' : serverStatus.replace('_', ' ')}
                         </Badge>
-                        {serverStatus !== 'DISCONNECTED' && serverStatus !== 'INITIALIZING' && (
+                        {serverStatus !== 'CONNECTED' && serverStatus !== 'INITIALIZING' && (
                              <Button
                                 variant="destructive"
                                 size="sm"
@@ -156,7 +165,7 @@ export function WhatsAppConnector() {
                                 disabled={isLogoutActionRunning}
                             >
                                 {isLogoutActionRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
-                                Logout
+                                Clear Session & Logout
                             </Button>
                         )}
                     </div>

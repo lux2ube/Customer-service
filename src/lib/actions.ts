@@ -568,7 +568,7 @@ export async function createTransaction(transactionId: string | null, prevState:
     
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
-    redirect('/transactions');
+    redirect(`/transactions/${newId}/edit`);
 }
 
 // --- Chart of Accounts Actions ---
@@ -856,8 +856,7 @@ export async function initializeWhatsAppClient() {
 }
 
 export async function getWhatsAppClientStatus() {
-    const status = await getWhatsAppStatus();
-    return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
+    return await getWhatsAppStatus();
 }
 
 export async function logoutWhatsAppClient() {

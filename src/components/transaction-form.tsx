@@ -418,7 +418,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         <Card>
                             <CardHeader>
                                 <CardTitle>Actions</CardTitle>
-                                <CardDescription>Download invoice or send messages.</CardDescription>
+                                <CardDescription>Download or share the invoice.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-2">
                                 <Button onClick={handleSendViaServer} disabled={isSendingViaServer || isDownloading || isSharing} className="w-full" variant="secondary">
@@ -427,7 +427,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     ) : (
                                         <Send className="mr-2 h-4 w-4" />
                                     )}
-                                    {isSendingViaServer ? 'Sending...' : 'Send Invoice via Server'}
+                                    {isSendingViaServer ? 'Sending...' : 'Send via Server'}
                                 </Button>
                                  <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing || isSendingViaServer} className="w-full">
                                     {isDownloading ? (
@@ -435,7 +435,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     ) : (
                                         <Download className="mr-2 h-4 w-4" />
                                     )}
-                                    {isDownloading ? 'Downloading...' : 'Download Invoice Image'}
+                                    {isDownloading ? 'Downloading...' : 'Download Invoice'}
                                 </Button>
                                 <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading || isSendingViaServer} className="w-full">
                                     {isSharing ? (
@@ -443,7 +443,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     ) : (
                                         <Share2 className="mr-2 h-4 w-4" />
                                     )}
-                                    {isSharing ? 'Preparing...' : 'Share Invoice Image'}
+                                    {isSharing ? 'Preparing...' : 'Share Invoice'}
                                 </Button>
                             </CardContent>
                         </Card>
