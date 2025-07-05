@@ -467,12 +467,10 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         const existingTxs = transactionsSnapshot.val() || {};
         const existingHashes = new Set(Object.values(existingTxs).map((tx: any) => tx.hash));
 
-        const incomingTxs = data.result.filter((tx: any) => tx.to.toLowerCase() === bsc_wallet_address.toLowerCase());
-
         let newTxCount = 0;
         const updates: { [key: string]: any } = {};
 
-        for (const tx of incomingTxs) {
+        for (const tx of data.result) {
             if (existingHashes.has(tx.hash)) {
                 continue;
             }
@@ -483,13 +481,25 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
+            const isWithdrawal = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
+            const isDeposit = tx.from.toLowerCase() === bsc_wallet_address.toLowerCase();
+
+            if (!isWithdrawal && !isDeposit) {
+                continue;
+            }
+
             const newTxId = push(ref(db, 'transactions')).key;
             if (!newTxId) continue;
+
+            const transactionType = isWithdrawal ? 'Withdraw' : 'Deposit';
+            const note = isWithdrawal 
+                ? `Synced from BscScan. From: ${tx.from}` 
+                : `Synced from BscScan. To: ${tx.to}`;
 
             const newTxData = {
                 id: newTxId,
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
-                type: 'Withdraw',
+                type: transactionType,
                 clientId: 'unassigned-bscscan',
                 clientName: 'Unassigned (BSCScan)',
                 amount: amount,
@@ -499,7 +509,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 amount_usdt: amount,
                 hash: tx.hash,
                 status: 'Confirmed',
-                notes: `Synced from BscScan. From: ${tx.from}`,
+                notes: note,
                 createdAt: new Date().toISOString(),
                 flags: [],
             };
