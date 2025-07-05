@@ -95,20 +95,20 @@ export function ChartOfAccountsTable() {
     transactions.forEach(tx => {
         if (tx.status !== 'Confirmed') return;
 
-        const accountId = tx.bankAccountId || tx.cryptoWalletId;
-        if (accountId && leafBalances[accountId]) {
-            const account = accounts.find(acc => acc.id === accountId);
-            const multiplier = tx.type === 'Deposit' ? 1 : -1;
+        const multiplier = tx.type === 'Deposit' ? 1 : -1;
 
-            if (account?.currency === 'USDT') {
-                // For USDT accounts, the native balance is updated by the final USDT amount.
-                leafBalances[accountId].native += tx.amount_usdt * multiplier;
-                leafBalances[accountId].usd += tx.amount_usdt * multiplier; // USDT is 1:1 with USD
-            } else {
-                // For regular fiat accounts, use the original transaction amount.
-                leafBalances[accountId].native += tx.amount * multiplier;
-                leafBalances[accountId].usd += tx.amount_usd * multiplier;
-            }
+        // Handle Fiat Bank Account part of the transaction
+        if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
+            // Fiat accounts use the original amount and its USD equivalent
+            leafBalances[tx.bankAccountId].native += tx.amount * multiplier;
+            leafBalances[tx.bankAccountId].usd += tx.amount_usd * multiplier;
+        }
+
+        // Handle Crypto Wallet part of the transaction
+        if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
+            // USDT accounts use the final amount_usdt after fees
+            leafBalances[tx.cryptoWalletId].native += tx.amount_usdt * multiplier;
+            leafBalances[tx.cryptoWalletId].usd += tx.amount_usdt * multiplier; // USDT is 1:1 with USD
         }
     });
 
