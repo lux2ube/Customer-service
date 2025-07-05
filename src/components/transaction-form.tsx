@@ -58,7 +58,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
-    const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
+    const [lastEditedField, setLastEditedField] = React.useState<'amount' | 'usdt'>(transaction?.hash ? 'usdt' : 'amount');
 
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -124,51 +124,89 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     React.useEffect(() => {
         if (!settings) return;
 
-        let calculatedUsdValue = 0;
-        switch(currency) {
-            case 'USD': calculatedUsdValue = amount; break;
-            case 'USDT': calculatedUsdValue = amount * (settings.usdt_usd || 1); break;
-            case 'YER': calculatedUsdValue = amount * (settings.yer_usd || 0); break;
-            case 'SAR': calculatedUsdValue = amount * (settings.sar_usd || 0); break;
-        }
-        setUsdValue(calculatedUsdValue);
-        
-        let calculatedFee = 0;
-        let calculatedExpense = 0;
+        const getRate = (curr: string) => {
+            switch(curr) {
+                case 'USD': return 1;
+                case 'USDT': return settings.usdt_usd || 1;
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                default: return 0;
+            }
+        };
+
+        const rate = getRate(currency);
+        if (rate === 0) return;
+
         const minimumFee = settings.minimum_fee_usd || 1;
+        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
+        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
 
-        if (transactionType === 'Deposit') {
-            if (isUsdtManuallyEdited) {
-                const diff = calculatedUsdValue - usdtAmount;
-                if (diff >= 0) {
-                    calculatedFee = diff;
+        let finalUsdValue = 0;
+        let finalFee = 0;
+        let finalExpense = 0;
+
+        if (lastEditedField === 'usdt') {
+            // Reverse calculate: from USDT to Amount
+            if (transactionType === 'Deposit') {
+                const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
+                if ((usdFromFeePercent * depositFeePercent) > minimumFee) {
+                    finalUsdValue = usdFromFeePercent;
                 } else {
-                    calculatedExpense = -diff; // Expense is the absolute value of the negative difference
+                    finalUsdValue = usdtAmount + minimumFee;
                 }
-            } else {
-                const percentageFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
-                calculatedFee = Math.max(percentageFee, minimumFee);
-                setUsdtAmount(Number((calculatedUsdValue - calculatedFee).toFixed(2)));
-            }
-        } else { // Withdraw
-            if (isUsdtManuallyEdited) {
-                const diff = usdtAmount - calculatedUsdValue;
-                 if (diff >= 0) {
-                    calculatedFee = diff;
+            } else { // Withdraw
+                const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
+                if ((usdFromFeePercent * withdrawFeePercent) > minimumFee) {
+                    finalUsdValue = usdFromFeePercent;
                 } else {
-                    calculatedExpense = -diff;
+                    finalUsdValue = usdtAmount - minimumFee;
                 }
-            } else {
-                const percentageFee = calculatedUsdValue * ((settings.withdraw_fee_percent || 0) / 100);
-                calculatedFee = Math.max(percentageFee, minimumFee);
-                setUsdtAmount(Number((calculatedUsdValue + calculatedFee).toFixed(2)));
             }
+            
+            const newAmount = finalUsdValue / rate;
+            setAmount(Number(newAmount.toFixed(2)));
+            
+        } else { // Forward calculate: from Amount to USDT
+            finalUsdValue = amount * rate;
         }
-        
-        setFee(calculatedFee);
-        setExpense(calculatedExpense);
 
-    }, [amount, currency, transactionType, settings, isUsdtManuallyEdited, usdtAmount]);
+        // Now that we have a definitive USD value, calculate fees and final USDT
+        let percentageFee, calculatedFee;
+
+        if (lastEditedField === 'usdt') {
+            // If USDT was the source, the fee is the difference
+            const difference = (transactionType === 'Deposit') ? finalUsdValue - usdtAmount : usdtAmount - finalUsdValue;
+            if (difference >= 0) {
+                finalFee = difference;
+                finalExpense = 0;
+            } else {
+                finalFee = 0;
+                finalExpense = -difference;
+            }
+        } else {
+            // If Amount was the source, calculate the fee based on rules
+            if (transactionType === 'Deposit') {
+                percentageFee = finalUsdValue * depositFeePercent;
+            } else { // Withdraw
+                percentageFee = finalUsdValue * withdrawFeePercent;
+            }
+            calculatedFee = Math.max(percentageFee, minimumFee);
+            
+            let finalUsdtAmount = 0;
+            if (transactionType === 'Deposit') {
+                finalUsdtAmount = finalUsdValue - calculatedFee;
+            } else { // Withdraw
+                finalUsdtAmount = finalUsdValue + calculatedFee;
+            }
+            finalFee = calculatedFee;
+            setUsdtAmount(Number(finalUsdtAmount.toFixed(2)));
+        }
+
+        setUsdValue(finalUsdValue);
+        setFee(finalFee);
+        setExpense(finalExpense);
+
+    }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField]);
 
     // Effect for handling server action responses
     React.useEffect(() => {
@@ -179,21 +217,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setAmount(Number(e.target.value));
-        if (!transaction?.hash) {
-            setIsUsdtManuallyEdited(false);
-        }
+        setLastEditedField('amount');
     }
 
     const handleTypeChange = (v: 'Deposit' | 'Withdraw') => {
         setTransactionType(v);
-        if (!transaction?.hash) {
-            setIsUsdtManuallyEdited(false);
-        }
+        setLastEditedField('amount');
     }
     
     const handleUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setUsdtAmount(Number(e.target.value));
-        setIsUsdtManuallyEdited(true);
+        setLastEditedField('usdt');
     }
 
     const handleClientSelect = (clientId: string) => {
@@ -212,9 +246,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setSelectedBankAccountId(undefined);
         }
         
-        if (!transaction?.hash) {
-            setIsUsdtManuallyEdited(false);
-        }
+        setLastEditedField('amount');
     };
     
     const handleBankAccountSelect = (accountId: string) => {
@@ -222,9 +254,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
-            if (!transaction?.hash) {
-                setIsUsdtManuallyEdited(false);
-            }
+            setLastEditedField('amount');
         }
     };
 
@@ -561,4 +591,5 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
+
 
