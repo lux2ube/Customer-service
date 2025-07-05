@@ -1,7 +1,7 @@
 
 'use server';
 
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import qrcode from 'qrcode';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -131,5 +131,26 @@ export async function sendWhatsAppMessage(toNumber: string, message: string) {
     } catch (error) {
         console.error('Failed to send WhatsApp message:', error);
         throw new Error('Failed to send message. Is the number valid and registered on WhatsApp?');
+    }
+}
+
+export async function sendWhatsAppMedia(toNumber: string, mediaUrl: string, caption?: string) {
+    if (status !== 'CONNECTED' || !client) {
+        console.error('Attempted to send media while client is not connected.');
+        throw new Error('WhatsApp client is not connected. Please go to the WhatsApp page to connect.');
+    }
+
+    try {
+        const chatId = `${toNumber.replace(/\D/g, '')}@c.us`;
+        console.log(`Attempting to send media from ${mediaUrl} to ${chatId}`);
+
+        const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
+        
+        const response = await client.sendMessage(chatId, media, { caption: caption });
+        console.log('Media sent successfully:', response.id.id);
+        return { success: true, messageId: response.id.id };
+    } catch (error) {
+        console.error('Failed to send WhatsApp media:', error);
+        throw new Error('Failed to send media. Is the URL a direct link to an image and is the number valid?');
     }
 }

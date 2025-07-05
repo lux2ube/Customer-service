@@ -11,7 +11,8 @@ import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem
 import { 
     initializeWhatsAppClient as initWhatsApp, 
     getWhatsAppClientStatus as getWhatsAppStatus, 
-    sendWhatsAppMessage 
+    sendWhatsAppMessage,
+    sendWhatsAppMedia
 } from './whatsapp';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -199,8 +200,8 @@ export async function createClient(clientId: string | null, prevState: ClientFor
             for (const item of blacklistItems) {
                 if (item.type === 'Name') {
                     // Split client name and blacklisted name into words for more flexible matching.
-                    const clientWords = new Set(clientName.toLowerCase().split(/\\s+/));
-                    const blacklistWords = item.value.toLowerCase().split(/\\s+/);
+                    const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
+                    const blacklistWords = item.value.toLowerCase().split(/\s+/);
                     
                     // Check if all words from the blacklist entry are present in the client's name.
                     if (blacklistWords.every(word => clientWords.has(word))) {
@@ -859,31 +860,33 @@ export async function getWhatsAppClientStatus() {
     return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
 }
 
-export type WhatsAppSendState = { message?: string; success?: boolean; } | undefined;
+export type WhatsAppSendState = { message?: string; success?: boolean; error?: boolean; } | undefined;
 
-export async function sendWhatsAppNotification(transactionId: string): Promise<WhatsAppSendState> {
+export async function sendWhatsAppNotification(prevState: WhatsAppSendState, formData: FormData): Promise<WhatsAppSendState> {
+    const transactionId = formData.get('transactionId') as string;
+    
     if (!transactionId) {
-        return { message: 'Transaction ID is missing.', success: false };
+        return { message: 'Transaction ID is missing.', error: true };
     }
 
     try {
         const txRef = ref(db, `transactions/${transactionId}`);
         const txSnapshot = await get(txRef);
         if (!txSnapshot.exists()) {
-            return { message: `Transaction with ID ${transactionId} not found.`, success: false };
+            return { message: `Transaction with ID ${transactionId} not found.`, error: true };
         }
         const transaction: Transaction = { id: transactionId, ...txSnapshot.val() };
 
         const clientRef = ref(db, `clients/${transaction.clientId}`);
         const clientSnapshot = await get(clientRef);
         if (!clientSnapshot.exists()) {
-            return { message: `Client with ID ${transaction.clientId} not found.`, success: false };
+            return { message: `Client with ID ${transaction.clientId} not found.`, error: true };
         }
         const client: Client = clientSnapshot.val();
         const phoneNumber = client.phone;
 
         if (!phoneNumber) {
-            return { message: `Client ${client.name} does not have a phone number.`, success: false };
+            return { message: `Client ${client.name} does not have a phone number.`, error: true };
         }
 
         const formattedAmount = new Intl.NumberFormat('en-US').format(transaction.amount);
@@ -905,9 +908,63 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
 
     } catch (error: any) {
         console.error("Failed to send WhatsApp notification:", error);
-        return { message: error.message || "An unknown error occurred.", success: false };
+        return { message: error.message || "An unknown error occurred.", error: true };
     }
 }
+
+export type WhatsAppImageSendState = { message?: string; success?: boolean; error?: boolean } | undefined;
+
+export async function sendWhatsAppImage(prevState: WhatsAppImageSendState, formData: FormData): Promise<WhatsAppImageSendState> {
+    const transactionId = formData.get('transactionId') as string;
+    const imageUrl = formData.get('imageUrl') as string;
+
+    if (!transactionId) {
+        return { message: 'Transaction ID is missing.', error: true };
+    }
+    if (!imageUrl) {
+        return { message: 'Image URL is required.', error: true };
+    }
+
+    try {
+        const urlSchema = z.string().url();
+        urlSchema.parse(imageUrl);
+    } catch (e) {
+        return { message: 'Invalid image URL provided.', error: true };
+    }
+
+    try {
+        const txRef = ref(db, `transactions/${transactionId}`);
+        const txSnapshot = await get(txRef);
+        if (!txSnapshot.exists()) {
+            return { message: `Transaction with ID ${transactionId} not found.`, error: true };
+        }
+        const transaction: Transaction = { id: transactionId, ...txSnapshot.val() };
+
+        const clientRef = ref(db, `clients/${transaction.clientId}`);
+        const clientSnapshot = await get(clientRef);
+        if (!clientSnapshot.exists()) {
+            return { message: `Client with ID ${transaction.clientId} not found.`, error: true };
+        }
+        const client: Client = clientSnapshot.val();
+        const phoneNumber = client.phone;
+
+        if (!phoneNumber) {
+            return { message: `Client ${client.name} does not have a phone number.`, error: true };
+        }
+        
+        const caption = `Invoice for Transaction ID: ${transaction.id}`;
+
+        await sendWhatsAppMedia(phoneNumber, imageUrl, caption);
+
+        revalidatePath(`/transactions/${transactionId}/edit`);
+        return { message: 'WhatsApp invoice sent successfully!', success: true };
+
+    } catch (error: any) {
+        console.error("Failed to send WhatsApp image:", error);
+        return { message: error.message || "An unknown error occurred.", error: true };
+    }
+}
+
 
 // --- Blacklist Actions ---
 export type BlacklistFormState = { message?: string } | undefined;
@@ -976,8 +1033,8 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
             
             // Check against name blacklist
             for (const item of nameBlacklist) {
-                const clientWords = new Set(client.name.toLowerCase().split(/\\s+/));
-                const blacklistWords = item.value.toLowerCase().split(/\\s+/);
+                const clientWords = new Set(client.name.toLowerCase().split(/\s+/));
+                const blacklistWords = item.value.toLowerCase().split(/\s+/);
 
                 if (blacklistWords.every(word => clientWords.has(word))) {
                     if (!currentFlags.includes('Blacklisted')) {

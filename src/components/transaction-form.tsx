@@ -23,6 +23,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Separator } from './ui/separator';
 import { WhatsAppSendButton } from './whatsapp-send-button';
+import { WhatsAppImageSendForm } from './whatsapp-image-send-form';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -355,8 +356,10 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         <CardHeader>
                             <CardTitle>Actions</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-4">
                             <WhatsAppSendButton transactionId={transaction.id} />
+                            <Separator />
+                            <WhatsAppImageSendForm transactionId={transaction.id} />
                         </CardContent>
                     </Card>
                 )}
