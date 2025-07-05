@@ -481,12 +481,14 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            const amount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
+            const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
 
-            if (amount <= 0.01) {
+            if (syncedAmount <= 0.01) {
                 continue;
             }
 
+            // If 'to' is our wallet, it's an incoming tx, which is a 'Withdraw' for the client (they get fiat, we get USDT)
+            // If 'from' is our wallet, it's an outgoing tx, which is a 'Deposit' for the client (they give fiat, we give USDT)
             const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
 
             const newTxId = push(ref(db, 'transactions')).key;
@@ -496,6 +498,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 ? `Synced from BscScan. From: ${tx.from}` 
                 : `Synced from BscScan. To: ${tx.to}`;
 
+            // For synced transactions, the amount from the API is the final USDT amount.
             const newTxData = {
                 id: newTxId,
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
@@ -504,11 +507,11 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 clientName: 'Unassigned (BSCScan)',
                 cryptoWalletId: '1003',
                 cryptoWalletName: cryptoWalletName,
-                amount: amount,
+                amount: syncedAmount,
                 currency: 'USDT',
-                amount_usd: amount,
+                amount_usd: syncedAmount, // The USD value is the same as the USDT value
                 fee_usd: 0,
-                amount_usdt: amount,
+                amount_usdt: syncedAmount, // This is the final value that affects the wallet balance
                 hash: tx.hash,
                 status: 'Confirmed',
                 notes: note,
