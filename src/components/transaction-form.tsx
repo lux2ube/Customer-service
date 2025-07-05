@@ -22,8 +22,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Separator } from './ui/separator';
-import { WhatsAppSendButton } from './whatsapp-send-button';
-import { WhatsAppImageSendForm } from './whatsapp-image-send-form';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -351,18 +349,6 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         </div>
                     </CardContent>
                 </Card>
-                {transaction && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Actions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <WhatsAppSendButton transactionId={transaction.id} />
-                            <Separator />
-                            <WhatsAppImageSendForm transactionId={transaction.id} />
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </form>
     );
