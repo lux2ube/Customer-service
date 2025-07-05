@@ -47,6 +47,7 @@ const clientReports = [
         title: "Client Balance Summary",
         description: "Shows total invoiced amounts, payments received, and outstanding balances for each client, helping identify top clients and opportunities for growth.",
         icon: <Users className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/client-balance-summary",
     },
     {
         title: "Client Payment Performance",
