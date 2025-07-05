@@ -10,7 +10,8 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem } from './types';
 import { 
     initializeWhatsAppClient as initWhatsApp, 
-    getWhatsAppClientStatus as getWhatsAppStatus
+    getWhatsAppClientStatus as getWhatsAppStatus,
+    sendWhatsAppMedia
 } from './whatsapp';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -856,6 +857,44 @@ export async function initializeWhatsAppClient() {
 export async function getWhatsAppClientStatus() {
     const status = await getWhatsAppStatus();
     return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
+}
+
+export type WhatsAppImageSendState = { message?: string; error?: boolean; success?: boolean; } | undefined;
+
+export async function sendWhatsAppInvoiceImage(transactionId: string, imageDataUrl: string): Promise<Exclude<WhatsAppImageSendState, undefined>> {
+    if (!transactionId) {
+        return { message: 'Transaction ID is missing.', error: true };
+    }
+    if (!imageDataUrl || !imageDataUrl.startsWith('data:image/png;base64,')) {
+        return { message: 'Invalid image data provided.', error: true };
+    }
+
+    try {
+        const transactionRef = ref(db, `transactions/${transactionId}`);
+        const transactionSnapshot = await get(transactionRef);
+        if (!transactionSnapshot.exists()) {
+            return { message: 'Transaction not found.', error: true };
+        }
+        const transaction: Transaction = { id: transactionId, ...transactionSnapshot.val() };
+        
+        const clientRef = ref(db, `clients/${transaction.clientId}`);
+        const clientSnapshot = await get(clientRef);
+        if (!clientSnapshot.exists()) {
+            return { message: 'Client not found for this transaction.', error: true };
+        }
+        const client: Client = { id: transaction.clientId, ...clientSnapshot.val() };
+        
+        if (!client.phone) {
+            return { message: "Client doesn't have a phone number.", error: true };
+        }
+
+        await sendWhatsAppMedia(client.phone, imageDataUrl, `Invoice for transaction ${transactionId}`);
+        return { message: 'Invoice image sent successfully to client.', success: true, error: false };
+
+    } catch (error: any) {
+        console.error("Error sending WhatsApp image via server action:", error);
+        return { message: error.message || 'An unknown server error occurred.', error: true };
+    }
 }
 
 

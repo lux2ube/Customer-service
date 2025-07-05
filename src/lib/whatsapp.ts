@@ -134,7 +134,7 @@ export async function sendWhatsAppMessage(toNumber: string, message: string) {
     }
 }
 
-export async function sendWhatsAppMedia(toNumber: string, mediaUrl: string, caption?: string) {
+export async function sendWhatsAppMedia(toNumber: string, mediaUrlOrDataUrl: string, caption?: string) {
     if (status !== 'CONNECTED' || !client) {
         console.error('Attempted to send media while client is not connected.');
         throw new Error('WhatsApp client is not connected. Please go to the WhatsApp page to connect.');
@@ -142,15 +142,28 @@ export async function sendWhatsAppMedia(toNumber: string, mediaUrl: string, capt
 
     try {
         const chatId = `${toNumber.replace(/\D/g, '')}@c.us`;
-        console.log(`Attempting to send media from ${mediaUrl} to ${chatId}`);
+        console.log(`Attempting to send media to ${chatId}`);
 
-        const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
+        let media: MessageMedia;
+
+        if (mediaUrlOrDataUrl.startsWith('data:')) {
+            // It's a data URL
+            const [meta, data] = mediaUrlOrDataUrl.split(',');
+            const mimeType = meta.match(/:(.*?);/)?.[1];
+            if (!mimeType || !data) {
+                throw new Error("Invalid data URL format.");
+            }
+            media = new MessageMedia(mimeType, data, 'invoice.png');
+        } else {
+            // It's a regular URL
+            media = await MessageMedia.fromUrl(mediaUrlOrDataUrl, { unsafeMime: true });
+        }
         
         const response = await client.sendMessage(chatId, media, { caption: caption });
         console.log('Media sent successfully:', response.id.id);
         return { success: true, messageId: response.id.id };
     } catch (error) {
         console.error('Failed to send WhatsApp media:', error);
-        throw new Error('Failed to send media. Is the URL a direct link to an image and is the number valid?');
+        throw new Error('Failed to send media. Check the URL/data and ensure the number is valid.');
     }
 }

@@ -5,11 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, Download, Loader2, Share2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2, Send } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState } from '@/lib/actions';
+import { createTransaction, sendWhatsAppInvoiceImage, type TransactionFormState, type WhatsAppImageSendState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -60,6 +60,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     // New state for download/share buttons
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
+    const [isSendingViaServer, setIsSendingViaServer] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -193,44 +194,29 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }
 
-    const handleGenerateWhatsAppLink = () => {
-        if (!client || !client.phone || !transaction) return;
+    const handleSendViaServer = async () => {
+        if (!invoiceRef.current || !transaction) return;
+        setIsSendingViaServer(true);
+        try {
+            const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: null });
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            const result = await sendWhatsAppInvoiceImage(transaction.id, dataUrl);
+            
+            toast({
+                title: result.error ? 'Error' : 'Success',
+                description: result.message,
+                variant: result.error ? 'destructive' : 'default',
+            });
 
-        const formatUsd = (value: number) => {
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+        } catch (error) {
+            console.error("Error sending invoice via server:", error);
+            toast({ variant: "destructive", title: "Action Failed", description: "Could not send invoice. See console for details." });
+        } finally {
+            setIsSendingViaServer(false);
         }
-
-        const messageParts = [
-            `*Invoice for Transaction*`,
-            `--------------------`,
-            `Date: ${format(new Date(transaction.date), 'PPP')}`,
-            `Client: ${transaction.clientName || client.name}`,
-            `Type: ${transaction.type}`,
-            `Amount: ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}`,
-            `Amount (USD): ${formatUsd(transaction.amount_usd)}`,
-            `Status: ${transaction.status}`,
-        ];
-
-        if (transaction.hash) {
-            messageParts.push(`Hash: ${transaction.hash}`);
-        }
-
-        if (transaction.remittance_number) {
-            messageParts.push(`Remittance #: ${transaction.remittance_number}`);
-        }
-        
-        messageParts.push(`--------------------`);
-        messageParts.push(`Thank you!`);
-        
-        const message = messageParts.join('\n');
-        const encodedMessage = encodeURIComponent(message);
-        // Remove non-digit characters from the phone number
-        const phoneNumber = client.phone.replace(/\D/g, ''); 
-        
-        const url = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-        
-        window.open(url, '_blank', 'noopener,noreferrer');
     };
+
 
     const handleDownloadInvoice = async () => {
         if (!invoiceRef.current || !transaction) return;
@@ -435,7 +421,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <CardDescription>Download invoice or send messages.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} className="w-full">
+                                <Button onClick={handleSendViaServer} disabled={isSendingViaServer || isDownloading || isSharing} className="w-full" variant="secondary">
+                                    {isSendingViaServer ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Send className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isSendingViaServer ? 'Sending...' : 'Send Invoice via Server'}
+                                </Button>
+                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing || isSendingViaServer} className="w-full">
                                     {isDownloading ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
@@ -443,7 +437,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     )}
                                     {isDownloading ? 'Downloading...' : 'Download Invoice Image'}
                                 </Button>
-                                <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading} className="w-full">
+                                <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading || isSendingViaServer} className="w-full">
                                     {isSharing ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
@@ -451,12 +445,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     )}
                                     {isSharing ? 'Preparing...' : 'Share Invoice Image'}
                                 </Button>
-                                {client.phone && (
-                                    <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
-                                        <MessageCircle className="mr-2 h-4 w-4" />
-                                        Send Text via WhatsApp
-                                    </Button>
-                                )}
                             </CardContent>
                         </Card>
                     )}
