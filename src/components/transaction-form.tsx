@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, FileText } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -22,7 +22,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Separator } from './ui/separator';
-import { WhatsAppLinkGenerator } from './whatsapp-link-generator';
+import Link from 'next/link';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -187,6 +187,45 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }
 
+    const handleGenerateWhatsAppLink = () => {
+        if (!client || !client.phone || !transaction) return;
+
+        const formatUsd = (value: number) => {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+        }
+
+        const messageParts = [
+            `*Invoice for Transaction*`,
+            `--------------------`,
+            `Date: ${format(new Date(transaction.date), 'PPP')}`,
+            `Client: ${transaction.clientName || client.name}`,
+            `Type: ${transaction.type}`,
+            `Amount: ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}`,
+            `Amount (USD): ${formatUsd(transaction.amount_usd)}`,
+            `Status: ${transaction.status}`,
+        ];
+
+        if (transaction.hash) {
+            messageParts.push(`Hash: ${transaction.hash}`);
+        }
+
+        if (transaction.remittance_number) {
+            messageParts.push(`Remittance #: ${transaction.remittance_number}`);
+        }
+        
+        messageParts.push(`--------------------`);
+        messageParts.push(`Thank you!`);
+        
+        const message = messageParts.join('\n');
+        const encodedMessage = encodeURIComponent(message);
+        // Remove non-digit characters from the phone number
+        const phoneNumber = client.phone.replace(/\D/g, ''); 
+        
+        const url = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+        
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
     return (
         <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -300,8 +339,25 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </Card>
             </div>
             <div className="lg:col-span-1 space-y-6">
-                {transaction && client && (
-                    <WhatsAppLinkGenerator transaction={transaction} client={client} />
+                {transaction && client && client.phone && (
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Actions</CardTitle>
+                            <CardDescription>Generate invoices or pre-fill a WhatsApp message.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <Button asChild className="w-full">
+                                <Link href={`/transactions/${transaction.id}/invoice`} target="_blank">
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    View Shareable Invoice
+                                </Link>
+                            </Button>
+                            <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">
+                                <MessageCircle className="mr-2 h-4 w-4" />
+                                Generate WhatsApp Link
+                            </Button>
+                        </CardContent>
+                    </Card>
                 )}
                  <Card>
                     <CardHeader>
