@@ -111,15 +111,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (isDataLoading) {
             return; // Wait for data to load
         }
+        
+        // This ref helps identify if a synced transaction is being edited for the first time.
+        pristineRef.current = !!transaction && !!transaction.hash && transaction.amount === 0;
 
         if (transaction) {
-            const isPristineSync = transaction.hash && transaction.amount === 0;
-            pristineRef.current = isPristineSync;
-            
             const initialData = { ...initialFormData, ...transaction };
             
-            if (isPristineSync) {
-                // Clear the amount for pristine syncs so user has to enter it
+            // If it's a pristine sync, clear the amount for the user to enter it.
+            if (pristineRef.current) {
                 initialData.amount = 0;
 
                 // Try to pre-select favorite bank account
@@ -166,12 +166,18 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
             if (prev.type === 'Withdraw') {
                 const difference = prev.amount_usdt - newAmountUSD;
-                if (difference >= 0) newFeeUSD = difference;
-                else newExpenseUSD = -difference;
+                if (difference >= 0) {
+                    newFeeUSD = difference;
+                } else {
+                    newExpenseUSD = -difference;
+                }
             } else { // Deposit
                 const difference = newAmountUSD - prev.amount_usdt;
-                if (difference >= 0) newFeeUSD = difference;
-                else newExpenseUSD = -difference;
+                 if (difference >= 0) {
+                    newFeeUSD = difference;
+                } else {
+                    newExpenseUSD = -difference;
+                }
             }
             
             return {
@@ -202,16 +208,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 const calculatedFee = newAmountUSD * feePercent;
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD - finalFee;
-            } else { // It's a 'Withdraw'
+            } else { // Withdraw
                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
                 let calculatedFee = 0;
-
                 if (feePercent > 0 && feePercent < 1) {
-                    // Calculate the gross amount (total USDT to be withdrawn) to find the fee on the total.
                     const grossUsdtAmount = newAmountUSD / (1 - feePercent);
                     calculatedFee = grossUsdtAmount - newAmountUSD;
                 }
-                
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD + finalFee; 
             }
@@ -223,6 +226,45 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 fee_usd: parseFloat(finalFee.toFixed(2)),
                 expense_usd: 0,
                 amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
+            };
+        });
+    };
+
+    const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newUsdtAmount = getNumberValue(e.target.value);
+
+        setFormData(prev => {
+            if (!settings) return { ...prev, amount_usdt: newUsdtAmount };
+
+            const amountUSD = prev.amount_usd;
+            let newFeeUSD = 0;
+            let newExpenseUSD = 0;
+
+            if (prev.type === 'Deposit') {
+                const difference = amountUSD - newUsdtAmount;
+                if (difference >= 0) {
+                    newFeeUSD = difference;
+                    newExpenseUSD = 0;
+                } else {
+                    newFeeUSD = 0;
+                    newExpenseUSD = -difference;
+                }
+            } else { // Withdraw
+                const difference = newUsdtAmount - amountUSD;
+                if (difference >= 0) {
+                    newFeeUSD = difference;
+                    newExpenseUSD = 0;
+                } else {
+                    newFeeUSD = 0;
+                    newExpenseUSD = -difference;
+                }
+            }
+
+            return {
+                ...prev,
+                amount_usdt: newUsdtAmount,
+                fee_usd: parseFloat(newFeeUSD.toFixed(2)),
+                expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
             };
         });
     };
@@ -301,7 +343,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const isSynced = !!formData.hash;
     const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
     
-    const amountToDisplay = (pristineRef.current && isSynced) ? '' : (formData.amount || '');
+    // For a pristine sync, amount field should appear empty for user to fill.
+    const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
 
     return (
         <>
@@ -394,15 +437,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="fee_usd">Fee (USD)</Label>
-                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly/>
+                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="expense_usd">Expense / Loss (USD)</Label>
-                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly/>
+                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly />
                             </div>
                             <div className="md:col-span-2 space-y-2">
                                 <Label htmlFor="amount_usdt">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} readOnly/>
+                                <Input
+                                    id="amount_usdt"
+                                    name="amount_usdt"
+                                    type="number"
+                                    step="any"
+                                    required
+                                    value={formData.amount_usdt}
+                                    onChange={!isSynced ? handleManualUsdtAmountChange : undefined}
+                                    readOnly={isSynced}
+                                />
                             </div>
                         </CardContent>
                         <CardFooter>
