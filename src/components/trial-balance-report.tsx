@@ -51,26 +51,26 @@ export function TrialBalanceReport({ initialAccounts, initialJournalEntries, ini
             }
         });
 
-        // from transactions (for principal amounts not journaled)
+        // from transaction principals (fees/expenses are already journaled)
         initialTransactions.forEach(tx => {
             if (tx.status !== 'Confirmed') return;
             const txDate = parseISO(tx.date);
             if (txDate <= toDate) {
-                // Deposit: Bank account (asset) increases -> debit.
-                if (tx.type === 'Deposit' && tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
-                    balances[tx.bankAccountId] += tx.amount_usd;
+                if (tx.type === 'Deposit') {
+                    if (tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
+                        balances[tx.bankAccountId] += (tx.amount_usd - (tx.fee_usd || 0));
+                    }
+                    if (tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
+                        balances[tx.cryptoWalletId] -= (tx.amount_usdt - (tx.expense_usd || 0));
+                    }
                 }
-                 // Deposit: Crypto wallet (asset) decreases -> credit.
-                if (tx.type === 'Deposit' && tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
-                    balances[tx.cryptoWalletId] -= tx.amount_usdt;
-                }
-                // Withdraw: Bank account (asset) decreases -> credit.
-                if (tx.type === 'Withdraw' && tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
-                    balances[tx.bankAccountId] -= tx.amount_usd;
-                }
-                // Withdraw: Crypto wallet (asset) increases -> debit.
-                if (tx.type === 'Withdraw' && tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
-                    balances[tx.cryptoWalletId] += tx.amount_usdt;
+                else if (tx.type === 'Withdraw') {
+                    if (tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
+                        balances[tx.bankAccountId] -= (tx.amount_usd - (tx.expense_usd || 0));
+                    }
+                    if (tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
+                        balances[tx.cryptoWalletId] += (tx.amount_usdt - (tx.fee_usd || 0));
+                    }
                 }
             }
         });
