@@ -20,7 +20,7 @@ import { Textarea } from './ui/textarea';
 import type { Client, Account, Settings, Transaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { Separator } from './ui/separator';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
@@ -38,30 +38,31 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
-    
-    // Form state
-    const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
+
+    // Data state
     const [clients, setClients] = React.useState<Client[]>([]);
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
+    const [isDataLoaded, setIsDataLoaded] = React.useState(false);
 
-    // Controlled state for inputs and comboboxes
-    const [amount, setAmount] = React.useState(transaction?.amount || 0);
-    const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
+    // Form state
+    const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>(transaction?.type || 'Deposit');
     const [selectedClientId, setSelectedClientId] = React.useState(transaction?.clientId);
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(transaction?.bankAccountId);
+    const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
+    const [amount, setAmount] = React.useState(transaction?.amount || 0);
+    const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     
     // Calculated values for the preview
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
     const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
-    const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
-    const [lastEditedField, setLastEditedField] = React.useState<'amount' | 'usdt' | null>(null);
-
-    // Ref to prevent initial calculation from re-running
+    
+    // Control flags
     const initialCalculationDone = React.useRef(false);
+    const lastEditedField = React.useRef<'amount' | 'usdt' | null>(null);
 
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -73,8 +74,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const clientsRef = ref(db, 'clients');
         const unsubscribeClients = onValue(clientsRef, (snapshot) => {
              const data = snapshot.val();
-             const clientList: Client[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-             setClients(clientList);
+             setClients(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
         });
 
         const accountsRef = ref(db, 'accounts');
@@ -82,12 +82,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const data = snapshot.val();
              if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                setBankAccounts(allAccounts.filter(acc => 
-                    !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
-                ));
-                setCryptoWallets(allAccounts.filter(acc =>
-                    !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'
-                ));
+                setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
+                setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'));
              } else {
                 setBankAccounts([]);
                 setCryptoWallets([]);
@@ -99,124 +95,16 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setSettings(snapshot.val());
         });
 
+        Promise.all([get(clientsRef), get(accountsRef), get(settingsRef)]).then(() => {
+            setIsDataLoaded(true);
+        });
+
         return () => {
             unsubscribeClients();
             unsubscribeAccounts();
             unsubscribeSettings();
         };
     }, []);
-
-    // Effect for financial calculations
-    React.useEffect(() => {
-        const getRate = (curr: string) => {
-            if (!settings) return 0;
-            switch(curr) {
-                case 'USD': return 1;
-                case 'USDT': return settings.usdt_usd || 1;
-                case 'YER': return settings.yer_usd || 0;
-                case 'SAR': return settings.sar_usd || 0;
-                default: return 0;
-            }
-        };
-
-        // --- ONE-TIME INITIAL CALCULATION FOR SYNCED TRANSACTIONS ---
-        if (transaction?.hash && !initialCalculationDone.current && settings && clients.length > 0 && bankAccounts.length > 0) {
-            const client = clients.find(c => c.id === transaction.clientId);
-            const accountIdToUse = transaction.bankAccountId || client?.favoriteBankAccountId;
-            
-            if (accountIdToUse) {
-                const account = bankAccounts.find(a => a.id === accountIdToUse);
-                if (account?.currency) {
-                    if (selectedBankAccountId !== account.id) setSelectedBankAccountId(account.id);
-                    if (currency !== account.currency) setCurrency(account.currency);
-                    
-                    const rate = getRate(account.currency);
-                    if (rate > 0) {
-                        const minimumFee = settings.minimum_fee_usd || 1;
-                        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
-                        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
-                        let derivedUsd = 0;
-
-                        if (transaction.type === 'Deposit') {
-                            const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
-                            derivedUsd = (usdFromFeePercent * depositFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount + minimumFee;
-                        } else {
-                            const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
-                            derivedUsd = (usdFromFeePercent * withdrawFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount - minimumFee;
-                        }
-                        
-                        const newAmount = derivedUsd / rate;
-                        setAmount(Number(newAmount.toFixed(2)));
-                        setUsdValue(derivedUsd);
-                        const difference = (transaction.type === 'Deposit') ? derivedUsd - usdtAmount : usdtAmount - derivedUsd;
-                        if (difference >= 0) { setFee(difference); setExpense(0); }
-                        else { setFee(0); setExpense(-difference); }
-                    }
-                }
-            }
-            initialCalculationDone.current = true;
-            return; // Exit after initial setup to prevent re-calculation
-        }
-
-        // --- SUBSEQUENT CALCULATIONS BASED ON USER INPUT ---
-        if (!settings || lastEditedField === null) return;
-        
-        const isSyncedTransaction = !!transaction?.hash;
-        const rate = getRate(currency);
-        if (rate === 0) return;
-        
-        const minimumFee = settings.minimum_fee_usd || 1;
-        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
-        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
-        
-        let finalUsd = 0;
-        let finalFee = 0;
-        let finalExpense = 0;
-
-        if (isSyncedTransaction) {
-            if (lastEditedField === 'amount') {
-                finalUsd = amount * rate;
-                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
-                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
-                else { finalFee = 0; finalExpense = -difference; }
-            } else if (lastEditedField === 'usdt') {
-                let derivedUsd = 0;
-                if (transactionType === 'Deposit') {
-                    const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
-                    derivedUsd = (usdFromFeePercent * depositFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount + minimumFee;
-                } else {
-                    const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
-                    derivedUsd = (usdFromFeePercent * withdrawFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount - minimumFee;
-                }
-                const newAmount = derivedUsd / rate;
-                setAmount(Number(newAmount.toFixed(2))); // Update local amount based on USDT change
-                finalUsd = derivedUsd;
-                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
-                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
-                else { finalFee = 0; finalExpense = -difference; }
-            }
-        } else { // Manual Transaction Logic
-            if (lastEditedField === 'amount') {
-                finalUsd = amount * rate;
-                const percentageFee = (transactionType === 'Deposit') ? finalUsd * depositFeePercent : finalUsd * withdrawFeePercent;
-                finalFee = Math.max(percentageFee, minimumFee);
-                finalExpense = 0;
-                const finalUsdt = (transactionType === 'Deposit') ? finalUsd - finalFee : finalUsd + finalFee;
-                setUsdtAmount(Number(finalUsdt.toFixed(2)));
-            } else { // lastEditedField === 'usdt'
-                finalUsd = amount * rate;
-                const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
-                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
-                else { finalFee = 0; finalExpense = -difference; }
-            }
-        }
-        
-        setUsdValue(finalUsd);
-        setFee(finalFee);
-        setExpense(finalExpense);
-
-    }, [amount, usdtAmount, currency, transactionType, settings, transaction, clients, bankAccounts, lastEditedField]);
-
 
     // Effect for handling server action responses
     React.useEffect(() => {
@@ -225,46 +113,151 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [state, toast]);
 
+    // Perform initial calculation for synced transactions once all data is loaded
+    React.useEffect(() => {
+        if (isDataLoaded && transaction?.hash && !initialCalculationDone.current) {
+            const clientForTx = clients.find(c => c.id === transaction.clientId);
+            const accountIdToUse = transaction.bankAccountId || clientForTx?.favoriteBankAccountId;
+            const accountToUse = bankAccounts.find(a => a.id === accountIdToUse);
+
+            if (accountToUse) {
+                setSelectedBankAccountId(accountToUse.id);
+                setCurrency(accountToUse.currency || 'USD');
+                // Trigger the calculation based on USDT as the source of truth
+                recalculateFinancials('usdt', usdtAmount, transactionType, accountToUse.currency || 'USD');
+            }
+            initialCalculationDone.current = true;
+        }
+    }, [isDataLoaded, transaction, clients, bankAccounts]);
+
+
+    const recalculateFinancials = (
+        source: 'amount' | 'usdt',
+        sourceValue: number,
+        type: 'Deposit' | 'Withdraw',
+        currentCurrency: string
+    ) => {
+        if (!settings) return;
+
+        const isSynced = !!transaction?.hash;
+        const getRate = (curr: string) => {
+            if (!settings) return 1;
+            switch(curr) {
+                case 'USD': return 1;
+                case 'USDT': return settings.usdt_usd || 1;
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                default: return 0;
+            }
+        };
+        const rate = getRate(currentCurrency);
+        if (rate === 0) return;
+
+        const minimumFee = settings.minimum_fee_usd || 1;
+        const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
+        const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
+
+        let finalUsd = 0, finalFee = 0, finalExpense = 0;
+        let finalAmount = source === 'amount' ? sourceValue : amount;
+        let finalUsdt = source === 'usdt' ? sourceValue : usdtAmount;
+
+        // --- CALCULATION LOGIC BASED ON USER'S RULES ---
+
+        if (isSynced) {
+            if (source === 'amount') {
+                // For synced, editing amount only changes fee/expense
+                finalUsd = sourceValue * rate;
+                const difference = type === 'Deposit' ? finalUsd - finalUsdt : finalUsdt - finalUsd;
+                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
+                else { finalFee = 0; finalExpense = -difference; }
+            } else { // source === 'usdt'
+                // For synced, editing USDT reverse-calculates local amount
+                let derivedUsd;
+                if (type === 'Deposit') {
+                    const usdFromFeePercent = sourceValue / (1 - depositFeePercent);
+                    derivedUsd = (usdFromFeePercent * depositFeePercent) > minimumFee ? usdFromFeePercent : sourceValue + minimumFee;
+                } else { // Withdraw
+                    const usdFromFeePercent = sourceValue / (1 + withdrawFeePercent);
+                    derivedUsd = (usdFromFeePercent * withdrawFeePercent) > minimumFee ? usdFromFeePercent : sourceValue - minimumFee;
+                }
+                finalAmount = derivedUsd / rate;
+                finalUsd = derivedUsd;
+                const difference = type === 'Deposit' ? finalUsd - sourceValue : sourceValue - finalUsd;
+                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
+                else { finalFee = 0; finalExpense = -difference; }
+            }
+        } else { // Manual Transaction
+            if (source === 'amount') {
+                // For manual, editing amount calculates USDT
+                finalUsd = sourceValue * rate;
+                const percentageFee = type === 'Deposit' ? finalUsd * depositFeePercent : finalUsd * withdrawFeePercent;
+                finalFee = Math.max(percentageFee, minimumFee);
+                finalExpense = 0;
+                finalUsdt = type === 'Deposit' ? finalUsd - finalFee : finalUsd + finalFee;
+            } else { // source === 'usdt'
+                // For manual, editing USDT calculates fee/expense
+                finalUsd = finalAmount * rate;
+                const difference = type === 'Deposit' ? finalUsd - sourceValue : sourceValue - finalUsd;
+                if (difference >= 0) { finalFee = difference; finalExpense = 0; }
+                else { finalFee = 0; finalExpense = -difference; }
+            }
+        }
+
+        // --- UPDATE ALL STATE VALUES ---
+        setAmount(Number(finalAmount.toFixed(2)));
+        setUsdValue(Number(finalUsd.toFixed(2)));
+        setFee(Number(finalFee.toFixed(2)));
+        setExpense(Number(finalExpense.toFixed(2)));
+        setUsdtAmount(Number(finalUsdt.toFixed(2)));
+    };
+
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setAmount(Number(e.target.value));
-        setLastEditedField('amount');
+        const newAmount = Number(e.target.value);
+        lastEditedField.current = 'amount';
+        setAmount(newAmount); // Update state immediately for controlled input
+        recalculateFinancials('amount', newAmount, transactionType, currency);
+    }
+    
+    const handleUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newUsdtAmount = Number(e.target.value);
+        lastEditedField.current = 'usdt';
+        setUsdtAmount(newUsdtAmount); // Update state immediately
+        recalculateFinancials('usdt', newUsdtAmount, transactionType, currency);
     }
 
     const handleTypeChange = (v: 'Deposit' | 'Withdraw') => {
         setTransactionType(v);
-        setLastEditedField('amount');
-    }
-    
-    const handleUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setUsdtAmount(Number(e.target.value));
-        setLastEditedField('usdt');
+        // Recalculate based on the last field the user edited
+        const source = lastEditedField.current || (transaction?.hash ? 'usdt' : 'amount');
+        const sourceValue = source === 'amount' ? amount : usdtAmount;
+        recalculateFinancials(source, sourceValue, v, currency);
     }
 
     const handleClientSelect = (clientId: string) => {
         setSelectedClientId(clientId);
         const selectedClient = clients.find(c => c.id === clientId);
-
-        if (selectedClient?.favoriteBankAccountId) {
-            const favoriteAccount = bankAccounts.find(ba => ba.id === selectedClient.favoriteBankAccountId);
-            if (favoriteAccount) {
-                setSelectedBankAccountId(favoriteAccount.id);
-                if (favoriteAccount.currency) {
-                    setCurrency(favoriteAccount.currency);
-                }
-            }
-        } else {
-            setSelectedBankAccountId(undefined);
-        }
+        const favoriteAccount = bankAccounts.find(ba => ba.id === selectedClient?.favoriteBankAccountId);
         
-        setLastEditedField('amount');
+        const newAccountId = favoriteAccount?.id;
+        const newCurrency = favoriteAccount?.currency || 'USD';
+
+        setSelectedBankAccountId(newAccountId);
+        setCurrency(newCurrency);
+
+        const source = lastEditedField.current || (transaction?.hash ? 'usdt' : 'amount');
+        const sourceValue = source === 'amount' ? amount : usdtAmount;
+        recalculateFinancials(source, sourceValue, transactionType, newCurrency);
     };
     
     const handleBankAccountSelect = (accountId: string) => {
         setSelectedBankAccountId(accountId);
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
-        if (selectedAccount && selectedAccount.currency) {
-            setCurrency(selectedAccount.currency);
-        }
+        const newCurrency = selectedAccount?.currency || 'USD';
+        setCurrency(newCurrency);
+
+        const source = lastEditedField.current || (transaction?.hash ? 'usdt' : 'amount');
+        const sourceValue = source === 'amount' ? amount : usdtAmount;
+        recalculateFinancials(source, sourceValue, transactionType, newCurrency);
     };
 
     const handleDownloadInvoice = async () => {
@@ -373,7 +366,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
-                                    <Select name="type" required defaultValue={transactionType} onValueChange={handleTypeChange}>
+                                    <Select name="type" required value={transactionType} onValueChange={handleTypeChange}>
                                         <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit</SelectItem>
@@ -461,9 +454,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     className="w-48 text-right font-mono text-lg font-bold"
                                 />
                             </div>
-                            <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
-                            <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
-                            <input type="hidden" name="expense_usd" value={expense.toFixed(2)} />
+                            <input type="hidden" name="amount_usd" value={usdValue} />
+                            <input type="hidden" name="fee_usd" value={fee} />
+                            <input type="hidden" name="expense_usd" value={expense} />
                         </CardContent>
                         <CardFooter>
                             <SubmitButton />
@@ -513,7 +506,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="hash">Crypto Hash</Label>
-                                    <Input id="hash" name="hash" defaultValue={transaction?.hash} />
+                                    <Input id="hash" name="hash" defaultValue={transaction?.hash} disabled />
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -562,8 +555,11 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
   }, [value]);
   
   const handleSelect = (currentValue: string) => {
-    setInternalValue(currentValue);
-    onSelect?.(currentValue);
+    const finalValue = currentValue === internalValue ? "" : currentValue;
+    setInternalValue(finalValue);
+    if (onSelect) {
+      onSelect(finalValue);
+    }
     setOpen(false);
   };
 
@@ -600,4 +596,3 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
-

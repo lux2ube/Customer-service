@@ -389,6 +389,7 @@ export async function createTransaction(transactionId: string | null, prevState:
     const validatedFields = TransactionSchema.safeParse(dataToValidate);
     
     if (!validatedFields.success) {
+        console.log(validatedFields.error.flatten());
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',
@@ -644,6 +645,7 @@ export async function createTransaction(transactionId: string | null, prevState:
     
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
+    revalidatePath(`/transactions/${newId}/edit`);
     redirect(`/transactions/${newId}/edit`);
 }
 
