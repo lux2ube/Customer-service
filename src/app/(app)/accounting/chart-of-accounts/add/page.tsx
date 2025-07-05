@@ -3,15 +3,16 @@ import { PageHeader } from "@/components/page-header";
 import { AccountForm } from "@/components/account-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
-import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import type { Account } from '@/lib/types';
 
 async function getGroupAccounts(): Promise<Account[]> {
-    const accountsRef = query(ref(db, 'accounts'), orderByChild('isGroup'), equalTo(true));
+    const accountsRef = ref(db, 'accounts');
     const snapshot = await get(accountsRef);
     if (snapshot.exists()) {
         const data = snapshot.val();
-        return Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        return allAccounts.filter(account => account.isGroup === true);
     }
     return [];
 }
