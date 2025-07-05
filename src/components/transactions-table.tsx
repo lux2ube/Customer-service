@@ -31,7 +31,7 @@ export function TransactionsTable() {
         const list: Transaction[] = Object.keys(data).map(key => ({
           id: key,
           ...data[key]
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setTransactions(list);
       } else {
         setTransactions([]);

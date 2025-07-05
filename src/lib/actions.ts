@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { redirect } from 'next/navigation';
@@ -139,7 +139,14 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     let kycUrlString: string | undefined = undefined;
 
     if (kycFile && kycFile.size > 0) {
-        return { message: 'File uploads are not implemented in this action.' };
+        try {
+            const fileRef = storageRef(storage, `kyc_documents/${newId}/${kycFile.name}`);
+            const snapshot = await uploadBytes(fileRef, kycFile);
+            kycUrlString = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("File upload failed: ", error);
+            return { message: 'File upload failed. Please try again.' };
+        }
     }
 
     const dataToValidate = {
@@ -210,8 +217,8 @@ const TransactionSchema = z.object({
     type: z.enum(['Deposit', 'Withdraw']),
     amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
     currency: z.enum(['USD', 'YER', 'SAR', 'USDT']),
-    bankAccountId: z.string().optional(),
-    cryptoWalletId: z.string().optional(),
+    bankAccountId: z.string().optional().nullable(),
+    cryptoWalletId: z.string().optional().nullable(),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number(),
     amount_usdt: z.coerce.number(),
@@ -231,9 +238,16 @@ export async function createTransaction(transactionId: string | null, prevState:
 
     const attachmentFile = formData.get('attachment_url') as File | null;
     let attachmentUrlString: string | undefined = undefined;
-
+    
     if (attachmentFile && attachmentFile.size > 0) {
-        return { message: 'File uploads are not implemented in this action.' };
+        try {
+            const fileRef = storageRef(storage, `transaction_attachments/${newId}/${attachmentFile.name}`);
+            const snapshot = await uploadBytes(fileRef, attachmentFile);
+            attachmentUrlString = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("File upload failed: ", error);
+            return { message: 'File upload failed. Please try again.' };
+        }
     }
 
     const flag = formData.get('flags');
@@ -459,32 +473,38 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         const updates: { [key: string]: any } = {};
 
         for (const tx of incomingTxs) {
-            if (!existingHashes.has(tx.hash)) {
-                const newTxId = push(ref(db, 'transactions')).key;
-                if (!newTxId) continue;
-
-                const amount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
-
-                const newTxData = {
-                    id: newTxId,
-                    date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
-                    type: 'Deposit',
-                    clientId: 'unassigned-bscscan',
-                    clientName: 'Unassigned (BSCScan)',
-                    amount: amount,
-                    currency: 'USDT',
-                    amount_usd: amount,
-                    fee_usd: 0,
-                    amount_usdt: amount,
-                    hash: tx.hash,
-                    status: 'Confirmed',
-                    notes: `Synced from BscScan. From: ${tx.from}`,
-                    createdAt: new Date().toISOString(),
-                    flags: [],
-                };
-                updates[`/transactions/${newTxId}`] = stripUndefined(newTxData);
-                newTxCount++;
+            if (existingHashes.has(tx.hash)) {
+                continue;
             }
+
+            const amount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
+
+            if (amount <= 0.01) {
+                continue;
+            }
+
+            const newTxId = push(ref(db, 'transactions')).key;
+            if (!newTxId) continue;
+
+            const newTxData = {
+                id: newTxId,
+                date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+                type: 'Deposit',
+                clientId: 'unassigned-bscscan',
+                clientName: 'Unassigned (BSCScan)',
+                amount: amount,
+                currency: 'USDT',
+                amount_usd: amount,
+                fee_usd: 0,
+                amount_usdt: amount,
+                hash: tx.hash,
+                status: 'Confirmed',
+                notes: `Synced from BscScan. From: ${tx.from}`,
+                createdAt: new Date().toISOString(),
+                flags: [],
+            };
+            updates[`/transactions/${newTxId}`] = stripUndefined(newTxData);
+            newTxCount++;
         }
 
         if (newTxCount > 0) {
