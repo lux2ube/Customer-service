@@ -629,16 +629,14 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 export type ImportState = { message?: string; error?: boolean; } | undefined;
 
 const ImportedClientSchema = z.object({
-  uniqueId: z.string().min(1),
-  dateOfAddition: z.string().min(1),
-  firstName: z.string(),
+  uniqueId: z.string().min(1, 'uniqueId is required.'),
+  dateOfAddition: z.string().min(1, 'dateOfAddition is required.'),
+  firstName: z.string().min(1, 'firstName is required.'),
   secondName: z.string().optional(),
   thirdName: z.string().optional(),
-  lastName: z.string(),
-  phoneNumber: z.string().min(1),
+  lastName: z.string().min(1, 'lastName is required.'),
+  phoneNumber: z.string().min(1, 'phoneNumber is required.'),
 });
-
-const ImportSchema = z.array(ImportedClientSchema);
 
 export async function importClients(prevState: ImportState, formData: FormData): Promise<ImportState> {
     const file = formData.get('jsonFile') as File | null;
@@ -654,44 +652,46 @@ export async function importClients(prevState: ImportState, formData: FormData):
     try {
         const fileContent = await file.text();
         const jsonData = JSON.parse(fileContent);
-        
-        const validatedData = ImportSchema.safeParse(jsonData);
 
-        if (!validatedData.success) {
-            console.error(validatedData.error);
-            return { message: 'JSON file must be an array of client objects. Some objects may have an invalid format or missing required fields.', error: true };
+        if (!Array.isArray(jsonData)) {
+            return { message: 'JSON file must contain an array of client objects.', error: true };
         }
         
-        const clientsToProcess = validatedData.data;
+        const clientsToProcess = jsonData;
         const updates: { [key: string]: any } = {};
         let importedCount = 0;
+        let skippedCount = 0;
 
         const existingClientsSnapshot = await get(ref(db, 'clients'));
         const existingClients = existingClientsSnapshot.val() || {};
         const existingIds = new Set(Object.keys(existingClients));
 
         for (const importedClient of clientsToProcess) {
-            if (existingIds.has(importedClient.uniqueId)) {
-                // Skip existing clients to avoid overwriting
+            const validatedData = ImportedClientSchema.safeParse(importedClient);
+            
+            if (!validatedData.success || (validatedData.data.uniqueId && existingIds.has(validatedData.data.uniqueId))) {
+                skippedCount++;
                 continue;
             }
 
+            const { uniqueId, dateOfAddition, firstName, secondName, thirdName, lastName, phoneNumber } = validatedData.data;
+
             const fullName = [
-                importedClient.firstName,
-                importedClient.secondName,
-                importedClient.thirdName,
-                importedClient.lastName
+                firstName,
+                secondName,
+                thirdName,
+                lastName
             ].filter(Boolean).join(' ');
 
             const newClient: Omit<Client, 'id'> = {
                 name: fullName,
-                phone: importedClient.phoneNumber,
+                phone: phoneNumber,
                 verification_status: 'Active', // Default status for imported clients
                 review_flags: [],
-                createdAt: new Date(importedClient.dateOfAddition).toISOString(),
+                createdAt: new Date(dateOfAddition).toISOString(),
             };
             
-            updates[`/clients/${importedClient.uniqueId}`] = stripUndefined(newClient);
+            updates[`/clients/${uniqueId}`] = stripUndefined(newClient);
             importedCount++;
         }
 
@@ -700,12 +700,18 @@ export async function importClients(prevState: ImportState, formData: FormData):
         }
 
         revalidatePath('/clients');
-        return { message: `Successfully imported ${importedCount} new clients.`, error: false };
+        
+        let message = `Successfully imported ${importedCount} new clients.`;
+        if (skippedCount > 0) {
+            message += ` ${skippedCount} records were skipped due to errors, missing fields, or duplicates.`;
+        }
+
+        return { message, error: false };
 
     } catch (error: any) {
         console.error("Client Import Error:", error);
         if (error instanceof SyntaxError) {
-             return { message: "Failed to parse JSON file. Please ensure it's valid.", error: true };
+             return { message: "Failed to parse JSON file. Please ensure it's valid JSON (e.g., wrapped in `[]` with no trailing commas).", error: true };
         }
         return { message: error.message || "An unknown error occurred during import.", error: true };
     }
