@@ -106,22 +106,23 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return () => { unsubClients(); unsubAccounts(); unsubSettings(); };
     }, []);
 
-    // Effect to set initial form data and auto-select favorite account
+    // Effect to set initial form data and handle pristine syncs
     React.useEffect(() => {
         if (isDataLoading) {
             return; // Wait for data to load
         }
-        
-        // This ref helps identify if a synced transaction is being edited for the first time.
-        pristineRef.current = !!transaction && !!transaction.hash && transaction.amount === 0;
 
         if (transaction) {
+            // Check if this is a "pristine" synced transaction (has a hash, but amount is 0/unset)
+            const isPristineSync = !!transaction.hash && transaction.amount === 0;
+            pristineRef.current = isPristineSync;
+
             const initialData = { ...initialFormData, ...transaction };
             
-            // If it's a pristine sync, clear the amount for the user to enter it.
-            if (pristineRef.current) {
+            if (isPristineSync) {
+                // For pristine syncs, clear the amount for the user to enter it.
                 initialData.amount = 0;
-
+                
                 // Try to pre-select favorite bank account
                 if (client?.favoriteBankAccountId) {
                     const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
@@ -131,9 +132,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     }
                 }
             }
+
             setFormData(initialData);
         } else {
-            // This is a new transaction.
+            // This is a brand new, manual transaction.
             setFormData(initialFormData);
         }
     }, [transaction, client, bankAccounts, isDataLoading]);
@@ -150,6 +152,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return isNaN(num) ? 0 : num;
     }
     
+    // Handles changes to the local amount field for a synced transaction.
+    // It calculates USD value, then determines fee/expense based on the fixed USDT amount.
     const handleSyncedAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
 
@@ -160,23 +164,26 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
+            const fixedUsdtAmount = prev.amount_usdt; // The amount from BscScan is the source of truth
 
-            if (prev.type === 'Withdraw') {
-                const difference = prev.amount_usdt - newAmountUSD;
+            // Deposit: Fee is the difference between what we received in USD and what the final USDT value is.
+            if (prev.type === 'Deposit') {
+                const difference = newAmountUSD - fixedUsdtAmount;
                 if (difference >= 0) {
                     newFeeUSD = difference;
                 } else {
-                    newExpenseUSD = -difference;
+                    newExpenseUSD = -difference; // Negative difference is a loss/expense
                 }
-            } else { // Deposit
-                const difference = newAmountUSD - prev.amount_usdt;
+            } 
+            // Withdraw: Fee is the difference between the final USDT value and what we sent in USD.
+            else { 
+                const difference = fixedUsdtAmount - newAmountUSD;
                  if (difference >= 0) {
                     newFeeUSD = difference;
                 } else {
-                    newExpenseUSD = -difference;
+                    newExpenseUSD = -difference; // Negative difference is a loss/expense
                 }
             }
             
@@ -210,11 +217,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // Withdraw
                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                let calculatedFee = 0;
+                let grossUsdtAmount = newAmountUSD;
                 if (feePercent > 0 && feePercent < 1) {
-                    const grossUsdtAmount = newAmountUSD / (1 - feePercent);
-                    calculatedFee = grossUsdtAmount - newAmountUSD;
+                    // We need to calculate the fee based on the total amount withdrawn, not just what the user receives.
+                    // Let G be Gross USDT, A be Amount USD, F be fee percent. G = A + G*F => G(1-F) = A => G = A / (1-F)
+                    grossUsdtAmount = newAmountUSD / (1 - feePercent);
                 }
+                const calculatedFee = grossUsdtAmount - newAmountUSD;
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD + finalFee; 
             }
@@ -344,6 +353,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
     
     // For a pristine sync, amount field should appear empty for user to fill.
+    // Otherwise, it should show the value from state (either from DB or from user typing).
     const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
 
     return (
