@@ -470,6 +470,12 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         let newTxCount = 0;
         const updates: { [key: string]: any } = {};
 
+        // Fetch the name of wallet '1003' for better display
+        const walletAccountRef = ref(db, 'accounts/1003');
+        const walletAccountSnapshot = await get(walletAccountRef);
+        const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
+
+
         for (const tx of data.result) {
             if (existingHashes.has(tx.hash)) {
                 continue;
@@ -481,18 +487,12 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            const isWithdrawal = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
-            const isDeposit = tx.from.toLowerCase() === bsc_wallet_address.toLowerCase();
-
-            if (!isWithdrawal && !isDeposit) {
-                continue;
-            }
+            const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
 
             const newTxId = push(ref(db, 'transactions')).key;
             if (!newTxId) continue;
-
-            const transactionType = isWithdrawal ? 'Withdraw' : 'Deposit';
-            const note = isWithdrawal 
+            
+            const note = transactionType === 'Withdraw' 
                 ? `Synced from BscScan. From: ${tx.from}` 
                 : `Synced from BscScan. To: ${tx.to}`;
 
@@ -502,6 +502,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 type: transactionType,
                 clientId: 'unassigned-bscscan',
                 clientName: 'Unassigned (BSCScan)',
+                cryptoWalletId: '1003',
+                cryptoWalletName: cryptoWalletName,
                 amount: amount,
                 currency: 'USDT',
                 amount_usd: amount,
@@ -510,6 +512,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 hash: tx.hash,
                 status: 'Confirmed',
                 notes: note,
+                client_wallet_address: transactionType === 'Withdraw' ? tx.from : tx.to,
                 createdAt: new Date().toISOString(),
                 flags: [],
             };
