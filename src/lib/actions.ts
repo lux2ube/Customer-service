@@ -7,7 +7,7 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem } from './types';
 import { 
     initializeWhatsAppClient as initWhatsApp, 
     getWhatsAppClientStatus as getWhatsAppStatus, 
@@ -139,11 +139,9 @@ const ClientSchema = z.object({
 });
 
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
-    console.log("Attempting to save client data...");
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) {
         const errorMsg = "Could not generate a client ID.";
-        console.error(errorMsg);
         throw new Error(errorMsg);
     }
     
@@ -152,40 +150,23 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const uploadedDocuments: KycDocument[] = [];
 
     if (kycFiles && kycFiles.length > 0) {
-        console.log(`Found ${kycFiles.length} file(s) to upload.`);
         for (const file of kycFiles) {
-            if (file.size === 0) {
-                console.log(`Skipping empty file input: ${file.name}`);
-                continue;
-            }
+            if (file.size === 0) continue;
             try {
                 const filePath = `kyc_documents/${newId}/${file.name}`;
-                console.log(`Uploading file: ${file.name} to path: ${filePath}`);
                 const fileRef = storageRef(storage, filePath);
                 const snapshot = await uploadBytes(fileRef, file);
-                console.log(`Successfully uploaded file: ${file.name}`);
                 const downloadURL = await getDownloadURL(snapshot.ref);
-                 console.log(`Got download URL: ${downloadURL}`);
                 uploadedDocuments.push({
                     name: file.name,
                     url: downloadURL,
                     uploadedAt: new Date().toISOString(),
                 });
             } catch (error) {
-                console.error("-----------------------------------");
-                console.error("Firebase Storage upload FAILED for file:", file.name);
-                console.error("Full error object:", error);
-                console.error("-----------------------------------");
-                
                 const errorMessage = (error as any)?.code;
                 let userMessage = `File upload failed. Please check server logs.`;
-
-                if (errorMessage === 'storage/unauthorized') {
-                    userMessage = 'Upload failed due to permissions. Please update your Firebase Storage Rules to allow writes.';
-                } else if (errorMessage) {
-                    userMessage = `Upload failed with error: ${errorMessage}. Please check server logs.`;
-                }
-                
+                if (errorMessage === 'storage/unauthorized') userMessage = 'Upload failed due to permissions. Please update your Firebase Storage Rules to allow writes.';
+                else if (errorMessage) userMessage = `Upload failed with error: ${errorMessage}. Please check server logs.`;
                 return { message: userMessage };
             }
         }
@@ -201,14 +182,45 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const validatedFields = ClientSchema.safeParse(dataToValidate);
 
     if (!validatedFields.success) {
-        console.error("Client data validation failed:", validatedFields.error.flatten().fieldErrors);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to save client. Please check the fields.',
         };
     }
     
+    let isBlacklisted = false;
+    try {
+        const blacklistSnapshot = await get(ref(db, 'blacklist'));
+        if (blacklistSnapshot.exists()) {
+            const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
+            const clientName = (validatedFields.data.name).toLowerCase();
+            const clientPhone = validatedFields.data.phone;
+
+            for (const item of blacklistItems) {
+                const blacklistedValue = item.value.toLowerCase();
+                if (item.type === 'Name' && clientName.includes(blacklistedValue)) {
+                    isBlacklisted = true;
+                    break;
+                }
+                if (item.type === 'Phone' && clientPhone === item.value) {
+                    isBlacklisted = true;
+                    break;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Blacklist check failed:", e);
+    }
+    
     const finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
+
+    if (isBlacklisted) {
+        if (!finalData.review_flags) finalData.review_flags = [];
+        if (!finalData.review_flags.includes('Blacklisted')) {
+            finalData.review_flags.push('Blacklisted');
+        }
+    }
+    
     const dataForFirebase = stripUndefined(finalData);
 
     try {
@@ -220,26 +232,17 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
 
         if (clientId) {
-            console.log(`Updating client ${clientId} in database...`);
             await update(clientDbRef, dataForFirebase);
-            console.log("Client updated successfully.");
         } else {
-            console.log(`Creating new client ${newId} in database...`);
             await set(clientDbRef, {
                 ...dataForFirebase,
                 createdAt: new Date().toISOString()
             });
-            console.log("New client created successfully.");
         }
     } catch (error) {
-        console.error("-----------------------------------");
-        console.error("Realtime Database save FAILED for client:", newId);
-        console.error("Full error object:", error);
-        console.error("-----------------------------------");
         return { message: 'Database Error: Failed to save client data. Check server logs.' }
     }
     
-    // Revalidate the edit page to show new files immediately if editing
     if (clientId) {
         revalidatePath(`/clients/${clientId}/edit`);
     }
@@ -249,51 +252,32 @@ export async function createClient(clientId: string | null, prevState: ClientFor
 
 export async function manageClient(clientId: string, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
     const intent = formData.get('intent') as string | null;
-    console.log(`Managing client ${clientId} with intent: ${intent || 'update/create'}`);
 
     if (intent?.startsWith('delete:')) {
         const documentName = intent.split(':')[1];
         if (!documentName) {
-            const errorMsg = 'Document name not provided for deletion.';
-            console.error(errorMsg);
-            return { message: errorMsg };
+            return { message: 'Document name not provided for deletion.' };
         }
         try {
             const filePath = `kyc_documents/${clientId}/${documentName}`;
-            console.log(`Attempting to delete document from storage: ${filePath}`);
             const fileRef = storageRef(storage, filePath);
             await deleteObject(fileRef);
-            console.log("Document successfully deleted from storage.");
 
-            console.log(`Attempting to remove document record from database for client ${clientId}`);
             const clientRef = ref(db, `clients/${clientId}`);
             const snapshot = await get(clientRef);
             if (snapshot.exists()) {
                 const clientData = snapshot.val() as Client;
                 const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
                 await update(clientRef, { kyc_documents: updatedDocs });
-                console.log("Document record removed from database.");
-            } else {
-                console.warn(`Client ${clientId} not found in database for document record deletion.`);
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
             return { success: true, message: "Document deleted successfully." };
         } catch (error) {
-            console.error("-----------------------------------");
-            console.error("Firebase Storage document deletion FAILED for:", documentName);
-            console.error("Full error object:", error);
-            console.error("-----------------------------------");
-            
             const errorMessage = (error as any)?.code;
             let userMessage = `Failed to delete document. Please check server logs.`;
-
-            if (errorMessage === 'storage/unauthorized') {
-                userMessage = 'Deletion failed due to permissions. Please update your Firebase Storage Rules to allow deletes.';
-            } else if (errorMessage) {
-                userMessage = `Deletion failed with error: ${errorMessage}. Please check server logs.`;
-            }
-
+            if (errorMessage === 'storage/unauthorized') userMessage = 'Deletion failed due to permissions. Please update your Firebase Storage Rules to allow deletes.';
+            else if (errorMessage) userMessage = `Deletion failed with error: ${errorMessage}. Please check server logs.`;
             return { message: userMessage };
         }
     }
@@ -353,7 +337,6 @@ export async function createTransaction(transactionId: string | null, prevState:
             const snapshot = await uploadBytes(fileRef, attachmentFile);
             attachmentUrlString = await getDownloadURL(snapshot.ref);
         } catch (error) {
-            console.error("File upload failed: ", error);
             return { message: 'File upload failed. Please try again.' };
         }
     }
@@ -368,14 +351,42 @@ export async function createTransaction(transactionId: string | null, prevState:
     const validatedFields = TransactionSchema.safeParse(dataToValidate);
     
     if (!validatedFields.success) {
-        console.log(validatedFields.error.flatten().fieldErrors);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',
         };
     }
     
+    let isBlacklisted = false;
+    const clientAddress = validatedFields.data.client_wallet_address;
+    if (clientAddress) {
+        try {
+            const blacklistSnapshot = await get(ref(db, 'blacklist'));
+            if (blacklistSnapshot.exists()) {
+                const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
+                const addressToCheck = clientAddress.toLowerCase();
+                const addressBlacklist = blacklistItems.filter(item => item.type === 'Address');
+
+                for (const item of addressBlacklist) {
+                    if (addressToCheck === item.value.toLowerCase()) {
+                        isBlacklisted = true;
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Blacklist check for transaction failed:", e);
+        }
+    }
+
     let dataToSave = { ...validatedFields.data };
+
+    if (isBlacklisted) {
+        if (!dataToSave.flags) dataToSave.flags = [];
+        if (!dataToSave.flags.includes('Blacklisted')) {
+            dataToSave.flags.push('Blacklisted');
+        }
+    }
     
     if (transactionId && !dataToSave.attachment_url) {
         const transactionRef = ref(db, `transactions/${transactionId}`);
@@ -390,8 +401,7 @@ export async function createTransaction(transactionId: string | null, prevState:
         const clientRef = ref(db, `clients/${dataToSave.clientId}`);
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
-            const client = snapshot.val() as Client;
-            clientName = client.name;
+            clientName = (snapshot.val() as Client).name;
         }
     } catch (e) {
         console.error("Could not fetch client name for transaction");
@@ -444,13 +454,11 @@ export async function createTransaction(transactionId: string | null, prevState:
             });
         }
     } catch (error) {
-        console.log(error);
         return {
             message: 'Database Error: Failed to create transaction.'
         }
     }
 
-    // After successfully saving the transaction, check if we need to update the client's BEP20 addresses.
     if (finalData.type === 'Deposit' && finalData.status === 'Confirmed' && finalData.client_wallet_address) {
         try {
             const clientRef = ref(db, `clients/${finalData.clientId}`);
@@ -460,16 +468,13 @@ export async function createTransaction(transactionId: string | null, prevState:
                 const existingAddresses = clientData.bep20_addresses || [];
                 const newAddress = finalData.client_wallet_address;
 
-                // Add the new address only if it doesn't already exist
                 if (!existingAddresses.includes(newAddress)) {
                     const updatedAddresses = [...existingAddresses, newAddress];
                     await update(clientRef, { bep20_addresses: updatedAddresses });
-                    console.log(`Updated BEP20 addresses for client ${finalData.clientId}`);
                 }
             }
         } catch (e) {
             console.error(`Failed to update BEP20 address for client ${finalData.clientId}:`, e);
-            // We don't want to fail the whole transaction for this, so we just log the error.
         }
     }
 
@@ -489,7 +494,6 @@ export async function createTransaction(transactionId: string | null, prevState:
             ]);
             
             if (!debitSnapshot.exists() || !creditSnapshot.exists() || !settingsSnapshot.exists()) {
-                console.error(`Could not find accounts or settings for journal entry: ${debitAccountId}, ${creditAccountId}`);
                 return;
             }
 
@@ -511,7 +515,6 @@ export async function createTransaction(transactionId: string | null, prevState:
             const creditRate = getRate(creditAccount.currency);
             
             if (debitRate === 0 || creditRate === 0) {
-                 console.error(`Exchange rate is zero for journal entry accounts.`);
                  return;
             }
 
@@ -686,7 +689,6 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         let newTxCount = 0;
         const updates: { [key: string]: any } = {};
 
-        // Fetch the name of wallet '1003' for better display
         const walletAccountRef = ref(db, 'accounts/1003');
         const walletAccountSnapshot = await get(walletAccountRef);
         const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
@@ -703,8 +705,6 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            // If 'to' is our wallet, it's an incoming tx -> client is sending us crypto to get fiat -> 'Withdrawal'
-            // If 'from' is our wallet, it's an outgoing tx -> client sent us fiat to get crypto -> 'Deposit'
             const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
 
             const newTxId = push(ref(db, 'transactions')).key;
@@ -714,7 +714,6 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 ? `Synced from BscScan. From: ${tx.from}` 
                 : `Synced from BscScan. To: ${tx.to}`;
 
-            // For synced transactions, the amount from the API is the final USDT amount.
             const newTxData = {
                 id: newTxId,
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
@@ -725,10 +724,10 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 cryptoWalletName: cryptoWalletName,
                 amount: syncedAmount,
                 currency: 'USDT',
-                amount_usd: syncedAmount, // The USD value is the same as the USDT value
+                amount_usd: syncedAmount,
                 fee_usd: 0,
                 expense_usd: 0,
-                amount_usdt: syncedAmount, // This is the final value that affects the wallet balance
+                amount_usdt: syncedAmount,
                 hash: tx.hash,
                 status: 'Confirmed',
                 notes: note,
@@ -815,7 +814,7 @@ export async function importClients(prevState: ImportState, formData: FormData):
             const newClient: Omit<Client, 'id'> = {
                 name: name,
                 phone: phoneNumber,
-                verification_status: 'Active', // Default status for imported clients
+                verification_status: 'Active',
                 review_flags: [],
                 createdAt: new Date(dateOfAddition).toISOString(),
             };
@@ -851,7 +850,6 @@ export async function initializeWhatsAppClient() {
 
 export async function getWhatsAppClientStatus() {
     const status = await getWhatsAppStatus();
-    // Return a plain object, not a class instance
     return { status: status.status, qrCodeDataUrl: status.qrCodeDataUrl };
 }
 
@@ -863,7 +861,6 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
     }
 
     try {
-        // 1. Get Transaction Details
         const txRef = ref(db, `transactions/${transactionId}`);
         const txSnapshot = await get(txRef);
         if (!txSnapshot.exists()) {
@@ -871,7 +868,6 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
         }
         const transaction: Transaction = { id: transactionId, ...txSnapshot.val() };
 
-        // 2. Get Client Phone Number
         const clientRef = ref(db, `clients/${transaction.clientId}`);
         const clientSnapshot = await get(clientRef);
         if (!clientSnapshot.exists()) {
@@ -884,7 +880,6 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
             return { message: `Client ${client.name} does not have a phone number.`, success: false };
         }
 
-        // 3. Construct Message
         const formattedAmount = new Intl.NumberFormat('en-US').format(transaction.amount);
         const formattedUsdAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(transaction.amount_usd);
 
@@ -897,7 +892,6 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
                       `*Status:* ${transaction.status}\n\n` +
                       `Thank you for your business.`;
 
-        // 4. Send Message via WhatsApp
         await sendWhatsAppMessage(phoneNumber, message);
 
         revalidatePath(`/transactions/${transactionId}/edit`);
@@ -906,5 +900,44 @@ export async function sendWhatsAppNotification(transactionId: string): Promise<W
     } catch (error: any) {
         console.error("Failed to send WhatsApp notification:", error);
         return { message: error.message || "An unknown error occurred.", success: false };
+    }
+}
+
+// --- Blacklist Actions ---
+export type BlacklistFormState = { message?: string } | undefined;
+
+const BlacklistItemSchema = z.object({
+    type: z.enum(['Name', 'Phone', 'Address']),
+    value: z.string().min(1, { message: 'Value is required.' }),
+    reason: z.string().optional(),
+});
+
+export async function addBlacklistItem(formData: FormData): Promise<BlacklistFormState> {
+    const validatedFields = BlacklistItemSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return { message: validatedFields.error.flatten().fieldErrors.value?.[0] || 'Invalid data.' };
+    }
+
+    try {
+        const newRef = push(ref(db, 'blacklist'));
+        await set(newRef, {
+            ...validatedFields.data,
+            createdAt: new Date().toISOString(),
+        });
+        revalidatePath('/blacklist');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to add item.' };
+    }
+}
+
+export async function deleteBlacklistItem(id: string): Promise<BlacklistFormState> {
+    try {
+        await remove(ref(db, `blacklist/${id}`));
+        revalidatePath('/blacklist');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to delete item.' };
     }
 }

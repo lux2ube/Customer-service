@@ -342,6 +342,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                                     <SelectContent>
                                         <SelectItem value="AML">AML</SelectItem>
                                         <SelectItem value="KYC">KYC</SelectItem>
+                                        <SelectItem value="Blacklisted">Blacklisted</SelectItem>
                                         <SelectItem value="Other">Other</SelectItem>
                                     </SelectContent>
                                 </Select>

@@ -207,13 +207,14 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                 <SortableHeader sortKey="amount">Amount</SortableHeader>
                 <SortableHeader sortKey="amount_usd">Amount (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
+                <TableHead>Flags</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     Loading transactions...
                   </TableCell>
                 </TableRow>
@@ -234,6 +235,11 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                     <TableCell>
                         <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
                     </TableCell>
+                    <TableCell>
+                      {tx.flags?.map(flag => (
+                          <Badge key={flag} variant={flag === 'Blacklisted' ? 'destructive' : 'outline'} className="mr-1">{flag}</Badge>
+                      ))}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="ghost" size="icon">
                           <Link href={`/transactions/${tx.id}/edit`}>
@@ -245,7 +251,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     No transactions found for the selected criteria.
                   </TableCell>
                 </TableRow>

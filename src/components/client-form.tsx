@@ -17,7 +17,7 @@ import type { Client, ReviewFlag, KycDocument } from '@/lib/types';
 import { Separator } from './ui/separator';
 import Link from 'next/link';
 
-const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Other'];
+const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
 
 function SubmitButton() {
     const { pending } = useFormStatus();

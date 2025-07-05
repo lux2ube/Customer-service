@@ -7,7 +7,7 @@ export interface KycDocument {
 }
 
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
-export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
+export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other' | 'Blacklisted';
 
 export interface Client {
     id: string;
@@ -51,7 +51,7 @@ export interface Transaction {
     hash?: string;
     client_wallet_address?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
-    flags: ('AML' | 'KYC' | 'Other')[];
+    flags: ('AML' | 'KYC' | 'Other' | 'Blacklisted')[];
     createdAt: string;
 }
 
@@ -90,4 +90,12 @@ export interface Settings {
     minimum_fee_usd: number;
     bsc_api_key?: string;
     bsc_wallet_address?: string;
+}
+
+export interface BlacklistItem {
+    id: string;
+    type: 'Name' | 'Phone' | 'Address';
+    value: string;
+    reason?: string;
+    createdAt: string;
 }
