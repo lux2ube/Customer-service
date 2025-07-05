@@ -113,7 +113,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            // A "pristine" sync is one that has been synced but never edited (amount is 0)
+            // A "pristine" sync is one that has been synced but never edited (amount is 0 or was not previously set)
             const isPristineSync = transaction.hash && transaction.amount === 0;
             pristineRef.current = isPristineSync;
             
@@ -161,14 +161,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            const difference = newAmountUSD - prev.amount_usdt;
+            // For a synced tx, amount_usdt is fixed. The difference is fee/expense.
+            const difference = prev.amount_usdt - newAmountUSD;
             
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
 
-            if (difference >= 0) { // Local amount is more than USDT, so it's a fee (profit)
+            if (difference >= 0) { // USDT is more than local amount, so it's a fee (profit)
                 newFeeUSD = difference;
-            } else { // Local amount is less than USDT, so it's an expense/loss
+            } else { // USDT is less than local amount, so it's an expense/loss
                 newExpenseUSD = -difference;
             }
             
@@ -187,25 +188,29 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         setFormData(prev => {
             if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
+            
             const rate = getRate(prev.currency);
             if (rate <= 0) return { ...prev, amount: newAmountNum };
+
             const newAmountUSD = newAmountNum * rate;
 
             let finalFee = 0;
             let newUsdtAmount = 0;
             
             if (prev.type === 'Deposit') {
-                const feePercent = settings.deposit_fee_percent / 100;
+                const feePercent = (settings.deposit_fee_percent || 0) / 100;
                 const calculatedFee = newAmountUSD * feePercent;
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // It's a 'Withdraw'
-                const feePercent = settings.withdraw_fee_percent / 100;
-                let calculatedFee = 0;
+                const feePercent = (settings.withdraw_fee_percent || 0) / 100;
+                let grossUsdtAmount = newAmountUSD;
+                
                 if (feePercent > 0 && feePercent < 1) {
-                    const grossUsdtAmount = newAmountUSD / (1 - feePercent);
-                    calculatedFee = grossUsdtAmount - newAmountUSD;
+                    grossUsdtAmount = newAmountUSD / (1 - feePercent);
                 }
+                
+                let calculatedFee = grossUsdtAmount - newAmountUSD;
                 finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 newUsdtAmount = newAmountUSD + finalFee;
             }
@@ -225,11 +230,20 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (!selectedAccount) return;
     
-        setFormData(prev => ({
-            ...prev,
-            bankAccountId: accountId,
-            currency: selectedAccount.currency || 'USD',
-        }));
+        setFormData(prev => {
+             const newCurrency = selectedAccount.currency || 'USD';
+             const rate = getRate(newCurrency);
+             if (rate <= 0) return { ...prev, bankAccountId: accountId, currency: newCurrency };
+             
+             const newAmount = prev.amount_usd / rate;
+
+            return {
+                ...prev,
+                bankAccountId: accountId,
+                currency: newCurrency,
+                amount: parseFloat(newAmount.toFixed(2)),
+            }
+        });
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
