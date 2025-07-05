@@ -624,3 +624,88 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         return { message: error.message || "An unknown error occurred during sync.", error: true };
     }
 }
+
+// --- Client Import Action ---
+export type ImportState = { message?: string; error?: boolean; } | undefined;
+
+const ImportedClientSchema = z.object({
+  uniqueId: z.string().min(1),
+  dateOfAddition: z.string().min(1),
+  firstName: z.string(),
+  secondName: z.string().optional(),
+  thirdName: z.string().optional(),
+  lastName: z.string(),
+  phoneNumber: z.string().min(1),
+});
+
+const ImportArraySchema = z.array(ImportedClientSchema);
+
+export async function importClients(prevState: ImportState, formData: FormData): Promise<ImportState> {
+    const file = formData.get('jsonFile') as File | null;
+
+    if (!file || file.size === 0) {
+        return { message: 'No file uploaded.', error: true };
+    }
+
+    if (file.type !== 'application/json') {
+        return { message: 'Invalid file type. Please upload a JSON file.', error: true };
+    }
+
+    try {
+        const fileContent = await file.text();
+        const jsonData = JSON.parse(fileContent);
+        
+        const validatedData = ImportArraySchema.safeParse(jsonData);
+
+        if (!validatedData.success) {
+            console.error(validatedData.error);
+            return { message: 'JSON file has invalid format or missing required fields.', error: true };
+        }
+        
+        const updates: { [key: string]: any } = {};
+        let importedCount = 0;
+
+        const existingClientsSnapshot = await get(ref(db, 'clients'));
+        const existingClients = existingClientsSnapshot.val() || {};
+        const existingIds = new Set(Object.keys(existingClients));
+
+        for (const importedClient of validatedData.data) {
+            if (existingIds.has(importedClient.uniqueId)) {
+                // Skip existing clients to avoid overwriting
+                continue;
+            }
+
+            const fullName = [
+                importedClient.firstName,
+                importedClient.secondName,
+                importedClient.thirdName,
+                importedClient.lastName
+            ].filter(Boolean).join(' ');
+
+            const newClient: Omit<Client, 'id'> = {
+                name: fullName,
+                phone: importedClient.phoneNumber,
+                verification_status: 'Active', // Default status for imported clients
+                review_flags: [],
+                createdAt: new Date(importedClient.dateOfAddition).toISOString(),
+            };
+            
+            updates[`/clients/${importedClient.uniqueId}`] = stripUndefined(newClient);
+            importedCount++;
+        }
+
+        if (importedCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/clients');
+        return { message: `Successfully imported ${importedCount} new clients.`, error: false };
+
+    } catch (error: any) {
+        console.error("Client Import Error:", error);
+        if (error instanceof SyntaxError) {
+             return { message: "Failed to parse JSON file. Please ensure it's valid.", error: true };
+        }
+        return { message: error.message || "An unknown error occurred during import.", error: true };
+    }
+}
