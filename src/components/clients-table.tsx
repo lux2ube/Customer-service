@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -31,9 +32,9 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
     if (search) {
         const lowercasedSearch = search.toLowerCase();
         filtered = filtered.filter(client => 
-            client.name.toLowerCase().includes(lowercasedSearch) ||
-            client.phone.toLowerCase().includes(lowercasedSearch) ||
-            client.id.toLowerCase().includes(lowercasedSearch)
+            (client.name?.toLowerCase() || '').includes(lowercasedSearch) ||
+            (client.phone?.toLowerCase() || '').includes(lowercasedSearch) ||
+            (client.id?.toLowerCase() || '').includes(lowercasedSearch)
         );
     }
     return filtered;
