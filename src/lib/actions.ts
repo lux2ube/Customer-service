@@ -134,28 +134,44 @@ const ClientSchema = z.object({
 });
 
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+    console.log("Attempting to save client data...");
     const newId = clientId || push(ref(db, 'clients')).key;
-    if (!newId) throw new Error("Could not generate a client ID.");
+    if (!newId) {
+        const errorMsg = "Could not generate a client ID.";
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+    }
     
     // Handle file uploads
     const kycFiles = formData.getAll('kyc_files') as File[];
     const uploadedDocuments: KycDocument[] = [];
 
     if (kycFiles && kycFiles.length > 0) {
+        console.log(`Found ${kycFiles.length} file(s) to upload.`);
         for (const file of kycFiles) {
-            if (file.size === 0) continue; // Skip empty file inputs
+            if (file.size === 0) {
+                console.log(`Skipping empty file input: ${file.name}`);
+                continue;
+            }
             try {
-                const fileRef = storageRef(storage, `kyc_documents/${newId}/${file.name}`);
+                const filePath = `kyc_documents/${newId}/${file.name}`;
+                console.log(`Uploading file: ${file.name} to path: ${filePath}`);
+                const fileRef = storageRef(storage, filePath);
                 const snapshot = await uploadBytes(fileRef, file);
+                console.log(`Successfully uploaded file: ${file.name}`);
                 const downloadURL = await getDownloadURL(snapshot.ref);
+                 console.log(`Got download URL: ${downloadURL}`);
                 uploadedDocuments.push({
                     name: file.name,
                     url: downloadURL,
                     uploadedAt: new Date().toISOString(),
                 });
             } catch (error) {
-                console.error("File upload failed: ", error);
-                return { message: 'A file upload failed. Please try again.' };
+                console.error("-----------------------------------");
+                console.error("Firebase Storage upload FAILED for file:", file.name);
+                console.error("Full error object:", error);
+                console.error("-----------------------------------");
+                return { message: `File upload failed for "${file.name}". Please check server logs and Firebase Storage rules.` };
             }
         }
     }
@@ -170,6 +186,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const validatedFields = ClientSchema.safeParse(dataToValidate);
 
     if (!validatedFields.success) {
+        console.error("Client data validation failed:", validatedFields.error.flatten().fieldErrors);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to save client. Please check the fields.',
@@ -180,25 +197,31 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const dataForFirebase = stripUndefined(finalData);
 
     try {
-        if (clientId) {
-            const clientRef = ref(db, `clients/${clientId}`);
-            const snapshot = await get(clientRef);
-            const existingData = snapshot.val() as Client | null;
-            const existingDocs = existingData?.kyc_documents || [];
-            
-            dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
+        const clientDbRef = ref(db, `clients/${clientId || newId}`);
+        const snapshot = await get(clientDbRef);
+        const existingData = snapshot.val() as Client | null;
+        const existingDocs = existingData?.kyc_documents || [];
+        
+        dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
 
-            await update(clientRef, dataForFirebase);
+        if (clientId) {
+            console.log(`Updating client ${clientId} in database...`);
+            await update(clientDbRef, dataForFirebase);
+            console.log("Client updated successfully.");
         } else {
-            const newClientRef = ref(db, `clients/${newId}`);
-            dataForFirebase.kyc_documents = uploadedDocuments;
-            await set(newClientRef, {
+            console.log(`Creating new client ${newId} in database...`);
+            await set(clientDbRef, {
                 ...dataForFirebase,
                 createdAt: new Date().toISOString()
             });
+            console.log("New client created successfully.");
         }
     } catch (error) {
-        return { message: 'Database Error: Failed to save client.' }
+        console.error("-----------------------------------");
+        console.error("Realtime Database save FAILED for client:", newId);
+        console.error("Full error object:", error);
+        console.error("-----------------------------------");
+        return { message: 'Database Error: Failed to save client data. Check server logs.' }
     }
     
     // Revalidate the edit page to show new files immediately if editing
@@ -211,35 +234,46 @@ export async function createClient(clientId: string | null, prevState: ClientFor
 
 export async function manageClient(clientId: string, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
     const intent = formData.get('intent') as string | null;
+    console.log(`Managing client ${clientId} with intent: ${intent || 'update/create'}`);
 
     if (intent?.startsWith('delete:')) {
         const documentName = intent.split(':')[1];
         if (!documentName) {
-            return { message: 'Document name not provided for deletion.' };
+            const errorMsg = 'Document name not provided for deletion.';
+            console.error(errorMsg);
+            return { message: errorMsg };
         }
         try {
-            // 1. Delete file from Storage
-            const fileRef = storageRef(storage, `kyc_documents/${clientId}/${documentName}`);
+            const filePath = `kyc_documents/${clientId}/${documentName}`;
+            console.log(`Attempting to delete document from storage: ${filePath}`);
+            const fileRef = storageRef(storage, filePath);
             await deleteObject(fileRef);
+            console.log("Document successfully deleted from storage.");
 
-            // 2. Remove document from Realtime Database
+            console.log(`Attempting to remove document record from database for client ${clientId}`);
             const clientRef = ref(db, `clients/${clientId}`);
             const snapshot = await get(clientRef);
             if (snapshot.exists()) {
                 const clientData = snapshot.val() as Client;
                 const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
                 await update(clientRef, { kyc_documents: updatedDocs });
+                console.log("Document record removed from database.");
+            } else {
+                console.warn(`Client ${clientId} not found in database for document record deletion.`);
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
             return { success: true, message: "Document deleted successfully." };
         } catch (error) {
-            console.error("Failed to delete document: ", error);
-            return { message: 'Database Error: Failed to delete document.' };
+            console.error("-----------------------------------");
+            console.error("Firebase Storage document deletion FAILED for:", documentName);
+            console.error("Full error object:", error);
+            console.error("-----------------------------------");
+            return { message: `Database Error: Failed to delete document "${documentName}". Check server logs and permissions.` };
         }
     }
 
-    // Default action is to update the client
+    // Default action is to update/create the client
     return createClient(clientId, prevState, formData);
 }
 
