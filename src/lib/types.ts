@@ -1,5 +1,11 @@
 
 
+export interface KycDocument {
+    name: string;
+    url: string;
+    uploadedAt: string;
+}
+
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
 
@@ -7,8 +13,7 @@ export interface Client {
     id: string;
     name: string; // The full name of the client
     phone: string;
-    kyc_type?: 'ID' | 'Passport';
-    kyc_document_url?: string;
+    kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];
     createdAt: string;

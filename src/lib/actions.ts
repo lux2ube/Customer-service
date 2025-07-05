@@ -4,10 +4,10 @@
 import { z } from 'zod';
 import { db, storage } from './firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument } from './types';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -119,7 +119,7 @@ export type ClientFormState =
         name?: string[];
         phone?: string[];
         verification_status?: string[];
-        kyc_document_url?: string[];
+        kyc_files?: string[];
       };
       message?: string;
     }
@@ -128,8 +128,6 @@ export type ClientFormState =
 const ClientSchema = z.object({
     name: z.string().min(1, { message: 'Name is required.' }),
     phone: z.string().min(1, { message: 'Phone is required.' }),
-    kyc_type: z.enum(['ID', 'Passport']).optional().nullable(),
-    kyc_document_url: z.string().url({ message: "Invalid URL." }).optional().nullable(),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
 });
@@ -138,27 +136,34 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) throw new Error("Could not generate a client ID.");
     
-    const kycFile = formData.get('kyc_document_url') as File | null;
-    let kycUrlString: string | undefined = undefined;
+    // Handle file uploads
+    const kycFiles = formData.getAll('kyc_files') as File[];
+    const uploadedDocuments: KycDocument[] = [];
 
-    if (kycFile && kycFile.size > 0) {
-        try {
-            const fileRef = storageRef(storage, `kyc_documents/${newId}/${kycFile.name}`);
-            const snapshot = await uploadBytes(fileRef, kycFile);
-            kycUrlString = await getDownloadURL(snapshot.ref);
-        } catch (error) {
-            console.error("File upload failed: ", error);
-            return { message: 'File upload failed. Please try again.' };
+    if (kycFiles && kycFiles.length > 0) {
+        for (const file of kycFiles) {
+            if (file.size === 0) continue; // Skip empty file inputs
+            try {
+                const fileRef = storageRef(storage, `kyc_documents/${newId}/${file.name}`);
+                const snapshot = await uploadBytes(fileRef, file);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                uploadedDocuments.push({
+                    name: file.name,
+                    url: downloadURL,
+                    uploadedAt: new Date().toISOString(),
+                });
+            } catch (error) {
+                console.error("File upload failed: ", error);
+                return { message: 'A file upload failed. Please try again.' };
+            }
         }
     }
 
     const dataToValidate = {
         name: formData.get('name'),
         phone: formData.get('phone'),
-        kyc_type: formData.get('kyc_type') || null,
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
-        kyc_document_url: kycUrlString,
     };
 
     const validatedFields = ClientSchema.safeParse(dataToValidate);
@@ -170,22 +175,22 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         };
     }
     
-    let finalData: Partial<Client> = validatedFields.data;
-
-    if (clientId && !finalData.kyc_document_url) {
-        const clientRef = ref(db, `clients/${clientId}`);
-        const snapshot = await get(clientRef);
-        const existingData = snapshot.val();
-        finalData.kyc_document_url = existingData?.kyc_document_url;
-    }
-
+    const finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
     const dataForFirebase = stripUndefined(finalData);
 
     try {
         if (clientId) {
-            await update(ref(db, `clients/${clientId}`), dataForFirebase);
+            const clientRef = ref(db, `clients/${clientId}`);
+            const snapshot = await get(clientRef);
+            const existingData = snapshot.val() as Client | null;
+            const existingDocs = existingData?.kyc_documents || [];
+            
+            dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
+
+            await update(clientRef, dataForFirebase);
         } else {
             const newClientRef = ref(db, `clients/${newId}`);
+            dataForFirebase.kyc_documents = uploadedDocuments;
             await set(newClientRef, {
                 ...dataForFirebase,
                 createdAt: new Date().toISOString()
@@ -195,9 +200,40 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         return { message: 'Database Error: Failed to save client.' }
     }
     
+    // Revalidate the edit page to show new files immediately if editing
+    if (clientId) {
+        revalidatePath(`/clients/${clientId}/edit`);
+    }
     revalidatePath('/clients');
     redirect('/clients');
 }
+
+export async function deleteKycDocument(clientId: string, documentName: string) {
+    if (!clientId || !documentName) {
+        return { message: 'Invalid client or document ID.' };
+    }
+    try {
+        // 1. Delete file from Storage
+        const fileRef = storageRef(storage, `kyc_documents/${clientId}/${documentName}`);
+        await deleteObject(fileRef);
+
+        // 2. Remove document from Realtime Database
+        const clientRef = ref(db, `clients/${clientId}`);
+        const snapshot = await get(clientRef);
+        if (snapshot.exists()) {
+            const clientData = snapshot.val() as Client;
+            const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
+            await update(clientRef, { kyc_documents: updatedDocs });
+        }
+
+        revalidatePath(`/clients/${clientId}/edit`);
+        return { success: true };
+    } catch (error) {
+        console.error("Failed to delete document: ", error);
+        return { message: 'Database Error: Failed to delete document.' };
+    }
+}
+
 
 // --- Transaction Actions ---
 export type TransactionFormState =
@@ -652,10 +688,16 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
     try {
         const fileContent = await file.text();
-        const jsonData = JSON.parse(fileContent);
+        let jsonData;
+        try {
+            jsonData = JSON.parse(fileContent);
+        } catch (e) {
+            return { message: "Failed to parse JSON file. Please ensure it's valid JSON (e.g., wrapped in `[]` with no trailing commas).", error: true };
+        }
+        
 
         if (!Array.isArray(jsonData)) {
-            return { message: 'JSON file must contain an array of client objects.', error: true };
+             return { message: 'JSON file must contain an array of client objects.', error: true };
         }
         
         const clientsToProcess = jsonData;
@@ -706,9 +748,6 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
     } catch (error: any) {
         console.error("Client Import Error:", error);
-        if (error instanceof SyntaxError) {
-             return { message: "Failed to parse JSON file. Please ensure it's valid JSON (e.g., wrapped in `[]` with no trailing commas).", error: true };
-        }
         return { message: error.message || "An unknown error occurred during import.", error: true };
     }
 }

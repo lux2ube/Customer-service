@@ -5,16 +5,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createClient, type ClientFormState } from '@/lib/actions';
+import { createClient, type ClientFormState, deleteKycDocument } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, ReviewFlag } from '@/lib/types';
+import type { Client, ReviewFlag, KycDocument } from '@/lib/types';
+import { Separator } from './ui/separator';
+import Link from 'next/link';
 
 const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Other'];
 
@@ -59,23 +60,6 @@ export function ClientForm({ client }: { client?: Client }) {
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="kyc_type">KYC Type</Label>
-                            <Select name="kyc_type" defaultValue={client?.kyc_type}>
-                                <SelectTrigger><SelectValue placeholder="Select KYC type..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ID">ID</SelectItem>
-                                    <SelectItem value="Passport">Passport</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="kyc_document_url">KYC Document</Label>
-                            <Input id="kyc_document_url" name="kyc_document_url" type="file" />
-                            {/* In a real app, you'd handle file uploads properly. This is a placeholder. */}
-                        </div>
-                    </div>
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
@@ -110,6 +94,38 @@ export function ClientForm({ client }: { client?: Client }) {
                                 <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
                             </div>
                             ))}
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-medium">KYC Documents</h3>
+                        {client?.kyc_documents && client.kyc_documents.length > 0 && (
+                            <div className="space-y-2">
+                                <Label>Uploaded Documents</Label>
+                                <ul className="divide-y divide-border rounded-md border bg-background">
+                                    {client.kyc_documents.map((doc) => (
+                                        <li key={doc.name} className="flex items-center justify-between p-3">
+                                            <Button variant="link" asChild className="p-0 h-auto justify-start">
+                                                <Link href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                    {doc.name}
+                                                </Link>
+                                            </Button>
+                                            <form action={deleteKycDocument.bind(null, client.id, doc.name)}>
+                                                <Button type="submit" variant="ghost" size="icon">
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </form>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                         <div className="space-y-2">
+                            <Label htmlFor="kyc_files">Upload New Document(s)</Label>
+                            <Input id="kyc_files" name="kyc_files" type="file" multiple />
+                            <p className="text-sm text-muted-foreground">You can select multiple files at once.</p>
                         </div>
                     </div>
                 </CardContent>
