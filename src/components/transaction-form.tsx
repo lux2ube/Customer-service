@@ -50,6 +50,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
     const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>(transaction?.type || 'Deposit');
     
+    // Controlled state for comboboxes
+    const [selectedClientId, setSelectedClientId] = React.useState(transaction?.clientId);
+    const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(transaction?.bankAccountId);
+    
     // Calculated values for the preview
     const [usdValue, setUsdValue] = React.useState(transaction?.amount_usd || 0);
     const [fee, setFee] = React.useState(transaction?.fee_usd || 0);
@@ -67,7 +71,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const unsubscribeClients = onValue(clientsRef, (snapshot) => {
              const data = snapshot.val();
              if (data) {
-                setClients(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+                const clientList: Client[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                setClients(clientList);
+                // If a client is pre-selected (from editing a transaction), check for favorite account
+                if (client) {
+                    const currentClient = clientList.find(c => c.id === client.id);
+                    if (currentClient?.favoriteBankAccountId && !selectedBankAccountId) {
+                        setSelectedBankAccountId(currentClient.favoriteBankAccountId);
+                        const favAccount = bankAccounts.find(ba => ba.id === currentClient.favoriteBankAccountId);
+                        if(favAccount?.currency) setCurrency(favAccount.currency);
+                    }
+                }
              } else {
                 setClients([]);
              }
@@ -78,9 +92,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const data = snapshot.val();
              if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                setBankAccounts(allAccounts.filter(acc => 
+                const fetchedBankAccounts = allAccounts.filter(acc => 
                     !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
-                ));
+                );
+                setBankAccounts(fetchedBankAccounts);
                 setCryptoWallets(allAccounts.filter(acc =>
                     !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'
                 ));
@@ -100,7 +115,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             unsubscribeAccounts();
             unsubscribeSettings();
         };
-    }, []);
+    }, [client, selectedBankAccountId, bankAccounts]);
 
     // Perform calculations whenever an input changes
     React.useEffect(() => {
@@ -183,7 +198,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setIsUsdtManuallyEdited(true);
     }
 
+    const handleClientSelect = (clientId: string) => {
+        setSelectedClientId(clientId);
+        const selectedClient = clients.find(c => c.id === clientId);
+        if (selectedClient?.favoriteBankAccountId) {
+            const favoriteAccount = bankAccounts.find(ba => ba.id === selectedClient.favoriteBankAccountId);
+            if (favoriteAccount) {
+                setSelectedBankAccountId(selectedClient.favoriteBankAccountId);
+                if (favoriteAccount.currency) {
+                    setCurrency(favoriteAccount.currency);
+                }
+            }
+        } else {
+            setSelectedBankAccountId(undefined);
+        }
+    };
+    
     const handleBankAccountSelect = (accountId: string) => {
+        setSelectedBankAccountId(accountId);
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
@@ -191,7 +223,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 setIsUsdtManuallyEdited(false);
             }
         }
-    }
+    };
 
     const handleDownloadInvoice = async () => {
         if (!invoiceRef.current || !transaction) return;
@@ -312,17 +344,29 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                             <Label>Client</Label>
-                                <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
+                                <DataCombobox 
+                                    name="clientId" 
+                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} 
+                                    placeholder="Search by name or phone..." 
+                                    value={selectedClientId} 
+                                    onSelect={handleClientSelect} 
+                                />
                                 {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                             </div>
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                 <Label>Bank Account</Label>
-                                    <DataCombobox name="bankAccountId" data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} placeholder="Select a bank account..." defaultValue={transaction?.bankAccountId} onSelect={handleBankAccountSelect}/>
+                                    <DataCombobox 
+                                        name="bankAccountId" 
+                                        data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} 
+                                        placeholder="Select a bank account..." 
+                                        value={selectedBankAccountId} 
+                                        onSelect={handleBankAccountSelect}
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                 <Label>Crypto Wallet</Label>
-                                    <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." defaultValue={transaction?.cryptoWalletId}/>
+                                    <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." value={transaction?.cryptoWalletId}/>
                                 </div>
                             </div>
 
@@ -471,13 +515,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     );
 }
 
-function DataCombobox({ name, data, placeholder, defaultValue, onSelect }: { name: string, data: {id: string, name: string}[], placeholder: string, defaultValue?: string, onSelect?: (value: string) => void }) {
+function DataCombobox({ name, data, placeholder, value, onSelect }: { name: string, data: {id: string, name: string}[], placeholder: string, value?: string, onSelect?: (value: string) => void }) {
   const [open, setOpen] = React.useState(false);
-  const [value, setValue] = React.useState(defaultValue || "");
+  
+  const handleSelect = (currentValue: string) => {
+    onSelect?.(currentValue);
+    setOpen(false);
+  };
 
   return (
     <>
-    <input type="hidden" name={name} value={value} />
+    <input type="hidden" name={name} value={value || ""} />
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
@@ -495,11 +543,7 @@ function DataCombobox({ name, data, placeholder, defaultValue, onSelect }: { nam
                 <CommandItem
                     key={d.id}
                     value={`${d.id} ${d.name}`}
-                    onSelect={() => { 
-                        setValue(d.id);
-                        setOpen(false);
-                        onSelect?.(d.id);
-                    }}>
+                    onSelect={() => handleSelect(d.id)}>
                     <Check className={cn("mr-2 h-4 w-4", value === d.id ? "opacity-100" : "opacity-0")}/>
                     <span>{d.name}</span>
                 </CommandItem>

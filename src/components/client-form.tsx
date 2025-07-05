@@ -13,9 +13,10 @@ import { createClient, manageClient, type ClientFormState } from '@/lib/actions'
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, ReviewFlag, KycDocument } from '@/lib/types';
+import type { Client, ReviewFlag, KycDocument, Account } from '@/lib/types';
 import { Separator } from './ui/separator';
 import Link from 'next/link';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
 
@@ -28,7 +29,7 @@ function SubmitButton() {
     );
 }
 
-export function ClientForm({ client }: { client?: Client }) {
+export function ClientForm({ client, bankAccounts }: { client?: Client, bankAccounts?: Account[] }) {
     const { toast } = useToast();
     
     const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
@@ -81,6 +82,23 @@ export function ClientForm({ client }: { client?: Client }) {
                                 </div>
                             </RadioGroup>
                              {state?.errors?.verification_status && <p className="text-sm text-destructive">{state.errors.verification_status[0]}</p>}
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="favoriteBankAccountId">Favorite Bank Account</Label>
+                            <Select name="favoriteBankAccountId" defaultValue={client?.favoriteBankAccountId || 'none'}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a favorite account..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">None</SelectItem>
+                                    {bankAccounts?.map(account => (
+                                        <SelectItem key={account.id} value={account.id}>
+                                            {account.name} ({account.currency})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">This is automatically set by the last confirmed transaction.</p>
                         </div>
                     </div>
                     <div className="space-y-2">

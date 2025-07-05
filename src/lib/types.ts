@@ -18,6 +18,8 @@ export interface Client {
     review_flags: ReviewFlag[];
     createdAt: string;
     bep20_addresses?: string[];
+    favoriteBankAccountId?: string;
+    favoriteBankAccountName?: string;
 }
 
 export interface CryptoWallet {

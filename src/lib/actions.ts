@@ -132,6 +132,7 @@ const ClientSchema = z.object({
     phone: z.string().min(1, { message: 'Phone is required.' }),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
+    favoriteBankAccountId: z.string().optional().nullable(),
 });
 
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
@@ -168,11 +169,13 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         }
     }
 
+    const favoriteBankAccountIdValue = formData.get('favoriteBankAccountId');
     const dataToValidate = {
         name: formData.get('name'),
         phone: formData.get('phone'),
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
+        favoriteBankAccountId: favoriteBankAccountIdValue === 'none' ? null : favoriteBankAccountIdValue,
     };
 
     const validatedFields = ClientSchema.safeParse(dataToValidate);
@@ -214,7 +217,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         console.error("Blacklist check failed:", e);
     }
     
-    const finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
+    let finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
 
     if (isBlacklisted) {
         if (!finalData.review_flags) finalData.review_flags = [];
@@ -223,6 +226,17 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         }
     }
     
+    if (finalData.favoriteBankAccountId) {
+        try {
+            const accountSnapshot = await get(ref(db, `accounts/${finalData.favoriteBankAccountId}`));
+            if (accountSnapshot.exists()) {
+                finalData.favoriteBankAccountName = (accountSnapshot.val() as Account).name;
+            }
+        } catch (e) { console.error("Could not fetch favorite bank account name"); }
+    } else {
+        finalData.favoriteBankAccountName = undefined;
+    }
+
     const dataForFirebase = stripUndefined(finalData);
 
     try {
@@ -532,6 +546,18 @@ export async function createTransaction(transactionId: string | null, prevState:
             }
         } catch (e) {
             console.error(`Failed to update BEP20 address for client ${finalData.clientId}:`, e);
+        }
+    }
+    
+    if (finalData.status === 'Confirmed' && finalData.bankAccountId && finalData.clientId) {
+        try {
+            const clientRef = ref(db, `clients/${finalData.clientId}`);
+            await update(clientRef, { 
+                favoriteBankAccountId: finalData.bankAccountId,
+                favoriteBankAccountName: bankAccountName 
+            });
+        } catch (e) {
+            console.error(`Failed to update favorite bank account for client ${finalData.clientId}:`, e);
         }
     }
 
