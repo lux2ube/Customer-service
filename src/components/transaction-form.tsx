@@ -113,7 +113,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            // A "pristine" sync is one that has been synced but never edited
             const isPristineSync = transaction.hash && transaction.amount === 0;
             pristineRef.current = isPristineSync;
             
@@ -161,15 +160,18 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            const difference = prev.amount_usdt - newAmountUSD;
             
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
 
-            if (difference >= 0) {
-                newFeeUSD = difference;
-            } else {
-                newExpenseUSD = -difference;
+            if (prev.type === 'Withdraw') {
+                const difference = prev.amount_usdt - newAmountUSD;
+                if (difference >= 0) newFeeUSD = difference;
+                else newExpenseUSD = -difference;
+            } else { // Deposit
+                const difference = newAmountUSD - prev.amount_usdt;
+                if (difference >= 0) newFeeUSD = difference;
+                else newExpenseUSD = -difference;
             }
             
             return {
@@ -192,7 +194,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
 
             const newAmountUSD = newAmountNum * rate;
-
             let finalFee = 0;
             let newUsdtAmount = 0;
             
@@ -206,6 +207,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 let calculatedFee = 0;
 
                 if (feePercent > 0 && feePercent < 1) {
+                    // Calculate the gross amount (total USDT to be withdrawn) to find the fee on the total.
                     const grossUsdtAmount = newAmountUSD / (1 - feePercent);
                     calculatedFee = grossUsdtAmount - newAmountUSD;
                 }
@@ -232,7 +234,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData(prev => {
              const newCurrency = selectedAccount.currency || 'USD';
              const rate = getRate(newCurrency);
-             if (rate <= 0) return { ...prev, bankAccountId: accountId, currency: newCurrency };
+             if (rate <= 0 || prev.amount_usd === 0) {
+                 return { ...prev, bankAccountId: accountId, currency: newCurrency, amount: 0 };
+             }
              
              const newAmount = prev.amount_usd / rate;
 
@@ -297,7 +301,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const isSynced = !!formData.hash;
     const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
     
-    // For pristine synced transactions, amount is empty. Otherwise, show the value.
     const amountToDisplay = (pristineRef.current && isSynced) ? '' : (formData.amount || '');
 
     return (
