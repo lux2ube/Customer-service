@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -7,8 +6,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2 } from 'lucide-react';
 import React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useFormState, useFormStatus } from 'react-dom';
 import { createTransaction, type TransactionFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -36,7 +34,7 @@ function SubmitButton() {
 export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
-    const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
+    const [state, formAction] = useFormState<TransactionFormState, FormData>(action, undefined);
 
     // Data state
     const [clients, setClients] = React.useState<Client[]>([]);
@@ -71,8 +69,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         flags: transaction?.flags || [],
         createdAt: transaction?.createdAt || '',
     });
-
-    const initialCalculationDone = React.useRef(false);
 
     // Effect for fetching supporting data from Firebase
     React.useEffect(() => {
@@ -109,20 +105,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setFormData(transaction);
         }
     }, [transaction]);
-
-    // Initial calculation for synced transactions
-    React.useEffect(() => {
-        if (isDataLoading || !transaction || !transaction.hash || !clients.length || initialCalculationDone.current) {
-            return;
-        }
-
-        const clientForTx = clients.find(c => c.id === transaction.clientId);
-        if (clientForTx?.favoriteBankAccountId) {
-            handleBankAccountSelect(clientForTx.favoriteBankAccountId, 'usdt');
-            initialCalculationDone.current = true;
-        }
-    }, [isDataLoading, transaction, clients]);
-
 
     // Server action response handler
     React.useEffect(() => {
@@ -187,14 +169,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
     };
 
-    const handleFieldChange = (field: keyof typeof formData, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleBankAccountSelect = (accountId: string, calculationSource: 'amount' | 'usdt') => {
+    const handleBankAccountSelect = (accountId: string) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && settings) {
-             const getRate = (currency: string) => {
+            const getRate = (currency: string) => {
                 if (!settings) return 1;
                 switch(currency) {
                     case 'YER': return settings.yer_usd || 1;
@@ -203,56 +181,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 }
             };
             const rate = getRate(selectedAccount.currency || 'USD');
-            const feePercent = formData.type === 'Deposit' ? settings.deposit_fee_percent : settings.withdraw_fee_percent;
-
-            if (calculationSource === 'usdt') {
-                // Reverse calculate from USDT
-                const finalUSDT = getNumberValue(formData.amount_usdt);
-                const expense = getNumberValue(formData.expense_usd);
+            
+            setFormData(prev => {
+                const amountInUSD = prev.amount_usd;
+                const newAmount = rate > 0 ? amountInUSD / rate : 0;
                 
-                // usdt = (amount * rate) - ((amount * rate) * fee_percent) - expense
-                // usdt + expense = (amount * rate) * (1 - fee_percent)
-                // (usdt + expense) / (1 - fee_percent) = amount * rate
-                // ((usdt + expense) / (1 - fee_percent)) / rate = amount
-                const amountInUSD = (finalUSDT + expense) / (1 - (feePercent / 100));
-                let fee = amountInUSD * (feePercent / 100);
-                if (fee < settings.minimum_fee_usd) {
-                   fee = settings.minimum_fee_usd;
-                }
-                const newAmountInUSD = finalUSDT + fee + expense;
-                const newLocalAmount = newAmountInUSD / rate;
-                
-                setFormData(prev => ({
+                return {
                     ...prev,
                     bankAccountId: accountId,
                     currency: selectedAccount.currency || 'USD',
-                    amount: parseFloat(newLocalAmount.toFixed(2)),
-                    amount_usd: parseFloat(newAmountInUSD.toFixed(2)),
-                    fee_usd: parseFloat(fee.toFixed(2)),
-                }));
-
-            } else {
-                // Forward calculate from local amount
-                 setFormData(prev => {
-                    const updated = {...prev, bankAccountId: accountId, currency: selectedAccount.currency || 'USD'};
-                    
-                    const amountInUSD = getNumberValue(updated.amount) * rate;
-                    let fee = amountInUSD * (feePercent / 100);
-                    if (fee < settings.minimum_fee_usd) fee = settings.minimum_fee_usd;
-                    const expense = updated.expense_usd || 0;
-                    const usdtAmount = amountInUSD - fee - expense;
-
-                    return {
-                        ...updated,
-                        amount_usd: parseFloat(amountInUSD.toFixed(2)),
-                        fee_usd: parseFloat(fee.toFixed(2)),
-                        amount_usdt: parseFloat(usdtAmount.toFixed(4)),
-                    };
-                });
-            }
+                    amount: parseFloat(newAmount.toFixed(2)),
+                };
+            });
         }
     };
 
+    const handleFieldChange = (field: keyof typeof formData, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
     const handleDownloadInvoice = async () => {
         if (!invoiceRef.current || !transaction) return;
@@ -359,7 +305,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                         data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} 
                                         placeholder="Select a bank account..." 
                                         value={formData.bankAccountId} 
-                                        onSelect={(v) => handleBankAccountSelect(v, formData.hash ? 'usdt' : 'amount')}
+                                        onSelect={handleBankAccountSelect}
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -390,7 +336,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="expense_usd">Expense / Loss (USD)</Label>
-                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd} onChange={(e) => handleSecondaryChange('expense_usd', getNumberValue(e.target.value))}/>
+                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} onChange={(e) => handleSecondaryChange('expense_usd', getNumberValue(e.target.value))}/>
                             </div>
                             <div className="md:col-span-2 space-y-2">
                                 <Label htmlFor="amount_usdt">Final USDT Amount</Label>
@@ -463,7 +409,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Need Flag Review</Label>
-                                    <Select name="flags" value={formData.flags?.[0] || ''} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
+                                    <Select name="flags" value={formData.flags?.[0] || 'none'} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
                                         <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
