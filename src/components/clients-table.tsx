@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -98,7 +97,11 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
                         <Badge key={flag} variant="outline">{flag}</Badge>
                       ))}
                     </TableCell>
-                    <TableCell>{format(new Date(client.createdAt), 'PPP')}</TableCell>
+                    <TableCell>
+                      {client.createdAt && !isNaN(new Date(client.createdAt).getTime())
+                        ? format(new Date(client.createdAt), 'PPP')
+                        : 'N/A'}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="ghost" size="icon">
                           <Link href={`/clients/${client.id}/edit`}>

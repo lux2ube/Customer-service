@@ -25,7 +25,13 @@ export default function ClientsPage() {
             const list: Client[] = Object.keys(data).map(key => ({
             id: key,
             ...data[key]
-            })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            })).sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                if (isNaN(dateA)) return 1;
+                if (isNaN(dateB)) return -1;
+                return dateB - dateA;
+            });
             setClients(list);
         } else {
             setClients([]);
