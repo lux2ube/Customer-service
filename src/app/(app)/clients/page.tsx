@@ -15,6 +15,7 @@ import type { Client } from '@/lib/types';
 export default function ClientsPage() {
     const [clients, setClients] = React.useState<Client[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [exportData, setExportData] = React.useState<Client[]>([]);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients/');
@@ -35,7 +36,7 @@ export default function ClientsPage() {
         return () => unsubscribe();
     }, []);
 
-    const exportableData = clients.map(client => ({
+    const exportableData = exportData.map(client => ({
         id: client.id,
         name: client.name,
         phone: client.phone,
@@ -72,7 +73,11 @@ export default function ClientsPage() {
                     </Button>
                 </div>
             </PageHeader>
-            <ClientsTable clients={clients} loading={loading} />
+            <ClientsTable 
+                clients={clients} 
+                loading={loading}
+                onFilteredDataChange={setExportData}
+            />
         </>
     );
 }
