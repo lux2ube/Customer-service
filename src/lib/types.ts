@@ -62,11 +62,16 @@ export interface JournalEntry {
   id: string;
   date: string;
   description: string;
-  debit_account: string;
-  credit_account: string;
-  amount: number;
-  currency: 'USD' | 'YER' | 'SAR' | 'USDT';
+  debit_account: string; // Account ID
+  credit_account: string; // Account ID
+  debit_amount: number;
+  debit_currency: string;
+  credit_amount: number;
+  credit_currency: string;
+  amount_usd: number;
   createdAt: string;
+  debit_account_name?: string; // For display
+  credit_account_name?: string; // For display
 }
 
 export interface Settings {

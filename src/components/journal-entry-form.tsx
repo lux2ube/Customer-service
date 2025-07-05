@@ -9,18 +9,17 @@ import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown } from 'lucide-re
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createJournalEntry, type FormState } from '@/lib/actions';
+import { createJournalEntry, type JournalEntryFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Textarea } from './ui/textarea';
-import type { Account } from '@/lib/types';
+import type { Account, Settings } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { Skeleton } from './ui/skeleton';
 
 
 function SubmitButton() {
@@ -35,25 +34,80 @@ function SubmitButton() {
 
 export function JournalEntryForm() {
     const { toast } = useToast();
-    const [state, formAction] = useActionState<FormState, FormData>(createJournalEntry, undefined);
+    const [state, formAction] = useActionState<JournalEntryFormState, FormData>(createJournalEntry, undefined);
+    
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     const [accounts, setAccounts] = React.useState<Account[]>([]);
-    
+    const [settings, setSettings] = React.useState<Settings | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    const [debitAccount, setDebitAccount] = React.useState<Account | null>(null);
+    const [creditAccount, setCreditAccount] = React.useState<Account | null>(null);
+
+    const [debitAmount, setDebitAmount] = React.useState<string>("");
+    const [creditAmount, setCreditAmount] = React.useState<string>("");
+    const [amountUSD, setAmountUSD] = React.useState<number>(0);
+
+    const [lastEdited, setLastEdited] = React.useState<'debit' | 'credit' | null>(null);
+
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
-        const unsubscribe = onValue(accountsRef, (snapshot) => {
+        const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                // Filter out group accounts, as you can only post to detail accounts
-                setAccounts(allAccounts.filter(acc => !acc.isGroup));
+                setAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency));
             } else {
                 setAccounts([]);
             }
+            setLoading(false);
+        });
+        
+        const settingsRef = ref(db, 'settings');
+        const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
+            setSettings(snapshot.val());
         });
 
-        return () => unsubscribe();
+        return () => { 
+            unsubscribeAccounts();
+            unsubscribeSettings();
+        };
     }, []);
+
+    React.useEffect(() => {
+        if (!settings || (!debitAccount && !creditAccount) || !lastEdited) return;
+
+        const getRate = (currency?: string) => {
+            if (!currency || !settings) return 1;
+            switch(currency) {
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                case 'USDT': return settings.usdt_usd || 1;
+                case 'USD': default: return 1;
+            }
+        };
+
+        const debitRate = getRate(debitAccount?.currency);
+        const creditRate = getRate(creditAccount?.currency);
+
+        if (lastEdited === 'debit') {
+            const debitValue = parseFloat(debitAmount);
+            if (!isNaN(debitValue) && debitRate > 0 && creditRate > 0) {
+                const usd = debitValue * debitRate;
+                const credit = usd / creditRate;
+                setCreditAmount(credit.toFixed(2));
+                setAmountUSD(usd);
+            }
+        } else if (lastEdited === 'credit') {
+            const creditValue = parseFloat(creditAmount);
+            if (!isNaN(creditValue) && debitRate > 0 && creditRate > 0) {
+                const usd = creditValue * creditRate;
+                const debit = usd / debitRate;
+                setDebitAmount(debit.toFixed(2));
+                setAmountUSD(usd);
+            }
+        }
+    }, [debitAmount, creditAmount, debitAccount, creditAccount, settings, lastEdited]);
     
     React.useEffect(() => {
         if (state?.message && state.errors) {
@@ -61,13 +115,35 @@ export function JournalEntryForm() {
         }
     }, [state, toast]);
 
+    const handleDebitSelect = (id: string) => {
+        const acc = accounts.find(a => a.id === id);
+        setDebitAccount(acc || null);
+    };
+
+    const handleCreditSelect = (id: string) => {
+        const acc = accounts.find(a => a.id === id);
+        setCreditAccount(acc || null);
+    };
+
+    if (loading) {
+        return (
+            <Card>
+                <CardHeader><CardTitle>Loading Form...</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                </CardContent>
+            </Card>
+        )
+    }
 
   return (
     <form action={formAction} className="space-y-6">
         <Card>
             <CardHeader>
-                <CardTitle>Journal Entry Details</CardTitle>
-                <CardDescription>All fields are required for a valid double-entry transaction.</CardDescription>
+                <CardTitle>Internal Account Transfer</CardTitle>
+                <CardDescription>Record a transfer between two internal accounts. Conversions are handled automatically.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                  <div className="grid md:grid-cols-2 gap-6">
@@ -92,44 +168,77 @@ export function JournalEntryForm() {
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="description">Description</Label>
-                        <Input id="description" name="description" placeholder="e.g., Client deposit for USDT" aria-describedby="description-error" />
+                        <Input id="description" name="description" placeholder="e.g., Transfer to cover expenses" aria-describedby="description-error" />
                         {state?.errors?.description && <p id="description-error" className="text-sm text-destructive">{state.errors.description[0]}</p>}
                     </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid md:grid-cols-2 gap-6 items-start">
                     <div className="space-y-2">
-                        <Label>Debit Account (Increase Assets / Expenses)</Label>
-                        <AccountCombobox name="debit_account" accounts={accounts} />
+                        <Label>From (Debit)</Label>
+                        <AccountSelector 
+                            name="debit_account" 
+                            accounts={accounts} 
+                            onAccountSelect={handleDebitSelect}
+                            placeholder="Select a source account..."
+                        />
                         {state?.errors?.debit_account && <p className="text-sm text-destructive">{state.errors.debit_account[0]}</p>}
                     </div>
                      <div className="space-y-2">
-                        <Label>Credit Account (Increase Liab. / Equity / Inc.)</Label>
-                        <AccountCombobox name="credit_account" accounts={accounts} />
-                        {state?.errors?.credit_account && <p className="text-sm text-destructive">{state.errors.credit_account[0]}</p>}
+                        <Label htmlFor="debit_amount">Debit Amount ({debitAccount?.currency || '...'})</Label>
+                        <Input 
+                            id="debit_amount" 
+                            name="debit_amount" 
+                            type="number" 
+                            step="any" 
+                            placeholder="e.g., 1000.00" 
+                            aria-describedby="debit-amount-error"
+                            value={debitAmount}
+                            onChange={(e) => {
+                                setDebitAmount(e.target.value)
+                                setLastEdited('debit');
+                            }}
+                            disabled={!debitAccount}
+                        />
+                        {state?.errors?.debit_amount && <p id="debit-amount-error" className="text-sm text-destructive">{state.errors.debit_amount[0]}</p>}
                     </div>
                 </div>
 
-                 <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid md:grid-cols-2 gap-6 items-start">
                      <div className="space-y-2">
-                        <Label htmlFor="amount">Amount</Label>
-                        <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 1000.00" aria-describedby="amount-error"/>
-                        {state?.errors?.amount && <p id="amount-error" className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                        <Label>To (Credit)</Label>
+                        <AccountSelector 
+                            name="credit_account" 
+                            accounts={accounts} 
+                            onAccountSelect={handleCreditSelect}
+                            placeholder="Select a destination account..."
+                        />
+                        {state?.errors?.credit_account && <p className="text-sm text-destructive">{state.errors.credit_account[0]}</p>}
                     </div>
                     <div className="space-y-2">
-                        <Label>Currency</Label>
-                        <Select name="currency" defaultValue="USD">
-                            <SelectTrigger aria-describedby="currency-error"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="USD">USD</SelectItem>
-                                <SelectItem value="YER">YER</SelectItem>
-                                <SelectItem value="SAR">SAR</SelectItem>
-                                <SelectItem value="USDT">USDT</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        {state?.errors?.currency && <p id="currency-error" className="text-sm text-destructive">{state.errors.currency[0]}</p>}
+                        <Label htmlFor="credit_amount">Credit Amount ({creditAccount?.currency || '...'})</Label>
+                        <Input 
+                            id="credit_amount" 
+                            name="credit_amount" 
+                            type="number" 
+                            step="any" 
+                            placeholder="e.g., 150000.00" 
+                            aria-describedby="credit-amount-error"
+                            value={creditAmount}
+                            onChange={(e) => {
+                                setCreditAmount(e.target.value)
+                                setLastEdited('credit');
+                            }}
+                            disabled={!creditAccount}
+                        />
+                        {state?.errors?.credit_amount && <p id="credit-amount-error" className="text-sm text-destructive">{state.errors.credit_amount[0]}</p>}
                     </div>
                 </div>
+
+                {/* Hidden fields for server action */}
+                <input type="hidden" name="debit_currency" value={debitAccount?.currency || ''} />
+                <input type="hidden" name="credit_currency" value={creditAccount?.currency || ''} />
+                <input type="hidden" name="amount_usd" value={amountUSD} />
                 
             </CardContent>
             <CardFooter className="flex justify-end">
@@ -140,7 +249,7 @@ export function JournalEntryForm() {
   );
 }
 
-function AccountCombobox({ name, accounts }: { name: string, accounts: Account[] }) {
+function AccountSelector({ name, accounts, placeholder, onAccountSelect }: { name: string, accounts: Account[], placeholder: string, onAccountSelect: (id: string) => void }) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState("");
 
@@ -157,7 +266,7 @@ function AccountCombobox({ name, accounts }: { name: string, accounts: Account[]
         >
           {value
             ? accounts.find((acc) => acc.id === value)?.name
-            : "Select an account..."}
+            : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -165,15 +274,16 @@ function AccountCombobox({ name, accounts }: { name: string, accounts: Account[]
         <Command>
           <CommandInput placeholder="Search accounts..." />
           <CommandList>
-            <CommandEmpty>No account found.</CommandEmpty>
+            <CommandEmpty>No account with a currency found.</CommandEmpty>
             <CommandGroup>
                 {accounts.map((acc) => (
                 <CommandItem
                     key={acc.id}
-                    value={`${acc.id} ${acc.name}`}
+                    value={`${acc.id} ${acc.name} ${acc.currency}`}
                     onSelect={() => {
-                    setValue(acc.id)
-                    setOpen(false)
+                        setValue(acc.id)
+                        setOpen(false)
+                        onAccountSelect(acc.id)
                     }}
                 >
                     <Check
@@ -184,7 +294,7 @@ function AccountCombobox({ name, accounts }: { name: string, accounts: Account[]
                     />
                     <div className="flex justify-between w-full">
                         <span>{acc.name}</span>
-                        <span className="text-muted-foreground">{acc.id}</span>
+                        <span className="text-muted-foreground">{acc.id} ({acc.currency})</span>
                     </div>
                 </CommandItem>
                 ))}

@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -14,6 +15,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { ArrowRight } from 'lucide-react';
 
 export function JournalTable() {
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
@@ -43,35 +45,49 @@ export function JournalTable() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
+              <TableHead className="w-[120px]">Date</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Debit Acc</TableHead>
-              <TableHead>Credit Acc</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Transfer Details</TableHead>
+              <TableHead className="text-right">Value (USD)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={4} className="h-24 text-center">
                   Loading journal entries...
                 </TableCell>
               </TableRow>
             ) : entries.length > 0 ? (
               entries.map(entry => (
                 <TableRow key={entry.id}>
-                  <TableCell>{entry.date ? format(new Date(entry.date), 'PPP') : 'N/A'}</TableCell>
+                  <TableCell>{entry.date ? format(new Date(entry.date), 'PP') : 'N/A'}</TableCell>
                   <TableCell className="font-medium">{entry.description}</TableCell>
-                  <TableCell>{entry.debit_account}</TableCell>
-                  <TableCell>{entry.credit_account}</TableCell>
+                  <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                           <div className="font-medium">{entry.debit_account_name || entry.debit_account}</div>
+                           <div className="font-mono text-sm text-muted-foreground">
+                                {new Intl.NumberFormat().format(entry.debit_amount)} {entry.debit_currency}
+                           </div>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                           <div className="font-medium">{entry.credit_account_name || entry.credit_account}</div>
+                           <div className="font-mono text-sm text-muted-foreground">
+                                {new Intl.NumberFormat().format(entry.credit_amount)} {entry.credit_currency}
+                           </div>
+                        </div>
+                      </div>
+                  </TableCell>
                   <TableCell className="text-right font-mono">
-                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: entry.currency }).format(entry.amount)}
+                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(entry.amount_usd)}
                   </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={4} className="h-24 text-center">
                   No journal entries found. Add one to get started.
                 </TableCell>
               </TableRow>

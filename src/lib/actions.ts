@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -28,8 +29,8 @@ export type JournalEntryFormState =
         description?: string[];
         debit_account?: string[];
         credit_account?: string[];
-        amount?: string[];
-        currency?: string[];
+        debit_amount?: string[];
+        credit_amount?: string[];
       };
       message?: string;
     }
@@ -41,20 +42,16 @@ const JournalEntrySchema = z.object({
     description: z.string().min(1, { message: 'Description is required.' }),
     debit_account: z.string().min(1, { message: 'Please select a debit account.' }),
     credit_account: z.string().min(1, { message: 'Please select a credit account.' }),
-    amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
-    currency: z.enum(['USD', 'YER', 'SAR', 'USDT']),
+    debit_amount: z.coerce.number().gt(0, { message: 'Debit amount must be positive.' }),
+    debit_currency: z.string(),
+    credit_amount: z.coerce.number().gt(0, { message: 'Credit amount must be positive.' }),
+    credit_currency: z.string(),
+    amount_usd: z.coerce.number().gt(0, { message: 'USD amount must be positive.' }),
 });
 
 
 export async function createJournalEntry(prevState: JournalEntryFormState, formData: FormData) {
-    const validatedFields = JournalEntrySchema.safeParse({
-        date: formData.get('date'),
-        description: formData.get('description'),
-        debit_account: formData.get('debit_account'),
-        credit_account: formData.get('credit_account'),
-        amount: formData.get('amount'),
-        currency: formData.get('currency'),
-    });
+    const validatedFields = JournalEntrySchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
         return {
@@ -63,7 +60,7 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
         };
     }
 
-    const { date, description, debit_account, credit_account, amount, currency } = validatedFields.data;
+    const { date, description, debit_account, credit_account, debit_amount, debit_currency, credit_amount, credit_currency, amount_usd } = validatedFields.data;
 
     if (debit_account === credit_account) {
         return {
@@ -75,6 +72,17 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
         }
     }
 
+    // Denormalize account names
+    let debit_account_name = '';
+    let credit_account_name = '';
+    try {
+        const debitSnapshot = await get(ref(db, `accounts/${debit_account}`));
+        if (debitSnapshot.exists()) debit_account_name = (debitSnapshot.val() as Account).name;
+        const creditSnapshot = await get(ref(db, `accounts/${credit_account}`));
+        if (creditSnapshot.exists()) credit_account_name = (creditSnapshot.val() as Account).name;
+    } catch(e) { console.error("Could not fetch account names for journal entry"); }
+
+
     try {
         const newEntryRef = push(ref(db, 'journal_entries'));
         await set(newEntryRef, {
@@ -82,8 +90,13 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
             description,
             debit_account,
             credit_account,
-            amount,
-            currency,
+            debit_amount,
+            debit_currency,
+            credit_amount,
+            credit_currency,
+            amount_usd,
+            debit_account_name,
+            credit_account_name,
             createdAt: new Date().toISOString(),
         });
     } catch (error) {
@@ -404,7 +417,8 @@ export async function createAccount(accountId: string | null, prevState: Account
         if(accountId) {
              await update(accountRef, dataForFirebase);
         } else {
-            await set(accountRef, dataForFirebase);
+            const newAccountRef = ref(db, `accounts/${id}`)
+            await set(newAccountRef, dataForFirebase);
         }
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }
