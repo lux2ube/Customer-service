@@ -39,18 +39,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
     
+    // Form state
     const [date, setDate] = React.useState<Date | undefined>(transaction ? new Date(transaction.date) : new Date());
     const [clients, setClients] = React.useState<Client[]>([]);
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
 
-    // Form state that drives calculations
+    // Controlled state for inputs and comboboxes
     const [amount, setAmount] = React.useState(transaction?.amount || 0);
     const [currency, setCurrency] = React.useState(transaction?.currency || 'USD');
     const [transactionType, setTransactionType] = React.useState<'Deposit' | 'Withdraw'>(transaction?.type || 'Deposit');
-    
-    // Controlled state for comboboxes
     const [selectedClientId, setSelectedClientId] = React.useState(transaction?.clientId);
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(transaction?.bankAccountId);
     
@@ -61,30 +60,18 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
 
-    // New state for download/share buttons
+    // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
 
+    // Effect for fetching data from Firebase (runs once on mount)
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
         const unsubscribeClients = onValue(clientsRef, (snapshot) => {
              const data = snapshot.val();
-             if (data) {
-                const clientList: Client[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                setClients(clientList);
-                // If a client is pre-selected (from editing a transaction), check for favorite account
-                if (client) {
-                    const currentClient = clientList.find(c => c.id === client.id);
-                    if (currentClient?.favoriteBankAccountId && !selectedBankAccountId) {
-                        setSelectedBankAccountId(currentClient.favoriteBankAccountId);
-                        const favAccount = bankAccounts.find(ba => ba.id === currentClient.favoriteBankAccountId);
-                        if(favAccount?.currency) setCurrency(favAccount.currency);
-                    }
-                }
-             } else {
-                setClients([]);
-             }
+             const clientList: Client[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+             setClients(clientList);
         });
 
         const accountsRef = ref(db, 'accounts');
@@ -92,10 +79,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const data = snapshot.val();
              if (data) {
                 const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                const fetchedBankAccounts = allAccounts.filter(acc => 
+                setBankAccounts(allAccounts.filter(acc => 
                     !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
-                );
-                setBankAccounts(fetchedBankAccounts);
+                ));
                 setCryptoWallets(allAccounts.filter(acc =>
                     !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'
                 ));
@@ -115,9 +101,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             unsubscribeAccounts();
             unsubscribeSettings();
         };
-    }, [client, selectedBankAccountId, bankAccounts]);
+    }, []);
 
-    // Perform calculations whenever an input changes
+    // Effect for performing financial calculations
     React.useEffect(() => {
         if (!settings) return;
 
@@ -145,10 +131,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             } else {
                 const percentageFee = calculatedUsdValue * ((settings.deposit_fee_percent || 0) / 100);
                 calculatedFee = Math.max(percentageFee, minimumFee);
-                const newUsdtAmount = Number((calculatedUsdValue - calculatedFee).toFixed(2));
-                if (usdtAmount !== newUsdtAmount) {
-                    setUsdtAmount(newUsdtAmount);
-                }
+                setUsdtAmount(Number((calculatedUsdValue - calculatedFee).toFixed(2)));
             }
         } else { // Withdraw
             if (isUsdtManuallyEdited) {
@@ -161,10 +144,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             } else {
                 const percentageFee = calculatedUsdValue * ((settings.withdraw_fee_percent || 0) / 100);
                 calculatedFee = Math.max(percentageFee, minimumFee);
-                const newUsdtAmount = Number((calculatedUsdValue + calculatedFee).toFixed(2));
-                if (usdtAmount !== newUsdtAmount) {
-                     setUsdtAmount(newUsdtAmount);
-                }
+                setUsdtAmount(Number((calculatedUsdValue + calculatedFee).toFixed(2)));
             }
         }
         
@@ -173,6 +153,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     }, [amount, currency, transactionType, settings, isUsdtManuallyEdited, usdtAmount]);
 
+    // Effect for handling server action responses
     React.useEffect(() => {
         if (state?.message) {
             toast({ variant: 'destructive', title: 'Error Recording Transaction', description: state.message });
@@ -201,16 +182,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const handleClientSelect = (clientId: string) => {
         setSelectedClientId(clientId);
         const selectedClient = clients.find(c => c.id === clientId);
+
         if (selectedClient?.favoriteBankAccountId) {
             const favoriteAccount = bankAccounts.find(ba => ba.id === selectedClient.favoriteBankAccountId);
             if (favoriteAccount) {
-                setSelectedBankAccountId(selectedClient.favoriteBankAccountId);
+                setSelectedBankAccountId(favoriteAccount.id);
                 if (favoriteAccount.currency) {
                     setCurrency(favoriteAccount.currency);
                 }
             }
         } else {
             setSelectedBankAccountId(undefined);
+        }
+        
+        if (!transaction?.hash) {
+            setIsUsdtManuallyEdited(false);
         }
     };
     
@@ -232,7 +218,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const canvas = await html2canvas(invoiceRef.current, { 
                 scale: 2,
                 useCORS: true, 
-                backgroundColor: null, // Make background transparent to rely on component's bg
+                backgroundColor: null,
             });
             const link = document.createElement('a');
             link.href = canvas.toDataURL('image/png');
@@ -277,7 +263,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             text: `Here is the invoice for transaction ${transaction.id}.`,
                         });
                     } catch (error) {
-                        // This error happens if the user cancels the share dialog, so we don't show a toast.
                         console.log("Sharing cancelled or failed", error);
                     } finally {
                         setIsSharing(false);
@@ -300,7 +285,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     return (
         <>
-            {/* Hidden Invoice for image generation */}
             {transaction && client && (
                 <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
                     <div className="w-[420px]">
@@ -381,7 +365,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     <Input id="attachment_url" name="attachment_url" type="file" />
                                 </div>
                             </div>
-                            {/* Hidden input to pass currency to server action */}
                             <input type="hidden" name="currency" value={currency} />
                         </CardContent>
                     </Card>
@@ -422,7 +405,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     className="w-48 text-right font-mono text-lg font-bold"
                                 />
                             </div>
-                            {/* Hidden inputs to pass calculated values to the server action */}
                             <input type="hidden" name="amount_usd" value={usdValue.toFixed(2)} />
                             <input type="hidden" name="fee_usd" value={fee.toFixed(2)} />
                             <input type="hidden" name="expense_usd" value={expense.toFixed(2)} />
@@ -517,19 +499,25 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
 function DataCombobox({ name, data, placeholder, value, onSelect }: { name: string, data: {id: string, name: string}[], placeholder: string, value?: string, onSelect?: (value: string) => void }) {
   const [open, setOpen] = React.useState(false);
+  const [internalValue, setInternalValue] = React.useState(value);
+
+  React.useEffect(() => {
+    setInternalValue(value);
+  }, [value]);
   
   const handleSelect = (currentValue: string) => {
+    setInternalValue(currentValue);
     onSelect?.(currentValue);
     setOpen(false);
   };
 
   return (
     <>
-    <input type="hidden" name={name} value={value || ""} />
+    <input type="hidden" name={name} value={internalValue || ""} />
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
-          {value ? data.find((d) => d.id === value)?.name : placeholder}
+          {internalValue ? data.find((d) => d.id === internalValue)?.name : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -544,7 +532,7 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
                     key={d.id}
                     value={`${d.id} ${d.name}`}
                     onSelect={() => handleSelect(d.id)}>
-                    <Check className={cn("mr-2 h-4 w-4", value === d.id ? "opacity-100" : "opacity-0")}/>
+                    <Check className={cn("mr-2 h-4 w-4", internalValue === d.id ? "opacity-100" : "opacity-0")}/>
                     <span>{d.name}</span>
                 </CommandItem>
                 ))}
