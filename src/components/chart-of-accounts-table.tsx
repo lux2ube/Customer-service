@@ -97,28 +97,28 @@ export function ChartOfAccountsTable() {
 
         // DEPOSIT: Fiat IN (+), USDT OUT (-)
         if (tx.type === 'Deposit') {
-            // Handle Fiat Bank Account part of the transaction
+            // Fiat account gets credited
             if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
-                leafBalances[tx.bankAccountId].native += tx.amount; // Fiat comes IN
-                leafBalances[tx.bankAccountId].usd += tx.amount_usd; // USD equivalent comes IN
+                leafBalances[tx.bankAccountId].native += tx.amount;
+                leafBalances[tx.bankAccountId].usd += tx.amount_usd;
             }
-            // Handle Crypto Wallet part of the transaction
+            // Crypto wallet gets debited
             if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
-                leafBalances[tx.cryptoWalletId].native -= tx.amount_usdt; // USDT goes OUT
-                leafBalances[tx.cryptoWalletId].usd -= tx.amount_usdt; // USD equivalent goes OUT
+                leafBalances[tx.cryptoWalletId].native -= tx.amount_usdt;
+                leafBalances[tx.cryptoWalletId].usd -= tx.amount_usdt;
             }
         } 
         // WITHDRAWAL: Fiat OUT (-), USDT IN (+)
         else if (tx.type === 'Withdraw') {
-             // Handle Fiat Bank Account part of the transaction
+             // Fiat account gets debited
             if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
-                leafBalances[tx.bankAccountId].native -= tx.amount; // Fiat goes OUT
-                leafBalances[tx.bankAccountId].usd -= tx.amount_usd; // USD equivalent goes OUT
+                leafBalances[tx.bankAccountId].native -= tx.amount;
+                leafBalances[tx.bankAccountId].usd -= tx.amount_usd;
             }
-            // Handle Crypto Wallet part of the transaction
+            // Crypto wallet gets credited
             if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
-                leafBalances[tx.cryptoWalletId].native += tx.amount_usdt; // USDT comes IN
-                leafBalances[tx.cryptoWalletId].usd += tx.amount_usdt; // USD equivalent comes IN
+                leafBalances[tx.cryptoWalletId].native += tx.amount_usdt;
+                leafBalances[tx.cryptoWalletId].usd += tx.amount_usdt;
             }
         }
     });
