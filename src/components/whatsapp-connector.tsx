@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { getWhatsAppClientStatus, initializeWhatsAppClient } from '@/lib/actions';
@@ -14,51 +14,56 @@ type WhatsAppStatus = 'DISCONNECTED' | 'CONNECTING' | 'QR_REQUIRED' | 'CONNECTED
 export function WhatsAppConnector() {
     const [status, setStatus] = useState<WhatsAppStatus | 'INITIALIZING'>('INITIALIZING');
     const [qrCode, setQrCode] = useState<string | null>(null);
+    const intervalRef = useRef<NodeJS.Timeout>();
 
-    // This effect is responsible for all status checks.
-    useEffect(() => {
-        let intervalId: NodeJS.Timeout | null = null;
+    const checkStatus = useCallback(async () => {
+        try {
+            const result = await getWhatsAppClientStatus();
+            setStatus(result.status);
+            setQrCode(result.qrCodeDataUrl);
 
-        const checkStatus = async () => {
-            try {
-                const result = await getWhatsAppClientStatus();
-                // Only update state if it has changed to prevent unnecessary re-renders
-                setStatus(prevStatus => prevStatus === result.status ? prevStatus : result.status);
-                setQrCode(prevQr => prevQr === result.qrCodeDataUrl ? prevQr : result.qrCodeDataUrl);
-            } catch (error) {
-                console.error("Failed to get WhatsApp status:", error);
-                setStatus('DISCONNECTED');
+            // If we are connected, we can stop polling.
+            if (result.status === 'CONNECTED' && intervalRef.current) {
+                clearInterval(intervalRef.current);
             }
-        };
-
-        // Perform an initial check immediately
-        if (status === 'INITIALIZING') {
-            checkStatus();
+        } catch (error) {
+            console.error("Failed to get WhatsApp status:", error);
+            setStatus('DISCONNECTED');
         }
+    }, []);
 
-        // Start polling if the status is not yet 'CONNECTED'.
-        if (status !== 'CONNECTED') {
-            intervalId = setInterval(checkStatus, 3000); // Poll every 3 seconds
-        }
-
-        // Cleanup function: clear interval when the component unmounts or status becomes 'CONNECTED'.
-        return () => {
-            if (intervalId) {
-                clearInterval(intervalId);
-            }
-        };
-    }, [status]);
-
-    const handleConnect = async () => {
-        setStatus('CONNECTING'); // Optimistically set status to give immediate feedback
+    const handleConnect = useCallback(async () => {
+        // Don't do anything if we are already in the process of connecting
+        if (status === 'CONNECTING' || status === 'QR_REQUIRED') return;
+        
+        setStatus('CONNECTING');
         try {
             await initializeWhatsAppClient();
-            // The useEffect poller will pick up the new status from the server.
+            await checkStatus(); // Check status immediately
+
+            // If polling was stopped (e.g., after being connected), restart it
+            if (!intervalRef.current) {
+                intervalRef.current = setInterval(checkStatus, 3000);
+            }
         } catch (error) {
             console.error("Failed to initialize WhatsApp client:", error);
-            setStatus('DISCONNECTED'); // Revert on failure
+            setStatus('DISCONNECTED');
         }
-    };
+    }, [checkStatus, status]);
+
+    // This effect runs only once on mount to set up the polling.
+    useEffect(() => {
+        checkStatus(); // Initial check
+        intervalRef.current = setInterval(checkStatus, 3000);
+
+        // Cleanup on component unmount
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [checkStatus]);
+
 
     const getStatusContent = () => {
         switch (status) {
@@ -107,7 +112,6 @@ export function WhatsAppConnector() {
                     </CardDescription>
                 );
             default:
-                // This default case handles any unexpected intermediate states gracefully.
                 return (
                     <div className="flex flex-col items-center gap-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />

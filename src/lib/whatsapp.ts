@@ -53,9 +53,17 @@ export async function initializeWhatsAppClient() {
 
     client.on('qr', async (qr) => {
         console.log('QR Code received. Generating data URL.');
-        status = 'QR_REQUIRED';
-        qrCodeDataUrl = await qrcode.toDataURL(qr);
-        console.log('QR Code data URL is ready.');
+        try {
+            // FIX: Wait for the data URL to be generated before updating the state
+            const dataUrl = await qrcode.toDataURL(qr);
+            qrCodeDataUrl = dataUrl;
+            status = 'QR_REQUIRED';
+            console.log('QR Code data URL is ready.');
+        } catch (e) {
+            console.error("Failed to generate QR code data URL", e);
+            status = 'DISCONNECTED';
+            qrCodeDataUrl = null;
+        }
     });
 
     client.on('ready', () => {
