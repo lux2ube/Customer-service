@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
 import { Save, Trash2, FileScan, Loader2 } from 'lucide-react';
-import { useFormStatus, useActionState } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { addBlacklistItem, deleteBlacklistItem, scanClientsWithBlacklist, type ScanState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { BlacklistItem } from '@/lib/types';
@@ -58,7 +58,7 @@ export function BlacklistManager() {
     const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
     const [itemToDelete, setItemToDelete] = React.useState<BlacklistItem | null>(null);
 
-    const [scanState, scanAction] = useActionState<ScanState, FormData>(scanClientsWithBlacklist, undefined);
+    const [scanState, scanAction] = React.useActionState<ScanState, FormData>(scanClientsWithBlacklist, undefined);
 
     React.useEffect(() => {
         if (scanState?.message) {
