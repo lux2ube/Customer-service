@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, Download, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, MessageCircle, Download, Loader2, Share2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -57,8 +57,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     const [isUsdtManuallyEdited, setIsUsdtManuallyEdited] = React.useState(!!transaction?.hash);
 
-    // New state for download button
+    // New state for download/share buttons
     const [isDownloading, setIsDownloading] = React.useState(false);
+    const [isSharing, setIsSharing] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -258,6 +259,52 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     };
 
+    const handleShareInvoice = async () => {
+        if (!invoiceRef.current || !transaction || !client) return;
+        setIsSharing(true);
+        try {
+            const canvas = await html2canvas(invoiceRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: null,
+            });
+
+            if (navigator.share) {
+                canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                        toast({ variant: "destructive", title: "Share Failed", description: "Could not create image blob." });
+                        setIsSharing(false);
+                        return;
+                    }
+                    const file = new File([blob], `invoice-${transaction.id.slice(-8).toUpperCase()}.png`, { type: 'image/png' });
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: `Invoice for ${client.name}`,
+                            text: `Here is the invoice for transaction ${transaction.id}.`,
+                        });
+                    } catch (error) {
+                        // This error happens if the user cancels the share dialog, so we don't show a toast.
+                        console.log("Sharing cancelled or failed", error);
+                    } finally {
+                        setIsSharing(false);
+                    }
+                }, 'image/png');
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Share Not Supported",
+                    description: "Your browser does not support this feature. Please download the image and share it manually.",
+                });
+                setIsSharing(false);
+            }
+        } catch (error) {
+            console.error("Error generating invoice for sharing:", error);
+            toast({ variant: "destructive", title: "Share Failed", description: "Could not generate invoice image." });
+            setIsSharing(false);
+        }
+    };
+
     return (
         <>
             {/* Hidden Invoice for image generation */}
@@ -387,14 +434,22 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <CardTitle>Actions</CardTitle>
                                 <CardDescription>Download invoice or send messages.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading} className="w-full">
+                            <CardContent className="space-y-2">
+                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} className="w-full">
                                     {isDownloading ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
                                         <Download className="mr-2 h-4 w-4" />
                                     )}
-                                    {isDownloading ? 'Downloading...' : 'Download Invoice as Image'}
+                                    {isDownloading ? 'Downloading...' : 'Download Invoice Image'}
+                                </Button>
+                                <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading} className="w-full">
+                                    {isSharing ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Share2 className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isSharing ? 'Preparing...' : 'Share Invoice Image'}
                                 </Button>
                                 {client.phone && (
                                     <Button onClick={handleGenerateWhatsAppLink} className="w-full" variant="secondary">

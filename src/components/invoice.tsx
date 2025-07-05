@@ -5,7 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
 import { JaibLogo } from "./jaib-logo";
-import { Copy, Download, Share2, X } from "lucide-react";
+import { Copy, X } from "lucide-react";
 
 interface InvoiceProps {
     transaction: Transaction;
@@ -116,22 +116,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
                         <dd className="font-mono text-gray-600">Company Account</dd>
                     </div>
                 </section>
-
-                 <footer className="flex justify-around mt-8">
-                    <button className="text-center group">
-                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block group-hover:bg-gray-200 transition-colors">
-                             <Share2 className="h-6 w-6 text-gray-700" />
-                        </div>
-                        <p className="text-sm font-semibold">مشاركة</p>
-                    </button>
-                     <button className="text-center group">
-                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block group-hover:bg-gray-200 transition-colors">
-                             <Download className="h-6 w-6 text-red-500" />
-                        </div>
-                        <p className="text-sm font-semibold">حفظ</p>
-                    </button>
-                 </footer>
-
             </div>
         </div>
     )
