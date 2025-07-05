@@ -638,7 +638,7 @@ const ImportedClientSchema = z.object({
   phoneNumber: z.string().min(1),
 });
 
-const ImportArraySchema = z.array(ImportedClientSchema);
+const ImportSchema = z.union([ImportedClientSchema, z.array(ImportedClientSchema)]);
 
 export async function importClients(prevState: ImportState, formData: FormData): Promise<ImportState> {
     const file = formData.get('jsonFile') as File | null;
@@ -655,13 +655,14 @@ export async function importClients(prevState: ImportState, formData: FormData):
         const fileContent = await file.text();
         const jsonData = JSON.parse(fileContent);
         
-        const validatedData = ImportArraySchema.safeParse(jsonData);
+        const validatedData = ImportSchema.safeParse(jsonData);
 
         if (!validatedData.success) {
             console.error(validatedData.error);
             return { message: 'JSON file has invalid format or missing required fields.', error: true };
         }
         
+        const clientsToProcess = Array.isArray(validatedData.data) ? validatedData.data : [validatedData.data];
         const updates: { [key: string]: any } = {};
         let importedCount = 0;
 
@@ -669,7 +670,7 @@ export async function importClients(prevState: ImportState, formData: FormData):
         const existingClients = existingClientsSnapshot.val() || {};
         const existingIds = new Set(Object.keys(existingClients));
 
-        for (const importedClient of validatedData.data) {
+        for (const importedClient of clientsToProcess) {
             if (existingIds.has(importedClient.uniqueId)) {
                 // Skip existing clients to avoid overwriting
                 continue;
