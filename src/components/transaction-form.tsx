@@ -59,6 +59,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [expense, setExpense] = React.useState(transaction?.expense_usd || 0);
     const [usdtAmount, setUsdtAmount] = React.useState(transaction?.amount_usdt || 0);
     const [lastEditedField, setLastEditedField] = React.useState<'amount' | 'usdt' | null>(null);
+    const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+
 
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -103,27 +105,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         };
     }, []);
 
-    // Effect to pre-fill favorite bank account on load for transactions that don't have one
-    React.useEffect(() => {
-        // Run only when clients are loaded, for an existing transaction that doesn't have a bank account
-        if (clients.length > 0 && bankAccounts.length > 0 && transaction && !transaction.bankAccountId && transaction.clientId) {
-            const currentClient = clients.find(c => c.id === transaction.clientId);
-            if (currentClient?.favoriteBankAccountId) {
-                const favoriteAccount = bankAccounts.find(ba => ba.id === currentClient.favoriteBankAccountId);
-                if (favoriteAccount) {
-                    setSelectedBankAccountId(favoriteAccount.id);
-                    if (favoriteAccount.currency) {
-                        setCurrency(favoriteAccount.currency);
-                    }
-                }
-            }
-        }
-    }, [clients, bankAccounts, transaction]);
-
     // Effect for performing financial calculations
     React.useEffect(() => {
-        // Don't run on initial load; wait for a user interaction.
-        if (!lastEditedField) {
+        // Don't run on initial load for synced transactions; a separate effect handles that.
+        if (isInitialLoad && transaction?.hash) {
+            // Once the initial load effect runs, it will set isInitialLoad to false,
+            // allowing this effect to take over for user edits.
             return;
         }
 
@@ -155,36 +142,23 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (isSyncedTransaction) {
             // --- SYNCED TRANSACTION LOGIC ---
             if (lastEditedField === 'amount') {
-                // Rule: "never change final usdt according to any change in the amount"
-                // This means USDT is fixed, amount changes, so the difference is fee/expense.
                 finalUsd = amount * rate;
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
                 if (difference >= 0) { finalFee = difference; finalExpense = 0; }
                 else { finalFee = 0; finalExpense = -difference; }
             } else { // lastEditedField === 'usdt'
-                // Rule: "but changing usdt do" -> Reverse calculates the local amount from USDT
                 let derivedUsd = 0;
-                // Reverse calculate from USDT using fee rules
                 if (transactionType === 'Deposit') {
                     const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
-                    if ((usdFromFeePercent * depositFeePercent) > minimumFee) {
-                        derivedUsd = usdFromFeePercent;
-                    } else {
-                        derivedUsd = usdtAmount + minimumFee;
-                    }
+                    derivedUsd = (usdFromFeePercent * depositFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount + minimumFee;
                 } else { // Withdraw
                     const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
-                    if ((usdFromFeePercent * withdrawFeePercent) > minimumFee) {
-                        derivedUsd = usdFromFeePercent;
-                    } else {
-                        derivedUsd = usdtAmount - minimumFee;
-                    }
+                    derivedUsd = (usdFromFeePercent * withdrawFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount - minimumFee;
                 }
                 const newAmount = derivedUsd / rate;
-                setAmount(Number(newAmount.toFixed(2))); // Update the local amount field
+                setAmount(Number(newAmount.toFixed(2)));
                 finalUsd = derivedUsd;
                 
-                // Recalculate fee/expense based on the new derived values
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
                 if (difference >= 0) { finalFee = difference; finalExpense = 0;} 
                 else { finalFee = 0; finalExpense = -difference; }
@@ -192,17 +166,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         } else {
             // --- MANUAL TRANSACTION LOGIC ---
             if (lastEditedField === 'amount') {
-                // Rule: "amount change lead to usdt change"
                 finalUsd = amount * rate;
                 const percentageFee = (transactionType === 'Deposit') ? finalUsd * depositFeePercent : finalUsd * withdrawFeePercent;
                 finalFee = Math.max(percentageFee, minimumFee);
                 finalExpense = 0;
                 
                 const finalUsdt = (transactionType === 'Deposit') ? finalUsd - finalFee : finalUsd + finalFee;
-                setUsdtAmount(Number(finalUsdt.toFixed(2))); // Update the USDT amount field
+                setUsdtAmount(Number(finalUsdt.toFixed(2)));
             } else { // lastEditedField === 'usdt'
-                // Rule: "usdt change lead to fee or expense change"
-                finalUsd = amount * rate; // amount is fixed
+                finalUsd = amount * rate;
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
                 if (difference >= 0) { finalFee = difference; finalExpense = 0; }
                 else { finalFee = 0; finalExpense = -difference; }
@@ -213,7 +185,62 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFee(finalFee);
         setExpense(finalExpense);
 
-    }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField, transaction]);
+    }, [amount, usdtAmount, currency, transactionType, settings, lastEditedField, transaction, isInitialLoad]);
+
+    // Effect for the initial setup of synced transactions
+    React.useEffect(() => {
+        if (!isInitialLoad || !transaction?.hash || !settings || clients.length === 0 || bankAccounts.length === 0) {
+            return;
+        }
+
+        // --- Start of auto-selection and calculation logic ---
+        const client = clients.find(c => c.id === transaction.clientId);
+        const favoriteAccountId = client?.favoriteBankAccountId;
+        const accountIdToUse = transaction.bankAccountId || favoriteAccountId;
+
+        if (accountIdToUse) {
+            const account = bankAccounts.find(a => a.id === accountIdToUse);
+            if (account && account.currency) {
+                // Set form state based on found account
+                if (selectedBankAccountId !== account.id) setSelectedBankAccountId(account.id);
+                if (currency !== account.currency) setCurrency(account.currency);
+
+                // Perform the initial reverse calculation
+                const rate = (() => {
+                    switch(account.currency) {
+                        case 'USD': return 1;
+                        case 'USDT': return settings.usdt_usd || 1;
+                        case 'YER': return settings.yer_usd || 0;
+                        case 'SAR': return settings.sar_usd || 0;
+                        default: return 0;
+                    }
+                })();
+
+                if (rate > 0) {
+                    const minimumFee = settings.minimum_fee_usd || 1;
+                    const depositFeePercent = (settings.deposit_fee_percent || 0) / 100;
+                    const withdrawFeePercent = (settings.withdraw_fee_percent || 0) / 100;
+                    let derivedUsd = 0;
+
+                    if (transaction.type === 'Deposit') {
+                        const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
+                        derivedUsd = (usdFromFeePercent * depositFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount + minimumFee;
+                    } else { // Withdraw
+                        const usdFromFeePercent = usdtAmount / (1 + withdrawFeePercent);
+                        derivedUsd = (usdFromFeePercent * withdrawFeePercent) > minimumFee ? usdFromFeePercent : usdtAmount - minimumFee;
+                    }
+                    
+                    const newAmount = derivedUsd / rate;
+                    setAmount(Number(newAmount.toFixed(2)));
+                    setUsdValue(derivedUsd);
+                    const difference = (transaction.type === 'Deposit') ? derivedUsd - usdtAmount : usdtAmount - derivedUsd;
+                    if (difference >= 0) { setFee(difference); setExpense(0); }
+                    else { setFee(0); setExpense(-difference); }
+                }
+            }
+        }
+        setIsInitialLoad(false); // Mark initial load as complete
+    }, [isInitialLoad, transaction, settings, clients, bankAccounts]);
 
 
     // Effect for handling server action responses
@@ -262,9 +289,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
-            // If it's a synced transaction, changing the account should trigger a recalculation
-            // of the local currency amount from the fixed USDT value.
-            // For manual transactions, it should recalculate USDT from the local amount.
             if (transaction?.hash) {
                 setLastEditedField('usdt');
             } else {
