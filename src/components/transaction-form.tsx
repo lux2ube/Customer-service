@@ -185,6 +185,10 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
         }
     }
 
+    const getClientFullName = (client: Client) => {
+        return [client.firstName, client.secondName, client.thirdName, client.lastName].filter(Boolean).join(' ');
+    }
+
     return (
         <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -221,7 +225,7 @@ export function TransactionForm({ transaction }: { transaction?: Transaction }) 
                         </div>
                         <div className="space-y-2">
                            <Label>Client</Label>
-                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
+                            <DataCombobox name="clientId" data={clients.map(c => ({id: c.id, name: `${getClientFullName(c)} (${c.phone})`}))} placeholder="Search by name or phone..." defaultValue={transaction?.clientId} />
                             {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                         </div>
                         <div className="grid md:grid-cols-2 gap-6">

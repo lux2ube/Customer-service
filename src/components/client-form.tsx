@@ -49,17 +49,32 @@ export function ClientForm({ client }: { client?: Client }) {
                 <CardContent className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Full Name</Label>
-                            <Input id="name" name="name" placeholder="e.g., John Doe" defaultValue={client?.name} required />
-                            {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
+                            <Label htmlFor="firstName">First Name</Label>
+                            <Input id="firstName" name="firstName" placeholder="e.g., John" defaultValue={client?.firstName} required />
+                            {state?.errors?.firstName && <p className="text-sm text-destructive">{state.errors.firstName[0]}</p>}
                         </div>
                         <div className="space-y-2">
+                            <Label htmlFor="secondName">Second Name</Label>
+                            <Input id="secondName" name="secondName" placeholder="e.g., Allen" defaultValue={client?.secondName} />
+                        </div>
+                    </div>
+                     <div className="grid md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="thirdName">Third Name</Label>
+                            <Input id="thirdName" name="thirdName" placeholder="e.g., 'M.'" defaultValue={client?.thirdName} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="lastName">Last Name</Label>
+                            <Input id="lastName" name="lastName" placeholder="e.g., Doe" defaultValue={client?.lastName} required />
+                            {state?.errors?.lastName && <p className="text-sm text-destructive">{state.errors.lastName[0]}</p>}
+                        </div>
+                    </div>
+                     <div className="grid md:grid-cols-2 gap-6">
+                         <div className="space-y-2">
                             <Label htmlFor="phone">Phone Number</Label>
                             <Input id="phone" name="phone" placeholder="e.g., 555-1234" defaultValue={client?.phone} required />
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
-                    </div>
-                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="kyc_type">KYC Type</Label>
                             <Select name="kyc_type" defaultValue={client?.kyc_type}>
@@ -70,13 +85,13 @@ export function ClientForm({ client }: { client?: Client }) {
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="kyc_document_url">KYC Document</Label>
                             <Input id="kyc_document_url" name="kyc_document_url" type="file" />
                             {/* In a real app, you'd handle file uploads properly. This is a placeholder. */}
                         </div>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
                              <RadioGroup name="verification_status" defaultValue={client?.verification_status || 'Pending'} className="flex items-center gap-4 pt-2">
@@ -95,21 +110,21 @@ export function ClientForm({ client }: { client?: Client }) {
                             </RadioGroup>
                              {state?.errors?.verification_status && <p className="text-sm text-destructive">{state.errors.verification_status[0]}</p>}
                         </div>
-                         <div className="space-y-2">
-                            <Label>Review Flags</Label>
-                            <div className="flex flex-wrap items-center gap-4 pt-2">
-                                {reviewFlags.filter(f => f !== 'None').map(flag => (
-                                <div key={flag} className="flex items-center space-x-2">
-                                    <Checkbox 
-                                        id={`flag-${flag}`} 
-                                        name="review_flags" 
-                                        value={flag} 
-                                        defaultChecked={client?.review_flags?.includes(flag)}
-                                    />
-                                    <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
-                                </div>
-                                ))}
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Review Flags</Label>
+                        <div className="flex flex-wrap items-center gap-4 pt-2">
+                            {reviewFlags.filter(f => f !== 'None').map(flag => (
+                            <div key={flag} className="flex items-center space-x-2">
+                                <Checkbox 
+                                    id={`flag-${flag}`} 
+                                    name="review_flags" 
+                                    value={flag} 
+                                    defaultChecked={client?.review_flags?.includes(flag)}
+                                />
+                                <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
                             </div>
+                            ))}
                         </div>
                     </div>
                 </CardContent>

@@ -5,7 +5,10 @@ export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other';
 
 export interface Client {
     id: string;
-    name: string;
+    firstName: string;
+    secondName?: string;
+    thirdName?: string;
+    lastName: string;
     phone: string;
     kyc_type?: 'ID' | 'Passport';
     kyc_document_url?: string;

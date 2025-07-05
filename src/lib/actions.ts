@@ -13,7 +13,7 @@ import type { Client, Account, Settings, Transaction } from './types';
 const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
     const newObj: Record<string, any> = {};
     for (const key in obj) {
-        if (obj[key] !== undefined && obj[key] !== null) {
+        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
             newObj[key] = obj[key];
         }
     }
@@ -116,7 +116,8 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
 export type ClientFormState =
   | {
       errors?: {
-        name?: string[];
+        firstName?: string[];
+        lastName?: string[];
         phone?: string[];
         verification_status?: string[];
         kyc_document_url?: string[];
@@ -126,7 +127,10 @@ export type ClientFormState =
   | undefined;
 
 const ClientSchema = z.object({
-    name: z.string().min(1, { message: 'Name is required.' }),
+    firstName: z.string().min(1, { message: 'First name is required.' }),
+    secondName: z.string().optional(),
+    thirdName: z.string().optional(),
+    lastName: z.string().min(1, { message: 'Last name is required.' }),
     phone: z.string().min(1, { message: 'Phone is required.' }),
     kyc_type: z.enum(['ID', 'Passport']).optional().nullable(),
     kyc_document_url: z.string().url({ message: "Invalid URL." }).optional().nullable(),
@@ -153,7 +157,10 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     }
 
     const dataToValidate = {
-        name: formData.get('name'),
+        firstName: formData.get('firstName'),
+        secondName: formData.get('secondName'),
+        thirdName: formData.get('thirdName'),
+        lastName: formData.get('lastName'),
         phone: formData.get('phone'),
         kyc_type: formData.get('kyc_type') || null,
         verification_status: formData.get('verification_status'),
@@ -286,7 +293,8 @@ export async function createTransaction(transactionId: string | null, prevState:
         const clientRef = ref(db, `clients/${dataToSave.clientId}`);
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
-            clientName = (snapshot.val() as Client).name;
+            const client = snapshot.val() as Client;
+            clientName = [client.firstName, client.secondName, client.thirdName, client.lastName].filter(Boolean).join(' ');
         }
     } catch (e) {
         console.error("Could not fetch client name for transaction");
@@ -676,15 +684,11 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
             const { uniqueId, dateOfAddition, firstName, secondName, thirdName, lastName, phoneNumber } = validatedData.data;
 
-            const fullName = [
+            const newClient: Omit<Client, 'id'> = {
                 firstName,
                 secondName,
                 thirdName,
-                lastName
-            ].filter(Boolean).join(' ');
-
-            const newClient: Omit<Client, 'id'> = {
-                name: fullName,
+                lastName,
                 phone: phoneNumber,
                 verification_status: 'Active', // Default status for imported clients
                 review_flags: [],

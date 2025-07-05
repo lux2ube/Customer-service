@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -50,6 +51,10 @@ export function ClientsTable() {
     }
   }
 
+  const getFullName = (client: Client) => {
+    return [client.firstName, client.secondName, client.thirdName, client.lastName].filter(Boolean).join(' ');
+  }
+
   return (
     <div className="rounded-md border bg-card">
         <Table>
@@ -73,7 +78,7 @@ export function ClientsTable() {
             ) : clients.length > 0 ? (
               clients.map(client => (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableCell className="font-medium">{getFullName(client)}</TableCell>
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>
                     <Badge variant={getStatusVariant(client.verification_status)}>
