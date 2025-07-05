@@ -238,6 +238,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const canvas = await html2canvas(invoiceRef.current, { 
                 scale: 2,
                 useCORS: true, 
+                backgroundColor: null, // Make background transparent to rely on component's bg
             });
             const link = document.createElement('a');
             link.href = canvas.toDataURL('image/png');
@@ -257,19 +258,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     };
 
-    const companyDetails = {
-        name: 'Customer Central',
-        address: '123 Business Rd, Suite 100\nBusiness City, 12345',
-        phone: '(555) 555-5555'
-    };
-
     return (
         <>
             {/* Hidden Invoice for image generation */}
             {transaction && client && (
                 <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
-                    <div className="max-w-4xl">
-                        <Invoice ref={invoiceRef} transaction={transaction} client={client} company={companyDetails} />
+                    <div className="w-[420px]">
+                        <Invoice ref={invoiceRef} transaction={transaction} client={client} />
                     </div>
                 </div>
             )}

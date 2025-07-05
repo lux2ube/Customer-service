@@ -1,108 +1,108 @@
+
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
+import { JaibLogo } from "./jaib-logo";
+import { Copy, Download, Share2, X } from "lucide-react";
 
 interface InvoiceProps {
     transaction: Transaction;
     client: Client;
-    company: { name: string; address: string; phone: string; };
 }
 
-export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transaction, client, company }, ref) => {
+export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transaction, client }, ref) => {
 
-    const formatCurrency = (value: number, currency: string) => {
-        // Simple formatter, can be expanded
-        return new Intl.NumberFormat('en-US', {
-            style: 'decimal',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(value) + ` ${currency}`;
+    const currencyMap: Record<string, string> = {
+        USD: 'دولار امريكي',
+        YER: 'ريال يمني',
+        SAR: 'ريال سعودي',
+        USDT: 'USDT'
     };
 
-    const formatUsd = (value: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(value);
-    }
+    const typeMap: Record<string, string> = {
+        Deposit: 'تحويل مشترك',
+        Withdraw: 'تحويل مشترك'
+    };
     
     return (
-        // The ref is forwarded to this div, which html2canvas will capture
-        <div ref={ref} className="bg-white p-8 md:p-12 rounded-lg shadow-lg text-gray-800">
-            <header className="flex justify-between items-start mb-10">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800">{company.name}</h1>
-                    <p className="text-gray-500 whitespace-pre-line">{company.address}</p>
-                    <p className="text-gray-500">{company.phone}</p>
-                </div>
-                <div className="text-right">
-                    <h2 className="text-3xl font-semibold text-gray-700 uppercase">Invoice</h2>
-                    <p className="text-gray-500 mt-1"># {transaction.id.slice(-8).toUpperCase()}</p>
-                </div>
-            </header>
-
-            <section className="flex justify-between mb-10">
-                <div>
-                    <h3 className="text-gray-500 font-semibold mb-2">Bill To</h3>
-                    <p className="font-bold text-gray-800">{client.name}</p>
-                    <p className="text-gray-600">{client.phone}</p>
-                </div>
-                <div className="text-right">
-                    <p><span className="font-semibold text-gray-500">Invoice Date:</span> {format(new Date(transaction.date), 'MMMM dd, yyyy')}</p>
-                    <p><span className="font-semibold text-gray-500">Transaction Type:</span> {transaction.type}</p>
-                </div>
-            </section>
-
-            <section className="mb-10">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-gray-100 text-gray-600 uppercase text-sm">
-                            <th className="p-3 font-medium">Description</th>
-                            <th className="p-3 text-right font-medium">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr className="border-b border-gray-100">
-                            <td className="p-3">
-                                <p className="font-medium text-gray-800">{transaction.type} ({transaction.currency})</p>
-                                <p className="text-sm text-gray-500">{transaction.notes || 'Transaction'}</p>
-                            </td>
-                            <td className="p-3 text-right font-mono">{formatCurrency(transaction.amount, transaction.currency)}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
-
-            <section className="flex justify-end mb-10">
-                <div className="w-full max-w-xs text-gray-700">
-                    <div className="flex justify-between py-2">
-                        <span className="text-gray-500">Subtotal (USD)</span>
-                        <span className="font-mono">{formatUsd(transaction.amount_usd)}</span>
+        <div ref={ref} className="bg-gray-800 p-4 font-sans" dir="rtl">
+            <div className="bg-white rounded-2xl shadow-lg max-w-sm mx-auto p-6 text-gray-800">
+                <header className="relative text-center mb-6">
+                    <div className="absolute top-0 left-0">
+                        <X className="h-6 w-6 text-gray-400" />
                     </div>
-                    <div className="flex justify-between py-2">
-                        <span className="text-gray-500">Fee</span>
-                        <span className="font-mono">{formatUsd(transaction.fee_usd)}</span>
+                    <div className="flex justify-center items-center gap-2 mb-2">
+                        <JaibLogo className="h-10 w-auto" />
                     </div>
-                    {transaction.expense_usd && transaction.expense_usd > 0 ? (
-                        <div className="flex justify-between py-2 text-red-600">
-                            <span className="font-semibold">Expense / Loss</span>
-                            <span className="font-mono">{formatUsd(transaction.expense_usd)}</span>
+                    <h1 className="text-2xl font-bold">بيانات الحركة</h1>
+                </header>
+
+                <section className="bg-gray-100 rounded-lg p-3 text-center mb-6">
+                    <span className="text-2xl font-bold text-green-600">{transaction.amount}</span>
+                    <span className="mx-2 text-lg font-semibold">{currencyMap[transaction.currency] || transaction.currency}</span>
+                </section>
+
+                <section className="space-y-4 text-sm">
+                    <div className="flex justify-between items-center border-b pb-4">
+                        <dt className="text-gray-500">رقم مرجع العملية</dt>
+                        <dd className="font-mono flex items-center gap-2">
+                            <span>{transaction.id.slice(-12)}</span>
+                            <Copy className="h-4 w-4 text-gray-400" />
+                        </dd>
+                    </div>
+                    <div className="flex justify-between items-center border-b pb-4">
+                        <dt className="text-gray-500">العملية</dt>
+                        <dd className="font-semibold">{typeMap[transaction.type]}</dd>
+                    </div>
+                    <div className="flex justify-between items-center border-b pb-4">
+                        <dt className="text-gray-500">تاريخ العملية</dt>
+                        <dd className="font-semibold font-mono">
+                            {format(new Date(transaction.date), '(HH:mm) dd/MM/yyyy')}
+                        </dd>
+                    </div>
+
+                    {transaction.type === 'Withdraw' && (
+                        <div className="text-right pt-2">
+                            <dt className="text-gray-500 mb-1">المستفيد:</dt>
+                            <dd className="font-bold text-base">{client.name}</dd>
+                            <dd className="font-mono text-gray-600">{client.phone}</dd>
                         </div>
-                    ) : null}
-                    <div className="border-t border-gray-200 my-2"></div>
-                    <div className="flex justify-between py-2 font-bold text-lg text-gray-800">
-                        <span>Grand Total (USD)</span>
-                        <span className="font-mono">{formatUsd(transaction.amount_usd)}</span>
+                    )}
+                     {transaction.type === 'Deposit' && (
+                        <div className="text-right pt-2">
+                            <dt className="text-gray-500 mb-1">المودع:</dt>
+                            <dd className="font-bold text-base">{client.name}</dd>
+                            <dd className="font-mono text-gray-600">{client.phone}</dd>
+                        </div>
+                    )}
+                    
+                     <div className="text-right pt-2">
+                        <dt className="text-gray-500 mb-1">
+                            {transaction.type === 'Withdraw' ? 'المودع:' : 'المستفيد:'}
+                        </dt>
+                        <dd className="font-bold text-base">Customer Central</dd>
+                        <dd className="font-mono text-gray-600">Company Account</dd>
                     </div>
-                </div>
-            </section>
-            
-             <footer className="text-center text-gray-500 text-sm pt-8 border-t border-gray-200">
-                <p>Thank you for your business!</p>
-                {transaction.hash && <p className="mt-2 font-mono text-xs">Tx Hash: {transaction.hash}</p>}
-            </footer>
+                </section>
+
+                 <footer className="flex justify-around mt-8">
+                    <div className="text-center">
+                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block">
+                             <Share2 className="h-6 w-6 text-gray-700" />
+                        </div>
+                        <p className="text-sm font-semibold">مشاركة</p>
+                    </div>
+                     <div className="text-center">
+                        <div className="bg-gray-100 rounded-xl p-4 mb-2 inline-block">
+                             <Download className="h-6 w-6 text-red-500" />
+                        </div>
+                        <p className="text-sm font-semibold">حفظ</p>
+                    </div>
+                 </footer>
+
+            </div>
         </div>
     )
 });
