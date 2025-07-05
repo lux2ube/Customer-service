@@ -186,7 +186,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 
                 // Recalculate fee/expense based on the new derived values
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
-                if (difference >= 0) { finalFee = difference; } else { finalExpense = -difference; }
+                if (difference >= 0) { finalFee = difference; finalExpense = 0;} 
+                else { finalFee = 0; finalExpense = -difference; }
             }
         } else {
             // --- MANUAL TRANSACTION LOGIC ---
@@ -195,6 +196,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 finalUsd = amount * rate;
                 const percentageFee = (transactionType === 'Deposit') ? finalUsd * depositFeePercent : finalUsd * withdrawFeePercent;
                 finalFee = Math.max(percentageFee, minimumFee);
+                finalExpense = 0;
                 
                 const finalUsdt = (transactionType === 'Deposit') ? finalUsd - finalFee : finalUsd + finalFee;
                 setUsdtAmount(Number(finalUsdt.toFixed(2))); // Update the USDT amount field
@@ -260,7 +262,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (selectedAccount && selectedAccount.currency) {
             setCurrency(selectedAccount.currency);
-            setLastEditedField('amount');
+            // If it's a synced transaction, changing the account should trigger a recalculation
+            // of the local currency amount from the fixed USDT value.
+            // For manual transactions, it should recalculate USDT from the local amount.
+            if (transaction?.hash) {
+                setLastEditedField('usdt');
+            } else {
+                setLastEditedField('amount');
+            }
         }
     };
 
