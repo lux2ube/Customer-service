@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { importClients, type ImportState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
@@ -31,7 +32,7 @@ export function ImportClientsButton() {
     const [open, setOpen] = React.useState(false);
     const formRef = React.useRef<HTMLFormElement>(null);
     const { toast } = useToast();
-    const [state, formAction] = useFormState<ImportState, FormData>(importClients, undefined);
+    const [state, formAction] = useActionState<ImportState, FormData>(importClients, undefined);
 
     React.useEffect(() => {
         if (state?.message) {

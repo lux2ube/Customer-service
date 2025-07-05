@@ -2,7 +2,8 @@
 'use client';
 
 import React from 'react';
-import { useFormStatus, useFormState } from 'react-dom';
+import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Button } from './ui/button';
 import { syncBscTransactions, type SyncState } from '@/lib/actions';
 import { RefreshCw } from 'lucide-react';
@@ -21,7 +22,7 @@ function SubmitButton() {
 
 export function SyncButton() {
     const { toast } = useToast();
-    const [state, formAction] = useFormState<SyncState, FormData>(syncBscTransactions, undefined);
+    const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
 
     React.useEffect(() => {
         if (state?.message) {
