@@ -193,14 +193,20 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         const blacklistSnapshot = await get(ref(db, 'blacklist'));
         if (blacklistSnapshot.exists()) {
             const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
-            const clientName = (validatedFields.data.name).toLowerCase();
+            const clientName = validatedFields.data.name;
             const clientPhone = validatedFields.data.phone;
 
             for (const item of blacklistItems) {
-                const blacklistedValue = item.value.toLowerCase();
-                if (item.type === 'Name' && clientName.includes(blacklistedValue)) {
-                    isBlacklisted = true;
-                    break;
+                if (item.type === 'Name') {
+                    // Split client name and blacklisted name into words for more flexible matching.
+                    const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
+                    const blacklistWords = item.value.toLowerCase().split(/\s+/);
+                    
+                    // Check if all words from the blacklist entry are present in the client's name.
+                    if (blacklistWords.every(word => clientWords.has(word))) {
+                        isBlacklisted = true;
+                        break;
+                    }
                 }
                 if (item.type === 'Phone' && clientPhone === item.value) {
                     isBlacklisted = true;
