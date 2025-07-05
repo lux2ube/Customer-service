@@ -146,7 +146,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
                 if (difference >= 0) { finalFee = difference; finalExpense = 0; }
                 else { finalFee = 0; finalExpense = -difference; }
-            } else { // lastEditedField === 'usdt'
+            } else if (lastEditedField === 'usdt') {
                 let derivedUsd = 0;
                 if (transactionType === 'Deposit') {
                     const usdFromFeePercent = usdtAmount / (1 - depositFeePercent);
@@ -173,7 +173,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 
                 const finalUsdt = (transactionType === 'Deposit') ? finalUsd - finalFee : finalUsd + finalFee;
                 setUsdtAmount(Number(finalUsdt.toFixed(2)));
-            } else { // lastEditedField === 'usdt'
+            } else { // lastEditedField === 'usdt' or null
                 finalUsd = amount * rate;
                 const difference = (transactionType === 'Deposit') ? finalUsd - usdtAmount : usdtAmount - finalUsd;
                 if (difference >= 0) { finalFee = difference; finalExpense = 0; }
@@ -240,7 +240,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             }
         }
         setIsInitialLoad(false); // Mark initial load as complete
-    }, [isInitialLoad, transaction, settings, clients, bankAccounts]);
+    }, [isInitialLoad, transaction, settings, clients, bankAccounts, usdtAmount, selectedBankAccountId, currency]);
 
 
     // Effect for handling server action responses
