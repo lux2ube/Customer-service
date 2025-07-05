@@ -83,6 +83,7 @@ const detailedReports = [
         title: "Trial Balance",
         description: "Summarizes all account debits and credits on a specific date to verify the ledger is balanced.",
         icon: <BookCopy className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/trial-balance",
     },
     {
         title: "Account Transactions",
