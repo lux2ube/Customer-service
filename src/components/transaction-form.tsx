@@ -113,20 +113,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
 
         if (transaction) {
-            const isPristineSync = transaction.hash && transaction.currency === 'USDT';
+            // A "pristine" sync is one from bscscan that has not yet had a local amount saved.
+            const isPristineSync = transaction.hash && transaction.amount === 0;
             pristineRef.current = isPristineSync;
             const initialData = { ...transaction };
-
-            if (isPristineSync) {
-                 if (client?.favoriteBankAccountId) {
-                    const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-                    if (favAccount) {
-                        initialData.bankAccountId = favAccount.id;
-                        initialData.currency = favAccount.currency || 'USD';
-                    }
+            
+            if (isPristineSync && client?.favoriteBankAccountId) {
+                const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
+                if (favAccount) {
+                    initialData.bankAccountId = favAccount.id;
+                    initialData.currency = favAccount.currency || 'USD';
                 }
-                // Amount is kept from DB if it exists, otherwise it's 0 (empty)
-                initialData.amount = transaction.amount || 0;
             }
             setFormData(initialData);
         } else {
@@ -149,7 +146,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
-        pristineRef.current = false; // The user has interacted, it's no longer pristine
 
         setFormData(prev => {
             if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
@@ -348,15 +344,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="amount_usd">Amount (USD)</Label>
-                                <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly={isSynced} />
+                                <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly />
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="fee_usd">Fee (USD)</Label>
-                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly={isSynced}/>
+                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly/>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="expense_usd">Expense / Loss (USD)</Label>
-                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly={isSynced}/>
+                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly/>
                             </div>
                             <div className="md:col-span-2 space-y-2">
                                 <Label htmlFor="amount_usdt">Final USDT Amount</Label>
@@ -493,5 +489,3 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
-
-    
