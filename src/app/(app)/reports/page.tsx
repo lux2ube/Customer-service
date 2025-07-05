@@ -15,12 +15,14 @@ import {
     Scale, 
     Users 
 } from "lucide-react";
+import Link from "next/link";
 
 const financialStatements = [
     {
         title: "Income Statement",
         description: "Shows revenue, expenses, and net earnings over a period, indicating overall financial performance.",
         icon: <LineChart className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/income-statement",
     },
     {
         title: "Balance Sheet",
@@ -88,6 +90,26 @@ const detailedReports = [
     },
 ];
 
+const ReportCard = ({ report }: { report: { title: string, description: string, icon: React.ReactNode, href?: string } }) => {
+    const cardContent = (
+        <Card className="transition-shadow duration-300 h-full hover:shadow-lg data-[disabled=true]:opacity-50 data-[disabled=true]:cursor-not-allowed data-[disabled=true]:hover:shadow-sm" data-disabled={!report.href}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base font-medium">{report.title}</CardTitle>
+                {report.icon}
+            </CardHeader>
+            <CardContent>
+                <CardDescription>{report.description}</CardDescription>
+            </CardContent>
+        </Card>
+    );
+
+    if (report.href) {
+        return <Link href={report.href}>{cardContent}</Link>;
+    }
+
+    return cardContent;
+};
+
 
 export default function ReportsPage() {
     return (
@@ -101,17 +123,7 @@ export default function ReportsPage() {
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Financial Statements</h2>
                     <p className="text-sm text-muted-foreground mb-6">Key financial statements that provide an overview of your company’s financial health and performance.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {financialStatements.map((report) => (
-                            <Card key={report.title} className="hover:shadow-lg transition-shadow duration-300 cursor-pointer">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-base font-medium">{report.title}</CardTitle>
-                                    {report.icon}
-                                </CardHeader>
-                                <CardContent>
-                                    <CardDescription>{report.description}</CardDescription>
-                                </CardContent>
-                            </Card>
-                        ))}
+                        {financialStatements.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
 
@@ -119,17 +131,7 @@ export default function ReportsPage() {
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Client Reports</h2>
                      <p className="text-sm text-muted-foreground mb-6">Reports that provide detailed information on your company’s client transactions and balances.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {clientReports.map((report) => (
-                            <Card key={report.title} className="hover:shadow-lg transition-shadow duration-300 cursor-pointer">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-base font-medium">{report.title}</CardTitle>
-                                    {report.icon}
-                                </CardHeader>
-                                <CardContent>
-                                    <CardDescription>{report.description}</CardDescription>
-                                </CardContent>
-                            </Card>
-                        ))}
+                        {clientReports.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
                 
@@ -137,17 +139,7 @@ export default function ReportsPage() {
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Vendor Reports</h2>
                     <p className="text-sm text-muted-foreground mb-6">Reports that provide detailed information on your company’s vendor transactions and balances.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {vendorReports.map((report) => (
-                            <Card key={report.title} className="hover:shadow-lg transition-shadow duration-300 cursor-pointer">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-base font-medium">{report.title}</CardTitle>
-                                    {report.icon}
-                                </CardHeader>
-                                <CardContent>
-                                    <CardDescription>{report.description}</CardDescription>
-                                </CardContent>
-                            </Card>
-                        ))}
+                        {vendorReports.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
 
@@ -155,17 +147,7 @@ export default function ReportsPage() {
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Detailed Reports</h2>
                     <p className="text-sm text-muted-foreground mb-6">Detailed reports that provide a comprehensive view of your company’s financial transactions and account balances.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {detailedReports.map((report) => (
-                           <Card key={report.title} className="hover:shadow-lg transition-shadow duration-300 cursor-pointer">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-base font-medium">{report.title}</CardTitle>
-                                    {report.icon}
-                                </CardHeader>
-                                <CardContent>
-                                    <CardDescription>{report.description}</CardDescription>
-                                </CardContent>
-                            </Card>
-                        ))}
+                        {detailedReports.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
             </div>
