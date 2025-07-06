@@ -1,31 +1,37 @@
+
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
-import { Card } from "@/components/ui/card";
-import { CheckCircle2, Copy, XCircle, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { CheckCircle2, Copy, XCircle, Clock, User, Phone, Hash, Calendar, FileText, Banknote, Landmark, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { JaibLogo } from "./jaib-logo";
+import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
 
-// Compact detail row
-const DetailRow = ({ label, value, canCopy = false }: { label: string, value: string | undefined | number, canCopy?: boolean }) => {
+const DetailItem = ({ icon: Icon, label, value, canCopy = false }: { icon: React.ElementType, label: string, value: string | undefined | number, canCopy?: boolean }) => {
     const { toast } = useToast();
 
     const handleCopy = () => {
         if (!value) return;
         navigator.clipboard.writeText(String(value));
-        toast({ title: "تم النسخ!", description: "تم نسخ النص إلى الحافظة." });
+        toast({ title: "Copied!", description: `${label} copied to clipboard.` });
     };
 
     if (value === undefined || value === null || value === '') return null;
 
     return (
-        <div className="flex justify-between items-start py-1.5 border-b border-gray-100 last:border-b-0">
-            <span className="text-xs text-gray-500 whitespace-nowrap">{label}</span>
-            <div className="flex items-center gap-2 text-left">
-                <span className="text-xs font-mono break-all text-right">{String(value)}</span>
+        <div className="flex items-start justify-between py-1.5 border-b border-gray-100 dark:border-gray-700/50 last:border-b-0">
+            <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <span className="text-xs font-mono text-right text-gray-800 dark:text-gray-100 break-all">{String(value)}</span>
                 {canCopy && (
-                    <button onClick={handleCopy} className="text-gray-400 hover:text-gray-600 shrink-0">
+                    <button onClick={handleCopy} className="text-gray-400 hover:text-primary shrink-0">
                         <Copy size={12} />
                     </button>
                 )}
@@ -34,112 +40,118 @@ const DetailRow = ({ label, value, canCopy = false }: { label: string, value: st
     );
 };
 
-
 const StatusBadge = ({ status }: { status: Transaction['status'] }) => {
-    switch (status) {
-        case 'Confirmed':
-            return (
-                <div className="flex items-center gap-1.5 text-green-600">
-                    <CheckCircle2 size={16} />
-                    <span className="text-sm font-semibold">مكتمل</span>
-                </div>
-            );
-        case 'Pending':
-             return (
-                <div className="flex items-center gap-1.5 text-yellow-600">
-                    <Clock size={16} />
-                    <span className="text-sm font-semibold">قيد الإنتظار</span>
-                </div>
-            );
-        case 'Cancelled':
-            return (
-                <div className="flex items-center gap-1.5 text-red-600">
-                    <XCircle size={16} />
-                    <span className="text-sm font-semibold">ملغاة</span>
-                </div>
-            );
-        default:
-            return null;
-    }
+    const variant = {
+        Confirmed: 'default',
+        Pending: 'secondary',
+        Cancelled: 'destructive'
+    } as const;
+    const icon = {
+        Confirmed: <CheckCircle2 size={12} />,
+        Pending: <Clock size={12} />,
+        Cancelled: <XCircle size={12} />
+    };
+
+    return (
+        <Badge variant={variant[status]} className="flex gap-1.5 items-center">
+            {icon[status]}
+            <span className="text-xs">{status}</span>
+        </Badge>
+    );
 };
 
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client }>(({ transaction, client }, ref) => {
     
-    const transactionTitle = transaction.type === 'Deposit' ? 'تفاصيل الإيداع' : 'تفاصيل السحب';
-    const amountPrefix = transaction.type === 'Deposit' ? '+' : '-';
-    const amountColor = transaction.type === 'Deposit' ? 'text-green-600' : 'text-red-600';
+    const formatCurrency = (value: number | undefined, currency: string) => {
+        if (value === undefined || value === null) return 'N/A';
+        if (currency === 'USDT') return `${value.toFixed(2)} USDT`;
+        try {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value);
+        } catch (e) {
+            // Fallback for invalid currency codes like USDT
+            return `${new Intl.NumberFormat('en-US').format(value)} ${currency}`;
+        }
+    }
+
     const formattedDate = transaction.date && !isNaN(new Date(transaction.date).getTime())
-        ? format(new Date(transaction.date), 'yyyy-MM-dd HH:mm:ss')
+        ? format(new Date(transaction.date), 'MMM dd, yyyy @ HH:mm')
         : 'N/A';
-    
-    const transactionTypeArabic = transaction.type === 'Deposit' ? 'إيداع' : 'سحب';
 
-    const formatLocalCurrency = (value: number, currency: string) => {
-        return new Intl.NumberFormat('en-US').format(value) + ` ${currency}`;
-    }
-
-    const formatUsd = (value: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-    }
-    
     return (
-        <div ref={ref} dir="rtl" className="bg-white font-sans text-gray-800 p-2">
-            <Card className="w-full max-w-md mx-auto shadow-lg rounded-xl overflow-hidden">
-                <div className="p-4 space-y-3">
-                    <header className="text-center">
-                        <h1 className="text-lg font-bold">{transactionTitle}</h1>
-                    </header>
-
-                    <section className="text-center space-y-1">
-                        <p className={`text-3xl font-bold ${amountColor}`}>{`${amountPrefix}${transaction.amount_usdt.toFixed(2)} USDT`}</p>
-                        <div className="flex justify-center">
-                           <StatusBadge status={transaction.status} />
-                        </div>
-                    </section>
-
-                    <section className="text-center text-xs text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        <p>
-                           عزيزي العميل <span className="font-bold">{client.name}</span>، لقد قمت بإجراء معاملة <span className="font-bold">{transactionTypeArabic}</span>. 
-                           وهنا تفاصيل العملية:
-                        </p>
-                    </section>
-                    
-                     <section className="border-t pt-3 space-y-4">
+        <div ref={ref} className="bg-gray-50 dark:bg-gray-900 p-4 font-sans text-gray-800">
+            <div className="w-full max-w-2xl mx-auto bg-white dark:bg-card shadow-xl rounded-xl overflow-hidden border">
+                {/* Header */}
+                <header className="bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground p-4 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-xl font-bold">Transaction Receipt</h1>
+                        <p className="text-xs opacity-80">Ref: {transaction.id}</p>
+                    </div>
+                    <JaibLogo className="h-8 w-auto text-white" />
+                </header>
+                
+                <main className="grid md:grid-cols-2 gap-6 p-4">
+                    {/* Left Column: Client & Transaction Info */}
+                    <section className="space-y-4">
                         <div>
-                            <h3 className="text-sm font-semibold mb-2 text-gray-700">التفاصيل المالية</h3>
-                            <div className="space-y-1 rounded-lg border bg-gray-50/50 p-2">
-                                <DetailRow label="المبلغ" value={formatLocalCurrency(transaction.amount, transaction.currency)} />
-                                <DetailRow label="المبلغ (USD)" value={formatUsd(transaction.amount_usd)} />
-                                <DetailRow label="الرسوم (USD)" value={formatUsd(transaction.fee_usd)} />
-                                {transaction.expense_usd && transaction.expense_usd > 0 && (
-                                    <DetailRow label="مصاريف/خسارة (USD)" value={formatUsd(transaction.expense_usd)} />
-                                )}
-                                <DetailRow label="المبلغ النهائي (USDT)" value={`${transaction.amount_usdt.toFixed(2)} USDT`} />
+                            <h2 className="text-sm font-bold text-primary mb-2 border-b pb-1">Billed To</h2>
+                            <div className="space-y-1 text-xs">
+                                <p className="font-semibold text-base">{client.name}</p>
+                                <p className="text-muted-foreground flex items-center gap-2"><Phone size={12} /> {client.phone}</p>
                             </div>
                         </div>
-
-                        <div>
-                             <h3 className="text-sm font-semibold mb-2 text-gray-700">معلومات العملية</h3>
-                             <div className="space-y-1 rounded-lg border bg-gray-50/50 p-2">
-                                <DetailRow label="الحساب البنكي" value={transaction.bankAccountName} />
-                                <DetailRow label="المحفظة" value={transaction.cryptoWalletName} />
-                                <DetailRow label="رقم الحوالة" value={transaction.remittance_number} />
-                                <DetailRow label="عنوان العميل" value={transaction.client_wallet_address} canCopy />
-                                <DetailRow label="رمز العملية (Txid)" value={transaction.hash} canCopy />
-                                <DetailRow label="التاريخ" value={formattedDate} />
+                         <div>
+                            <h2 className="text-sm font-bold text-primary mb-2 border-b pb-1">Transaction Info</h2>
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-muted-foreground font-semibold">Status:</span>
+                                    <StatusBadge status={transaction.status} />
+                                </div>
+                                <DetailItem icon={FileText} label="Type" value={transaction.type} />
+                                <DetailItem icon={Calendar} label="Date" value={formattedDate} />
+                                <DetailItem icon={Hash} label="Remittance #" value={transaction.remittance_number} />
                             </div>
                         </div>
                     </section>
 
-                    {transaction.notes && (
-                         <section className="border-t pt-2">
-                            <h3 className="text-xs font-semibold mb-1">ملاحظات</h3>
-                            <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded-md">{transaction.notes}</p>
-                        </section>
-                    )}
-                </div>
-            </Card>
+                    {/* Right Column: Financial Breakdown */}
+                    <section className="space-y-4">
+                       <div>
+                            <h2 className="text-sm font-bold text-primary mb-2 border-b pb-1">Financial Details</h2>
+                            <div className="space-y-1.5 bg-gray-50 dark:bg-secondary/20 p-3 rounded-lg">
+                                <DetailItem icon={Banknote} label="Amount" value={`${transaction.amount} ${transaction.currency}`} />
+                                <DetailItem icon={Banknote} label="Amount (USD)" value={formatCurrency(transaction.amount_usd, 'USD')} />
+                                <DetailItem icon={Banknote} label="Fee (USD)" value={formatCurrency(transaction.fee_usd, 'USD')} />
+                                {transaction.expense_usd && transaction.expense_usd > 0 ? (
+                                    <DetailItem icon={Banknote} label="Expense/Loss" value={formatCurrency(transaction.expense_usd, 'USD')} />
+                                ) : null}
+                                <div className="border-t my-2"></div>
+                                <div className="flex justify-between items-center pt-1">
+                                    <p className="text-sm font-bold">Total (USDT)</p>
+                                    <p className="text-sm font-bold text-primary">{formatCurrency(transaction.amount_usdt, 'USDT')}</p>
+                                </div>
+                            </div>
+                        </div>
+                         <div>
+                            <h2 className="text-sm font-bold text-primary mb-2 border-b pb-1">Account & Wallet Details</h2>
+                            <div className="space-y-1.5">
+                                <DetailItem icon={Landmark} label="Bank Account" value={transaction.bankAccountName} />
+                                <DetailItem icon={Wallet} label="Company Wallet" value={transaction.cryptoWalletName} />
+                                <DetailItem icon={Wallet} label="Client Address" value={transaction.client_wallet_address} canCopy />
+                                <DetailItem icon={Hash} label="Tx Hash" value={transaction.hash} canCopy />
+                            </div>
+                        </div>
+                    </section>
+                </main>
+
+                {/* Footer */}
+                {transaction.notes && (
+                    <footer className="border-t p-4 text-xs text-muted-foreground bg-gray-50/50 dark:bg-card">
+                        <h3 className="font-bold mb-1">Notes:</h3>
+                        <p>{transaction.notes}</p>
+                    </footer>
+                )}
+            </div>
         </div>
     );
 });
