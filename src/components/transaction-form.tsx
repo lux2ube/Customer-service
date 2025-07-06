@@ -91,7 +91,7 @@ function BankAccountSelector({
           onClick={() => onSelect(account.id)}
           className="flex-none"
         >
-          {account.name} ({account.currency})
+          {account.name}
         </Button>
       ))}
       {!showAll && sortedAccounts.length > 3 && (
@@ -164,7 +164,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
      React.useEffect(() => {
         if (isDataLoading) return;
 
-        const initialClient = transaction ? client : null;
+        const initialClient = transaction ? client : (formData.clientId ? clients.find(c => c.id === formData.clientId) : null);
 
         if (transaction) {
             const initialData = { ...initialFormData, ...transaction };
@@ -174,9 +174,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             }
             setFormData(initialData);
         } else {
-            setFormData(initialFormData);
+             if (initialClient?.favoriteBankAccountId) {
+                handleBankAccountSelect(initialClient.favoriteBankAccountId, formData);
+            } else {
+                setFormData(initialFormData);
+            }
         }
-    }, [transaction, client, isDataLoading]);
+    }, [transaction, client, isDataLoading, formData.clientId, clients]);
 
     // Recalculate derived fields when form data changes
     React.useEffect(() => {
@@ -204,7 +208,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return isNaN(num) ? 0 : num;
     };
     
-    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleManualAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
         pristineRef.current = false;
 
@@ -250,12 +254,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     newUsdtAmount = newAmountUSD - finalFee;
                 } else { // Withdraw
                     const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                    let grossAmount = newAmountUSD;
-                    if (feePercent >= 0 && feePercent < 1) { // prevent division by zero or negative
-                        grossAmount = newAmountUSD / (1 - feePercent);
+                    if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
+                        newAmountUSD = newAmountUSD; // fallback
+                        finalFee = 0;
+                    } else {
+                        const grossAmount = newAmountUSD / (1 - feePercent);
+                        finalFee = grossAmount - newAmountUSD;
+                        newUsdtAmount = grossAmount;
                     }
-                    finalFee = grossAmount - newAmountUSD;
-                    newUsdtAmount = grossAmount;
                 }
                 
                 return {
@@ -314,12 +320,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const handleClientSelect = (clientId: string) => {
-        const selectedClient = clients.find(c => c.id === clientId);
-        if (selectedClient?.favoriteBankAccountId) {
-            handleBankAccountSelect(selectedClient.favoriteBankAccountId, {...formData, clientId });
-        } else {
-            setFormData(prev => ({...prev, clientId}));
-        }
+        setFormData(prev => ({...prev, clientId}));
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
@@ -452,7 +453,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         <CardContent className="p-3 grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({formData.currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleAmountChange}/>
+                                <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
                                 <input type="hidden" name="currency" value={formData.currency} />
                             </div>
                             <div className="space-y-2">
