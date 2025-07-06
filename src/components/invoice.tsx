@@ -3,140 +3,107 @@
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { CheckCircle2, Copy, XCircle, Clock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-const InvoiceLogo = () => (
-    <div className="flex items-center gap-2 text-primary">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span className="text-xl font-semibold">Customer Central</span>
-    </div>
-);
+const DetailRow = ({ label, value, canCopy = false }: { label: string, value: string | undefined, canCopy?: boolean }) => {
+    const { toast } = useToast();
+
+    const handleCopy = () => {
+        if (!value) return;
+        navigator.clipboard.writeText(value);
+        toast({ title: "تم النسخ!", description: "تم نسخ النص إلى الحافظة." });
+    };
+
+    if (!value) return null;
+
+    return (
+        <div className="flex justify-between items-start py-3 border-b border-gray-100 last:border-b-0">
+            <span className="text-sm text-gray-500 whitespace-nowrap">{label}</span>
+            <div className="flex items-center gap-2 text-left">
+                <span className="text-sm font-mono break-all">{value}</span>
+                {canCopy && (
+                    <button onClick={handleCopy} className="text-gray-400 hover:text-gray-600 shrink-0">
+                        <Copy size={14} />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
 
 
-const getStatusVariant = (status: Transaction['status']) => {
-    switch(status) {
-        case 'Confirmed': return 'default';
-        case 'Cancelled': return 'destructive';
-        case 'Pending': return 'secondary';
-        default: return 'secondary';
+const StatusBadge = ({ status }: { status: Transaction['status'] }) => {
+    switch (status) {
+        case 'Confirmed':
+            return (
+                <div className="flex items-center gap-1.5 text-green-600">
+                    <CheckCircle2 size={20} />
+                    <span className="font-semibold">مكتمل</span>
+                </div>
+            );
+        case 'Pending':
+             return (
+                <div className="flex items-center gap-1.5 text-yellow-600">
+                    <Clock size={20} />
+                    <span className="font-semibold">قيد الإنتظار</span>
+                </div>
+            );
+        case 'Cancelled':
+            return (
+                <div className="flex items-center gap-1.5 text-red-600">
+                    <XCircle size={20} />
+                    <span className="font-semibold">ملغاة</span>
+                </div>
+            );
+        default:
+            return null;
     }
 };
 
-const formatCurrency = (value: number | undefined, currency: string = 'USD') => {
-    if (value === undefined) return 'N/A';
-    if (currency === 'USDT') {
-        return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}\u00A0USDT`;
-    }
-    // Use a non-breaking space for currency symbols to prevent awkward wrapping
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value).replace(/\s/g, '\u00A0');
-}
 
-interface InvoiceProps {
-    transaction: Transaction;
-    client: Client;
-}
+export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client }>(({ transaction, client }, ref) => {
+    
+    const transactionTitle = transaction.type === 'Deposit' ? 'تفاصيل الإيداع' : 'تفاصيل السحب';
+    const amountPrefix = transaction.type === 'Deposit' ? '+' : '-';
+    const amountColor = transaction.type === 'Deposit' ? 'text-green-600' : 'text-red-600';
+    const formattedDate = transaction.date && !isNaN(new Date(transaction.date).getTime())
+        ? format(new Date(transaction.date), 'yyyy-MM-dd HH:mm:ss')
+        : 'N/A';
+    
+    const transactionTypeArabic = transaction.type === 'Deposit' ? 'إيداع' : 'سحب';
 
-export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transaction, client }, ref) => {
     return (
-        <div ref={ref} className="bg-white p-4 sm:p-8 font-sans text-gray-800">
-            <Card className="w-full max-w-4xl mx-auto shadow-lg">
-                <CardHeader className="p-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <InvoiceLogo />
-                            <p className="text-muted-foreground text-sm mt-2">
-                                123 Finance Street<br />
-                                Moneyland, USA 12345<br/>
-                                contact@customercentral.app
-                            </p>
-                        </div>
-                        <div className="text-right">
-                            <h1 className="text-2xl sm:text-4xl font-bold text-primary uppercase tracking-wider">Invoice</h1>
-                            <p className="text-muted-foreground mt-2"># {transaction.id}</p>
-                             <div className="mt-1">
-                                <Badge variant={getStatusVariant(transaction.status)}>{transaction.status}</Badge>
-                            </div>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                    <Separator className="my-4" />
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div>
-                            <h2 className="font-semibold text-gray-600 mb-1">BILLED TO</h2>
-                            <p className="font-bold">{client.name}</p>
-                            <p className="text-muted-foreground">{client.phone}</p>
-                        </div>
-                        <div className="text-right">
-                             <div className="grid grid-cols-2 gap-y-1 text-sm">
-                                <span className="font-semibold text-gray-600">Invoice Date:</span>
-                                <span>{transaction.date && !isNaN(new Date(transaction.date).getTime()) ? format(new Date(transaction.date), 'MMMM dd, yyyy') : 'N/A'}</span>
-                                <span className="font-semibold text-gray-600">Created At:</span>
-                                <span>{transaction.createdAt && !isNaN(new Date(transaction.createdAt).getTime()) ? format(new Date(transaction.createdAt), 'MMMM dd, yyyy') : 'N/A'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/50">
-                                <TableHead className="w-[60%]">Description</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow>
-                                <TableCell>
-                                    <p className="font-medium">{`Transaction: ${transaction.type}`}</p>
-                                    <div className="text-sm text-muted-foreground space-y-1 mt-1">
-                                        <p>{`From: ${transaction.type === 'Deposit' ? transaction.client_wallet_address : (transaction.bankAccountName || 'Bank Account')}`}</p>
-                                        <p>{`To: ${transaction.type === 'Deposit' ? (transaction.bankAccountName || 'Bank Account') : transaction.client_wallet_address}`}</p>
-                                    </div>
-                                    {transaction.remittance_number && <p className="text-xs text-muted-foreground mt-2">Remittance #: {transaction.remittance_number}</p>}
-                                    {transaction.hash && <p className="text-xs text-muted-foreground mt-1 font-mono break-all">Hash: {transaction.hash}</p>}
-                                </TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(transaction.amount, transaction.currency)}</TableCell>
-                            </TableRow>
-                        </TableBody>
-                    </Table>
-                    
-                    <div className="flex justify-end mt-8">
-                        <div className="w-full max-w-sm space-y-2 text-sm">
-                             <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Subtotal (USD)</span>
-                                <span className="font-medium font-mono">{formatCurrency(transaction.amount_usd)}</span>
-                            </div>
-                             <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Fee (USD)</span>
-                                <span className="font-medium font-mono">{formatCurrency(transaction.fee_usd)}</span>
-                            </div>
-                            {transaction.expense_usd && transaction.expense_usd > 0 ? (
-                                <div className="flex justify-between items-center text-destructive">
-                                    <span className="">Expense/Loss (USD)</span>
-                                    <span className="font-medium font-mono">{formatCurrency(transaction.expense_usd)}</span>
-                                </div>
-                            ) : null}
-                            <Separator className="my-2" />
-                            <div className="flex justify-between items-center text-base font-bold text-primary">
-                                <span>Total Final Amount</span>
-                                <span className="font-mono">{formatCurrency(transaction.amount_usdt, 'USDT')}</span>
-                            </div>
-                        </div>
-                    </div>
+        <div ref={ref} dir="rtl" className="bg-white font-sans text-gray-800 p-4">
+            <Card className="w-full max-w-md mx-auto shadow-lg rounded-xl overflow-hidden">
+                <div className="p-6 space-y-6">
+                    <header className="text-center">
+                        <h1 className="text-xl font-bold">{transactionTitle}</h1>
+                    </header>
 
-                    {transaction.notes && (
-                        <div className="mt-8">
-                            <h3 className="font-semibold text-gray-600 mb-1">Notes</h3>
-                            <p className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/20">{transaction.notes}</p>
+                    <section className="text-center space-y-2">
+                        <p className={`text-4xl font-bold ${amountColor}`}>{`${amountPrefix}${transaction.amount_usdt.toFixed(2)} USDT`}</p>
+                        <div className="flex justify-center">
+                           <StatusBadge status={transaction.status} />
                         </div>
-                    )}
-                </CardContent>
-                <CardFooter className="p-6 text-center text-xs text-muted-foreground">
-                    <p>Thank you for your business. If you have any questions, please contact us.</p>
-                </CardFooter>
+                    </section>
+
+                    <section className="text-center text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                        <p>
+                           عزيزي العميل <span className="font-bold">{client.name}</span>، لقد قمت بإجراء معاملة <span className="font-bold">{transactionTypeArabic}</span>. 
+                           وهنا تفاصيل العملية:
+                        </p>
+                    </section>
+                    
+                    <section>
+                        <DetailRow label="الشبكة" value="BEP20 (Binance Smart Chain)" />
+                        <DetailRow label="العنوان" value={transaction.client_wallet_address} canCopy />
+                        <DetailRow label="Txid" value={transaction.hash} canCopy />
+                        <DetailRow label="المحفظة" value={transaction.cryptoWalletName} />
+                        <DetailRow label="التاريخ" value={formattedDate} />
+                    </section>
+                </div>
             </Card>
         </div>
     );
