@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -25,6 +24,7 @@ const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
+  { href: '/bank-accounts', label: 'Bank Accounts', icon: Landmark },
   { type: 'divider' },
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
