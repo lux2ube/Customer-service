@@ -160,24 +160,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return () => { unsubClients(); unsubAccounts(); unsubSettings(); };
     }, []);
 
-    // Effect to set initial form data and handle auto-selections
-     React.useEffect(() => {
-        if (isDataLoading) return;
-
-        const initialClient = transaction ? client : (formData.clientId ? clients.find(c => c.id === formData.clientId) : null);
-        const formToUpdate = transaction ? { ...initialFormData, ...transaction } : { ...formData };
-
-        if (initialClient?.favoriteBankAccountId && !formToUpdate.bankAccountId) {
-            const selectedAccount = bankAccounts.find(acc => acc.id === initialClient.favoriteBankAccountId);
-            if (selectedAccount) {
-                formToUpdate.bankAccountId = selectedAccount.id;
-                formToUpdate.currency = selectedAccount.currency || 'USD';
+    // Effect to set initial form data when editing a transaction
+    React.useEffect(() => {
+        if (transaction && !isDataLoading) {
+            const formState = { ...initialFormData, ...transaction };
+            
+            // On initial load, if there's no bank account set on the transaction,
+            // try to populate it with the client's favorite.
+            if (client?.favoriteBankAccountId && !formState.bankAccountId) {
+                const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
+                if (favoriteAccount) {
+                    formState.bankAccountId = favoriteAccount.id;
+                    formState.currency = favoriteAccount.currency || 'USD';
+                }
             }
-        }
-        
-        setFormData(formToUpdate);
 
-    }, [transaction, client, isDataLoading, formData.clientId, clients, bankAccounts]);
+            setFormData(formState);
+        }
+    }, [transaction, client, isDataLoading, bankAccounts]);
 
 
     // Recalculate derived fields when form data changes
@@ -317,7 +317,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const handleClientSelect = (clientId: string) => {
-        setFormData(prev => ({...prev, clientId}));
+        const selectedClient = clients.find(c => c.id === clientId);
+        const favoriteAccount = selectedClient 
+            ? bankAccounts.find(acc => acc.id === selectedClient.favoriteBankAccountId)
+            : undefined;
+
+        setFormData(prev => ({
+            ...prev,
+            clientId: clientId,
+            bankAccountId: favoriteAccount?.id || '',
+            currency: favoriteAccount?.currency || 'USD',
+        }));
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
