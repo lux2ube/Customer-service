@@ -22,6 +22,16 @@ export interface Client {
     favoriteBankAccountName?: string;
 }
 
+export interface BankAccount {
+    id: string;
+    name: string;
+    account_number?: string;
+    currency: 'USD' | 'YER' | 'SAR';
+    status: 'Active' | 'Inactive';
+    createdAt: string;
+    priority?: number;
+}
+
 export interface CryptoWallet {
     id: string;
     name: string;

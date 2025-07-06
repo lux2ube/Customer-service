@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -16,7 +17,8 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import Link from 'next/link';
-import { Pencil } from 'lucide-react';
+import { Pencil, ArrowUp, ArrowDown } from 'lucide-react';
+import { updateBankAccountPriority } from '@/lib/actions';
 
 export function BankAccountsTable() {
   const [accounts, setAccounts] = React.useState<BankAccount[]>([]);
@@ -30,7 +32,22 @@ export function BankAccountsTable() {
         const list: BankAccount[] = Object.keys(data).map(key => ({
           id: key,
           ...data[key]
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }));
+        
+        list.sort((a, b) => {
+            const priorityA = a.priority ?? Infinity;
+            const priorityB = b.priority ?? Infinity;
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+            
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (isNaN(dateA)) return 1;
+            if (isNaN(dateB)) return -1;
+            return dateB - dateA;
+        });
+
         setAccounts(list);
       } else {
         setAccounts([]);
@@ -46,6 +63,7 @@ export function BankAccountsTable() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[120px]">Priority</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Account Number</TableHead>
               <TableHead>Currency</TableHead>
@@ -57,13 +75,27 @@ export function BankAccountsTable() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   Loading accounts...
                 </TableCell>
               </TableRow>
             ) : accounts.length > 0 ? (
-              accounts.map(account => (
+              accounts.map((account, index) => (
                 <TableRow key={account.id}>
+                  <TableCell>
+                      <div className="flex items-center">
+                          <form action={updateBankAccountPriority.bind(null, account.id, 'up')}>
+                              <Button type="submit" variant="ghost" size="icon" disabled={index === 0}>
+                                  <ArrowUp className="h-4 w-4" />
+                              </Button>
+                          </form>
+                          <form action={updateBankAccountPriority.bind(null, account.id, 'down')}>
+                              <Button type="submit" variant="ghost" size="icon" disabled={index === accounts.length - 1}>
+                                  <ArrowDown className="h-4 w-4" />
+                              </Button>
+                          </form>
+                      </div>
+                  </TableCell>
                   <TableCell className="font-medium">{account.name}</TableCell>
                   <TableCell>{account.account_number || 'N/A'}</TableCell>
                   <TableCell><Badge variant="secondary">{account.currency}</Badge></TableCell>
@@ -72,7 +104,7 @@ export function BankAccountsTable() {
                       {account.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{format(new Date(account.createdAt), 'PPP')}</TableCell>
+                  <TableCell>{account.createdAt ? format(new Date(account.createdAt), 'PPP') : 'N/A'}</TableCell>
                   <TableCell className="text-right">
                     <Button asChild variant="ghost" size="icon">
                         <Link href={`/bank-accounts/${account.id}/edit`}>
@@ -84,7 +116,7 @@ export function BankAccountsTable() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No bank accounts found. Add one to get started.
                 </TableCell>
               </TableRow>
