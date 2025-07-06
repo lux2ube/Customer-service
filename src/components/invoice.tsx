@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
@@ -28,6 +27,9 @@ const getStatusVariant = (status: Transaction['status']) => {
 
 const formatCurrency = (value: number | undefined, currency: string = 'USD') => {
     if (value === undefined) return 'N/A';
+    if (currency === 'USDT') {
+        return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}\u00A0USDT`;
+    }
     // Use a non-breaking space for currency symbols to prevent awkward wrapping
     return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value).replace(/\s/g, '\u00A0');
 }
