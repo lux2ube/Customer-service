@@ -27,7 +27,7 @@ import html2canvas from 'html2canvas';
 function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} size="lg" className="w-full">
+        <Button type="submit" disabled={pending} className="w-full">
             {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Transaction</>}
         </Button>
     );
@@ -136,20 +136,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 // If it's not pristine, make sure we calculate the derived values correctly based on the stored amount
                 const rate = getRate(initialData.currency);
                 if (rate > 0) {
-                     const storedAmountUSD = initialData.amount * rate;
-                     const fixedUsdtAmount = initialData.amount_usdt;
+                     const storedAmountUSD = initialData.amount_usd;
+                     const finalUsdtAmount = initialData.amount_usdt;
                      let newFeeUSD = 0;
                      let newExpenseUSD = 0;
+
                      if (initialData.type === 'Deposit') {
-                        const difference = storedAmountUSD - fixedUsdtAmount;
+                        const difference = storedAmountUSD - finalUsdtAmount;
                         if (difference >= 0) newFeeUSD = difference;
                         else newExpenseUSD = -difference;
                      } else { // Withdraw
-                        const difference = fixedUsdtAmount - storedAmountUSD;
+                        const difference = finalUsdtAmount - storedAmountUSD;
                         if (difference >= 0) newFeeUSD = difference;
                         else newExpenseUSD = -difference;
                      }
-                     initialData.amount_usd = storedAmountUSD;
+
                      initialData.fee_usd = newFeeUSD;
                      initialData.expense_usd = newExpenseUSD;
                 }
@@ -239,11 +240,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 newUsdtAmount = newAmountUSD - finalFee;
             } else { // Withdraw
                  const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
-                    newAmountUSD = newAmountUSD; // fallback
+                if (feePercent < 0 || feePercent >= 1) { 
+                    newAmountUSD = newAmountUSD; 
                     finalFee = 0;
                 } else {
                     const grossAmount = newAmountUSD / (1 - feePercent);
+                    newAmountUSD = grossAmount;
                     const calculatedFee = grossAmount * feePercent;
                     finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
                 }
@@ -253,7 +255,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             return {
                 ...prev,
                 amount: newAmountNum,
-                amount_usd: parseFloat(newAmountUSD.toFixed(2)),
+                amount_usd: parseFloat(newAmountNum * rate).toFixed(2),
                 fee_usd: parseFloat(finalFee.toFixed(2)),
                 expense_usd: 0,
                 amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
@@ -325,10 +327,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                  } else { // Withdraw
                      const feePercent = (settings?.withdraw_fee_percent || 0) / 100;
                      if (feePercent >= 0 && feePercent < 1) {
-                         const grossAmount = newAmountUSD / (1 - feePercent);
-                         finalFee = Math.max(grossAmount * feePercent, settings?.minimum_fee_usd || 0);
+                        const grossAmount = newAmountUSD / (1 - feePercent);
+                        finalFee = grossAmount - newAmountUSD;
+                     } else {
+                        finalFee = 0;
                      }
-                     newUsdtAmount = newAmountUSD - finalFee;
+                     newUsdtAmount = newAmountUSD;
                  }
                  return {
                     ...prev,
@@ -350,7 +354,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const handleClientSelect = (clientId: string) => {
-        handleFieldChange('clientId', clientId);
+        setFormData(prev => ({...prev, clientId}));
         const selectedClient = clients.find(c => c.id === clientId);
 
         if (selectedClient?.favoriteBankAccountId) {
@@ -425,14 +429,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </div>
             )}
 
-            <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
+            <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 space-y-4">
                     <Card>
                         <CardHeader>
                             <CardTitle>Transaction Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid md:grid-cols-2 gap-6">
+                        <CardContent className="space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="date">Date and Time</Label>
                                     <Popover>
@@ -467,7 +471,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     onSelect={handleClientSelect}
                                 />
                             </div>
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                 <Label>Bank Account</Label>
                                     <DataCombobox 
@@ -494,7 +498,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 : "Enter the local currency Amount to auto-calculate all other financial details."}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="grid md:grid-cols-2 gap-6">
+                        <CardContent className="grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={amountChangeHandler}/>
@@ -531,7 +535,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </CardFooter>
                     </Card>
                 </div>
-                <div className="lg:col-span-1 space-y-6">
+                <div className="lg:col-span-1 space-y-4">
                     {transaction && client && (
                         <Card>
                             <CardHeader>
@@ -554,7 +558,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         <CardHeader>
                             <CardTitle>Optional Data</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="notes">Notes</Label>
                                 <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)}/>
@@ -564,7 +568,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Input id="attachment_url" name="attachment_url" type="file" />
                                 {transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
                             </div>
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="remittance_number">Remittance Number</Label>
                                     <Input id="remittance_number" name="remittance_number" value={formData.remittance_number || ''} onChange={(e) => handleFieldChange('remittance_number', e.target.value)}/>
@@ -578,7 +582,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
                                 <Input id="client_wallet_address" name="client_wallet_address" value={formData.client_wallet_address || ''} onChange={(e) => handleFieldChange('client_wallet_address', e.target.value)}/>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>Status</Label>
                                     <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>

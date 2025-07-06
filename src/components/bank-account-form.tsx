@@ -59,14 +59,14 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
     };
 
     return (
-        <form action={formAction} className="space-y-6">
+        <form action={formAction} className="space-y-4">
             <Card>
                 <CardHeader>
                     <CardTitle>{account ? 'Edit' : 'New'} Bank Account</CardTitle>
                     <CardDescription>Fill in the details for the bank account.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="grid md:grid-cols-2 gap-6">
+                <CardContent className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Account Name</Label>
                             <Input 
@@ -91,7 +91,7 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                              {state?.errors?.account_number && <p className="text-sm text-destructive">{state.errors.account_number[0]}</p>}
                         </div>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-6">
+                    <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="currency">Currency</Label>
                             <Select 

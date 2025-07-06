@@ -74,14 +74,14 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
     };
 
     return (
-        <form action={formAction} className="space-y-6">
+        <form action={formAction} className="space-y-4">
             <Card>
                 <CardHeader>
                     <CardTitle>{client ? 'Edit' : 'New'} Client</CardTitle>
                     <CardDescription>Fill in the details for the client profile.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="grid md:grid-cols-2 gap-6">
+                <CardContent className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Full Name</Label>
                             <Input 
@@ -107,7 +107,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-6">
+                    <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
                              <RadioGroup 
@@ -174,7 +174,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                     <Separator />
 
                     <div className="space-y-2">
-                        <h3 className="text-lg font-medium">BEP20 Addresses</h3>
+                        <h3 className="text-base font-medium">BEP20 Addresses</h3>
                         <p className="text-sm text-muted-foreground">
                             Addresses are automatically added from confirmed deposit transactions.
                         </p>
@@ -203,7 +203,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                     <Separator />
 
                     <div className="space-y-4">
-                        <h3 className="text-lg font-medium">KYC Documents</h3>
+                        <h3 className="text-base font-medium">KYC Documents</h3>
                         {client?.kyc_documents && client.kyc_documents.length > 0 && (
                             <div className="space-y-2">
                                 <Label>Uploaded Documents</Label>

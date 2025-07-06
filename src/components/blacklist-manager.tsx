@@ -118,14 +118,14 @@ export function BlacklistManager() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <Card>
                 <form action={handleAddSubmit} ref={formRef}>
                     <CardHeader>
                         <CardTitle>Add New Blacklist Item</CardTitle>
                         <CardDescription>Enter a value to be flagged. Checks are case-insensitive for names and addresses.</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid md:grid-cols-3 gap-6">
+                    <CardContent className="grid md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="type">Type</Label>
                             <Select name="type" required>

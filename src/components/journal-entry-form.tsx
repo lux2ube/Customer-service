@@ -25,7 +25,7 @@ import { Skeleton } from './ui/skeleton';
 function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} size="lg">
+        <Button type="submit" disabled={pending}>
             {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Entry</>}
         </Button>
     );
@@ -129,24 +129,24 @@ export function JournalEntryForm() {
         return (
             <Card>
                 <CardHeader><CardTitle>Loading Form...</CardTitle></CardHeader>
-                <CardContent className="space-y-6">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
                 </CardContent>
             </Card>
         )
     }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-4">
         <Card>
             <CardHeader>
                 <CardTitle>Internal Account Transfer</CardTitle>
                 <CardDescription>Record a transfer between two internal accounts. Conversions are handled automatically.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                 <div className="grid md:grid-cols-2 gap-6">
+            <CardContent className="space-y-4">
+                 <div className="grid md:grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <Label htmlFor="date">Date</Label>
                         <Popover>
@@ -173,7 +173,7 @@ export function JournalEntryForm() {
                     </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6 items-start">
+                <div className="grid md:grid-cols-2 gap-4 items-start">
                     <div className="space-y-2">
                         <Label>From (Debit)</Label>
                         <AccountSelector 
@@ -204,7 +204,7 @@ export function JournalEntryForm() {
                     </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6 items-start">
+                <div className="grid md:grid-cols-2 gap-4 items-start">
                      <div className="space-y-2">
                         <Label>To (Credit)</Label>
                         <AccountSelector 

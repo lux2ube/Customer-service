@@ -63,14 +63,14 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
     };
 
     return (
-        <form action={formAction} className="space-y-6">
+        <form action={formAction} className="space-y-4">
             <Card>
                 <CardHeader>
                     <CardTitle>{account ? 'Edit' : 'New'} Account</CardTitle>
                     <CardDescription>Fill in the details for the account.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                     <div className="grid md:grid-cols-2 gap-6">
+                <CardContent className="space-y-4">
+                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="id">Account Code</Label>
                             <Input 
@@ -97,7 +97,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-6">
+                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="type">Account Type</Label>
                             <Select 
@@ -134,7 +134,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             </Select>
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-6">
+                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="currency">Currency (Optional)</Label>
                             <Select 
@@ -153,7 +153,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             </Select>
                             {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
                         </div>
-                         <div className="flex items-center space-x-2 pt-8">
+                         <div className="flex items-center space-x-2 pt-6">
                             <Checkbox 
                                 id="isGroup" 
                                 name="isGroup" 
