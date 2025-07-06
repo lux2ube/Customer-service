@@ -165,22 +165,20 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (isDataLoading) return;
 
         const initialClient = transaction ? client : (formData.clientId ? clients.find(c => c.id === formData.clientId) : null);
+        const formToUpdate = transaction ? { ...initialFormData, ...transaction } : { ...formData };
 
-        if (transaction) {
-            const initialData = { ...initialFormData, ...transaction };
-            if (transaction.hash && !transaction.bankAccountId && initialClient?.favoriteBankAccountId) {
-                handleBankAccountSelect(initialClient.favoriteBankAccountId, initialData);
-                return;
-            }
-            setFormData(initialData);
-        } else {
-             if (initialClient?.favoriteBankAccountId) {
-                handleBankAccountSelect(initialClient.favoriteBankAccountId, formData);
-            } else {
-                setFormData(initialFormData);
+        if (initialClient?.favoriteBankAccountId && !formToUpdate.bankAccountId) {
+            const selectedAccount = bankAccounts.find(acc => acc.id === initialClient.favoriteBankAccountId);
+            if (selectedAccount) {
+                formToUpdate.bankAccountId = selectedAccount.id;
+                formToUpdate.currency = selectedAccount.currency || 'USD';
             }
         }
-    }, [transaction, client, isDataLoading, formData.clientId, clients]);
+        
+        setFormData(formToUpdate);
+
+    }, [transaction, client, isDataLoading, formData.clientId, clients, bankAccounts]);
+
 
     // Recalculate derived fields when form data changes
     React.useEffect(() => {
@@ -437,7 +435,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                                 <Label>Crypto Wallet</Label>
-                                <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." value={formData.cryptoWalletId} onSelect={(v) => handleFieldChange('cryptoWalletId', v)}/>
+                                <BankAccountSelector
+                                    accounts={cryptoWallets}
+                                    value={formData.cryptoWalletId}
+                                    onSelect={(v) => handleFieldChange('cryptoWalletId', v)}
+                                />
+                                <input type="hidden" name="cryptoWalletId" value={formData.cryptoWalletId || ''} />
                             </div>
                         </CardContent>
                     </Card>
