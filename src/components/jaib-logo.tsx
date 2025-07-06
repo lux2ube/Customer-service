@@ -29,3 +29,5 @@ export function JaibLogo({ className, ...props }: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+    

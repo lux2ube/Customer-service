@@ -36,14 +36,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         notFound();
     }
 
-    // You could also fetch company details from settings here if needed
-    const companyDetails = {
-        name: 'Customer Central',
-        address: '123 Business Rd, Suite 100\nBusiness City, 12345',
-        phone: '(555) 555-5555'
-    };
-
     return (
-        <Invoice transaction={transaction} client={client} company={companyDetails} />
+        <Invoice transaction={transaction} client={client} />
     );
 }
+
+    
