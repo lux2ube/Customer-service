@@ -183,18 +183,32 @@ export function ChartOfAccountsTable() {
   };
 
   const renderAccounts = () => {
-    const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as Account[] }]));
-    const rootAccounts: Account[] = [];
+    const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
+    const rootAccounts: any[] = [];
 
-    for (const account of accounts) {
-      if (account.parentId && accountMap.has(account.parentId)) {
-        accountMap.get(account.parentId)!.children.push(accountMap.get(account.id)!);
-      } else {
-        rootAccounts.push(accountMap.get(account.id)!);
-      }
-    }
+    // Build the tree structure
+    accounts.forEach(account => {
+        const node = accountMap.get(account.id)!;
+        if (account.parentId && accountMap.has(account.parentId)) {
+            accountMap.get(account.parentId)!.children.push(node);
+        } else {
+            rootAccounts.push(node);
+        }
+    });
+
+    // Recursively sort all children arrays by priority
+    const sortChildrenRecursive = (nodes: any[]) => {
+        nodes.sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity) || a.id.localeCompare(b.id));
+        nodes.forEach(node => {
+            if (node.children.length > 0) {
+                sortChildrenRecursive(node.children);
+            }
+        });
+    };
     
-    const renderRow = (account: any, level = 0, siblings: Account[] = [], index: number = 0) => {
+    sortChildrenRecursive(rootAccounts);
+    
+    const renderRow = (account: any, level = 0, siblings: any[] = [], index: number = 0) => {
       const isGroup = account.isGroup;
       const balanceInfo = balances[account.id];
       return (

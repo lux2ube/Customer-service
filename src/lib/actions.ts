@@ -745,19 +745,36 @@ export async function updateAccountPriority(accountId: string, parentId: string 
     const snapshot = await get(accountsRef);
     if (!snapshot.exists()) return;
 
-    let allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
-
+    const allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
+    
     // Filter for sibling accounts
-    let siblingAccounts = allAccounts.filter(acc => (acc.parentId || null) === (parentId || null));
+    const siblingAccounts = allAccounts.filter(acc => (acc.parentId || null) === (parentId || null));
 
-    // Assign default priority if missing
-    siblingAccounts.forEach((acc, index) => {
-        if (acc.priority === undefined || acc.priority === null) {
-            acc.priority = index;
-        }
+    // Ensure all siblings have a priority number for sorting. This makes the system resilient.
+    let maxPriority = -1;
+    siblingAccounts.forEach(acc => {
+      if (typeof acc.priority === 'number' && acc.priority > maxPriority) {
+        maxPriority = acc.priority;
+      }
+    });
+    
+    const updates: { [key: string]: any } = {};
+    // Assign priorities to any account that is missing one.
+    siblingAccounts.forEach(acc => {
+      if (typeof acc.priority !== 'number') {
+        maxPriority++;
+        acc.priority = maxPriority; // Update local object for sorting
+        updates[`/accounts/${acc.id}/priority`] = acc.priority; // And prepare to persist it
+      }
     });
 
-    siblingAccounts.sort((a, b) => (a.priority || 0) - (b.priority || 0));
+    // If we had to assign new priorities, save them first before proceeding.
+    if (Object.keys(updates).length > 0) {
+        await update(ref(db), updates);
+    }
+    
+    // Sort siblings by their now-guaranteed priority
+    siblingAccounts.sort((a, b) => a.priority! - b.priority!);
 
     const currentIndex = siblingAccounts.findIndex(acc => acc.id === accountId);
     if (currentIndex === -1) return;
@@ -770,16 +787,16 @@ export async function updateAccountPriority(accountId: string, parentId: string 
     }
     
     if (otherIndex !== -1) {
-        // Swap priorities
         const currentAccount = siblingAccounts[currentIndex];
         const otherAccount = siblingAccounts[otherIndex];
         
-        const updates: { [key: string]: any } = {};
-        updates[`/accounts/${currentAccount.id}/priority`] = otherAccount.priority;
-        updates[`/accounts/${otherAccount.id}/priority`] = currentAccount.priority;
+        // Swap priorities
+        const priorityUpdates: { [key: string]: any } = {};
+        priorityUpdates[`/accounts/${currentAccount.id}/priority`] = otherAccount.priority;
+        priorityUpdates[`/accounts/${otherAccount.id}/priority`] = currentAccount.priority;
         
         try {
-            await update(ref(db), updates);
+            await update(ref(db), priorityUpdates);
         } catch (error) {
             console.error("Failed to update priority:", error);
         }
