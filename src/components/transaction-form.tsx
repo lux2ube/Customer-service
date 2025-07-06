@@ -87,9 +87,9 @@ function BankAccountSelector({
           key={account.id}
           type="button"
           variant={value === account.id ? 'default' : 'outline'}
-          size="sm"
+          size="xs"
           onClick={() => onSelect(account.id)}
-          className="flex-grow sm:flex-grow-0"
+          className="flex-none"
         >
           {account.name} ({account.currency})
         </Button>
@@ -98,9 +98,9 @@ function BankAccountSelector({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={() => setShowAll(true)}
-          className="text-muted-foreground"
+          className="text-muted-foreground flex-none"
         >
           Show More...
         </Button>
@@ -164,15 +164,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
      React.useEffect(() => {
         if (isDataLoading) return;
 
+        const initialClient = transaction ? client : null;
+
         if (transaction) {
             const initialData = { ...initialFormData, ...transaction };
-            if (transaction.hash && !transaction.bankAccountId && client?.favoriteBankAccountId) {
-                handleBankAccountSelect(client.favoriteBankAccountId, initialData);
-                return; 
+            if (transaction.hash && !transaction.bankAccountId && initialClient?.favoriteBankAccountId) {
+                handleBankAccountSelect(initialClient.favoriteBankAccountId, initialData);
+                return;
             }
-            
             setFormData(initialData);
-
         } else {
             setFormData(initialFormData);
         }
@@ -214,7 +214,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const rate = getRate(prev.currency);
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
-            const newAmountUSD = newAmountNum * rate;
+            let newAmountUSD = newAmountNum * rate;
             
             if (prev.hash) { // SYNCED TRANSACTION LOGIC
                 let newFeeUSD = 0;
@@ -251,7 +251,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 } else { // Withdraw
                     const feePercent = (settings.withdraw_fee_percent || 0) / 100;
                     let grossAmount = newAmountUSD;
-                    if (feePercent >= 0 && feePercent < 1) {
+                    if (feePercent >= 0 && feePercent < 1) { // prevent division by zero or negative
                         grossAmount = newAmountUSD / (1 - feePercent);
                     }
                     finalFee = grossAmount - newAmountUSD;
@@ -383,13 +383,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </div>
             )}
 
-            <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 space-y-4">
+            <form action={formAction} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-4">
                     <Card>
-                        <CardHeader className="p-4">
-                            <CardTitle className="text-base">Transaction Details</CardTitle>
+                        <CardHeader className="p-3">
+                            <CardTitle className="text-sm">Transaction Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-4 space-y-4">
+                        <CardContent className="p-3 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="date">Date and Time</Label>
@@ -407,7 +407,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
                                     <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)}>
-                                        <SelectTrigger className="h-9"><SelectValue placeholder="Select type..."/></SelectTrigger>
+                                        <SelectTrigger className="h-8"><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit</SelectItem>
                                             <SelectItem value="Withdraw">Withdraw</SelectItem>
@@ -441,15 +441,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader className="p-4">
-                            <CardTitle className="text-base">Financial Details</CardTitle>
+                        <CardHeader className="p-3">
+                            <CardTitle className="text-sm">Financial Details</CardTitle>
                             <CardDescription className="text-xs">
                                 {formData.hash 
                                 ? "This was synced from BscScan. Please enter the local currency Amount." 
                                 : "Enter local Amount or Final USDT to auto-calculate."}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="p-4 grid md:grid-cols-2 gap-4">
+                        <CardContent className="p-3 grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleAmountChange}/>
@@ -481,19 +481,19 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 />
                             </div>
                         </CardContent>
-                        <CardFooter className="p-4">
+                        <CardFooter className="p-3">
                             <SubmitButton />
                         </CardFooter>
                     </Card>
                 </div>
-                <div className="lg:col-span-1 space-y-4">
+                <div className="md:col-span-1 space-y-4">
                     {transaction && client && (
                         <Card>
-                            <CardHeader className="p-4">
-                                <CardTitle className="text-base">Actions</CardTitle>
+                            <CardHeader className="p-3">
+                                <CardTitle className="text-sm">Actions</CardTitle>
                                 <CardDescription className="text-xs">Download or share the invoice.</CardDescription>
                             </CardHeader>
-                            <CardContent className="p-4 space-y-2">
+                            <CardContent className="p-3 space-y-2">
                                  <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} size="sm" className="w-full">
                                     {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                     {isDownloading ? 'Downloading...' : 'Download Invoice'}
@@ -506,10 +506,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </Card>
                     )}
                     <Card>
-                        <CardHeader className="p-4">
-                            <CardTitle className="text-base">Optional Data</CardTitle>
+                        <CardHeader className="p-3">
+                            <CardTitle className="text-sm">Optional Data</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-4 space-y-4">
+                        <CardContent className="p-3 space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="notes">Notes</Label>
                                 <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2}/>
@@ -537,7 +537,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Status</Label>
                                     <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
-                                        <SelectTrigger className="h-9"><SelectValue/></SelectTrigger>
+                                        <SelectTrigger className="h-8"><SelectValue/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Pending">Pending</SelectItem>
                                             <SelectItem value="Confirmed">Confirmed</SelectItem>
@@ -548,7 +548,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Need Flag Review</Label>
                                     <Select name="flags" value={formData.flags?.[0] || 'none'} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
-                                        <SelectTrigger className="h-9"><SelectValue placeholder="Add a flag..."/></SelectTrigger>
+                                        <SelectTrigger className="h-8"><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
                                             <SelectItem value="AML">AML</SelectItem>
@@ -611,5 +611,3 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
-
-    
