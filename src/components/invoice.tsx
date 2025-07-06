@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
@@ -106,26 +105,30 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         </p>
                     </section>
                     
-                     <section className="border-t pt-3 grid grid-cols-2 gap-x-6">
-                        <div className="space-y-1">
-                            <h3 className="text-xs font-bold mb-2 border-b pb-1">التفاصيل المالية</h3>
-                            <DetailRow label="المبلغ" value={formatLocalCurrency(transaction.amount, transaction.currency)} />
-                            <DetailRow label="المبلغ (USD)" value={formatUsd(transaction.amount_usd)} />
-                            <DetailRow label="الرسوم (USD)" value={formatUsd(transaction.fee_usd)} />
-                            {transaction.expense_usd && transaction.expense_usd > 0 && (
-                                <DetailRow label="مصاريف/خسارة (USD)" value={formatUsd(transaction.expense_usd)} />
-                            )}
-                            <DetailRow label="المبلغ النهائي (USDT)" value={`${transaction.amount_usdt.toFixed(2)} USDT`} />
+                     <section className="border-t pt-3 space-y-4">
+                        <div>
+                            <h3 className="text-sm font-semibold mb-2 text-gray-700">التفاصيل المالية</h3>
+                            <div className="space-y-1 rounded-lg border bg-gray-50/50 p-2">
+                                <DetailRow label="المبلغ" value={formatLocalCurrency(transaction.amount, transaction.currency)} />
+                                <DetailRow label="المبلغ (USD)" value={formatUsd(transaction.amount_usd)} />
+                                <DetailRow label="الرسوم (USD)" value={formatUsd(transaction.fee_usd)} />
+                                {transaction.expense_usd && transaction.expense_usd > 0 && (
+                                    <DetailRow label="مصاريف/خسارة (USD)" value={formatUsd(transaction.expense_usd)} />
+                                )}
+                                <DetailRow label="المبلغ النهائي (USDT)" value={`${transaction.amount_usdt.toFixed(2)} USDT`} />
+                            </div>
                         </div>
 
-                        <div className="space-y-1">
-                             <h3 className="text-xs font-bold mb-2 border-b pb-1">معلومات العملية</h3>
-                            <DetailRow label="الحساب البنكي" value={transaction.bankAccountName} />
-                            <DetailRow label="المحفظة" value={transaction.cryptoWalletName} />
-                            <DetailRow label="رقم الحوالة" value={transaction.remittance_number} />
-                            <DetailRow label="عنوان العميل" value={transaction.client_wallet_address} canCopy />
-                            <DetailRow label="رمز العملية (Txid)" value={transaction.hash} canCopy />
-                            <DetailRow label="التاريخ" value={formattedDate} />
+                        <div>
+                             <h3 className="text-sm font-semibold mb-2 text-gray-700">معلومات العملية</h3>
+                             <div className="space-y-1 rounded-lg border bg-gray-50/50 p-2">
+                                <DetailRow label="الحساب البنكي" value={transaction.bankAccountName} />
+                                <DetailRow label="المحفظة" value={transaction.cryptoWalletName} />
+                                <DetailRow label="رقم الحوالة" value={transaction.remittance_number} />
+                                <DetailRow label="عنوان العميل" value={transaction.client_wallet_address} canCopy />
+                                <DetailRow label="رمز العملية (Txid)" value={transaction.hash} canCopy />
+                                <DetailRow label="التاريخ" value={formattedDate} />
+                            </div>
                         </div>
                     </section>
 
