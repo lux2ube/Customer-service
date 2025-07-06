@@ -52,7 +52,7 @@ export function TrialBalanceReport({ initialAccounts, initialJournalEntries, ini
             }
         });
 
-        // from transaction principals (fees/expenses are already journaled)
+        // from transaction principals
         initialTransactions.forEach(tx => {
             if (tx.status !== 'Confirmed') return;
             const txDate = parseISO(tx.date);

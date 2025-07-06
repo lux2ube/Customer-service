@@ -71,28 +71,23 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
             }
         });
 
-        // 2. Adjust asset balances based on transaction principals, which are not journaled.
-        // The fee/expense parts ARE journaled, so we subtract them from the transaction amounts here to avoid double-counting.
+        // 2. Adjust asset balances based on transaction principals
          initialTransactions.forEach(tx => {
             if (tx.status !== 'Confirmed') return;
             const txDate = parseISO(tx.date);
              if (txDate <= toDate) {
                 if (tx.type === 'Deposit') {
-                    // Bank account increases by the principal amount (total USD received minus the fee, which is already journaled).
                     if (tx.bankAccountId && leafBalances[tx.bankAccountId] !== undefined) {
                         leafBalances[tx.bankAccountId] += (tx.amount_usd - (tx.fee_usd || 0));
                     }
-                    // Crypto wallet decreases by the principal amount (total USDT sent minus the expense, which is already journaled).
                     if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId] !== undefined) {
                         leafBalances[tx.cryptoWalletId] -= (tx.amount_usdt - (tx.expense_usd || 0));
                     }
                 }
                 else if (tx.type === 'Withdraw') {
-                    // Bank account decreases by the principal amount (total USD sent minus the expense, which is already journaled).
                     if (tx.bankAccountId && leafBalances[tx.bankAccountId] !== undefined) {
                         leafBalances[tx.bankAccountId] -= (tx.amount_usd - (tx.expense_usd || 0));
                     }
-                    // Crypto wallet increases by the principal amount (total USDT received minus the fee, which is already journaled).
                     if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId] !== undefined) {
                         leafBalances[tx.cryptoWalletId] += (tx.amount_usdt - (tx.fee_usd || 0));
                     }
