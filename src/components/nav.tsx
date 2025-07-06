@@ -32,6 +32,9 @@ const menuItems = [
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
+  { type: 'divider' },
+  { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
+  { href: '/sms/settings', label: 'SMS Settings', icon: MessageCircle },
 ];
 
 export function Nav() {
