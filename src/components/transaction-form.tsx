@@ -453,26 +453,26 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 : "Enter local Amount or Final USDT to auto-calculate."}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="p-3 grid md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="amount">Amount ({formData.currency})</Label>
+                        <CardContent className="p-3 space-y-2">
+                             <div className="flex items-center gap-2">
+                                <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
                                 <input type="hidden" name="currency" value={formData.currency} />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="amount_usd">Amount (USD)</Label>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="amount_usd" className="w-1/3 shrink-0 text-right text-xs">Amount (USD)</Label>
                                 <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly />
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="fee_usd">Fee (USD)</Label>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="fee_usd" className="w-1/3 shrink-0 text-right text-xs">Fee (USD)</Label>
                                 <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="expense_usd">Expense / Loss (USD)</Label>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="expense_usd" className="w-1/3 shrink-0 text-right text-xs">Expense / Loss (USD)</Label>
                                 <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly />
                             </div>
-                            <div className="md:col-span-2 space-y-2">
-                                <Label htmlFor="amount_usdt">Final USDT Amount</Label>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
                                 <Input
                                     id="amount_usdt"
                                     name="amount_usdt"
