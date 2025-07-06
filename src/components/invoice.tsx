@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { CheckCircle2, Copy, XCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-// More compact detail row
+// Compact detail row
 const DetailRow = ({ label, value, canCopy = false }: { label: string, value: string | undefined | number, canCopy?: boolean }) => {
     const { toast } = useToast();
 
@@ -21,7 +21,7 @@ const DetailRow = ({ label, value, canCopy = false }: { label: string, value: st
     if (value === undefined || value === null || value === '') return null;
 
     return (
-        <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+        <div className="flex justify-between items-start py-1.5 border-b border-gray-100 last:border-b-0">
             <span className="text-xs text-gray-500 whitespace-nowrap">{label}</span>
             <div className="flex items-center gap-2 text-left">
                 <span className="text-xs font-mono break-all text-right">{String(value)}</span>
@@ -106,9 +106,9 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         </p>
                     </section>
                     
-                    <section className="border-t pt-2">
+                     <section className="border-t pt-3 grid grid-cols-2 gap-x-6">
                         <div className="space-y-1">
-                            {/* Combined Details */}
+                            <h3 className="text-xs font-bold mb-2 border-b pb-1">التفاصيل المالية</h3>
                             <DetailRow label="المبلغ" value={formatLocalCurrency(transaction.amount, transaction.currency)} />
                             <DetailRow label="المبلغ (USD)" value={formatUsd(transaction.amount_usd)} />
                             <DetailRow label="الرسوم (USD)" value={formatUsd(transaction.fee_usd)} />
@@ -116,14 +116,13 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                                 <DetailRow label="مصاريف/خسارة (USD)" value={formatUsd(transaction.expense_usd)} />
                             )}
                             <DetailRow label="المبلغ النهائي (USDT)" value={`${transaction.amount_usdt.toFixed(2)} USDT`} />
-                            
-                            {/* Spacer */}
-                            <div className="py-1"></div>
+                        </div>
 
+                        <div className="space-y-1">
+                             <h3 className="text-xs font-bold mb-2 border-b pb-1">معلومات العملية</h3>
                             <DetailRow label="الحساب البنكي" value={transaction.bankAccountName} />
                             <DetailRow label="المحفظة" value={transaction.cryptoWalletName} />
                             <DetailRow label="رقم الحوالة" value={transaction.remittance_number} />
-                            <DetailRow label="الشبكة" value="BEP20 (BSC)" />
                             <DetailRow label="عنوان العميل" value={transaction.client_wallet_address} canCopy />
                             <DetailRow label="رمز العملية (Txid)" value={transaction.hash} canCopy />
                             <DetailRow label="التاريخ" value={formattedDate} />
