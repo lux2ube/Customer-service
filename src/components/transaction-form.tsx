@@ -27,7 +27,7 @@ import html2canvas from 'html2canvas';
 function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} className="w-full">
+        <Button type="submit" disabled={pending} size="sm" className="w-full">
             {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Transaction</>}
         </Button>
     );
@@ -54,6 +54,60 @@ const initialFormData: Transaction = {
     flags: [],
     createdAt: '',
 };
+
+function BankAccountSelector({
+  accounts,
+  value,
+  onSelect,
+}: {
+  accounts: Account[];
+  value: string | null | undefined;
+  onSelect: (accountId: string) => void;
+}) {
+  const [showAll, setShowAll] = React.useState(false);
+
+  // Sort accounts by priority, then by name as a fallback.
+  const sortedAccounts = React.useMemo(() => {
+    return [...accounts].sort((a, b) => {
+        const priorityA = a.priority ?? Infinity;
+        const priorityB = b.priority ?? Infinity;
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+        return a.name.localeCompare(b.name);
+    });
+  }, [accounts]);
+
+  const visibleAccounts = showAll ? sortedAccounts : sortedAccounts.slice(0, 3);
+
+  return (
+    <div className="flex flex-wrap gap-2 pt-1">
+      {visibleAccounts.map((account) => (
+        <Button
+          key={account.id}
+          type="button"
+          variant={value === account.id ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => onSelect(account.id)}
+          className="flex-grow sm:flex-grow-0"
+        >
+          {account.name} ({account.currency})
+        </Button>
+      ))}
+      {!showAll && sortedAccounts.length > 3 && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowAll(true)}
+          className="text-muted-foreground"
+        >
+          Show More...
+        </Button>
+      )}
+    </div>
+  );
+}
 
 export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
@@ -106,63 +160,37 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return () => { unsubClients(); unsubAccounts(); unsubSettings(); };
     }, []);
 
-    // Effect to set initial form data and handle pristine syncs
-    React.useEffect(() => {
-        if (isDataLoading) {
-            return;
-        }
-    
+    // Effect to set initial form data and handle auto-selections
+     React.useEffect(() => {
+        if (isDataLoading) return;
+
         if (transaction) {
-            // This is an existing transaction being edited.
             const initialData = { ...initialFormData, ...transaction };
-    
-            const isSynced = !!transaction.hash;
-    
-            // Auto-select favorite bank account for synced transactions that don't have one set yet.
-            if (isSynced && !initialData.bankAccountId && client?.favoriteBankAccountId) {
-                const favAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-                if (favAccount) {
-                    initialData.bankAccountId = favAccount.id;
-                    initialData.currency = favAccount.currency || 'USD';
-                }
+            if (transaction.hash && !transaction.bankAccountId && client?.favoriteBankAccountId) {
+                handleBankAccountSelect(client.favoriteBankAccountId, initialData);
+                return; 
             }
             
-            // Handle pristine state for clearing amount field
-            const isPristineSync = isSynced && !transaction.amount;
-            pristineRef.current = isPristineSync;
-            if (isPristineSync) {
-                initialData.amount = 0; // Clear amount for user to enter
-            } else if (transaction.amount) {
-                // If it's not pristine, make sure we calculate the derived values correctly based on the stored amount
-                const rate = getRate(initialData.currency);
-                if (rate > 0) {
-                     const storedAmountUSD = initialData.amount_usd;
-                     const finalUsdtAmount = initialData.amount_usdt;
-                     let newFeeUSD = 0;
-                     let newExpenseUSD = 0;
-
-                     if (initialData.type === 'Deposit') {
-                        const difference = storedAmountUSD - finalUsdtAmount;
-                        if (difference >= 0) newFeeUSD = difference;
-                        else newExpenseUSD = -difference;
-                     } else { // Withdraw
-                        const difference = finalUsdtAmount - storedAmountUSD;
-                        if (difference >= 0) newFeeUSD = difference;
-                        else newExpenseUSD = -difference;
-                     }
-
-                     initialData.fee_usd = newFeeUSD;
-                     initialData.expense_usd = newExpenseUSD;
-                }
-            }
-    
             setFormData(initialData);
-    
+
         } else {
-            // This is a brand new, manual transaction.
             setFormData(initialFormData);
         }
-    }, [transaction, client, bankAccounts, isDataLoading, getRate]);
+    }, [transaction, client, isDataLoading]);
+
+    // Recalculate derived fields when form data changes
+    React.useEffect(() => {
+        if (isDataLoading) return;
+
+        const isSynced = !!formData.hash;
+        if (isSynced) {
+            const isPristineSync = isSynced && !transaction?.amount;
+             pristineRef.current = isPristineSync;
+             if (isPristineSync) {
+                setFormData(prev => ({...prev, amount: 0}));
+             }
+        }
+    }, [formData.hash, transaction, isDataLoading]);
     
     // Server action response handler
     React.useEffect(() => {
@@ -174,13 +202,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const getNumberValue = (value: string | number) => {
         const num = parseFloat(String(value));
         return isNaN(num) ? 0 : num;
-    }
+    };
     
-    // Handles changes to the local amount field for a synced transaction.
-    // It calculates USD value, then determines fee/expense based on the fixed USDT amount.
-    const handleSyncedAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
-        pristineRef.current = false; // It's no longer pristine once edited
+        pristineRef.current = false;
 
         setFormData(prev => {
             if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
@@ -189,77 +215,58 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
             const newAmountUSD = newAmountNum * rate;
-            let newFeeUSD = 0;
-            let newExpenseUSD = 0;
-            const fixedUsdtAmount = prev.amount_usdt; // The amount from BscScan is the source of truth
+            
+            if (prev.hash) { // SYNCED TRANSACTION LOGIC
+                let newFeeUSD = 0;
+                let newExpenseUSD = 0;
+                const fixedUsdtAmount = prev.amount_usdt;
 
-            if (prev.type === 'Deposit') {
-                const difference = newAmountUSD - fixedUsdtAmount;
-                if (difference >= 0) {
-                    newFeeUSD = difference;
-                } else {
-                    newExpenseUSD = -difference; // Negative difference is a loss/expense
+                if (prev.type === 'Deposit') {
+                    const difference = newAmountUSD - fixedUsdtAmount;
+                    if (difference >= 0) newFeeUSD = difference;
+                    else newExpenseUSD = -difference;
+                } else { // Withdraw
+                    const difference = fixedUsdtAmount - newAmountUSD;
+                    if (difference >= 0) newFeeUSD = difference;
+                    else newExpenseUSD = -difference;
                 }
-            } 
-            else { 
-                const difference = fixedUsdtAmount - newAmountUSD;
-                 if (difference >= 0) {
-                    newFeeUSD = difference;
-                } else {
-                    newExpenseUSD = -difference; // Negative difference is a loss/expense
-                }
-            }
-            
-            return {
-                ...prev,
-                amount: newAmountNum,
-                amount_usd: parseFloat(newAmountUSD.toFixed(2)),
-                fee_usd: parseFloat(newFeeUSD.toFixed(2)),
-                expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
-            };
-        });
-    };
+                
+                return {
+                    ...prev,
+                    amount: newAmountNum,
+                    amount_usd: parseFloat(newAmountUSD.toFixed(2)),
+                    fee_usd: parseFloat(newFeeUSD.toFixed(2)),
+                    expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
+                };
 
-    const handleManualAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newAmountNum = getNumberValue(e.target.value);
-
-        setFormData(prev => {
-            if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
-            
-            const rate = getRate(prev.currency);
-            if (rate <= 0) return { ...prev, amount: newAmountNum };
-
-            let newAmountUSD = newAmountNum * rate;
-            let finalFee = 0;
-            let newUsdtAmount = 0;
-            
-            if (prev.type === 'Deposit') {
-                const feePercent = (settings.deposit_fee_percent || 0) / 100;
-                const calculatedFee = newAmountUSD * feePercent;
-                finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                newUsdtAmount = newAmountUSD - finalFee;
-            } else { // Withdraw
-                 const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                if (feePercent < 0 || feePercent >= 1) { 
-                    newAmountUSD = newAmountUSD; 
-                    finalFee = 0;
-                } else {
-                    const grossAmount = newAmountUSD / (1 - feePercent);
-                    newAmountUSD = grossAmount;
-                    const calculatedFee = grossAmount * feePercent;
+            } else { // MANUAL TRANSACTION LOGIC
+                let finalFee = 0;
+                let newUsdtAmount = 0;
+                
+                if (prev.type === 'Deposit') {
+                    const feePercent = (settings.deposit_fee_percent || 0) / 100;
+                    const calculatedFee = newAmountUSD * feePercent;
                     finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
+                    newUsdtAmount = newAmountUSD - finalFee;
+                } else { // Withdraw
+                    const feePercent = (settings.withdraw_fee_percent || 0) / 100;
+                    let grossAmount = newAmountUSD;
+                    if (feePercent >= 0 && feePercent < 1) {
+                        grossAmount = newAmountUSD / (1 - feePercent);
+                    }
+                    finalFee = grossAmount - newAmountUSD;
+                    newUsdtAmount = grossAmount;
                 }
-                newUsdtAmount = newAmountUSD - finalFee;
+                
+                return {
+                    ...prev,
+                    amount: newAmountNum,
+                    amount_usd: parseFloat(newAmountUSD.toFixed(2)),
+                    fee_usd: parseFloat(finalFee.toFixed(2)),
+                    expense_usd: 0,
+                    amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
+                };
             }
-
-            return {
-                ...prev,
-                amount: newAmountNum,
-                amount_usd: parseFloat(newAmountNum * rate).toFixed(2),
-                fee_usd: parseFloat(finalFee.toFixed(2)),
-                expense_usd: 0,
-                amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
-            };
         });
     };
 
@@ -267,9 +274,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const newUsdtAmount = getNumberValue(e.target.value);
 
         setFormData(prev => {
-            if (!settings) return { ...prev, amount_usdt: newUsdtAmount };
-
-            const amountUSD = prev.amount_usd;
+            if (!settings || prev.hash) return { ...prev, amount_usdt: newUsdtAmount };
+            const amountUSD = getNumberValue(prev.amount_usd);
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
 
@@ -292,7 +298,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     newExpenseUSD = -difference;
                 }
             }
-
             return {
                 ...prev,
                 amount_usdt: newUsdtAmount,
@@ -302,66 +307,18 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
     };
     
-    const handleBankAccountSelect = (accountId: string) => {
+    const handleBankAccountSelect = (accountId: string, data = formData) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (!selectedAccount) return;
-    
-        setFormData(prev => {
-             const newCurrency = selectedAccount.currency || 'USD';
-             const rate = getRate(newCurrency);
-             if (rate <= 0 || prev.amount_usd === 0) {
-                 return { ...prev, bankAccountId: accountId, currency: newCurrency, amount: prev.amount || 0 };
-             }
-             
-             let newAmount = prev.amount_usd / rate;
-             
-             // Recalculate fees for manual transactions if currency changes
-             if (!prev.hash) {
-                 const newAmountUSD = prev.amount_usd;
-                 let finalFee = 0;
-                 let newUsdtAmount = 0;
-                 if (prev.type === 'Deposit') {
-                     const feePercent = (settings?.deposit_fee_percent || 0) / 100;
-                     finalFee = Math.max(newAmountUSD * feePercent, settings?.minimum_fee_usd || 0);
-                     newUsdtAmount = newAmountUSD - finalFee;
-                 } else { // Withdraw
-                     const feePercent = (settings?.withdraw_fee_percent || 0) / 100;
-                     if (feePercent >= 0 && feePercent < 1) {
-                        const grossAmount = newAmountUSD / (1 - feePercent);
-                        finalFee = grossAmount - newAmountUSD;
-                     } else {
-                        finalFee = 0;
-                     }
-                     newUsdtAmount = newAmountUSD;
-                 }
-                 return {
-                    ...prev,
-                    bankAccountId: accountId,
-                    currency: newCurrency,
-                    amount: parseFloat(newAmount.toFixed(2)),
-                    fee_usd: parseFloat(finalFee.toFixed(2)),
-                    amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
-                 }
-             }
-
-            return {
-                ...prev,
-                bankAccountId: accountId,
-                currency: newCurrency,
-                amount: parseFloat(newAmount.toFixed(2)),
-            }
-        });
+        setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
     const handleClientSelect = (clientId: string) => {
-        setFormData(prev => ({...prev, clientId}));
         const selectedClient = clients.find(c => c.id === clientId);
-
         if (selectedClient?.favoriteBankAccountId) {
-            const favAccountId = selectedClient.favoriteBankAccountId;
-            if (bankAccounts.some(acc => acc.id === favAccountId)) {
-                handleBankAccountSelect(favAccountId);
-            }
+            handleBankAccountSelect(selectedClient.favoriteBankAccountId, {...formData, clientId });
+        } else {
+            setFormData(prev => ({...prev, clientId}));
         }
     };
     
@@ -414,9 +371,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     };
 
-    const isSynced = !!formData.hash;
-    const amountChangeHandler = isSynced ? handleSyncedAmountChange : handleManualAmountChange;
-    
     const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
 
     return (
@@ -432,16 +386,16 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             <form action={formAction} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2 space-y-4">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Transaction Details</CardTitle>
+                        <CardHeader className="p-4">
+                            <CardTitle className="text-base">Transaction Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="p-4 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="date">Date and Time</Label>
                                     <Popover>
                                     <PopoverTrigger asChild>
-                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.date && "text-muted-foreground")}>
+                                        <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !formData.date && "text-muted-foreground")}>
                                             <CalendarIcon className="mr-2 h-4 w-4" />
                                             {formData.date ? format(new Date(formData.date), "PPP") : <span>Pick a date</span>}
                                         </Button>
@@ -453,7 +407,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
                                     <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)}>
-                                        <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
+                                        <SelectTrigger className="h-9"><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit</SelectItem>
                                             <SelectItem value="Withdraw">Withdraw</SelectItem>
@@ -471,37 +425,34 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     onSelect={handleClientSelect}
                                 />
                             </div>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
+                            <div className="space-y-2">
                                 <Label>Bank Account</Label>
-                                    <DataCombobox 
-                                        name="bankAccountId" 
-                                        data={bankAccounts.map(b => ({id: b.id, name: `${b.name} (${b.currency})`}))} 
-                                        placeholder="Select a bank account..." 
-                                        value={formData.bankAccountId} 
-                                        onSelect={handleBankAccountSelect}
-                                    />
-                                </div>
-                                <div className="space-y-2">
+                                <BankAccountSelector
+                                    accounts={bankAccounts}
+                                    value={formData.bankAccountId}
+                                    onSelect={handleBankAccountSelect}
+                                />
+                                <input type="hidden" name="bankAccountId" value={formData.bankAccountId || ''} />
+                            </div>
+                            <div className="space-y-2">
                                 <Label>Crypto Wallet</Label>
-                                    <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." value={formData.cryptoWalletId} onSelect={(v) => handleFieldChange('cryptoWalletId', v)}/>
-                                </div>
+                                <DataCombobox name="cryptoWalletId" data={cryptoWallets.map(w => ({id: w.id, name: `${w.name} (${w.id})`}))} placeholder="Select a crypto wallet..." value={formData.cryptoWalletId} onSelect={(v) => handleFieldChange('cryptoWalletId', v)}/>
                             </div>
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Financial Details</CardTitle>
-                            <CardDescription>
-                                {isSynced 
+                        <CardHeader className="p-4">
+                            <CardTitle className="text-base">Financial Details</CardTitle>
+                            <CardDescription className="text-xs">
+                                {formData.hash 
                                 ? "This was synced from BscScan. Please enter the local currency Amount." 
-                                : "Enter the local currency Amount to auto-calculate all other financial details."}
+                                : "Enter local Amount or Final USDT to auto-calculate."}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="grid md:grid-cols-2 gap-4">
+                        <CardContent className="p-4 grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Amount ({formData.currency})</Label>
-                                <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={amountChangeHandler}/>
+                                <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleAmountChange}/>
                                 <input type="hidden" name="currency" value={formData.currency} />
                             </div>
                             <div className="space-y-2">
@@ -525,12 +476,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     step="any"
                                     required
                                     value={formData.amount_usdt}
-                                    onChange={!isSynced ? handleManualUsdtAmountChange : undefined}
-                                    readOnly={isSynced}
+                                    onChange={handleManualUsdtAmountChange}
+                                    readOnly={!!formData.hash}
                                 />
                             </div>
                         </CardContent>
-                        <CardFooter>
+                        <CardFooter className="p-4">
                             <SubmitButton />
                         </CardFooter>
                     </Card>
@@ -538,16 +489,16 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 <div className="lg:col-span-1 space-y-4">
                     {transaction && client && (
                         <Card>
-                            <CardHeader>
-                                <CardTitle>Actions</CardTitle>
-                                <CardDescription>Download or share the invoice.</CardDescription>
+                            <CardHeader className="p-4">
+                                <CardTitle className="text-base">Actions</CardTitle>
+                                <CardDescription className="text-xs">Download or share the invoice.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-2">
-                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} className="w-full">
+                            <CardContent className="p-4 space-y-2">
+                                 <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} size="sm" className="w-full">
                                     {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                     {isDownloading ? 'Downloading...' : 'Download Invoice'}
                                 </Button>
-                                <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading} className="w-full">
+                                <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading} size="sm" className="w-full">
                                     {isSharing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
                                     {isSharing ? 'Preparing...' : 'Share Invoice'}
                                 </Button>
@@ -555,17 +506,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </Card>
                     )}
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Optional Data</CardTitle>
+                        <CardHeader className="p-4">
+                            <CardTitle className="text-base">Optional Data</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="p-4 space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="notes">Notes</Label>
-                                <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)}/>
+                                <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2}/>
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="attachment_url">Upload Transaction Image</Label>
-                                <Input id="attachment_url" name="attachment_url" type="file" />
+                                <Input id="attachment_url" name="attachment_url" type="file" size="sm" />
                                 {transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
@@ -586,7 +537,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Status</Label>
                                     <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
+                                        <SelectTrigger className="h-9"><SelectValue/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Pending">Pending</SelectItem>
                                             <SelectItem value="Confirmed">Confirmed</SelectItem>
@@ -597,7 +548,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Need Flag Review</Label>
                                     <Select name="flags" value={formData.flags?.[0] || 'none'} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
-                                        <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
+                                        <SelectTrigger className="h-9"><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
                                             <SelectItem value="AML">AML</SelectItem>
@@ -632,7 +583,7 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     <input type="hidden" name={name} value={value || ""} />
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+        <Button variant="outline" role="combobox" aria-expanded={open} size="sm" className="w-full justify-between font-normal">
           {value ? data.find((d) => d.id === value)?.name : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -660,3 +611,5 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     </>
   )
 }
+
+    
