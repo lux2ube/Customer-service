@@ -19,6 +19,8 @@ import {
     Hash,
     Paperclip,
     ArrowLeftRight,
+    CircleDollarSign,
+    Receipt,
 } from 'lucide-react';
 
 
@@ -26,16 +28,6 @@ import {
 
 const translateType = (type: 'Deposit' | 'Withdraw') => {
     return type === 'Deposit' ? 'إيداع' : 'سحب';
-};
-
-const translateCurrency = (currency: string) => {
-    switch(currency.toUpperCase()) {
-        case 'USD': return 'دولار أمريكي';
-        case 'YER': return 'ريال يمني';
-        case 'SAR': return 'ريال سعودي';
-        case 'USDT': return 'USDT';
-        default: return currency;
-    }
 };
 
 const toArabicWords = (num: number): string => {
@@ -87,19 +79,14 @@ const toArabicWords = (num: number): string => {
 };
 
 const tafqeet = (value: number, currency: string) => {
-    const mainCurrency = currency.toUpperCase() === 'USDT' ? 'USDT' : translateCurrency(currency).split(' ')[0];
+    const mainCurrency = currency.toUpperCase() === 'USDT' ? 'USDT' : 'دولار';
     const integerPart = Math.floor(value);
     const decimalPart = Math.round((value - integerPart) * 100);
 
     let result = `${toArabicWords(integerPart)} ${mainCurrency}`;
     if (decimalPart > 0) {
-        let subCurrency = '';
-        if (currency.toUpperCase() === 'USD') subCurrency = 'سنت';
-        if (currency.toUpperCase() === 'SAR') subCurrency = 'هللة';
-        if (currency.toUpperCase() === 'YER') subCurrency = 'فلس';
-        if (subCurrency) {
-            result += ` و ${toArabicWords(decimalPart)} ${subCurrency}`;
-        }
+        let subCurrency = 'سنت';
+        result += ` و ${toArabicWords(decimalPart)} ${subCurrency}`;
     }
     return `فقط ${result} لا غير.`;
 };
@@ -107,7 +94,7 @@ const tafqeet = (value: number, currency: string) => {
 
 // --- Components ---
 
-const DetailItem = ({ icon, label, value, canCopy = false, isLink = false }: { icon: React.ElementType, label: string, value?: string | number, canCopy?: boolean, isLink?: boolean }) => {
+const DetailItem = ({ icon, label, value, canCopy = false, isLink = false, isFee = false }: { icon: React.ElementType, label: string, value?: string | number, canCopy?: boolean, isLink?: boolean, isFee?: boolean }) => {
     const { toast } = useToast();
 
     const handleCopy = (e: React.MouseEvent) => {
@@ -117,26 +104,26 @@ const DetailItem = ({ icon, label, value, canCopy = false, isLink = false }: { i
         toast({ title: "تم النسخ!", description: `${label} تم نسخه إلى الحافظة.` });
     };
 
-    if (value === undefined || value === null || value === '') return null;
+    if (value === undefined || value === null || value === '' || (typeof value === 'number' && isNaN(value)) ) return null;
 
     const Icon = icon;
 
     const content = (
-        <div className="flex items-center gap-2 text-xs text-right text-gray-700 dark:text-gray-300">
+        <div className="flex items-center gap-1.5 text-right text-gray-700 dark:text-gray-300">
             {canCopy && (
                 <button onClick={handleCopy} className="text-gray-400 hover:text-primary shrink-0">
                     <Copy size={12} />
                 </button>
             )}
-            <p className={cn("font-mono", isLink && "underline text-primary")}>{String(value)}</p>
+            <p className={cn("font-mono", isLink && "underline text-primary", isFee && "text-destructive")}>{String(value)}</p>
         </div>
     );
 
     return (
-        <div className="flex justify-between items-center py-1.5 px-2 rounded-md hover:bg-muted/50">
-            <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-primary/70" />
-                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <div className="flex justify-between items-center py-1 px-2 rounded-md hover:bg-muted/50">
+            <div className="flex items-center gap-1.5">
+                <Icon className="h-3.5 w-3.5 text-primary/70" />
+                <p className="font-medium text-muted-foreground">{label}</p>
             </div>
             {isLink ? <a href={String(value)} target="_blank" rel="noopener noreferrer">{content}</a> : content}
         </div>
@@ -147,7 +134,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     
     const formatCurrency = (value: number | undefined, currency: string) => {
         if (value === undefined || value === null) return 'N/A';
-        // Format with commas, no currency symbol
         return new Intl.NumberFormat('en-US').format(value);
     }
 
@@ -155,101 +141,88 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         ? format(new Date(transaction.date), 'yyyy-MM-dd @ hh:mm a')
         : 'N/A';
         
-    const isDeposit = transaction.type === 'Deposit';
     const totalAmount = transaction.amount_usdt;
 
     return (
         <div ref={ref} dir="rtl" className="bg-gray-50 dark:bg-gray-800 p-4 font-[system-ui] text-gray-800">
-            <div className="w-full max-w-3xl mx-auto bg-white dark:bg-card shadow-lg rounded-xl overflow-hidden border">
-                <header className="bg-gradient-to-l from-primary via-primary/90 to-teal-600 text-primary-foreground p-4">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-white/20 p-1.5 rounded-lg">
-                                <JaibLogo className="h-6 w-auto text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-lg font-bold">إيصال معاملة</h1>
-                                <p className="text-xs opacity-80 font-mono tracking-wider">#{transaction.id.slice(-8).toUpperCase()}</p>
-                            </div>
+            <div className="w-full max-w-4xl mx-auto bg-white dark:bg-card shadow-lg rounded-xl overflow-hidden border">
+                <header className="bg-gradient-to-l from-primary via-primary/90 to-teal-600 text-primary-foreground p-3 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white/20 p-1.5 rounded-lg">
+                            <JaibLogo className="h-6 w-auto text-white" />
                         </div>
-                        <Badge variant={transaction.status === 'Confirmed' ? 'default' : 'destructive'} className="bg-white/90 text-primary font-bold">
+                        <div>
+                            <h1 className="text-base font-bold">إيصال معاملة</h1>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-xs opacity-80 font-mono tracking-wider">#{transaction.id.slice(-8).toUpperCase()}</p>
+                        <Badge variant={transaction.status === 'Confirmed' ? 'default' : 'destructive'} className="bg-white/90 text-primary font-bold text-xs">
                             {transaction.status === 'Confirmed' ? 'مؤكدة' : (transaction.status === 'Pending' ? 'قيد الانتظار' : 'ملغاة')}
                         </Badge>
                     </div>
                 </header>
                 
-                <main className="p-4 space-y-4">
-                    <div className="p-3 text-sm text-center bg-teal-50 dark:bg-teal-900/20 rounded-lg">
+                <main className="p-3 text-xs">
+                     <div className="p-2 text-center bg-teal-50 dark:bg-teal-900/20 rounded-lg mb-3">
                         <p>
                             <span className="font-semibold">عميلنا العزيز {client.name}</span>، لقد قمت بإجراء معاملة <span className="font-semibold text-primary">{translateType(transaction.type)}</span> بنجاح.
                         </p>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                        {/* Right Column */}
-                        <div className="p-3 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card">
-                            <h3 className="text-sm font-bold text-gray-500 mb-2">معلومات العميل والعملية</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Column 1 */}
+                        <div className="p-2 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card">
+                            <h3 className="text-xs font-bold text-gray-500 mb-1 border-b pb-1">معلومات العميل</h3>
                             <DetailItem icon={User} label="اسم العميل" value={client.name} />
                             <DetailItem icon={Phone} label="رقم الهاتف" value={client.phone} />
                             <DetailItem icon={Calendar} label="تاريخ العملية" value={formattedDate} />
-                            <DetailItem icon={ArrowLeftRight} label="نوع العملية" value={translateType(transaction.type)} />
-                            <DetailItem icon={FileText} label="رقم الحوالة" value={transaction.remittance_number} />
                         </div>
 
-                        {/* Left Column */}
-                        <div className="p-3 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card">
-                             <h3 className="text-sm font-bold text-gray-500 mb-2">معلومات الحسابات والمحافظ</h3>
+                        {/* Column 2 */}
+                        <div className="p-2 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card">
+                             <h3 className="text-xs font-bold text-gray-500 mb-1 border-b pb-1">معلومات الحسابات</h3>
+                             <DetailItem icon={ArrowLeftRight} label="نوع العملية" value={translateType(transaction.type)} />
                              <DetailItem icon={Landmark} label="الحساب البنكي" value={transaction.bankAccountName} />
                              <DetailItem icon={Wallet} label="محفظة الشركة" value={transaction.cryptoWalletName} />
                              <DetailItem icon={Wallet} label="محفظة العميل" value={transaction.client_wallet_address} canCopy />
-                             <DetailItem icon={Hash} label="معرّف العملية (Txid)" value={transaction.hash} canCopy />
-                             {transaction.attachment_url && <DetailItem icon={Paperclip} label="مرفق" value={transaction.attachment_url} isLink />}
                         </div>
-                    </div>
-                    
-                    <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                            <thead className="bg-gray-100 dark:bg-muted/50">
-                                <tr>
-                                    <th className="p-2 text-right font-semibold">الوصف</th>
-                                    <th className="p-2 text-center font-semibold">المبلغ الأصلي</th>
-                                    <th className="p-2 text-center font-semibold">القيمة (USD)</th>
-                                    <th className="p-2 text-center font-semibold">الرسوم/المصاريف (USD)</th>
-                                    <th className="p-2 text-left font-semibold">المبلغ النهائي (USDT)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr className="border-t">
-                                    <td className="p-2">
-                                        <p className="font-semibold">{translateType(transaction.type)}</p>
-                                        <p className="text-muted-foreground">{transaction.bankAccountName}</p>
-                                    </td>
-                                    <td className="p-2 text-center font-mono">{formatCurrency(transaction.amount, transaction.currency)} {transaction.currency}</td>
-                                    <td className="p-2 text-center font-mono">{formatCurrency(transaction.amount_usd, 'USD')}</td>
-                                    <td className="p-2 text-center font-mono text-red-600">{formatCurrency((transaction.fee_usd || 0) + (transaction.expense_usd || 0), 'USD')}</td>
-                                    <td className="p-2 text-left font-mono font-semibold">{formatCurrency(transaction.amount_usdt, 'USDT')}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    {transaction.notes && (
-                         <div className="p-2 text-xs border rounded-lg bg-gray-50 dark:bg-card">
-                            <p><span className="font-bold">ملاحظات:</span> {transaction.notes}</p>
-                        </div>
-                    )}
 
+                        {/* Column 3 */}
+                        <div className="p-2 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card">
+                             <h3 className="text-xs font-bold text-gray-500 mb-1 border-b pb-1">تفاصيل مالية (USD)</h3>
+                             <DetailItem icon={CircleDollarSign} label={`المبلغ (${transaction.currency})`} value={formatCurrency(transaction.amount, transaction.currency)} />
+                             <DetailItem icon={CircleDollarSign} label="القيمة (USD)" value={formatCurrency(transaction.amount_usd, 'USD')} />
+                             <DetailItem icon={Receipt} label="رسوم/مصاريف" value={formatCurrency((transaction.fee_usd || 0) + (transaction.expense_usd || 0), 'USD')} isFee={true} />
+                             <DetailItem icon={CircleDollarSign} label="النهائي (USDT)" value={formatCurrency(transaction.amount_usdt, 'USDT')} />
+                        </div>
+
+                        {/* Transaction Data */}
+                        <div className="p-2 border rounded-lg space-y-1 bg-gray-50/50 dark:bg-card col-span-full">
+                            <h3 className="text-xs font-bold text-gray-500 mb-1 border-b pb-1">بيانات العملية</h3>
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-3">
+                                <DetailItem icon={FileText} label="رقم الحوالة" value={transaction.remittance_number} />
+                                <DetailItem icon={Hash} label="معرّف العملية (Txid)" value={transaction.hash} canCopy />
+                                {transaction.attachment_url && <DetailItem icon={Paperclip} label="مرفق" value={transaction.attachment_url} isLink />}
+                            </div>
+                            {transaction.notes && (
+                                <div className="pt-1">
+                                    <p><span className="font-bold">ملاحظات:</span> {transaction.notes}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </main>
 
-                <footer className="p-4 bg-gray-100 dark:bg-muted/30">
+                <footer className="p-3 bg-gray-100 dark:bg-muted/30">
                      <div className="flex justify-between items-center">
-                        <div className="text-xs">
+                        <div className="text-xs max-w-[60%]">
                             <p className="font-bold">المبلغ الإجمالي كتابةً:</p>
                             <p className="text-primary font-semibold">{tafqeet(totalAmount, 'USDT')}</p>
                         </div>
                         <div className="text-left">
-                            <p className="text-sm text-muted-foreground">الإجمالي النهائي</p>
-                            <p className={cn("text-2xl font-bold font-mono", isDeposit ? 'text-green-600' : 'text-red-600')}>
+                            <p className="text-xs text-muted-foreground">الإجمالي النهائي</p>
+                            <p className={cn("text-xl font-bold font-mono", transaction.type === 'Deposit' ? 'text-green-600' : 'text-red-600')}>
                                 {formatCurrency(totalAmount, 'USDT')} USDT
                             </p>
                         </div>
