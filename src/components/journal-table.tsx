@@ -61,7 +61,11 @@ export function JournalTable() {
             ) : entries.length > 0 ? (
               entries.map(entry => (
                 <TableRow key={entry.id}>
-                  <TableCell>{entry.date ? format(new Date(entry.date), 'PP') : 'N/A'}</TableCell>
+                  <TableCell>
+                    {entry.date && !isNaN(new Date(entry.date).getTime())
+                      ? format(new Date(entry.date), 'PP')
+                      : 'N/A'}
+                  </TableCell>
                   <TableCell className="font-medium">{entry.description}</TableCell>
                   <TableCell>
                       <div className="flex items-center gap-2">

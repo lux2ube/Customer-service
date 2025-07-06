@@ -104,7 +104,7 @@ export function BankAccountsTable() {
                       {account.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{account.createdAt ? format(new Date(account.createdAt), 'PPP') : 'N/A'}</TableCell>
+                  <TableCell>{account.createdAt && !isNaN(new Date(account.createdAt).getTime()) ? format(new Date(account.createdAt), 'PPP') : 'N/A'}</TableCell>
                   <TableCell className="text-right">
                     <Button asChild variant="ghost" size="icon">
                         <Link href={`/bank-accounts/${account.id}/edit`}>

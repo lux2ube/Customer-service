@@ -221,7 +221,11 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
               ) : filteredAndSortedTransactions.length > 0 ? (
                 filteredAndSortedTransactions.map(tx => (
                   <TableRow key={tx.id}>
-                    <TableCell>{format(new Date(tx.date), 'PPP')}</TableCell>
+                    <TableCell>
+                      {tx.date && !isNaN(new Date(tx.date).getTime())
+                        ? format(new Date(tx.date), 'PPP')
+                        : 'N/A'}
+                    </TableCell>
                     <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
                     <TableCell>
                       <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>

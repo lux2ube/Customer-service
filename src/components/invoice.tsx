@@ -38,9 +38,6 @@ interface InvoiceProps {
 }
 
 export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transaction, client }, ref) => {
-    
-    const transactionDate = transaction.date ? new Date(transaction.date) : new Date();
-
     return (
         <div ref={ref} className="bg-white p-4 sm:p-8 font-sans text-gray-800">
             <Card className="w-full max-w-4xl mx-auto shadow-lg">
@@ -74,9 +71,9 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
                         <div className="text-right">
                              <div className="grid grid-cols-2 gap-y-1 text-sm">
                                 <span className="font-semibold text-gray-600">Invoice Date:</span>
-                                <span>{format(transactionDate, 'MMMM dd, yyyy')}</span>
+                                <span>{transaction.date && !isNaN(new Date(transaction.date).getTime()) ? format(new Date(transaction.date), 'MMMM dd, yyyy') : 'N/A'}</span>
                                 <span className="font-semibold text-gray-600">Created At:</span>
-                                <span>{format(new Date(transaction.createdAt), 'MMMM dd, yyyy')}</span>
+                                <span>{transaction.createdAt && !isNaN(new Date(transaction.createdAt).getTime()) ? format(new Date(transaction.createdAt), 'MMMM dd, yyyy') : 'N/A'}</span>
                             </div>
                         </div>
                     </div>

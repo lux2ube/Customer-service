@@ -191,7 +191,7 @@ export function BlacklistManager() {
                                             <TableCell>{item.type}</TableCell>
                                             <TableCell className="font-mono">{item.value}</TableCell>
                                             <TableCell>{item.reason || 'N/A'}</TableCell>
-                                            <TableCell>{format(new Date(item.createdAt), 'PPP')}</TableCell>
+                                            <TableCell>{item.createdAt && !isNaN(new Date(item.createdAt).getTime()) ? format(new Date(item.createdAt), 'PPP') : 'N/A'}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(item)}>
                                                     <Trash2 className="h-4 w-4 text-destructive" />
