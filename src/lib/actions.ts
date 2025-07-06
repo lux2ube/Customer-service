@@ -710,8 +710,13 @@ export async function createAccount(accountId: string | null, prevState: Account
         if(accountId) {
              await update(accountRef, dataForFirebase);
         } else {
+            const accountsSnapshot = await get(ref(db, 'accounts'));
+            const count = accountsSnapshot.exists() ? accountsSnapshot.size : 0;
             const newAccountRef = ref(db, `accounts/${id}`)
-            await set(newAccountRef, dataForFirebase);
+            await set(newAccountRef, {
+                ...dataForFirebase,
+                priority: count, // Assign priority at the end
+            });
         }
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }
@@ -734,6 +739,55 @@ export async function deleteAccount(accountId: string) {
         return { message: 'Database Error: Failed to delete account.' };
     }
 }
+
+export async function updateAccountPriority(accountId: string, parentId: string | null, direction: 'up' | 'down') {
+    const accountsRef = ref(db, 'accounts');
+    const snapshot = await get(accountsRef);
+    if (!snapshot.exists()) return;
+
+    let allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
+
+    // Filter for sibling accounts
+    let siblingAccounts = allAccounts.filter(acc => (acc.parentId || null) === (parentId || null));
+
+    // Assign default priority if missing
+    siblingAccounts.forEach((acc, index) => {
+        if (acc.priority === undefined || acc.priority === null) {
+            acc.priority = index;
+        }
+    });
+
+    siblingAccounts.sort((a, b) => (a.priority || 0) - (b.priority || 0));
+
+    const currentIndex = siblingAccounts.findIndex(acc => acc.id === accountId);
+    if (currentIndex === -1) return;
+
+    let otherIndex = -1;
+    if (direction === 'up' && currentIndex > 0) {
+        otherIndex = currentIndex - 1;
+    } else if (direction === 'down' && currentIndex < siblingAccounts.length - 1) {
+        otherIndex = currentIndex + 1;
+    }
+    
+    if (otherIndex !== -1) {
+        // Swap priorities
+        const currentAccount = siblingAccounts[currentIndex];
+        const otherAccount = siblingAccounts[otherIndex];
+        
+        const updates: { [key: string]: any } = {};
+        updates[`/accounts/${currentAccount.id}/priority`] = otherAccount.priority;
+        updates[`/accounts/${otherAccount.id}/priority`] = currentAccount.priority;
+        
+        try {
+            await update(ref(db), updates);
+        } catch (error) {
+            console.error("Failed to update priority:", error);
+        }
+    }
+    
+    revalidatePath('/accounting/chart-of-accounts');
+}
+
 
 
 // --- BscScan Sync Action ---

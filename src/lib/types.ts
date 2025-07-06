@@ -74,6 +74,7 @@ export interface Account {
     isGroup: boolean;
     parentId?: string | null;
     currency?: 'YER' | 'USD' | 'SAR' | 'USDT';
+    priority?: number;
     // Balance fields will be calculated properties, not stored directly
 }
 

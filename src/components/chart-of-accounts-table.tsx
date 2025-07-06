@@ -26,9 +26,9 @@ import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Button } from './ui/button';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import Link from 'next/link';
-import { deleteAccount } from '@/lib/actions';
+import { deleteAccount, updateAccountPriority } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -49,7 +49,9 @@ export function ChartOfAccountsTable() {
 
     const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
       const data = snapshot.val();
-      const list: Account[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })).sort((a, b) => a.id.localeCompare(b.id)) : [];
+      const list: Account[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+      // Sort by priority first, then by ID
+      list.sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity) || a.id.localeCompare(b.id));
       setAccounts(list);
     });
 
@@ -65,8 +67,6 @@ export function ChartOfAccountsTable() {
       setJournalEntries(list);
     });
 
-    // Use get() for the initial load to manage the loading state correctly.
-    // The onValue listeners above will handle real-time updates afterward.
     Promise.all([
       get(accountsRef),
       get(transactionsRef),
@@ -83,7 +83,7 @@ export function ChartOfAccountsTable() {
   React.useEffect(() => {
     if (loading) return;
 
-    // 1. Calculate balances for leaf nodes (accounts that can have transactions)
+    // 1. Calculate balances for leaf nodes
     const leafBalances: Record<string, { native: number; usd: number }> = {};
     accounts.forEach(acc => {
       if (!acc.isGroup) {
@@ -91,31 +91,24 @@ export function ChartOfAccountsTable() {
       }
     });
 
-    // Process transactions to update balances
+    // Process transactions
     transactions.forEach(tx => {
         if (tx.status !== 'Confirmed') return;
-
-        // DEPOSIT: Fiat IN (+), USDT OUT (-)
         if (tx.type === 'Deposit') {
-            // Fiat account gets credited
             if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
                 leafBalances[tx.bankAccountId].native += tx.amount;
                 leafBalances[tx.bankAccountId].usd += tx.amount_usd;
             }
-            // Crypto wallet gets debited
             if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
                 leafBalances[tx.cryptoWalletId].native -= tx.amount_usdt;
                 leafBalances[tx.cryptoWalletId].usd -= tx.amount_usdt;
             }
         } 
-        // WITHDRAWAL: Fiat OUT (-), USDT IN (+)
         else if (tx.type === 'Withdraw') {
-             // Fiat account gets debited
             if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
                 leafBalances[tx.bankAccountId].native -= tx.amount;
                 leafBalances[tx.bankAccountId].usd -= tx.amount_usd;
             }
-            // Crypto wallet gets credited
             if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
                 leafBalances[tx.cryptoWalletId].native += tx.amount_usdt;
                 leafBalances[tx.cryptoWalletId].usd += tx.amount_usdt;
@@ -123,7 +116,7 @@ export function ChartOfAccountsTable() {
         }
     });
 
-    // Process journal entries to update balances
+    // Process journal entries
     journalEntries.forEach(entry => {
       if (leafBalances[entry.debit_account]) {
         leafBalances[entry.debit_account].native += entry.debit_amount;
@@ -137,7 +130,7 @@ export function ChartOfAccountsTable() {
 
     // 2. Aggregate balances up to parent group accounts
     const aggregatedBalances = { ...leafBalances };
-    const reversedAccounts = [...accounts].reverse(); // Process children before parents
+    const reversedAccounts = [...accounts].reverse(); 
 
     reversedAccounts.forEach(account => {
       if (account.isGroup) {
@@ -201,12 +194,26 @@ export function ChartOfAccountsTable() {
       }
     }
     
-    const renderRow = (account: any, level = 0) => {
+    const renderRow = (account: any, level = 0, siblings: Account[] = [], index: number = 0) => {
       const isGroup = account.isGroup;
       const balanceInfo = balances[account.id];
       return (
         <React.Fragment key={account.id}>
           <TableRow className={cn(isGroup && 'bg-muted/50')}>
+             <TableCell className="w-[100px]">
+                  <div className="flex items-center">
+                      <form action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'up')}>
+                          <Button type="submit" variant="ghost" size="icon" disabled={index === 0}>
+                              <ArrowUp className="h-4 w-4" />
+                          </Button>
+                      </form>
+                      <form action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'down')}>
+                          <Button type="submit" variant="ghost" size="icon" disabled={index === siblings.length - 1}>
+                              <ArrowDown className="h-4 w-4" />
+                          </Button>
+                      </form>
+                  </div>
+              </TableCell>
             <TableCell className={cn('font-medium', isGroup && 'font-bold')}>{account.id}</TableCell>
             <TableCell style={{ paddingLeft: `${1 + level * 1.5}rem` }} className={cn(isGroup && 'font-bold')}>{account.name}</TableCell>
             <TableCell>
@@ -215,12 +222,10 @@ export function ChartOfAccountsTable() {
             <TableCell className="text-right font-mono">
               {balanceInfo !== undefined && (
                 isGroup ? (
-                  // Group accounts always show aggregated USD balance
                   <span>
                     {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.usd)}
                   </span>
                 ) : (
-                  // Leaf accounts show native currency balance
                   account.currency && (
                     <span>
                       {
@@ -244,12 +249,12 @@ export function ChartOfAccountsTable() {
                 </Button>
             </TableCell>
           </TableRow>
-          {account.children.sort((a: Account, b: Account) => a.id.localeCompare(b.id)).map((child: Account) => renderRow(child, level + 1))}
+          {account.children.map((child: Account, childIndex: number) => renderRow(child, level + 1, account.children, childIndex))}
         </React.Fragment>
       );
     }
     
-    return rootAccounts.map(acc => renderRow(acc));
+    return rootAccounts.map((acc, index) => renderRow(acc, 0, rootAccounts, index));
   };
 
 
@@ -259,6 +264,7 @@ export function ChartOfAccountsTable() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[100px]">Priority</TableHead>
               <TableHead className="w-[100px]">Code</TableHead>
               <TableHead>Account Name</TableHead>
               <TableHead>Type</TableHead>
@@ -269,7 +275,7 @@ export function ChartOfAccountsTable() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   Loading accounts and calculating balances...
                 </TableCell>
               </TableRow>
@@ -277,7 +283,7 @@ export function ChartOfAccountsTable() {
               renderAccounts()
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   No accounts found. Add one to get started.
                 </TableCell>
               </TableRow>
