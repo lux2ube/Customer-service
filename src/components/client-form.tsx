@@ -74,14 +74,14 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
     };
 
     return (
-        <form action={formAction} className="space-y-4">
+        <form action={formAction} className="space-y-3">
             <Card>
                 <CardHeader>
                     <CardTitle>{client ? 'Edit' : 'New'} Client</CardTitle>
                     <CardDescription>Fill in the details for the client profile.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
+                <CardContent className="space-y-3">
+                    <div className="grid md:grid-cols-2 gap-3">
                         <div className="space-y-2">
                             <Label htmlFor="name">Full Name</Label>
                             <Input 
@@ -107,7 +107,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
                         </div>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="grid md:grid-cols-2 gap-3">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
                              <RadioGroup 
@@ -181,8 +181,8 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                         {client?.bep20_addresses && client.bep20_addresses.length > 0 ? (
                             <ul className="divide-y divide-border rounded-md border bg-background">
                                 {client.bep20_addresses.map((address, index) => (
-                                    <li key={index} className="flex items-center justify-between p-3">
-                                        <span className="font-mono text-sm break-all">{address}</span>
+                                    <li key={index} className="flex items-center justify-between p-3 text-sm">
+                                        <span className="font-mono break-all">{address}</span>
                                         <Button
                                             type="submit"
                                             name="intent"
@@ -202,14 +202,14 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
 
                     <Separator />
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <h3 className="text-base font-medium">KYC Documents</h3>
                         {client?.kyc_documents && client.kyc_documents.length > 0 && (
                             <div className="space-y-2">
                                 <Label>Uploaded Documents</Label>
                                 <ul className="divide-y divide-border rounded-md border bg-background">
                                     {client.kyc_documents.map((doc) => (
-                                        <li key={doc.name} className="flex items-center justify-between p-3">
+                                        <li key={doc.name} className="flex items-center justify-between p-3 text-sm">
                                             <Button variant="link" asChild className="p-0 h-auto justify-start">
                                                 <Link href={doc.url} target="_blank" rel="noopener noreferrer">
                                                     {doc.name}

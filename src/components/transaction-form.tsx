@@ -216,7 +216,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const rate = getRate(prev.currency);
             if (rate <= 0) return { ...prev, amount: newAmountNum };
             
-            let newAmountUSD = newAmountNum * rate;
+            const newAmountUSD = newAmountNum * rate;
             
             if (prev.hash) { // SYNCED TRANSACTION LOGIC
                 let newFeeUSD = 0;
@@ -253,7 +253,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 } else { // Withdraw
                     const feePercent = (settings.withdraw_fee_percent || 0) / 100;
                     if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
-                        newAmountUSD = newAmountUSD; // fallback
                         finalFee = 0;
                     } else {
                         const grossAmount = newAmountUSD / (1 - feePercent);
@@ -382,14 +381,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </div>
             )}
 
-            <form action={formAction} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2 space-y-4">
+            <form action={formAction} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2 space-y-3">
                     <Card>
-                        <CardHeader className="p-3">
-                            <CardTitle className="text-sm">Transaction Details</CardTitle>
+                        <CardHeader>
+                            <CardTitle>Transaction Details</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-3 space-y-4">
-                            <div className="grid md:grid-cols-2 gap-4">
+                        <CardContent className="space-y-3">
+                            <div className="grid md:grid-cols-2 gap-3">
                                 <div className="space-y-2">
                                     <Label htmlFor="date">Date and Time</Label>
                                     <Popover>
@@ -406,7 +405,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
                                     <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)}>
-                                        <SelectTrigger className="h-8"><SelectValue placeholder="Select type..."/></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit</SelectItem>
                                             <SelectItem value="Withdraw">Withdraw</SelectItem>
@@ -445,15 +444,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader className="p-3">
-                            <CardTitle className="text-sm">Financial Details</CardTitle>
+                        <CardHeader>
+                            <CardTitle>Financial Details</CardTitle>
                             <CardDescription className="text-xs">
                                 {formData.hash 
                                 ? "This was synced from BscScan. Please enter the local currency Amount." 
                                 : "Enter local Amount or Final USDT to auto-calculate."}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="p-3 space-y-2">
+                        <CardContent className="space-y-2">
                              <div className="flex items-center gap-2">
                                 <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
@@ -485,19 +484,19 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 />
                             </div>
                         </CardContent>
-                        <CardFooter className="p-3">
+                        <CardFooter>
                             <SubmitButton />
                         </CardFooter>
                     </Card>
                 </div>
-                <div className="md:col-span-1 space-y-4">
+                <div className="md:col-span-1 space-y-3">
                     {transaction && client && (
                         <Card>
-                            <CardHeader className="p-3">
-                                <CardTitle className="text-sm">Actions</CardTitle>
+                            <CardHeader>
+                                <CardTitle>Actions</CardTitle>
                                 <CardDescription className="text-xs">Download or share the invoice.</CardDescription>
                             </CardHeader>
-                            <CardContent className="p-3 space-y-2">
+                            <CardContent className="space-y-2">
                                  <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} size="sm" className="w-full">
                                     {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                     {isDownloading ? 'Downloading...' : 'Download Invoice'}
@@ -510,10 +509,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </Card>
                     )}
                     <Card>
-                        <CardHeader className="p-3">
-                            <CardTitle className="text-sm">Optional Data</CardTitle>
+                        <CardHeader>
+                            <CardTitle>Optional Data</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-3 space-y-4">
+                        <CardContent className="space-y-3">
                             <div className="space-y-2">
                                 <Label htmlFor="notes">Notes</Label>
                                 <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2}/>
@@ -523,7 +522,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Input id="attachment_url" name="attachment_url" type="file" size="sm" />
                                 {transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
                             </div>
-                            <div className="grid md:grid-cols-2 gap-4">
+                            <div className="grid md:grid-cols-2 gap-3">
                                 <div className="space-y-2">
                                     <Label htmlFor="remittance_number">Remittance Number</Label>
                                     <Input id="remittance_number" name="remittance_number" value={formData.remittance_number || ''} onChange={(e) => handleFieldChange('remittance_number', e.target.value)}/>
@@ -537,11 +536,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
                                 <Input id="client_wallet_address" name="client_wallet_address" value={formData.client_wallet_address || ''} onChange={(e) => handleFieldChange('client_wallet_address', e.target.value)}/>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-4">
+                            <div className="grid md:grid-cols-2 gap-3">
                                 <div className="space-y-2">
                                     <Label>Status</Label>
                                     <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
-                                        <SelectTrigger className="h-8"><SelectValue/></SelectTrigger>
+                                        <SelectTrigger><SelectValue/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Pending">Pending</SelectItem>
                                             <SelectItem value="Confirmed">Confirmed</SelectItem>
@@ -552,7 +551,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <div className="space-y-2">
                                     <Label>Need Flag Review</Label>
                                     <Select name="flags" value={formData.flags?.[0] || 'none'} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
-                                        <SelectTrigger className="h-8"><SelectValue placeholder="Add a flag..."/></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
                                             <SelectItem value="AML">AML</SelectItem>
@@ -587,7 +586,7 @@ function DataCombobox({ name, data, placeholder, value, onSelect }: { name: stri
     <input type="hidden" name={name} value={value || ""} />
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} size="sm" className="w-full justify-between font-normal">
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
           {value ? data.find((d) => d.id === value)?.name : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
