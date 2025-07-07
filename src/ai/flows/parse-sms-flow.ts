@@ -132,6 +132,21 @@ ${input.prompt}
                             person: 'علي عبدالله صالح',
                         }
                     }]
+                },
+                {
+                    role: 'user',
+                    content: [{ text: 'تم تحويل10100لحساب عمار محمد رصيدك14٫83YER' }]
+                },
+                {
+                    role: 'model',
+                    content: [{
+                        data: {
+                            type: 'debit',
+                            amount: 10100,
+                            currency: 'YER',
+                            person: 'عمار محمد',
+                        }
+                    }]
                 }
             ],
             config: {
