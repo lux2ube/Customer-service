@@ -54,6 +54,11 @@ export function SmsParserForm({ parser, accounts, onSuccess }: { parser?: SmsPar
         }
     }, [state, toast, onSuccess]);
 
+    const handleDeleteAction = (formData: FormData) => {
+        formData.append('intent', 'delete');
+        formAction(formData);
+    };
+
     return (
         <form action={formAction} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -123,10 +128,8 @@ export function SmsParserForm({ parser, accounts, onSuccess }: { parser?: SmsPar
                                     <AlertDialogAction asChild>
                                         <Button
                                             type="submit"
-                                            name="intent"
-                                            value="delete"
                                             variant="destructive"
-                                            formAction={formAction}
+                                            formAction={handleDeleteAction}
                                         >
                                             Continue
                                         </Button>
