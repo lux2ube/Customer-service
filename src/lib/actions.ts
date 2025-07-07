@@ -1269,12 +1269,27 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let processedCount = 0;
         let errorCount = 0;
 
-        const processMessageAndUpdate = async (smsBody: string, accountId: string, account: BankAccount, messageId?: string) => {
-            if (typeof smsBody !== 'string' || smsBody.trim() === '') {
-                if (messageId) {
-                    updates[`/incoming/${accountId}/${messageId}`] = null;
-                }
-                return;
+        const processMessageAndUpdate = async (payload: any, accountId: string, account: BankAccount, messageId?: string) => {
+            let smsBody: string;
+
+            if (typeof payload === 'string') {
+                smsBody = payload;
+            } else if (typeof payload === 'object' && payload !== null) {
+                // Look for common keys for the message body
+                smsBody = payload.body || payload.message || payload.text || '';
+            } else {
+                smsBody = '';
+            }
+            
+            // Clean up the original message from 'incoming' regardless of outcome
+            if (messageId) {
+                updates[`/incoming/${accountId}/${messageId}`] = null;
+            } else {
+                updates[`/incoming/${accountId}`] = null;
+            }
+
+            if (smsBody.trim() === '') {
+                return; // Don't process empty messages
             }
 
             processedCount++;
@@ -1306,7 +1321,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                         amount: 0,
                         currency: account.currency,
                         type: null,
-                        status: 'rejected', // Mark as rejected so it's clear it needs attention
+                        status: 'rejected',
                         parsed_at: new Date().toISOString(),
                         raw_sms: smsBody,
                     };
@@ -1325,13 +1340,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     parsed_at: new Date().toISOString(),
                     raw_sms: smsBody,
                 };
-            }
-
-            // Clean up the original message from 'incoming'
-            if (messageId) {
-                updates[`/incoming/${accountId}/${messageId}`] = null;
-            } else {
-                updates[`/incoming/${accountId}`] = null;
             }
         };
 
