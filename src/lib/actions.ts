@@ -7,7 +7,8 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, SmsParser } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction } from './types';
+import { parseSms } from './sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1223,91 +1224,7 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
     revalidatePath('/bank-accounts');
 }
 
-// --- SMS Parser Actions ---
-export type SmsParserFormState =
-  | {
-      errors?: {
-        account_id?: string[];
-        deposit_regex?: string[];
-        withdraw_regex?: string[];
-      };
-      message?: string;
-      success?: boolean;
-    }
-  | undefined;
-
-const SmsParserSchema = z.object({
-    account_id: z.string().min(1, { message: 'Please select an account.' }),
-    deposit_regex: z.string().min(1, { message: 'Deposit regex is required.' }),
-    withdraw_regex: z.string().min(1, { message: 'Withdrawal regex is required.' }),
-    active: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
-});
-
-export async function manageSmsParser(parserId: string | null, prevState: SmsParserFormState, formData: FormData): Promise<SmsParserFormState> {
-    const intent = formData.get('intent');
-    
-    const handleDeleteAction = async (innerFormData: FormData) => {
-      if (!parserId) return { message: 'Cannot delete a parser without an ID.', success: false };
-      try {
-        await remove(ref(db, `sms_parsers/${parserId}`));
-        revalidatePath('/sms/settings');
-        return { message: 'Parser deleted successfully.', success: true };
-      } catch (error) {
-        return { message: 'Database Error: Failed to delete parser.', success: false };
-      }
-    };
-    
-    if (intent === 'delete') {
-      return handleDeleteAction(formData);
-    }
-
-    const validatedFields = SmsParserSchema.safeParse(Object.fromEntries(formData.entries()));
-
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to save parser. Please check the fields.',
-        };
-    }
-
-    const data = validatedFields.data;
-    
-    const accountSnapshot = await get(ref(db, `accounts/${data.account_id}`));
-    const account_name = accountSnapshot.exists() ? (accountSnapshot.val() as Account).name : 'Unknown Account';
-
-    try {
-        if (parserId) {
-            const parserRef = ref(db, `sms_parsers/${parserId}`);
-            await update(parserRef, { ...data, account_name });
-        } else {
-            const newParserRef = push(ref(db, 'sms_parsers'));
-            const newId = newParserRef.key;
-            if (!newId) throw new Error('Could not create new parser ID.');
-
-            const databaseUrl = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
-            if (!databaseUrl) {
-                return { message: 'Firebase Database URL is not configured. Cannot generate endpoint URL.', success: false };
-            }
-            // Ensure URL is clean before appending. The .json suffix is required for the REST API.
-            const endpoint_url = `${databaseUrl.replace(/\/$/, '')}/incoming/${newId}.json`;
-
-            const newParserData = {
-                ...data,
-                account_name,
-                endpoint_path: newId,
-                endpoint_url: endpoint_url,
-                created_at: new Date().toISOString(),
-            };
-            await set(newParserRef, newParserData);
-        }
-    } catch (e) {
-        return { message: 'Database error while saving parser.', success: false };
-    }
-
-    revalidatePath('/sms/settings');
-    return { success: true, message: `Parser ${parserId ? 'updated' : 'created'} successfully.` };
-}
-
+// --- SMS Processing Actions ---
 export async function updateSmsTransactionStatus(id: string, status: SmsTransaction['status']): Promise<{success: boolean, message?: string}> {
     if (!id || !status) {
         return { success: false, message: 'Invalid ID or status provided.' };
@@ -1326,104 +1243,76 @@ export type ProcessSmsState = { message?: string; error?: boolean; } | undefined
 
 export async function processIncomingSms(prevState: ProcessSmsState, formData: FormData): Promise<ProcessSmsState> {
     const incomingSmsRef = ref(db, 'incoming');
-    const parsersRef = ref(db, 'sms_parsers');
     const accountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
 
     try {
-        const [incomingSnapshot, parsersSnapshot, accountsSnapshot] = await Promise.all([
+        const [incomingSnapshot, accountsSnapshot] = await Promise.all([
             get(incomingSmsRef),
-            get(parsersRef),
-            get(accountsRef)
+            get(accountsRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
         }
-        if (!parsersSnapshot.exists()) {
-            return { message: "No SMS parsers configured.", error: true };
-        }
-
-        const allIncoming: Record<string, Record<string, string>> = incomingSnapshot.val();
-        const allParsers: Record<string, SmsParser> = parsersSnapshot.val();
-        const allAccounts: Record<string, Account> = accountsSnapshot.val();
+        
+        const allIncoming = incomingSnapshot.val();
+        const allAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let errorCount = 0;
 
-        for (const parserId in allIncoming) {
-            const parser = allParsers[parserId];
-            if (!parser || !parser.active) continue;
+        for (const accountId in allIncoming) {
+            const account = allAccounts[accountId];
+            if (!account) continue; // Skip if account doesn't exist
 
-            const account = allAccounts[parser.account_id];
-            if (!account) continue;
+            const messagesNode = allIncoming[accountId];
 
-            const messages = allIncoming[parserId];
-            for (const messageId in messages) {
-                const smsBody = messages[messageId];
-                let parsed = false;
-
-                const processMatch = (match: RegExpMatchArray | null, type: 'deposit' | 'withdraw') => {
-                    if (!match?.groups) return;
-
-                    const { amount: amountString, client: client_identifier } = match.groups;
-                    if (!amountString) return;
-
-                    const amount = parseFloat(amountString.replace(/,/g, '').replace(/٫/g, '.'));
-                    if (isNaN(amount)) return;
-                    
+            // Function to process a single SMS body
+            const processMessage = (smsBody: string, messageId?: string) => {
+                if (typeof smsBody !== 'string' || smsBody.trim() === '') {
+                    // Not a valid message, maybe an empty node or nested object
+                    return;
+                }
+                const parsed = parseSms(smsBody);
+                
+                if (parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
                     const newTxId = push(transactionsRef).key;
                     if (newTxId) {
                         updates[`/sms_transactions/${newTxId}`] = {
-                            client_name: client_identifier?.trim() || 'Unknown',
-                            account_id: parser.account_id,
+                            client_name: parsed.person,
+                            account_id: accountId,
                             account_name: account.name,
-                            amount,
-                            currency: account.currency || 'USD',
-                            type,
+                            amount: parsed.amount,
+                            currency: parsed.currency || account.currency || 'USD',
+                            type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
                             status: 'pending',
                             parsed_at: new Date().toISOString(),
                             raw_sms: smsBody,
                         };
                         processedCount++;
-                        parsed = true;
                     }
-                };
-                
-                try {
-                    // Try to parse as deposit
-                    // Fix Python-style named groups (?P<name>) to JS-style (?<name>)
-                    const jsDepositRegex = parser.deposit_regex.replace(/\(\?P</g, '(?<');
-                    const depositRegex = new RegExp(jsDepositRegex, 'i');
-                    const depositMatch = smsBody.match(depositRegex);
-                    if (depositMatch) {
-                        processMatch(depositMatch, 'deposit');
-                    }
-
-                    // If not a deposit, try as withdrawal
-                    if (!parsed) {
-                        const jsWithdrawRegex = parser.withdraw_regex.replace(/\(\?P</g, '(?<');
-                        const withdrawRegex = new RegExp(jsWithdrawRegex, 'i');
-                        const withdrawMatch = smsBody.match(withdrawRegex);
-                         if (withdrawMatch) {
-                            processMatch(withdrawMatch, 'withdraw');
-                        }
-                    }
-                } catch(e) {
-                    console.error(`Invalid regex for parser ${parserId}:`, e);
-                    // Mark message for deletion but don't count as an error in the final count,
-                    // as it's a config issue, not a processing issue. We just want to clear the queue.
-                    updates[`/incoming/${parserId}/${messageId}`] = null;
-                    continue; // Skip to next message
-                }
-                
-                if (!parsed) {
+                } else {
                     errorCount++;
                 }
 
-                // Remove processed message from incoming queue
-                updates[`/incoming/${parserId}/${messageId}`] = null;
+                // Mark this specific message for deletion
+                if (messageId) {
+                    updates[`/incoming/${accountId}/${messageId}`] = null;
+                }
+            };
+            
+            if (typeof messagesNode === 'object' && messagesNode !== null) {
+                // This handles multiple messages under an accountId (from POST)
+                for (const messageId in messagesNode) {
+                    processMessage(messagesNode[messageId], messageId);
+                }
+            } else if (typeof messagesNode === 'string') {
+                // This handles a single message string under an accountId (from PUT)
+                processMessage(messagesNode);
+                // Mark the whole accountId node for deletion as it held a single message
+                updates[`/incoming/${accountId}`] = null;
             }
         }
 
@@ -1432,7 +1321,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Successfully processed ${processedCount} SMS messages.`;
+        let message = `Processing complete. Processed ${processedCount} new SMS messages.`;
         if (errorCount > 0) {
             message += ` ${errorCount} messages could not be parsed.`;
         }

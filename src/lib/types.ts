@@ -113,18 +113,6 @@ export interface BlacklistItem {
     createdAt: string;
 }
 
-export interface SmsParser {
-    id: string;
-    account_id: string;
-    account_name?: string;
-    deposit_regex: string;
-    withdraw_regex: string;
-    endpoint_path: string;
-    endpoint_url: string;
-    active: boolean;
-    created_at: string;
-}
-
 export interface IncomingSms {
     [pushId: string]: string;
 }
@@ -142,3 +130,11 @@ export interface SmsTransaction {
     raw_sms: string;
     transaction_id?: string; // To store the linked transaction ID
 }
+
+export type ParsedSms = {
+  type: "credit" | "debit" | "unknown";
+  amount: number | null;
+  currency: string | null;
+  person: string | null;
+  raw: string;
+};
