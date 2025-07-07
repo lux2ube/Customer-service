@@ -8,7 +8,6 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, SmsParser } from './types';
-import { parseSms } from '@/ai/flows/parse-sms-flow';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1353,6 +1352,32 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
+        let errorCount = 0;
+
+        const buildRegexFromExample = (example: string, identity_source: SmsParser['identity_source']): RegExp | null => {
+            if (!example.includes('AMOUNT')) return null;
+
+            // Escape special regex characters in the example string
+            let pattern = example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // Replace AMOUNT placeholder
+            pattern = pattern.replace('AMOUNT', '(\\d[\\d,.]*)');
+
+            // Replace CLIENT placeholder based on identity source
+            if (pattern.includes('CLIENT')) {
+                let clientPattern = '(.+?)'; // Default: non-greedy match for any characters
+                if (identity_source === 'first_last_name' || identity_source === 'first_second_name') {
+                    // Matches two groups of non-space characters separated by a space
+                    clientPattern = '(\\S+\\s\\S+)';
+                } else if (identity_source === 'partial_name') {
+                    // Matches a single group of non-space characters
+                    clientPattern = '(\\S+)';
+                }
+                pattern = pattern.replace('CLIENT', clientPattern);
+            }
+            
+            return new RegExp(pattern, 'i');
+        };
 
         for (const parserId in allIncoming) {
             const parser = allParsers[parserId];
@@ -1364,32 +1389,56 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const messages = allIncoming[parserId];
             for (const messageId in messages) {
                 const smsBody = messages[messageId];
-                
-                // Call Genkit flow
-                const parsedResult = await parseSms({
-                    sms_body: smsBody,
-                    deposit_example: parser.deposit_example,
-                    withdraw_example: parser.withdraw_example,
-                    identity_source: parser.identity_source,
-                });
+                let parsed = false;
 
-                if (parsedResult.type !== 'unknown' && parsedResult.amount > 0) {
-                    const newTxId = push(transactionsRef).key;
-                    if (!newTxId) continue;
+                const processMatch = (match: RegExpMatchArray, type: 'deposit' | 'withdraw') => {
+                    const amount = parseFloat(match[1].replace(/,/g, ''));
+                    let client_identifier = '';
                     
-                    const newSmsTx: Omit<SmsTransaction, 'id'> = {
-                        client_name: parsedResult.client_identifier,
-                        account_id: parser.account_id,
-                        account_name: account.name,
-                        amount: parsedResult.amount,
-                        currency: account.currency || 'USD',
-                        type: parsedResult.type,
-                        status: 'pending',
-                        parsed_at: new Date().toISOString(),
-                        raw_sms: smsBody,
-                    };
-                    updates[`/sms_transactions/${newTxId}`] = newSmsTx;
-                    processedCount++;
+                    if (parser.deposit_example.includes('CLIENT')) {
+                       client_identifier = match[2]?.trim() || '';
+                    }
+                    
+                    const newTxId = push(transactionsRef).key;
+                    if (newTxId) {
+                        updates[`/sms_transactions/${newTxId}`] = {
+                            client_name: client_identifier,
+                            account_id: parser.account_id,
+                            account_name: account.name,
+                            amount,
+                            currency: account.currency || 'USD',
+                            type,
+                            status: 'pending',
+                            parsed_at: new Date().toISOString(),
+                            raw_sms: smsBody,
+                        };
+                        processedCount++;
+                        parsed = true;
+                    }
+                };
+                
+                // Try to parse as deposit
+                const depositRegex = buildRegexFromExample(parser.deposit_example, parser.identity_source);
+                if (depositRegex) {
+                    const match = smsBody.match(depositRegex);
+                    if (match) {
+                        processMatch(match, 'deposit');
+                    }
+                }
+
+                // If not a deposit, try as withdrawal
+                if (!parsed) {
+                    const withdrawRegex = buildRegexFromExample(parser.withdraw_example, parser.identity_source);
+                     if (withdrawRegex) {
+                        const match = smsBody.match(withdrawRegex);
+                        if (match) {
+                            processMatch(match, 'withdraw');
+                        }
+                    }
+                }
+                
+                if (!parsed) {
+                    errorCount++;
                 }
 
                 // Remove processed message from incoming queue
@@ -1402,7 +1451,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        return { message: `Successfully processed ${processedCount} new SMS messages.`, error: false };
+        let message = `Successfully processed ${processedCount} SMS messages.`;
+        if (errorCount > 0) {
+            message += ` ${errorCount} messages could not be parsed.`;
+        }
+
+        return { message, error: false };
 
     } catch(error: any) {
         console.error("SMS Processing Error:", error);

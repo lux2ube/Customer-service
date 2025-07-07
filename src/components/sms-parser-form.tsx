@@ -92,12 +92,18 @@ export function SmsParserForm({ parser, accounts, onSuccess }: { parser?: SmsPar
             <div className="space-y-2">
                 <Label htmlFor="deposit_example">Deposit Example SMS</Label>
                 <Textarea id="deposit_example" name="deposit_example" defaultValue={parser?.deposit_example} placeholder="Paste an example of a deposit SMS message here." required />
+                <p className="text-xs text-muted-foreground">
+                    Use `AMOUNT` for the transaction value and `CLIENT` for the client's name. E.g., `Received AMOUNT from CLIENT.`
+                </p>
                 {state?.errors?.deposit_example && <p className="text-sm text-destructive">{state.errors.deposit_example[0]}</p>}
             </div>
 
             <div className="space-y-2">
                 <Label htmlFor="withdraw_example">Withdrawal Example SMS</Label>
                 <Textarea id="withdraw_example" name="withdraw_example" defaultValue={parser?.withdraw_example} placeholder="Paste an example of a withdrawal SMS message here." required />
+                <p className="text-xs text-muted-foreground">
+                    Use `AMOUNT` for the transaction value and `CLIENT` for the client's name. E.g., `Sent AMOUNT to CLIENT.`
+                </p>
                 {state?.errors?.withdraw_example && <p className="text-sm text-destructive">{state.errors.withdraw_example[0]}</p>}
             </div>
             
