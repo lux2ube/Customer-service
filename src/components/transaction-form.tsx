@@ -225,7 +225,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
                 const allSmsTxs: SmsTransaction[] = Object.values(smsSnapshot.val());
                 const client = clientSnapshot.val() as Client;
-                const clientNameParts = client.name.toLowerCase().split(/\s+/).filter(p => p.length > 2);
+                const clientNameSet = new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1));
                 const clientPhone = client.phone.replace(/[^0-9]/g, '');
 
                 const matches = allSmsTxs.filter(sms => {
@@ -240,11 +240,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     
                     if (clientPhone && smsPerson.includes(clientPhone)) return true;
                     
-                    let matchCount = 0;
-                    for (const part of clientNameParts) {
-                        if (smsPerson.includes(part)) matchCount++;
+                    const smsNameParts = smsPerson.split(/\s+/).filter(p => p.length > 1);
+                    if (smsNameParts.length === 0) return false;
+
+                    let commonWords = 0;
+                    for (const part of smsNameParts) {
+                        if (clientNameSet.has(part)) {
+                            commonWords++;
+                        }
                     }
-                    return matchCount >= 2;
+                    
+                    return commonWords >= 2;
                 });
                 
                 setSuggestedSms(matches);
