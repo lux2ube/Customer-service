@@ -1,3 +1,4 @@
+
 import type { ParsedSms } from '@/lib/types';
 
 // A list of parser configurations, ordered by priority.
@@ -60,17 +61,17 @@ const parsers = [
     },
     {
         name: 'Credit (Idafa) with checkmarks',
-        regex: /^تم√√ إضافة([\d,.]+) (USD|SAR|YER)من (.*?) رصيدك.*$/,
+        regex: /^تم\s*√\s*√\s*إضافة([\d,.]+) (USD|SAR|YER)من (.*?) رصيدك.*$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Debit (Tahweel) with checkmarks',
-        regex: /^تم√√ تحويل([\d,.]+) (SAR|USD|YER) لـ (.*?) بنجاح.*$/,
+        regex: /^تم\s*√\s*√\s*تحويل([\d,.]+) (SAR|USD|YER) لـ (.*?) بنجاح.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Debit (Tam Sahab) with checkmarks',
-        regex: /^تم√√ سحب ([\d,.]+) (YER|SAR|USD) رصيدك.*$/,
+        regex: /^تم\s*√\s*√\s*سحب ([\d,.]+) (YER|SAR|USD) رصيدك.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 'Self Withdrawal' }
     },
     {
