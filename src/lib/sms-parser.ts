@@ -1,3 +1,4 @@
+
 import type { ParsedSms } from './types';
 
 /**
@@ -8,7 +9,7 @@ import type { ParsedSms } from './types';
  * 1. It tries a list of patterns in order.
  * 2. The first pattern that successfully matches the SMS message is used.
  * 3. Named capture groups `(?<group_name>...)` are used to extract data reliably.
- * 4. The patterns are designed to be flexible with whitespace to handle real-world SMS inconsistencies.
+ * 4. The patterns are designed to be flexible with whitespace (`\s*`) to handle real-world SMS inconsistencies.
  * 5. All patterns use the `/u` flag for proper Unicode handling in the Node.js environment.
  *
  * To support a new SMS format, simply add a new object to the `patterns` array.
@@ -38,7 +39,7 @@ export function parseSms(message: string): ParsedSms {
      * Example: "أودع/باسم محمد لحسابك6900 YERرصيدك132888٫9YER"
      */
     {
-      regex: /أودع\/(?:باسم\s*)?(?<person>.+?)\s*لحسابك\s*(?<amount>[\d,٫.]+)\s*(?<currency>\S+?)\s*رصيدك/u,
+      regex: /أودع\s*\/\s*(?:باسم\s*)?(?<person>.+?)\s*لحسابك\s*(?<amount>[\d,٫.]+)\s*(?<currency>\S+?)\s*رصيدك/u,
       type: 'credit' as const
     },
 
@@ -63,6 +64,7 @@ export function parseSms(message: string): ParsedSms {
     /**
      * PATTERN 4: For "حولت" (Transferred) or "تحويل" (Transfer) debit messages.
      * Example: "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
+     * Example: "حولت6,000.00لـباسم مصلح علي م..."
      */
     {
       regex: /(?:حولت|تحويل)\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*لـ\s*(?<person>.+?)\s*(?:بنجاح|رسوم)/u,
@@ -74,12 +76,15 @@ export function parseSms(message: string): ParsedSms {
     const match = normalizedMessage.match(p.regex);
     
     if (match && match.groups) {
+        // Use named capture groups for clarity and safety.
         const { amount, currency: rawCurrency, person } = match.groups;
         
+        // Ensure all required groups were captured.
         if (amount === undefined || person === undefined) continue;
 
         const parsedAmount = parseFloat(amount.replace(/[,٫]/g, ''));
         
+        // Handle optional currency group.
         const currencySymbol = rawCurrency?.trim().toUpperCase();
         const currency = currencySymbol ? (currencyMap[currencySymbol] || currencySymbol) : null;
 
