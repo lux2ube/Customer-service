@@ -1243,13 +1243,13 @@ export type ProcessSmsState = { message?: string; error?: boolean; } | undefined
 
 export async function processIncomingSms(prevState: ProcessSmsState, formData: FormData): Promise<ProcessSmsState> {
     const incomingSmsRef = ref(db, 'incoming');
-    const accountsRef = ref(db, 'accounts');
+    const bankAccountsRef = ref(db, 'bank_accounts');
     const transactionsRef = ref(db, 'sms_transactions');
 
     try {
-        const [incomingSnapshot, accountsSnapshot] = await Promise.all([
+        const [incomingSnapshot, bankAccountsSnapshot] = await Promise.all([
             get(incomingSmsRef),
-            get(accountsRef),
+            get(bankAccountsRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -1257,22 +1257,27 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         const allIncoming = incomingSnapshot.val();
-        const allAccounts: Record<string, Account> = accountsSnapshot.val() || {};
+        const allBankAccounts: Record<string, BankAccount> = bankAccountsSnapshot.val() || {};
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let errorCount = 0;
 
         for (const accountId in allIncoming) {
-            const account = allAccounts[accountId];
-            if (!account) continue; // Skip if account doesn't exist
+            const account = allBankAccounts[accountId];
+            if (!account) {
+                // If account ID from SMS endpoint doesn't match a bank account, clean up the orphan data.
+                updates[`/incoming/${accountId}`] = null;
+                continue; 
+            }
 
             const messagesNode = allIncoming[accountId];
 
-            // Function to process a single SMS body
             const processMessage = (smsBody: string, messageId?: string) => {
                 if (typeof smsBody !== 'string' || smsBody.trim() === '') {
-                    // Not a valid message, maybe an empty node or nested object
+                    if (messageId) {
+                        updates[`/incoming/${accountId}/${messageId}`] = null;
+                    }
                     return;
                 }
                 const parsed = parseSms(smsBody);
@@ -1285,7 +1290,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                             account_id: accountId,
                             account_name: account.name,
                             amount: parsed.amount,
-                            currency: parsed.currency || account.currency || 'USD',
+                            currency: parsed.currency || account.currency,
                             type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
                             status: 'pending',
                             parsed_at: new Date().toISOString(),
@@ -1297,21 +1302,17 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     errorCount++;
                 }
 
-                // Mark this specific message for deletion
                 if (messageId) {
                     updates[`/incoming/${accountId}/${messageId}`] = null;
                 }
             };
             
             if (typeof messagesNode === 'object' && messagesNode !== null) {
-                // This handles multiple messages under an accountId (from POST)
                 for (const messageId in messagesNode) {
                     processMessage(messagesNode[messageId], messageId);
                 }
             } else if (typeof messagesNode === 'string') {
-                // This handles a single message string under an accountId (from PUT)
                 processMessage(messagesNode);
-                // Mark the whole accountId node for deletion as it held a single message
                 updates[`/incoming/${accountId}`] = null;
             }
         }

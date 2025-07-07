@@ -19,6 +19,7 @@ import {
   Network,
   MessageCircle,
   ShieldAlert,
+  Settings2,
 } from 'lucide-react';
 
 const menuItems = [
@@ -34,6 +35,7 @@ const menuItems = [
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { type: 'divider' },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
+  { href: '/sms/settings', label: 'SMS Settings', icon: Settings2 },
 ];
 
 export function Nav() {
