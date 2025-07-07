@@ -28,6 +28,15 @@ const prompt = ai.definePrompt({
   output: { schema: ParsedSmsOutputSchema },
   history: [
     {
+        input: 'أودع/عبدالله عبدالغفور لحسابك2500 YERرصيدك146688٫9YER',
+        output: {
+            type: 'credit',
+            amount: 2500,
+            currency: 'YER',
+            person: 'عبدالله عبدالغفور',
+        }
+    },
+    {
         input: 'أودع/محمد احمد لحسابك35000 YERرصيدك181688٫9YER',
         output: {
             type: 'credit',
