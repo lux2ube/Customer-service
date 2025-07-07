@@ -23,6 +23,7 @@ const initialSettings: Settings = {
     minimum_fee_usd: 1,
     bsc_api_key: '',
     bsc_wallet_address: '',
+    gemini_api_key: '',
 };
 
 export default function SettingsPage() {
@@ -164,9 +165,16 @@ export default function SettingsPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>API Integrations</CardTitle>
-                        <CardDescription>Connect to external services like BscScan.</CardDescription>
+                        <CardDescription>Manage API keys for external services.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="gemini_api_key">Gemini API Key</Label>
+                            <Input id="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" value={settings.gemini_api_key || ''} onChange={handleInputChange} />
+                             <p className="text-xs text-muted-foreground">
+                                Required for AI-powered SMS parsing. This key must also be set as a <code className="font-mono bg-muted p-1 rounded-md">GEMINI_API_KEY</code> environment variable in your hosting environment.
+                            </p>
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="bsc_api_key">BscScan API Key</Label>
                             <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />

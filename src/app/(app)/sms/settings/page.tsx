@@ -5,12 +5,14 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Copy } from 'lucide-react';
+import { Copy, Settings, Bot } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import type { BankAccount } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
+import { Label } from '@/components/ui/label';
 
 export default function SmsGatewaySetupPage() {
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
@@ -51,7 +53,7 @@ export default function SmsGatewaySetupPage() {
             <>
                 <PageHeader
                     title="SMS Gateway Setup"
-                    description="Configure your SMS gateway to post messages to these unique endpoints for each bank account."
+                    description="Configure your SMS gateway to post messages for AI-powered parsing."
                 />
                 <Card>
                     <CardHeader>
@@ -71,9 +73,41 @@ export default function SmsGatewaySetupPage() {
         <>
             <PageHeader
                 title="SMS Gateway Setup"
-                description="Configure your SMS gateway to post messages to these unique endpoints for each bank account."
+                description="Configure your SMS gateway to post messages for AI-powered parsing."
             />
-            <div className="space-y-4">
+            <div className="space-y-6">
+                <Card>
+                    <CardHeader className="flex-row items-center gap-4 space-y-0">
+                        <div className="p-3 bg-primary/10 rounded-full">
+                           <Bot className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                            <CardTitle>AI-Powered SMS Parsing</CardTitle>
+                            <CardDescription>
+                                This system now uses a powerful AI model to parse incoming SMS messages. 
+                                Please ensure your Gemini API key is set correctly.
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                         <p className="text-sm text-muted-foreground">
+                            The AI parser is designed to be flexible and understand various SMS formats automatically. 
+                            For it to work, you must add your Google AI Gemini API key in the main application settings.
+                            The key must also be available as a <code className="font-mono bg-muted p-1 rounded-md">GEMINI_API_KEY</code> environment variable in your hosting backend.
+                        </p>
+                    </CardContent>
+                    <CardFooter>
+                        <Button asChild variant="outline">
+                            <Link href="/settings">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Go to Settings
+                            </Link>
+                        </Button>
+                    </CardFooter>
+                </Card>
+
+                <h2 className="text-xl font-semibold tracking-tight">Account Endpoints</h2>
+
                 {loading ? (
                     Array.from({ length: 3 }).map((_, i) => (
                         <Card key={i}>
@@ -96,8 +130,9 @@ export default function SmsGatewaySetupPage() {
                                     <CardDescription>Default Currency: {account.currency}</CardDescription>
                                 </CardHeader>
                                 <CardContent>
+                                    <Label htmlFor={`endpoint-${account.id}`}>POST URL</Label>
                                     <div className="flex items-center space-x-2">
-                                        <Input value={endpointUrl} readOnly />
+                                        <Input id={`endpoint-${account.id}`} value={endpointUrl} readOnly />
                                         <Button variant="outline" size="icon" onClick={() => handleCopy(endpointUrl)}>
                                             <Copy className="h-4 w-4" />
                                         </Button>
@@ -105,7 +140,7 @@ export default function SmsGatewaySetupPage() {
                                 </CardContent>
                                 <CardFooter>
                                     <p className="text-xs text-muted-foreground">
-                                        Use this URL as the endpoint for your SMS gateway. It should `POST` the raw SMS body as the JSON payload.
+                                        Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to this unique URL.
                                     </p>
                                 </CardFooter>
                             </Card>

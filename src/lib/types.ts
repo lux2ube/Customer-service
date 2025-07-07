@@ -103,6 +103,7 @@ export interface Settings {
     minimum_fee_usd: number;
     bsc_api_key?: string;
     bsc_wallet_address?: string;
+    gemini_api_key?: string;
 }
 
 export interface BlacklistItem {
@@ -136,5 +137,4 @@ export type ParsedSms = {
   amount: number | null;
   currency: string | null;
   person: string | null;
-  raw: string;
 };

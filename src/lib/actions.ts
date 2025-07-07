@@ -8,7 +8,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction } from './types';
-import { parseSms } from './sms-parser';
+import { parseSms } from '@/ai/flows/parse-sms-flow';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1245,17 +1245,23 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const incomingSmsRef = ref(db, 'incoming');
     const bankAccountsRef = ref(db, 'bank_accounts');
     const transactionsRef = ref(db, 'sms_transactions');
+    const settingsRef = ref(db, 'settings');
 
     try {
-        const [incomingSnapshot, bankAccountsSnapshot] = await Promise.all([
+        const [incomingSnapshot, bankAccountsSnapshot, settingsSnapshot] = await Promise.all([
             get(incomingSmsRef),
             get(bankAccountsRef),
+            get(settingsRef)
         ]);
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
         }
         
+        if (!settingsSnapshot.exists() || !settingsSnapshot.val().gemini_api_key) {
+            return { message: "Gemini API Key is not set in Settings. AI parsing is disabled.", error: true };
+        }
+
         const allIncoming = incomingSnapshot.val();
         const allBankAccounts: Record<string, BankAccount> = bankAccountsSnapshot.val() || {};
         
@@ -1266,23 +1272,24 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         for (const accountId in allIncoming) {
             const account = allBankAccounts[accountId];
             if (!account) {
-                // If account ID from SMS endpoint doesn't match a bank account, clean up the orphan data.
                 updates[`/incoming/${accountId}`] = null;
                 continue; 
             }
 
             const messagesNode = allIncoming[accountId];
 
-            const processMessage = (smsBody: string, messageId?: string) => {
+            const processMessage = async (smsBody: string, messageId?: string) => {
                 if (typeof smsBody !== 'string' || smsBody.trim() === '') {
                     if (messageId) {
                         updates[`/incoming/${accountId}/${messageId}`] = null;
                     }
                     return;
                 }
-                const parsed = parseSms(smsBody);
                 
-                if (parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
+                // Use the new AI flow for parsing
+                const parsed = await parseSms(smsBody);
+                
+                if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
                     const newTxId = push(transactionsRef).key;
                     if (newTxId) {
                         updates[`/sms_transactions/${newTxId}`] = {
@@ -1290,7 +1297,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                             account_id: accountId,
                             account_name: account.name,
                             amount: parsed.amount,
-                            currency: parsed.currency || account.currency,
+                            currency: parsed.currency || account.currency, // Fallback to account's default currency
                             type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
                             status: 'pending',
                             parsed_at: new Date().toISOString(),
@@ -1305,17 +1312,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 if (messageId) {
                     updates[`/incoming/${accountId}/${messageId}`] = null;
                 } else {
-                    // Handle cases where messages are stored as a single string
                     updates[`/incoming/${accountId}`] = null;
                 }
             };
             
             if (typeof messagesNode === 'object' && messagesNode !== null) {
                 for (const messageId in messagesNode) {
-                    processMessage(messagesNode[messageId], messageId);
+                    await processMessage(messagesNode[messageId], messageId);
                 }
             } else if (typeof messagesNode === 'string') {
-                processMessage(messagesNode);
+                await processMessage(messagesNode);
             }
         }
 
