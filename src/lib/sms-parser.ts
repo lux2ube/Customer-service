@@ -9,14 +9,29 @@ const parsers = [
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
-        name: 'Debit (Khasm) from ATM',
-        regex: /^خصم (\d+)(ر\.ي) سحب من (.*?) رص:.*$/,
-        map: { type: 'debit', amount: 1, currency: 2, person: 3 }
+        name: 'Debit (Khasm) from ATM - YKB',
+        regex: /^خصم (\d+)ر\.ي سحب من الصراف الآلي YKB رص:.*?ر\.ي$/,
+        map: { type: 'debit', amount: 1, currency: 'YER', person: 'YKB ATM' }
+    },
+    {
+        name: 'Debit (Khasm) cash withdrawal SAR',
+        regex: /^خصم ([\d,.]+) ر\.س سحب نقدي رص:.*?ر\.س$/,
+        map: { type: 'debit', amount: 1, currency: 'SAR', person: 'Cash Withdrawal' }
+    },
+    {
+        name: 'Debit (Tam Khasm) for purchases - no currency',
+        regex: /^تم خصم ([\d,.]+) من حسابك مقابل مشترياتك من (.*?) رصيدك .*?YER$/,
+        map: { type: 'debit', amount: 1, person: 2, currency: 'YER' }
     },
     {
         name: 'Debit (Tam Khasm) for purchases',
         regex: /^تم خصم ([\d,.]+) من حسابك مقابل مشترياتك من (.*?) رصيدك .*?(YER|SAR|USD)$/,
         map: { type: 'debit', amount: 1, person: 2, currency: 3 }
+    },
+    {
+        name: 'Debit (Khasm) from ATM',
+        regex: /^خصم (\d+)(ر\.ي) سحب من (.*?) رص:.*$/,
+        map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Debit (Khasm) to Phone Number - Generic',
@@ -54,6 +69,11 @@ const parsers = [
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
+        name: 'Debit (Tam Sahab) with checkmarks',
+        regex: /^تم√√ سحب ([\d,.]+) (YER|SAR|USD) رصيدك.*$/,
+        map: { type: 'debit', amount: 1, currency: 2, person: 'Self Withdrawal' }
+    },
+    {
         name: 'Credit (Istalamt) from phone number',
         regex: /^استلمت مبلغ (\d+) (YER|SAR|USD) من (\d+) رصيدك.*$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
@@ -71,7 +91,9 @@ function cleanAndParseFloat(value: string): number {
 }
 
 function mapCurrency(currency: string): string {
-    return currency === 'ر.ي' ? 'YER' : currency;
+    if (currency === 'ر.ي') return 'YER';
+    if (currency === 'ر.س') return 'SAR';
+    return currency;
 }
 
 
@@ -84,12 +106,21 @@ export function parseSms(smsBody: string): ParsedSms | null {
         if (match) {
             try {
                 const result: any = {
+                    parsed: true,
                     type: parser.map.type,
                 };
 
+                // Amount must be a regex group
                 result.amount = cleanAndParseFloat(match[parser.map.amount as number]);
-                result.person = match[parser.map.person as number].trim();
                 
+                // Person can be hardcoded or from regex
+                if (typeof parser.map.person === 'number') {
+                     result.person = match[parser.map.person].trim();
+                } else {
+                    result.person = parser.map.person;
+                }
+                
+                // Currency can be hardcoded or from regex
                 if (typeof parser.map.currency === 'number') {
                     result.currency = mapCurrency(match[parser.map.currency]);
                 } else {
