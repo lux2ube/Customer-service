@@ -112,3 +112,16 @@ export interface BlacklistItem {
     reason?: string;
     createdAt: string;
 }
+
+export interface SmsParser {
+    id: string;
+    account_id: string;
+    account_name?: string;
+    deposit_example: string;
+    withdraw_example: string;
+    identity_source: "phone_number" | "first_last_name" | "first_second_name" | "partial_name";
+    endpoint_path: string;
+    endpoint_url: string;
+    active: boolean;
+    created_at: string;
+}

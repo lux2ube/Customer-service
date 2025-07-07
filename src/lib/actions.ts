@@ -1222,3 +1222,80 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
     
     revalidatePath('/bank-accounts');
 }
+
+// --- SMS Parser Actions ---
+export type SmsParserFormState =
+  | {
+      errors?: {
+        account_id?: string[];
+        deposit_example?: string[];
+        withdraw_example?: string[];
+        identity_source?: string[];
+      };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
+const SmsParserSchema = z.object({
+    account_id: z.string().min(1, { message: 'Please select an account.' }),
+    deposit_example: z.string().min(1, { message: 'Deposit example SMS is required.' }),
+    withdraw_example: z.string().min(1, { message: 'Withdrawal example SMS is required.' }),
+    identity_source: z.enum(["phone_number", "first_last_name", "first_second_name", "partial_name"]),
+    active: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
+});
+
+export async function manageSmsParser(parserId: string | null, prevState: SmsParserFormState, formData: FormData): Promise<SmsParserFormState> {
+    const intent = formData.get('intent');
+    if (intent === 'delete') {
+        if (!parserId) return { message: 'Cannot delete a parser without an ID.', success: false };
+        try {
+            await remove(ref(db, `sms_parsers/${parserId}`));
+            revalidatePath('/sms/settings');
+            return { message: 'Parser deleted successfully.', success: true };
+        } catch (error) {
+            return { message: 'Database Error: Failed to delete parser.', success: false };
+        }
+    }
+
+    const validatedFields = SmsParserSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save parser. Please check the fields.',
+        };
+    }
+
+    const data = validatedFields.data;
+    
+    const accountSnapshot = await get(ref(db, `accounts/${data.account_id}`));
+    const account_name = accountSnapshot.exists() ? (accountSnapshot.val() as Account).name : 'Unknown Account';
+
+    try {
+        if (parserId) {
+            const parserRef = ref(db, `sms_parsers/${parserId}`);
+            await update(parserRef, { ...data, account_name });
+        } else {
+            const newParserRef = push(ref(db, 'sms_parsers'));
+            const newId = newParserRef.key;
+            if (!newId) throw new Error('Could not create new parser ID.');
+
+            const endpoint_url = `https://smsapi-f9f6d-default-rtdb.firebaseio.com/incoming/${newId}.json`;
+
+            const newParserData = {
+                ...data,
+                account_name,
+                endpoint_path: newId,
+                endpoint_url: endpoint_url,
+                created_at: new Date().toISOString(),
+            };
+            await set(newParserRef, newParserData);
+        }
+    } catch (e) {
+        return { message: 'Database error while saving parser.', success: false };
+    }
+
+    revalidatePath('/sms/settings');
+    return { success: true, message: `Parser ${parserId ? 'updated' : 'created'} successfully.` };
+}
