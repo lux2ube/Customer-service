@@ -32,13 +32,18 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR - no space',
-        regex: /^خصم ([\d,.]+)(ر\.س) سحب نقدي رص:.*?ر\.س$/,
-        map: { type: 'debit', amount: 1, currency: 2, person: 'Cash Withdrawal' }
+        regex: /^خصم ([\d,.]+)ر\.س سحب نقدي رص:.*?ر\.س$/,
+        map: { type: 'debit', amount: 1, currency: 'SAR', person: 'Cash Withdrawal' }
     },
     {
         name: 'Debit (Khasm) from ATM',
         regex: /^خصم ([\d,.]+)(ر\.ي) سحب من (.*?) رص:.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
+    },
+    {
+        name: 'Debit (Tam Khasm) for purchases',
+        regex: /^تم خصم ([\d,.]+) من حسابك مقابل مشترياتك من (.*?) رصيدك .*?(YER|SAR|USD)$/,
+        map: { type: 'debit', amount: 1, person: 2, currency: 3 }
     },
     
     // --- DEBIT (TAM) ---
@@ -58,25 +63,20 @@ const parsers = [
         map: { type: 'debit', amount: 1, person: 'Self Withdrawal', currency: 'YER' }
     },
     {
-        name: 'Debit (Tam Khasm) for purchases',
-        regex: /^تم خصم ([\d,.]+) من حسابك مقابل مشترياتك من (.*?) رصيدك .*?(YER|SAR|USD)$/,
-        map: { type: 'debit', amount: 1, person: 2, currency: 3 }
-    },
-    {
         name: 'Debit (Tam Tahweel) with checkmarks',
-        regex: /^تم\s*√\s*√\s*تحويل([\d,.]+)\s*(SAR|USD|YER) لـ (.*?) بنجاح.*$/,
+        regex: /^تم\s*√\s*√\s*تحويل\s*([\d,.]+)\s*(SAR|USD|YER) لـ (.*?) بنجاح.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
-        name: 'Debit (Tam Sahab) with checkmarks',
-        regex: /^تم\s*√\s*√\s*سحب ([\d,.]+)\s*(YER|SAR|USD) رصيدك.*$/,
+        name: 'Debit (Tam Sahab) with checkmarks and optional spaces',
+        regex: /^تم\s*√\s*√\s*سحب\s*([\d,.]+)\s*(YER|SAR|USD) رصيدك.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 'Self Withdrawal' }
     },
 
     // --- DEBIT (HAWALT) ---
     {
         name: 'Debit (Hawalt) with lamed preposition',
-        regex: /^حولت([\d,.]+)لـ(.*?)(?: رسوم | م)?.*?ر\.ي$/,
+        regex: /^حولت([\d,.]+)لـ([\D]+?)\s*(?:رسوم|م).*/,
         map: { type: 'debit', amount: 1, person: 2, currency: 'YER' }
     },
 
@@ -91,8 +91,19 @@ const parsers = [
         regex: /^أودعت ([\d,.]+) من (.*?) الرسوم .*? رصيدك.*? ر\.ي$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
+     {
+        name: 'Credit (Tam Eidaa) YER via Agent',
+        regex: /^تم إيداع ([\d,.]+)ر\.ي عبر (.*?) رصيدك .*? ر\.ي$/,
+        map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
+    },
+
 
     // --- CREDIT (IDIF/ADIFA) ---
+    {
+        name: 'Credit (Idif) from person with "mogabel"',
+        regex: /^اضيف ([\d,.]+)ر\.ي مقابل تحويل مشترك رص:.*? من (.*)$/,
+        map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
+    },
     {
         name: 'Credit (Idif) from Mobile Money',
         regex: /^اضيف ([\d,.]+)(ر\.ي) مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)$/,
@@ -105,23 +116,18 @@ const parsers = [
     },
     {
         name: 'Credit (Idif) from person with optional phone',
-        regex: /^اضيف ([\d,.]+)(ر\.ي) تحويل مشترك رص:.* من (.*?)(?:-\d+)?$/,
-        map: { type: 'credit', amount: 1, currency: 2, person: 3 }
+        regex: /^اضيف ([\d,.]+)ر\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?$/,
+        map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
     {
         name: 'Credit (Idafa) with checkmarks and optional space currency',
-        regex: /^تم\s*√\s*√\s*إضافة([\d,.]+)\s*(USD|SAR|YER)من (.*?) رصيدك.*$/,
+        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,.]+)\s*(USD|SAR|YER)\s*من (.*?) رصيدك.*$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Credit (Tam Idaa) YER',
         regex: /^تم ايداع ([\d,.]+)\s*(YER) لحسابكم المرسل (.*?) الرصيد.*$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
-    },
-    {
-        name: 'Credit (Tam Eidaa) YER via Agent',
-        regex: /^تم إيداع ([\d,.]+)ر\.ي عبر (.*?) رصيدك .*? ر\.ي$/,
-        map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
 
     // --- CREDIT (ISTALAMT/ASTALAMT) ---
