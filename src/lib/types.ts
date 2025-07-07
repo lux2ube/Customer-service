@@ -133,19 +133,9 @@ export interface SmsTransaction {
     transaction_id?: string; // To store the linked transaction ID
 }
 
-export const SmsParseInputSchema = z.object({
-    prompt: z.string().describe("The raw SMS message content."),
-    apiKey: z.string().optional().describe("The Gemini API key from settings."),
-});
-export type SmsParseInput = z.infer<typeof SmsParseInputSchema>;
-
-export const ParsedSmsOutputSchema = z.object({
-  type: z.enum(['credit', 'debit', 'unknown']).describe("The type of transaction. 'credit' is a deposit, 'debit' is a withdrawal."),
-  amount: z.number().nullable().describe("The numeric amount of the transaction."),
-  currency: z.string().nullable().describe("The currency code (e.g., YER, SAR, USD)."),
-  person: z.string().nullable().describe("The name of the other person involved in the transaction."),
-});
-export type ParsedSmsOutput = z.infer<typeof ParsedSmsOutputSchema>;
-
-// The old ParsedSms type is deprecated in favor of the Zod schema above.
-export type ParsedSms = ParsedSmsOutput;
+export interface ParsedSms {
+  type: 'credit' | 'debit';
+  amount: number;
+  person: string;
+  currency: string;
+}
