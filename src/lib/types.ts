@@ -124,8 +124,8 @@ export interface SmsTransaction {
     client_name: string;
     account_id: string;
     account_name?: string; // for display
-    amount: number;
-    currency: string;
+    amount: number | null;
+    currency: string | null;
     type: 'deposit' | 'withdraw' | null;
     status: 'pending' | 'matched' | 'used' | 'rejected';
     parsed_at: string;
@@ -133,7 +133,10 @@ export interface SmsTransaction {
     transaction_id?: string; // To store the linked transaction ID
 }
 
-export const SmsParseInputSchema = z.string().describe("The raw SMS message content.");
+export const SmsParseInputSchema = z.object({
+    prompt: z.string().describe("The raw SMS message content."),
+    apiKey: z.string().optional().describe("The Gemini API key from settings."),
+});
 export type SmsParseInput = z.infer<typeof SmsParseInputSchema>;
 
 export const ParsedSmsOutputSchema = z.object({

@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSmsOutput } from './types';
 import { parseSms } from '@/ai/flows/parse-sms-flow';
+import { parseSmsWithRegex } from './sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1258,7 +1259,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             return { message: "No new SMS messages to process.", error: false };
         }
         
-        const hasGeminiKey = settingsSnapshot.exists() && settingsSnapshot.val().gemini_api_key;
+        const settings = settingsSnapshot.val() as Settings | null;
+        const geminiApiKey = settings?.gemini_api_key;
+        
+        if (!geminiApiKey) {
+            return { message: "Gemini API Key is not set in Settings. AI parsing is disabled.", error: true };
+        }
         
         const allIncoming = incomingSnapshot.val();
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
@@ -1284,7 +1290,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             if (messageId) {
                 updates[`/incoming/${accountId}/${messageId}`] = null;
             } else {
-                updates[`/incoming/${accountId}`] = null;
+                 updates[`/incoming/${accountId}`] = null;
             }
 
             if (smsBody.trim() === '') {
@@ -1297,15 +1303,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
             let parsed: ParsedSmsOutput | null = null;
             
-            if (hasGeminiKey) {
-                try {
-                    parsed = await parseSms(smsBody);
-                } catch (e) {
-                    console.error("AI parser failed:", e);
-                    parsed = null;
-                }
-            } else {
-                console.log("No Gemini key found in settings, cannot parse SMS.");
+            try {
+                // Pass the API key from settings to the AI flow
+                parsed = await parseSms({ prompt: smsBody, apiKey: geminiApiKey });
+            } catch (e) {
+                console.error("AI parser failed:", e);
+                parsed = null;
             }
             
             // Record the result
@@ -1323,7 +1326,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     raw_sms: smsBody,
                 };
             } else {
-                // All parsers failed, but we still create a record for visibility
+                // AI parser failed or returned an 'unknown' type.
                 errorCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
                     client_name: 'Parsing Failed',
