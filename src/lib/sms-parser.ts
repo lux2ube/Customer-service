@@ -1,11 +1,25 @@
-
 import type { ParsedSms } from '@/lib/types';
 
 // A list of parser configurations, ordered by priority.
 // Each parser has a regex and a map to extract data.
 const parsers = [
     {
-        name: 'Debit (Khasm) to Phone Number',
+        name: 'Debit (Khasm) to phone number with balance',
+        regex: /^خصم (\d+)(ر\.ي) تحويل لمحفظة\/بنك رص:.*? الى (.*)$/,
+        map: { type: 'debit', amount: 1, currency: 2, person: 3 }
+    },
+    {
+        name: 'Debit (Khasm) from ATM',
+        regex: /^خصم (\d+)(ر\.ي) سحب من (.*?) رص:.*$/,
+        map: { type: 'debit', amount: 1, currency: 2, person: 3 }
+    },
+    {
+        name: 'Debit (Tam Khasm) for purchases',
+        regex: /^تم خصم ([\d,.]+) من حسابك مقابل مشترياتك من (.*?) رصيدك .*?(YER|SAR|USD)$/,
+        map: { type: 'debit', amount: 1, person: 2, currency: 3 }
+    },
+    {
+        name: 'Debit (Khasm) to Phone Number - Generic',
         regex: /^خصم (\d+)(ر\.ي) تحويل لمحفظة\/بنك.*? الى (.*)$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
