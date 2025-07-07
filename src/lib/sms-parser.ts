@@ -11,36 +11,35 @@ const currencyMap: { [key: string]: string } = {
 // This function attempts to parse various SMS formats for financial transactions.
 // It uses a series of regular expressions tailored to the example messages.
 export function parseSms(message: string): ParsedSms {
-  // First, normalize message for easier regex matching
-  const normalizedMessage = message.replace(/\s+/g, ' ').replace('√', '').trim();
+  // Normalize by removing special characters and trimming whitespace.
+  const normalizedMessage = message.replace('√', '').trim();
 
   const patterns = [
     // Covers:
     // استلمت 6,000.00 من صدام حسن احمد ا رصيدك...
     // استلمت مبلغ 42500 YER من 770909099 رصيدك...
     {
-      regex: /استلمت(?: مبلغ)? ([\d,.]+) ?(\S+)? من (.+?) رصيدك/,
-      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
+      regex: /استلمت(?: مبلغ)?\s*([\d,.]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
+      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2], person: m[3] })
     },
     // Covers: حولت6,000.00لـباسم مصلح علي م...
     {
-      regex: /حولت([\d,.]+)لـ(.+?) رسوم/,
-      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: 'YER', person: m[2] })
+      regex: /حولت\s*([\d,.]+)\s*لـ\s*(.+?)\s*(?:بنجاح|رسوم)/,
+      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: null, person: m[2] })
     },
     // Covers: تحويل3000.00 SAR لـ وائل ابو عدله بنجاح...
     {
-      regex: /تحويل([\d,.]+) (SAR|USD|YER) لـ (.+?) بنجاح/,
+      regex: /تحويل\s*([\d,.]+)\s*(\S+)?\s*لـ\s*(.+?)\s*بنجاح/,
       map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: m[2], person: m[3] })
     },
     // Covers: إضافة3000.00 SARمن خالد الحبيشي رصيدك...
     {
-      regex: /إضافة([\d,.]+) (SAR|USD|YER)من (.+?) رصيدك/,
+      regex: /إضافة\s*([\d,.]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
       map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2], person: m[3] })
     },
-    // Covers: أودع/وديد خالد لحسابك23 USDرصيدك...
+    // Covers: أودع/وديد خالد لحسابك23 USDرصيدك... and أودع/باسم محمد لحسابك6900 YERرصيدك...
     {
-      // This regex is made more flexible to handle optional spaces around the amount and currency.
-      regex: /أودع\/(.+?) لحسابك\s*([\d.,٫]+)\s*(USD|SAR|YER)/,
+      regex: /أودع\/(.+?)\s*لحسابك\s*([\d.,٫]+)\s*(\S+)?\s*رصيدك/,
       map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[2], currency: m[3], person: m[1] })
     },
   ];
@@ -52,7 +51,9 @@ export function parseSms(message: string): ParsedSms {
         const result = p.map(match);
         // Replace both standard and Arabic commas before parsing.
         const amount = parseFloat(result.amount.replace(/[,٫]/g, ''));
-        const currencySymbol = result.currency?.toUpperCase();
+        const currencySymbol = result.currency?.trim().toUpperCase();
+        
+        // Return null for currency if not found in SMS; the processing action will use the account's default.
         const currency = currencySymbol ? (currencyMap[currencySymbol] || currencySymbol) : null;
 
         if (!isNaN(amount)) {
@@ -65,7 +66,6 @@ export function parseSms(message: string): ParsedSms {
           };
         }
       } catch (e) {
-        // Log error but continue trying other patterns.
         console.error("Error parsing SMS with pattern:", p.regex, e);
       }
     }
