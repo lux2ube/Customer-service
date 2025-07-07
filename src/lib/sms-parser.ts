@@ -18,44 +18,35 @@ const currencyMap: { [key: string]: string } = {
  * @returns A ParsedSms object.
  */
 export function parseSms(message: string): ParsedSms {
-  // Normalize the message: remove some special characters.
+  // Normalize the message: remove some special characters that can interfere.
   const normalizedMessage = message.replace('√', '').trim();
 
-  // This is the dictionary of patterns. Each pattern is tried in order.
-  // The \s* makes whitespace optional, which handles variations like "word1word2" and "word1 word2".
+  // A dictionary of robust patterns to try in order.
+  // They are designed to be flexible with whitespace (\s*).
   const patterns = [
-    // Pattern 1: For "استلمت..." messages.
-    // Example: "استلمت مبلغ 42500 YER من 770909099 رصيدك..."
-    // Example: "استلمت 6,000.00 من صدام حسن احمد ا رصيدك..."
+    // Matches: "أودع/باسم محمد لحسابك6900 YERرصيدك..."
+    // This is a very flexible pattern for deposit messages starting with "أودع/".
     {
-      regex: /استلمت(?:\s*مبلغ)?\s*([\d,.]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
+      regex: /أودع\/(.+?)\s*لحسابك\s*([\d,.,٫]+)\s*(\S+)\s*رصيدك/,
+      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, person: m[1], amount: m[2], currency: m[3] })
+    },
+    // Matches: "استلمت مبلغ 42500 YER من 770909099 رصيدك..." or "استلمت 6,000.00 من صدام حسن احمد ا رصيدك..."
+    // This handles the common "استلمت" (Received) format.
+    {
+      regex: /استلمت(?:\s*مبلغ)?\s*([\d,.,٫]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
       map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
     },
-    // Pattern 2: For "حولت..." messages.
-    // Example: "حولت6,000.00لـباسم مصلح علي م..."
+    // Matches: "إضافة3000.00 SARمن خالد الحبيشي رصيدك..."
+    // This handles the common "إضافة" (Addition) format.
     {
-      regex: /حولت\s*([\d,.]+)\s*لـ\s*(.+?)\s*(?:بنجاح|رسوم)/,
-      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: 'YER', person: m[2] })
+        regex: /إضافة\s*([\d,.,٫]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
+        map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
     },
-    // Pattern 3: For "تحويل..." messages.
-    // Example: "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
+    // A combined pattern for "حولت" (Transferred) or "تحويل" (Transfer) messages.
+    // Example: "حولت6,000.00لـباسم مصلح علي م..." or "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
     {
-      regex: /تحويل\s*([\d,.]+)\s*(SAR|USD|YER|ر\.س|ر\.ي)?\s*لـ\s*(.+?)\s*بنجاح/,
-      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: m[2], person: m[3] })
-    },
-    // Pattern 4: For "إضافة..." messages.
-    // Example: "إضافة3000.00 SARمن خالد الحبيشي رصيدك..."
-    {
-      regex: /إضافة\s*([\d,.]+)\s*(SAR|USD|YER|ر\.س|ر\.ي)?\s*من\s*(.+?)\s*رصيدك/,
-      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2], person: m[3] })
-    },
-    // Pattern 5: For "أودع..." messages. This is the most complex one.
-    // It's designed to be flexible with whitespace.
-    // Example: "أودع/باسم محمد لحسابك6900 YERرصيدك132888٫9YER"
-    // Example: "أودع/وديد خالد لحسابك23 USDرصيدك..."
-    {
-      regex: /أودع\/(.+?)\s*لحسابك\s*([\d.,٫]+)\s*(USD|SAR|YER|ر\.ي|ر\.س)?\s*رصيدك/,
-      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, person: m[1], amount: m[2], currency: m[3] })
+      regex: /(?:حولت|تحويل)\s*([\d,.,٫]+)\s*(\S+)?\s*لـ\s*(.+?)\s*(?:بنجاح|رسوم)/,
+      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
     },
   ];
 
@@ -81,8 +72,8 @@ export function parseSms(message: string): ParsedSms {
           };
         }
       } catch (e) {
-        // If there's an error with one pattern, just log it and try the next.
-        console.error("Error parsing SMS with pattern:", p.regex, "Message:", message, e);
+        // This helps in debugging if a pattern's map function has an error.
+        console.error("Error applying map function for pattern:", p.regex, "Original Message:", message, e);
       }
     }
   }
