@@ -117,9 +117,8 @@ export interface SmsParser {
     id: string;
     account_id: string;
     account_name?: string;
-    deposit_example: string;
-    withdraw_example: string;
-    identity_source: "phone_number" | "first_last_name" | "first_second_name" | "partial_name";
+    deposit_regex: string;
+    withdraw_regex: string;
     endpoint_path: string;
     endpoint_url: string;
     active: boolean;

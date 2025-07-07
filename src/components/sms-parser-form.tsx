@@ -38,8 +38,6 @@ export function SmsParserForm({ parser, accounts, onSuccess }: { parser?: SmsPar
     const { toast } = useToast();
     const action = manageSmsParser.bind(null, parser?.id || null);
     const [state, formAction] = useActionState<SmsParserFormState, FormData>(action, undefined);
-    
-    const [identitySource, setIdentitySource] = React.useState(parser?.identity_source || 'phone_number');
 
     React.useEffect(() => {
         if (state?.message) {
@@ -61,50 +59,35 @@ export function SmsParserForm({ parser, accounts, onSuccess }: { parser?: SmsPar
 
     return (
         <form action={formAction} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="account_id">Account</Label>
-                    <Select name="account_id" defaultValue={parser?.account_id} required>
-                        <SelectTrigger><SelectValue placeholder="Select an account..." /></SelectTrigger>
-                        <SelectContent>
-                            {accounts.map(acc => (
-                                <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    {state?.errors?.account_id && <p className="text-sm text-destructive">{state.errors.account_id[0]}</p>}
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="identity_source">Client Identity Source</Label>
-                    <Select name="identity_source" value={identitySource} onValueChange={setIdentitySource} required>
-                        <SelectTrigger><SelectValue placeholder="Select a source..." /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="phone_number">Sender's Phone Number</SelectItem>
-                            <SelectItem value="first_last_name">First and Last Name in SMS</SelectItem>
-                            <SelectItem value="first_second_name">First and Second Name in SMS</SelectItem>
-                            <SelectItem value="partial_name">Part of Full Name in SMS</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    {state?.errors?.identity_source && <p className="text-sm text-destructive">{state.errors.identity_source[0]}</p>}
-                </div>
+            <div className="space-y-2">
+                <Label htmlFor="account_id">Account</Label>
+                <Select name="account_id" defaultValue={parser?.account_id} required>
+                    <SelectTrigger><SelectValue placeholder="Select an account..." /></SelectTrigger>
+                    <SelectContent>
+                        {accounts.map(acc => (
+                            <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {state?.errors?.account_id && <p className="text-sm text-destructive">{state.errors.account_id[0]}</p>}
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="deposit_example">Deposit Example SMS</Label>
-                <Textarea id="deposit_example" name="deposit_example" defaultValue={parser?.deposit_example} placeholder="Paste an example of a deposit SMS message here." required />
+                <Label htmlFor="deposit_regex">Deposit Regex Pattern</Label>
+                <Textarea id="deposit_regex" name="deposit_regex" defaultValue={parser?.deposit_regex} placeholder="e.g., Deposit of (?<amount>\d+\.?\d*) from (?<client>.+)\." required />
                 <p className="text-xs text-muted-foreground">
-                    Use `AMOUNT` for the transaction value and `CLIENT` for the client's name. E.g., `Received AMOUNT from CLIENT.`
+                    Enter a JavaScript-compatible regex pattern. Use named capture groups <code>(?&lt;amount&gt;...)</code> and <code>(?&lt;client&gt;...)</code> to extract data.
                 </p>
-                {state?.errors?.deposit_example && <p className="text-sm text-destructive">{state.errors.deposit_example[0]}</p>}
+                {state?.errors?.deposit_regex && <p className="text-sm text-destructive">{state.errors.deposit_regex[0]}</p>}
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="withdraw_example">Withdrawal Example SMS</Label>
-                <Textarea id="withdraw_example" name="withdraw_example" defaultValue={parser?.withdraw_example} placeholder="Paste an example of a withdrawal SMS message here." required />
+                <Label htmlFor="withdraw_regex">Withdrawal Regex Pattern</Label>
+                <Textarea id="withdraw_regex" name="withdraw_regex" defaultValue={parser?.withdraw_regex} placeholder="e.g., Withdrawal of (?<amount>\d+\.?\d*) to (?<client>.+)\." required />
                 <p className="text-xs text-muted-foreground">
-                    Use `AMOUNT` for the transaction value and `CLIENT` for the client's name. E.g., `Sent AMOUNT to CLIENT.`
+                   Ensure your pattern correctly captures the amount and client's name from the SMS body.
                 </p>
-                {state?.errors?.withdraw_example && <p className="text-sm text-destructive">{state.errors.withdraw_example[0]}</p>}
+                {state?.errors?.withdraw_regex && <p className="text-sm text-destructive">{state.errors.withdraw_regex[0]}</p>}
             </div>
             
             <div className="flex items-center space-x-2">

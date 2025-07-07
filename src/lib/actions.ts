@@ -1228,9 +1228,8 @@ export type SmsParserFormState =
   | {
       errors?: {
         account_id?: string[];
-        deposit_example?: string[];
-        withdraw_example?: string[];
-        identity_source?: string[];
+        deposit_regex?: string[];
+        withdraw_regex?: string[];
       };
       message?: string;
       success?: boolean;
@@ -1239,9 +1238,8 @@ export type SmsParserFormState =
 
 const SmsParserSchema = z.object({
     account_id: z.string().min(1, { message: 'Please select an account.' }),
-    deposit_example: z.string().min(1, { message: 'Deposit example SMS is required.' }),
-    withdraw_example: z.string().min(1, { message: 'Withdrawal example SMS is required.' }),
-    identity_source: z.enum(["phone_number", "first_last_name", "first_second_name", "partial_name"]),
+    deposit_regex: z.string().min(1, { message: 'Deposit regex is required.' }),
+    withdraw_regex: z.string().min(1, { message: 'Withdrawal regex is required.' }),
     active: z.preprocess((val) => val === 'on' || val === true, z.boolean()),
 });
 
@@ -1354,53 +1352,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let processedCount = 0;
         let errorCount = 0;
 
-        const buildRegexFromExample = (example: string, identity_source: SmsParser['identity_source']): { regex: RegExp, amountIndex: number, clientIndex: number } | null => {
-            if (!example.includes('AMOUNT')) return null;
-
-            let pattern = example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            pattern = pattern.replace(/ /g, '\\s*');
-            
-            const amountPattern = '(\\d[\\d,.,٫]*)';
-            let clientPattern = '(.+?)'; // Default
-            if (example.includes('CLIENT')) {
-                if (identity_source === 'first_last_name' || identity_source === 'first_second_name') {
-                    clientPattern = '(\\S+\\s+\\S+)';
-                } else if (identity_source === 'partial_name') {
-                    clientPattern = '(\\S+)';
-                }
-            }
-
-            const amountIndexInExample = example.indexOf('AMOUNT');
-            const clientIndexInExample = example.indexOf('CLIENT');
-
-            let amountCaptureIndex = -1;
-            let clientCaptureIndex = -1;
-            let currentCaptureIndex = 1;
-
-            if (clientIndexInExample === -1) { // No CLIENT placeholder
-                pattern = pattern.replace('AMOUNT', amountPattern);
-                amountCaptureIndex = currentCaptureIndex;
-            } else {
-                if (amountIndexInExample < clientIndexInExample) {
-                    pattern = pattern.replace('AMOUNT', amountPattern);
-                    pattern = pattern.replace('CLIENT', clientPattern);
-                    amountCaptureIndex = currentCaptureIndex++;
-                    clientCaptureIndex = currentCaptureIndex;
-                } else {
-                    pattern = pattern.replace('CLIENT', clientPattern);
-                    pattern = pattern.replace('AMOUNT', amountPattern);
-                    clientCaptureIndex = currentCaptureIndex++;
-                    amountCaptureIndex = currentCaptureIndex;
-                }
-            }
-            
-            return {
-                regex: new RegExp(pattern, 'i'),
-                amountIndex: amountCaptureIndex,
-                clientIndex: clientCaptureIndex
-            };
-        };
-
         for (const parserId in allIncoming) {
             const parser = allParsers[parserId];
             if (!parser || !parser.active) continue;
@@ -1413,23 +1364,19 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 const smsBody = messages[messageId];
                 let parsed = false;
 
-                const processMatch = (match: RegExpMatchArray, type: 'deposit' | 'withdraw', amountIndex: number, clientIndex: number) => {
-                    const amountString = match[amountIndex];
-                    if (!amountString) return;
-                    const amount = parseFloat(amountString.replace(/,/g, '').replace(/٫/g, '.'));
+                const processMatch = (match: RegExpMatchArray | null, type: 'deposit' | 'withdraw') => {
+                    if (!match?.groups) return;
 
+                    const { amount: amountString, client: client_identifier } = match.groups;
+                    if (!amountString) return;
+
+                    const amount = parseFloat(amountString.replace(/,/g, '').replace(/٫/g, '.'));
                     if (isNaN(amount)) return;
-                    
-                    let client_identifier = '';
-                    if (clientIndex !== -1) {
-                       const clientString = match[clientIndex];
-                       if (clientString) client_identifier = clientString.trim();
-                    }
                     
                     const newTxId = push(transactionsRef).key;
                     if (newTxId) {
                         updates[`/sms_transactions/${newTxId}`] = {
-                            client_name: client_identifier || 'Unknown',
+                            client_name: client_identifier?.trim() || 'Unknown',
                             account_id: parser.account_id,
                             account_name: account.name,
                             amount,
@@ -1444,24 +1391,28 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     }
                 };
                 
-                // Try to parse as deposit
-                const depositRegexInfo = buildRegexFromExample(parser.deposit_example, parser.identity_source);
-                if (depositRegexInfo) {
-                    const match = smsBody.match(depositRegexInfo.regex);
-                    if (match) {
-                        processMatch(match, 'deposit', depositRegexInfo.amountIndex, depositRegexInfo.clientIndex);
+                try {
+                    // Try to parse as deposit
+                    const depositRegex = new RegExp(parser.deposit_regex, 'i');
+                    const depositMatch = smsBody.match(depositRegex);
+                    if (depositMatch) {
+                        processMatch(depositMatch, 'deposit');
                     }
-                }
 
-                // If not a deposit, try as withdrawal
-                if (!parsed) {
-                    const withdrawRegexInfo = buildRegexFromExample(parser.withdraw_example, parser.identity_source);
-                     if (withdrawRegexInfo) {
-                        const match = smsBody.match(withdrawRegexInfo.regex);
-                        if (match) {
-                            processMatch(match, 'withdraw', withdrawRegexInfo.amountIndex, withdrawRegexInfo.clientIndex);
+                    // If not a deposit, try as withdrawal
+                    if (!parsed) {
+                        const withdrawRegex = new RegExp(parser.withdraw_regex, 'i');
+                        const withdrawMatch = smsBody.match(withdrawRegex);
+                         if (withdrawMatch) {
+                            processMatch(withdrawMatch, 'withdraw');
                         }
                     }
+                } catch(e) {
+                    console.error(`Invalid regex for parser ${parserId}:`, e);
+                    // Mark message for deletion but don't count as an error in the final count,
+                    // as it's a config issue, not a processing issue. We just want to clear the queue.
+                    updates[`/incoming/${parserId}/${messageId}`] = null;
+                    continue; // Skip to next message
                 }
                 
                 if (!parsed) {
