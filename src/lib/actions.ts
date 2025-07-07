@@ -1248,7 +1248,7 @@ const SmsParserSchema = z.object({
 export async function manageSmsParser(parserId: string | null, prevState: SmsParserFormState, formData: FormData): Promise<SmsParserFormState> {
     const intent = formData.get('intent');
     
-    const handleDeleteAction = async () => {
+    const handleDeleteAction = async (innerFormData: FormData) => {
       if (!parserId) return { message: 'Cannot delete a parser without an ID.', success: false };
       try {
         await remove(ref(db, `sms_parsers/${parserId}`));
@@ -1260,7 +1260,7 @@ export async function manageSmsParser(parserId: string | null, prevState: SmsPar
     };
     
     if (intent === 'delete') {
-      return handleDeleteAction();
+      return handleDeleteAction(formData);
     }
 
     const validatedFields = SmsParserSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -1358,6 +1358,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             if (!example.includes('AMOUNT')) return null;
 
             let pattern = example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            pattern = pattern.replace(/ /g, '\\s*');
             
             const amountPattern = '(\\d[\\d,.,٫]*)';
             let clientPattern = '(.+?)'; // Default
