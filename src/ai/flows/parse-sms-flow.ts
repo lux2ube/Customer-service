@@ -43,18 +43,18 @@ const parseSmsFlow = ai.defineFlow(
     try {
         const { output } = await ai.generate({
             model: 'googleai/gemini-pro',
-            prompt: `You are an expert financial transaction parser for SMS messages. The messages are in Arabic. Your task is to analyze the following SMS and extract the required information with high accuracy.
+            prompt: `أنت خبير في تحليل رسائل SMS المالية باللغة العربية. مهمتك هي تحليل الرسالة التالية واستخراج المعلومات المطلوبة بدقة عالية.
 
-- The transaction 'type' should be 'credit' if it represents a deposit or money received (e.g., "أودع", "استلمت", "إضافة", "إيداع").
-- The transaction 'type' should be 'debit' if it represents a withdrawal or money sent (e.g., "حولت", "تحويل").
-- The 'amount' should be the numerical value of the transaction.
-- The 'currency' should be the currency code (e.g., YER, SAR, USD). If no currency is specified, infer it from the context if possible, otherwise return null.
-- The 'person' is the name of the other party involved in the transaction.
-- If you cannot reliably determine any piece of information, return null for that specific field. 
-- If the message does not appear to be a financial transaction, set all fields to null and the type to 'unknown'.
-- Always return a JSON object that strictly adheres to the provided output schema.
+- يجب أن يكون نوع المعاملة 'type' هو 'credit' إذا كانت تمثل إيداعًا أو استلام أموال (مثل: "أودع"، "استلمت"، "إضافة"، "إيداع").
+- يجب أن يكون نوع المعاملة 'type' هو 'debit' إذا كانت تمثل سحبًا أو إرسال أموال (مثل: "حولت"، "تحويل").
+- يجب أن تكون 'amount' هي القيمة الرقمية للمعاملة.
+- يجب أن تكون 'currency' هي رمز العملة (مثل: YER, SAR, USD). إذا لم يتم تحديد العملة، حاول استنتاجها من السياق، وإلا فاستخدم null.
+- يجب أن يكون 'person' هو اسم الطرف الآخر في المعاملة.
+- إذا لم تتمكن من تحديد أي معلومة بشكل موثوق، فاستخدم القيمة null للحقل المحدد.
+- إذا لم تكن الرسالة معاملة مالية، اضبط النوع 'type' على 'unknown' واجعل جميع الحقول الأخرى null.
+- قم دائمًا بإرجاع كائن JSON يلتزم تمامًا بمخطط الإخراج المحدد.
 
-SMS to parse:
+الرسالة لتحليلها:
 ${input.prompt}
 `,
             history: [
