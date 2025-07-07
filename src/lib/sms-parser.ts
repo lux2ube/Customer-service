@@ -16,7 +16,7 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR',
-        regex: /^خصم ([\d,.]+) ر\.س سحب نقدي رص:.*?ر\.س$/,
+        regex: /^خصم ([\d,.]+)ر\.س سحب نقدي رص:.*?ر\.س$/,
         map: { type: 'debit', amount: 1, currency: 'SAR', person: 'Cash Withdrawal' }
     },
     {
