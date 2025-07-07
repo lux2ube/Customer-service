@@ -1393,7 +1393,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 
                 try {
                     // Try to parse as deposit
-                    const depositRegex = new RegExp(parser.deposit_regex, 'i');
+                    // Fix Python-style named groups (?P<name>) to JS-style (?<name>)
+                    const jsDepositRegex = parser.deposit_regex.replace(/\(\?P</g, '(?<');
+                    const depositRegex = new RegExp(jsDepositRegex, 'i');
                     const depositMatch = smsBody.match(depositRegex);
                     if (depositMatch) {
                         processMatch(depositMatch, 'deposit');
@@ -1401,7 +1403,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
                     // If not a deposit, try as withdrawal
                     if (!parsed) {
-                        const withdrawRegex = new RegExp(parser.withdraw_regex, 'i');
+                        const jsWithdrawRegex = parser.withdraw_regex.replace(/\(\?P</g, '(?<');
+                        const withdrawRegex = new RegExp(jsWithdrawRegex, 'i');
                         const withdrawMatch = smsBody.match(withdrawRegex);
                          if (withdrawMatch) {
                             processMatch(withdrawMatch, 'withdraw');
