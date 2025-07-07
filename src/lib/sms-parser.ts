@@ -9,6 +9,7 @@ import type { ParsedSms } from './types';
  * 2. The first pattern that successfully matches the SMS message is used.
  * 3. Named capture groups `(?<group_name>...)` are used to extract data reliably.
  * 4. The patterns are designed to be flexible with whitespace to handle real-world SMS inconsistencies.
+ * 5. All patterns use the `/u` flag for proper Unicode handling in the Node.js environment.
  *
  * To support a new SMS format, simply add a new object to the `patterns` array.
  */
@@ -22,28 +23,31 @@ const currencyMap: { [key: string]: string } = {
 };
 
 export function parseSms(message: string): ParsedSms {
-  // Normalize by removing some characters and trimming whitespace, but preserve internal spacing.
-  const normalizedMessage = message.replace(/[√]/g, '').trim();
+  // More aggressive normalization to handle various whitespace characters and other common SMS artifacts.
+  const normalizedMessage = message
+    .replace(/[√]/g, '')
+    .replace(/[\u00A0\u200B-\u200D\uFEFF]/g, ' ') // Replace various zero-width and non-breaking spaces
+    .trim();
 
   const patterns = [
     /**
-     * PATTERN 1: For "أودع" (deposit) messages.
-     * Correctly handles cases with and without spaces around the amount and currency.
-     * The key fix is using `(.*?)` for the person, which is non-greedy and stops correctly before the `لحسابك` keyword.
+     * PATTERN 1: For "أودع" (deposit) messages. Made more robust.
+     * The `u` flag is added for proper Unicode handling.
+     * `\s*` handles inconsistent spacing.
+     * `(?:باسم\s*)?` makes the word "باسم" optional.
      * Example: "أودع/باسم محمد لحسابك6900 YERرصيدك132888٫9YER"
      */
     {
-      regex: /أودع\/(?<person>.*?)\s*لحسابك\s*(?<amount>[\d.,٫]+)\s*(?<currency>\S+)\s*رصيدك/,
+      regex: /أودع\/(?:باسم\s*)?(?<person>.+?)\s*لحسابك\s*(?<amount>[\d,٫.]+)\s*(?<currency>\S+?)\s*رصيدك/u,
       type: 'credit' as const
     },
 
     /**
      * PATTERN 2: For "استلمت" (Received) messages.
-     * The word "مبلغ" is optional.
-     * Examples: "استلمت مبلغ 42500 YER من 770909099 رصيدك..." or "استلمت 6,000.00 من صدام حسن احمد ا رصيدك..."
+     * Example: "استلمت مبلغ 42500 YER من 770909099 رصيدك..."
      */
     {
-      regex: /استلمت(?:\s*مبلغ)?\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/,
+      regex: /استلمت(?:\s*مبلغ)?\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/u,
       type: 'credit' as const
     },
 
@@ -52,17 +56,16 @@ export function parseSms(message: string): ParsedSms {
      * Example: "إضافة3000.00 SARمن خالد الحبيشي رصيدك..."
      */
     {
-        regex: /إضافة\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/,
+        regex: /إضافة\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/u,
         type: 'credit' as const
     },
 
     /**
      * PATTERN 4: For "حولت" (Transferred) or "تحويل" (Transfer) debit messages.
-     * Handles different endings like "بنجاح" or "رسوم".
-     * Example: "حولت6,000.00لـباسم مصلح علي م..." or "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
+     * Example: "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
      */
     {
-      regex: /(?:حولت|تحويل)\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*لـ\s*(?<person>.+?)\s*(?:بنجاح|رسوم)/,
+      regex: /(?:حولت|تحويل)\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*لـ\s*(?<person>.+?)\s*(?:بنجاح|رسوم)/u,
       type: 'debit' as const
     },
   ];
@@ -73,12 +76,10 @@ export function parseSms(message: string): ParsedSms {
     if (match && match.groups) {
         const { amount, currency: rawCurrency, person } = match.groups;
         
-        // Sanity check for captured groups
         if (amount === undefined || person === undefined) continue;
 
         const parsedAmount = parseFloat(amount.replace(/[,٫]/g, ''));
         
-        // Handle currency mapping, defaulting to null if not found.
         const currencySymbol = rawCurrency?.trim().toUpperCase();
         const currency = currencySymbol ? (currencyMap[currencySymbol] || currencySymbol) : null;
 
@@ -94,6 +95,5 @@ export function parseSms(message: string): ParsedSms {
     }
   }
 
-  // If no patterns matched, return a default 'unknown' object.
   return { type: 'unknown', amount: null, currency: null, person: null, raw: message };
 }
