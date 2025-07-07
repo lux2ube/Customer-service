@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -9,30 +10,31 @@ import { Copy, Settings, Bot } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { BankAccount } from '@/lib/types';
+import type { Account } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Label } from '@/components/ui/label';
 
 export default function SmsGatewaySetupPage() {
-    const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+    const [accounts, setAccounts] = React.useState<Account[]>([]);
     const [loading, setLoading] = React.useState(true);
     const { toast } = useToast();
     const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
     React.useEffect(() => {
-        const accountsRef = ref(db, 'bank_accounts/');
+        const accountsRef = ref(db, 'accounts/');
         const unsubscribe = onValue(accountsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                const list: BankAccount[] = Object.keys(data).map(key => ({
+                const list: Account[] = Object.keys(data).map(key => ({
                     id: key,
                     ...data[key]
                 }));
-                list.sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity) || a.name.localeCompare(b.name));
-                setBankAccounts(list);
+                const filteredList = list.filter(acc => !acc.isGroup && acc.currency);
+                filteredList.sort((a, b) => a.id.localeCompare(b.id));
+                setAccounts(filteredList);
             } else {
-                setBankAccounts([]);
+                setAccounts([]);
             }
             setLoading(false);
         });
@@ -107,6 +109,9 @@ export default function SmsGatewaySetupPage() {
                 </Card>
 
                 <h2 className="text-xl font-semibold tracking-tight">Account Endpoints</h2>
+                 <p className="text-sm text-muted-foreground">
+                    Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to these unique URLs. Each URL corresponds to a specific account in your Chart of Accounts.
+                </p>
 
                 {loading ? (
                     Array.from({ length: 3 }).map((_, i) => (
@@ -120,13 +125,13 @@ export default function SmsGatewaySetupPage() {
                             </CardContent>
                         </Card>
                     ))
-                ) : bankAccounts.length > 0 ? (
-                    bankAccounts.map(account => {
+                ) : accounts.length > 0 ? (
+                    accounts.map(account => {
                         const endpointUrl = `${sanitizedDbUrl}/incoming/${account.id}.json`;
                         return (
                             <Card key={account.id}>
                                 <CardHeader>
-                                    <CardTitle>{account.name}</CardTitle>
+                                    <CardTitle>{account.name} ({account.id})</CardTitle>
                                     <CardDescription>Default Currency: {account.currency}</CardDescription>
                                 </CardHeader>
                                 <CardContent>
@@ -138,18 +143,13 @@ export default function SmsGatewaySetupPage() {
                                         </Button>
                                     </div>
                                 </CardContent>
-                                <CardFooter>
-                                    <p className="text-xs text-muted-foreground">
-                                        Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to this unique URL.
-                                    </p>
-                                </CardFooter>
                             </Card>
                         );
                     })
                 ) : (
                      <Card>
                         <CardContent className="p-6">
-                            <p className="text-center text-muted-foreground">No bank accounts found. Please add a bank account first.</p>
+                            <p className="text-center text-muted-foreground">No transaction accounts with a currency assigned were found in your Chart of Accounts. Please add one first.</p>
                         </CardContent>
                     </Card>
                 )}

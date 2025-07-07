@@ -1243,14 +1243,14 @@ export type ProcessSmsState = { message?: string; error?: boolean; } | undefined
 
 export async function processIncomingSms(prevState: ProcessSmsState, formData: FormData): Promise<ProcessSmsState> {
     const incomingSmsRef = ref(db, 'incoming');
-    const bankAccountsRef = ref(db, 'bank_accounts');
+    const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
     const settingsRef = ref(db, 'settings');
 
     try {
-        const [incomingSnapshot, bankAccountsSnapshot, settingsSnapshot] = await Promise.all([
+        const [incomingSnapshot, accountsSnapshot, settingsSnapshot] = await Promise.all([
             get(incomingSmsRef),
-            get(bankAccountsRef),
+            get(chartOfAccountsRef),
             get(settingsRef)
         ]);
 
@@ -1263,13 +1263,13 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
 
         const allIncoming = incomingSnapshot.val();
-        const allBankAccounts: Record<string, BankAccount> = bankAccountsSnapshot.val() || {};
+        const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let errorCount = 0;
 
-        const processMessageAndUpdate = async (payload: any, accountId: string, account: BankAccount, messageId?: string) => {
+        const processMessageAndUpdate = async (payload: any, accountId: string, account: Account, messageId?: string) => {
             let smsBody: string;
 
             if (typeof payload === 'string') {
@@ -1344,9 +1344,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         };
 
         for (const accountId in allIncoming) {
-            const account = allBankAccounts[accountId];
-            if (!account) {
-                updates[`/incoming/${accountId}`] = null; // Clean up orphaned account data
+            const account = allChartOfAccounts[accountId];
+            if (!account || account.isGroup) {
+                updates[`/incoming/${accountId}`] = null; // Clean up orphaned account data or data sent to a group account
                 continue; 
             }
 
