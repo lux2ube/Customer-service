@@ -19,11 +19,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    watchOptions: {
-      ignored: ['**/.wwebjs_auth/**'],
-    },
-  },
 };
 
 export default nextConfig;
