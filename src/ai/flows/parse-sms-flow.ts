@@ -81,6 +81,7 @@ const prompt = ai.definePrompt({
   - The 'currency' should be the currency code (e.g., YER, SAR, USD). If no currency is specified, infer it from the context if possible, otherwise return null.
   - The 'person' is the name of the other party involved in the transaction.
   - If you cannot reliably determine any piece of information, return null for that specific field. If the message does not appear to be a financial transaction, set the type to 'unknown'.
+  - Always return a JSON object that strictly adheres to the output schema.
 
   SMS to parse:
   {{{prompt}}}
@@ -95,6 +96,16 @@ const parseSmsFlow = ai.defineFlow(
   },
   async (input) => {
     const { output } = await prompt(input);
-    return output!;
+    // If the model fails to produce a valid output, return a default 'unknown' object.
+    // This prevents a crash and allows the caller to handle the parsing failure gracefully.
+    if (output) {
+        return output;
+    }
+    return {
+        type: 'unknown',
+        amount: null,
+        currency: null,
+        person: null,
+    };
   }
 );
