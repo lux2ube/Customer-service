@@ -15,7 +15,6 @@ import {
     type SmsParseInput,
     type ParsedSmsOutput
 } from '@/lib/types';
-import { geminiPro } from '@genkit-ai/googleai';
 
 // Re-exporting types is allowed in "use server" files.
 export type { SmsParseInput, ParsedSmsOutput };
@@ -43,7 +42,7 @@ const parseSmsFlow = ai.defineFlow(
     
     try {
         const { output } = await ai.generate({
-            model: geminiPro,
+            model: 'googleai/gemini-pro',
             prompt: `You are an expert financial transaction parser for SMS messages. The messages are in Arabic. Your task is to analyze the following SMS and extract the required information with high accuracy.
 
 - The transaction 'type' should be 'credit' if it represents a deposit or money received (e.g., "أودع", "استلمت", "إضافة", "إيداع").
