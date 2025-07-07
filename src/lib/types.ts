@@ -126,6 +126,10 @@ export interface SmsParser {
     created_at: string;
 }
 
+export interface IncomingSms {
+    [pushId: string]: string;
+}
+
 export interface SmsTransaction {
     id: string;
     client_name: string;

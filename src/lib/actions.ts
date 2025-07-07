@@ -7,7 +7,8 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, SmsParser } from './types';
+import { parseSms } from '@/ai/flows/parse-sms-flow';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1247,15 +1248,20 @@ const SmsParserSchema = z.object({
 
 export async function manageSmsParser(parserId: string | null, prevState: SmsParserFormState, formData: FormData): Promise<SmsParserFormState> {
     const intent = formData.get('intent');
+    
+    const handleDeleteAction = async () => {
+      if (!parserId) return { message: 'Cannot delete a parser without an ID.', success: false };
+      try {
+        await remove(ref(db, `sms_parsers/${parserId}`));
+        revalidatePath('/sms/settings');
+        return { message: 'Parser deleted successfully.', success: true };
+      } catch (error) {
+        return { message: 'Database Error: Failed to delete parser.', success: false };
+      }
+    };
+    
     if (intent === 'delete') {
-        if (!parserId) return { message: 'Cannot delete a parser without an ID.', success: false };
-        try {
-            await remove(ref(db, `sms_parsers/${parserId}`));
-            revalidatePath('/sms/settings');
-            return { message: 'Parser deleted successfully.', success: true };
-        } catch (error) {
-            return { message: 'Database Error: Failed to delete parser.', success: false };
-        }
+      return handleDeleteAction();
     }
 
     const validatedFields = SmsParserSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -1319,4 +1325,87 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
     }
 }
 
-    
+export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
+
+export async function processIncomingSms(prevState: ProcessSmsState, formData: FormData): Promise<ProcessSmsState> {
+    const incomingSmsRef = ref(db, 'incoming');
+    const parsersRef = ref(db, 'sms_parsers');
+    const accountsRef = ref(db, 'accounts');
+    const transactionsRef = ref(db, 'sms_transactions');
+
+    try {
+        const [incomingSnapshot, parsersSnapshot, accountsSnapshot] = await Promise.all([
+            get(incomingSmsRef),
+            get(parsersRef),
+            get(accountsRef)
+        ]);
+
+        if (!incomingSnapshot.exists()) {
+            return { message: "No new SMS messages to process.", error: false };
+        }
+        if (!parsersSnapshot.exists()) {
+            return { message: "No SMS parsers configured.", error: true };
+        }
+
+        const allIncoming: Record<string, Record<string, string>> = incomingSnapshot.val();
+        const allParsers: Record<string, SmsParser> = parsersSnapshot.val();
+        const allAccounts: Record<string, Account> = accountsSnapshot.val();
+        
+        const updates: { [key: string]: any } = {};
+        let processedCount = 0;
+
+        for (const parserId in allIncoming) {
+            const parser = allParsers[parserId];
+            if (!parser || !parser.active) continue;
+
+            const account = allAccounts[parser.account_id];
+            if (!account) continue;
+
+            const messages = allIncoming[parserId];
+            for (const messageId in messages) {
+                const smsBody = messages[messageId];
+                
+                // Call Genkit flow
+                const parsedResult = await parseSms({
+                    sms_body: smsBody,
+                    deposit_example: parser.deposit_example,
+                    withdraw_example: parser.withdraw_example,
+                    identity_source: parser.identity_source,
+                });
+
+                if (parsedResult.type !== 'unknown' && parsedResult.amount > 0) {
+                    const newTxId = push(transactionsRef).key;
+                    if (!newTxId) continue;
+                    
+                    const newSmsTx: Omit<SmsTransaction, 'id'> = {
+                        client_name: parsedResult.client_identifier,
+                        account_id: parser.account_id,
+                        account_name: account.name,
+                        amount: parsedResult.amount,
+                        currency: account.currency || 'USD',
+                        type: parsedResult.type,
+                        status: 'pending',
+                        parsed_at: new Date().toISOString(),
+                        raw_sms: smsBody,
+                    };
+                    updates[`/sms_transactions/${newTxId}`] = newSmsTx;
+                    processedCount++;
+                }
+
+                // Remove processed message from incoming queue
+                updates[`/incoming/${parserId}/${messageId}`] = null;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/sms/transactions');
+        return { message: `Successfully processed ${processedCount} new SMS messages.`, error: false };
+
+    } catch(error: any) {
+        console.error("SMS Processing Error:", error);
+        return { message: error.message || "An unknown error occurred during SMS processing.", error: true };
+    }
+}
