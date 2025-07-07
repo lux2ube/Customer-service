@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms } from './types';
 import { parseSms } from '@/lib/sms-parser';
+import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1291,12 +1292,14 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
+    const settingsRef = ref(db, 'settings');
 
     try {
-        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot] = await Promise.all([
+        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
+            get(settingsRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -1306,16 +1309,17 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allIncoming = incomingSnapshot.val();
         const allEndpoints: Record<string, { accountId: string, accountName: string }> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
+        const settings: Settings | null = settingsSnapshot.val();
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
-        let errorCount = 0;
-        let successCount = 0;
+        let regexSuccessCount = 0;
+        let aiSuccessCount = 0;
+        let failedCount = 0;
 
         const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
             const endpointMapping = allEndpoints[endpointId];
             
-            // Cleanup orphaned incoming messages
             if (!endpointMapping) {
                 updates[`/incoming/${endpointId}`] = null;
                 return;
@@ -1324,20 +1328,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const accountId = endpointMapping.accountId;
             const account = allChartOfAccounts[accountId];
             
-            // Cleanup if the linked account no longer exists
             if (!account) {
                 updates[`/incoming/${endpointId}`] = null;
                 return;
             }
 
             let smsBody: string;
-
-            if (typeof payload === 'string') {
-                smsBody = payload;
-            } else if (typeof payload === 'object' && payload !== null) {
+            if (typeof payload === 'object' && payload !== null) {
                 smsBody = payload.body || payload.message || payload.text || '';
             } else {
-                smsBody = '';
+                smsBody = String(payload);
             }
             
             if (messageId) {
@@ -1346,18 +1346,26 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                  updates[`/incoming/${endpointId}`] = null;
             }
 
-            if (smsBody.trim() === '') {
-                return;
-            }
+            if (smsBody.trim() === '') return;
 
             processedCount++;
             const newTxId = push(transactionsRef).key;
             if (!newTxId) return;
 
-            const parsed: ParsedSms | null = parseSms(smsBody);
+            // Stage 1: Try Regex Parser first for known formats
+            let parsed: ParsedSms | null = parseSms(smsBody);
+
+            if (parsed) {
+                regexSuccessCount++;
+            } else {
+                // Stage 2: If regex fails, fallback to AI Parser
+                parsed = await parseSmsWithAi(smsBody, settings?.gemini_api_key || '');
+                if (parsed) {
+                    aiSuccessCount++;
+                }
+            }
             
             if (parsed) {
-                successCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
                     client_name: parsed.person,
                     account_id: accountId,
@@ -1370,7 +1378,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     raw_sms: smsBody,
                 };
             } else {
-                errorCount++;
+                failedCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
                     client_name: 'Parsing Failed',
                     account_id: accountId,
@@ -1403,10 +1411,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Sync complete. Attempted to process ${processedCount} new SMS message(s).`;
-        message += ` ${successCount} successfully parsed, ${errorCount} failed.`;
+        let message = `Processed ${processedCount} message(s): ${regexSuccessCount} by regex, ${aiSuccessCount} by AI, ${failedCount} failed.`;
 
-        return { message, error: false };
+        return { message, error: failedCount > 0 };
 
     } catch(error: any) {
         console.error("SMS Processing Error:", error);

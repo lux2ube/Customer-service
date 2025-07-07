@@ -1,6 +1,6 @@
 'use server';
 
-import { genkit, configureGenkit, GenkitError } from 'genkit';
+import { genkit, GenkitError } from 'genkit';
 import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'zod';
 import type { ParsedSms } from '@/lib/types';
