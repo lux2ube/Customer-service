@@ -42,7 +42,7 @@ import { updateSmsTransactionStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 
 const statuses: SmsTransaction['status'][] = ['pending', 'matched', 'used', 'rejected'];
-const types: SmsTransaction['type'][] = ['deposit', 'withdraw'];
+const types: ('deposit' | 'withdraw')[] = ['deposit', 'withdraw'];
 
 export function SmsTransactionsTable() {
     const [transactions, setTransactions] = React.useState<SmsTransaction[]>([]);
@@ -183,8 +183,8 @@ export function SmsTransactionsTable() {
                   <TableRow key={tx.id}>
                     <TableCell className="font-medium">{tx.client_name}</TableCell>
                     <TableCell>{tx.account_name || tx.account_id}</TableCell>
-                    <TableCell><Badge variant={tx.type === 'deposit' ? 'outline' : 'secondary'} className="capitalize">{tx.type}</Badge></TableCell>
-                    <TableCell className="font-mono">{new Intl.NumberFormat().format(tx.amount)} {tx.currency}</TableCell>
+                    <TableCell><Badge variant={!tx.type ? 'destructive' : tx.type === 'deposit' ? 'outline' : 'secondary'} className="capitalize">{tx.type || 'Unknown'}</Badge></TableCell>
+                    <TableCell className="font-mono">{tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}</TableCell>
                     <TableCell><Badge variant={getStatusVariant(tx.status)} className="capitalize">{tx.status}</Badge></TableCell>
                     <TableCell>{tx.parsed_at && !isNaN(new Date(tx.parsed_at).getTime()) ? format(new Date(tx.parsed_at), 'Pp') : 'N/A'}</TableCell>
                     <TableCell className="text-right">

@@ -1269,59 +1269,88 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let processedCount = 0;
         let errorCount = 0;
 
+        const processMessageAndUpdate = async (smsBody: string, accountId: string, account: BankAccount, messageId?: string) => {
+            if (typeof smsBody !== 'string' || smsBody.trim() === '') {
+                if (messageId) {
+                    updates[`/incoming/${accountId}/${messageId}`] = null;
+                }
+                return;
+            }
+
+            processedCount++;
+            const newTxId = push(transactionsRef).key;
+            if (!newTxId) return;
+
+            try {
+                const parsed = await parseSms(smsBody);
+                
+                if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
+                    updates[`/sms_transactions/${newTxId}`] = {
+                        client_name: parsed.person,
+                        account_id: accountId,
+                        account_name: account.name,
+                        amount: parsed.amount,
+                        currency: parsed.currency || account.currency,
+                        type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
+                        status: 'pending',
+                        parsed_at: new Date().toISOString(),
+                        raw_sms: smsBody,
+                    };
+                } else {
+                    // Parsing failed, but we still create a record for visibility
+                    errorCount++;
+                    updates[`/sms_transactions/${newTxId}`] = {
+                        client_name: 'Parsing Failed',
+                        account_id: accountId,
+                        account_name: account.name,
+                        amount: 0,
+                        currency: account.currency,
+                        type: null,
+                        status: 'rejected', // Mark as rejected so it's clear it needs attention
+                        parsed_at: new Date().toISOString(),
+                        raw_sms: smsBody,
+                    };
+                }
+            } catch(e) {
+                // AI call itself failed
+                errorCount++;
+                updates[`/sms_transactions/${newTxId}`] = {
+                    client_name: 'AI Error',
+                    account_id: accountId,
+                    account_name: account.name,
+                    amount: 0,
+                    currency: account.currency,
+                    type: null,
+                    status: 'rejected',
+                    parsed_at: new Date().toISOString(),
+                    raw_sms: smsBody,
+                };
+            }
+
+            // Clean up the original message from 'incoming'
+            if (messageId) {
+                updates[`/incoming/${accountId}/${messageId}`] = null;
+            } else {
+                updates[`/incoming/${accountId}`] = null;
+            }
+        };
+
         for (const accountId in allIncoming) {
             const account = allBankAccounts[accountId];
             if (!account) {
-                updates[`/incoming/${accountId}`] = null;
+                updates[`/incoming/${accountId}`] = null; // Clean up orphaned account data
                 continue; 
             }
 
             const messagesNode = allIncoming[accountId];
-
-            const processMessage = async (smsBody: string, messageId?: string) => {
-                if (typeof smsBody !== 'string' || smsBody.trim() === '') {
-                    if (messageId) {
-                        updates[`/incoming/${accountId}/${messageId}`] = null;
-                    }
-                    return;
-                }
-                
-                // Use the new AI flow for parsing
-                const parsed = await parseSms(smsBody);
-                
-                if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
-                    const newTxId = push(transactionsRef).key;
-                    if (newTxId) {
-                        updates[`/sms_transactions/${newTxId}`] = {
-                            client_name: parsed.person,
-                            account_id: accountId,
-                            account_name: account.name,
-                            amount: parsed.amount,
-                            currency: parsed.currency || account.currency, // Fallback to account's default currency
-                            type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
-                            status: 'pending',
-                            parsed_at: new Date().toISOString(),
-                            raw_sms: smsBody,
-                        };
-                        processedCount++;
-                    }
-                } else {
-                    errorCount++;
-                }
-
-                if (messageId) {
-                    updates[`/incoming/${accountId}/${messageId}`] = null;
-                } else {
-                    updates[`/incoming/${accountId}`] = null;
-                }
-            };
             
             if (typeof messagesNode === 'object' && messagesNode !== null) {
-                for (const messageId in messagesNode) {
-                    await processMessage(messagesNode[messageId], messageId);
-                }
+                const messagePromises = Object.keys(messagesNode).map(messageId => 
+                    processMessageAndUpdate(messagesNode[messageId], accountId, account, messageId)
+                );
+                await Promise.all(messagePromises);
             } else if (typeof messagesNode === 'string') {
-                await processMessage(messagesNode);
+                await processMessageAndUpdate(messagesNode, accountId, account);
             }
         }
 
@@ -1330,9 +1359,11 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Processing complete. Processed ${processedCount} new SMS messages.`;
+        let message = `Sync complete. Attempted to process ${processedCount} new SMS message(s).`;
         if (errorCount > 0) {
-            message += ` ${errorCount} messages could not be parsed.`;
+            message += ` ${errorCount} message(s) failed to parse and were marked as rejected.`;
+        } else if (processedCount > 0) {
+            message += ` All messages were parsed successfully.`;
         }
 
         return { message, error: false };

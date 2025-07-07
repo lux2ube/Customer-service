@@ -126,7 +126,7 @@ export interface SmsTransaction {
     account_name?: string; // for display
     amount: number;
     currency: string;
-    type: 'deposit' | 'withdraw';
+    type: 'deposit' | 'withdraw' | null;
     status: 'pending' | 'matched' | 'used' | 'rejected';
     parsed_at: string;
     raw_sms: string;
