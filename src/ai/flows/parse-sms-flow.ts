@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI flow for parsing financial transaction SMS messages.
@@ -75,17 +76,27 @@ const prompt = ai.definePrompt({
   ],
   prompt: `You are an expert financial transaction parser for SMS messages. The messages are in Arabic. Your task is to analyze the following SMS and extract the required information with high accuracy.
 
-  - The transaction 'type' should be 'credit' if it represents a deposit or money received (e.g., "أودع", "استلمت", "إضافة").
+  - The transaction 'type' should be 'credit' if it represents a deposit or money received (e.g., "أودع", "استلمت", "إضافة", "إيداع").
   - The transaction 'type' should be 'debit' if it represents a withdrawal or money sent (e.g., "حولت", "تحويل").
   - The 'amount' should be the numerical value of the transaction.
   - The 'currency' should be the currency code (e.g., YER, SAR, USD). If no currency is specified, infer it from the context if possible, otherwise return null.
   - The 'person' is the name of the other party involved in the transaction.
-  - If you cannot reliably determine any piece of information, return null for that specific field. If the message does not appear to be a financial transaction, set the type to 'unknown'.
-  - Always return a JSON object that strictly adheres to the output schema.
+  - If you cannot reliably determine any piece of information, return null for that specific field. 
+  - If the message does not appear to be a financial transaction, set all fields to null and the type to 'unknown'.
+  - Always return a JSON object that strictly adheres to the provided output schema.
 
   SMS to parse:
   {{{prompt}}}
   `,
+  config: {
+      // Relax safety settings to reduce the chance of false positives on non-English text.
+      safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+      ],
+  },
 });
 
 const parseSmsFlow = ai.defineFlow(

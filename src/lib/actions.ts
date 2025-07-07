@@ -7,8 +7,9 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSmsOutput } from './types';
 import { parseSms } from '@/ai/flows/parse-sms-flow';
+import { parseSmsWithRegex } from './sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1258,16 +1259,15 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             return { message: "No new SMS messages to process.", error: false };
         }
         
-        if (!settingsSnapshot.exists() || !settingsSnapshot.val().gemini_api_key) {
-            return { message: "Gemini API Key is not set in Settings. AI parsing is disabled.", error: true };
-        }
-
+        const hasGeminiKey = settingsSnapshot.exists() && settingsSnapshot.val().gemini_api_key;
+        
         const allIncoming = incomingSnapshot.val();
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let errorCount = 0;
+        let successCount = 0;
 
         const processMessageAndUpdate = async (payload: any, accountId: string, account: Account, messageId?: string) => {
             let smsBody: string;
@@ -1289,51 +1289,56 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
 
             if (smsBody.trim() === '') {
-                return; // Don't process empty messages
+                return;
             }
 
             processedCount++;
             const newTxId = push(transactionsRef).key;
             if (!newTxId) return;
 
+            let parsed: ParsedSmsOutput | null = null;
+            
+            // STAGE 1: Try Regex Parser First
             try {
-                const parsed = await parseSms(smsBody);
-                
-                if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
-                    updates[`/sms_transactions/${newTxId}`] = {
-                        client_name: parsed.person,
-                        account_id: accountId,
-                        account_name: account.name,
-                        amount: parsed.amount,
-                        currency: parsed.currency || account.currency,
-                        type: parsed.type === 'credit' ? 'deposit' : 'withdraw',
-                        status: 'pending',
-                        parsed_at: new Date().toISOString(),
-                        raw_sms: smsBody,
-                    };
-                } else {
-                    // Parsing failed, but we still create a record for visibility
-                    errorCount++;
-                    updates[`/sms_transactions/${newTxId}`] = {
-                        client_name: 'Parsing Failed',
-                        account_id: accountId,
-                        account_name: account.name,
-                        amount: 0,
-                        currency: account.currency,
-                        type: null,
-                        status: 'rejected',
-                        parsed_at: new Date().toISOString(),
-                        raw_sms: smsBody,
-                    };
-                }
-            } catch(e) {
-                // AI call itself failed
-                errorCount++;
+                parsed = parseSmsWithRegex(smsBody);
+            } catch (e) {
+                console.error("Regex parser failed:", e);
+                parsed = null;
+            }
+
+            // STAGE 2: Fallback to AI Parser if Regex fails and API key exists
+            if (!parsed && hasGeminiKey) {
+                 try {
+                    console.log(`Regex failed for: "${smsBody}". Falling back to AI.`);
+                    parsed = await parseSms(smsBody);
+                 } catch (e) {
+                    console.error("AI parser failed:", e);
+                    parsed = null;
+                 }
+            }
+            
+            // STAGE 3: Record the result
+            if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
+                successCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
-                    client_name: 'AI Error',
+                    client_name: parsed.person,
                     account_id: accountId,
                     account_name: account.name,
-                    amount: 0,
+                    amount: parsed.amount,
+                    currency: parsed.currency || account.currency,
+                    type: parsed.type,
+                    status: 'pending',
+                    parsed_at: new Date().toISOString(),
+                    raw_sms: smsBody,
+                };
+            } else {
+                // All parsers failed, but we still create a record for visibility
+                errorCount++;
+                updates[`/sms_transactions/${newTxId}`] = {
+                    client_name: 'Parsing Failed',
+                    account_id: accountId,
+                    account_name: account.name,
+                    amount: null,
                     currency: account.currency,
                     type: null,
                     status: 'rejected',
@@ -1346,7 +1351,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         for (const accountId in allIncoming) {
             const account = allChartOfAccounts[accountId];
             if (!account || account.isGroup) {
-                updates[`/incoming/${accountId}`] = null; // Clean up orphaned account data or data sent to a group account
+                updates[`/incoming/${accountId}`] = null;
                 continue; 
             }
 
@@ -1368,11 +1373,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         
         revalidatePath('/sms/transactions');
         let message = `Sync complete. Attempted to process ${processedCount} new SMS message(s).`;
-        if (errorCount > 0) {
-            message += ` ${errorCount} message(s) failed to parse and were marked as rejected.`;
-        } else if (processedCount > 0) {
-            message += ` All messages were parsed successfully.`;
-        }
+        message += ` ${successCount} successfully parsed, ${errorCount} failed.`;
 
         return { message, error: false };
 
