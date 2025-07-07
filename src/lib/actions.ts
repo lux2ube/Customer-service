@@ -9,7 +9,6 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSmsOutput } from './types';
 import { parseSms } from '@/ai/flows/parse-sms-flow';
-import { parseSmsWithRegex } from './sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1298,26 +1297,18 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
             let parsed: ParsedSmsOutput | null = null;
             
-            // STAGE 1: Try Regex Parser First
-            try {
-                parsed = parseSmsWithRegex(smsBody);
-            } catch (e) {
-                console.error("Regex parser failed:", e);
-                parsed = null;
-            }
-
-            // STAGE 2: Fallback to AI Parser if Regex fails and API key exists
-            if (!parsed && hasGeminiKey) {
-                 try {
-                    console.log(`Regex failed for: "${smsBody}". Falling back to AI.`);
+            if (hasGeminiKey) {
+                try {
                     parsed = await parseSms(smsBody);
-                 } catch (e) {
+                } catch (e) {
                     console.error("AI parser failed:", e);
                     parsed = null;
-                 }
+                }
+            } else {
+                console.log("No Gemini key found in settings, cannot parse SMS.");
             }
             
-            // STAGE 3: Record the result
+            // Record the result
             if (parsed && parsed.type !== 'unknown' && parsed.amount !== null && parsed.person !== null) {
                 successCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
