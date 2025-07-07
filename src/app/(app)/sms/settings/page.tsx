@@ -3,53 +3,156 @@
 
 import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Copy, Settings, Bot } from 'lucide-react';
+import { Copy, PlusCircle, Trash2, Bot, Settings as SettingsIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Account } from '@/lib/types';
+import type { Account, SmsEndpoint } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import Link from 'next/link';
 import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+  TableHeader,
+  TableHead,
+} from '@/components/ui/table';
+import { format } from 'date-fns';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { useActionState, useFormStatus } from 'react-dom';
+import { createSmsEndpoint, deleteSmsEndpoint, type SmsEndpointState } from '@/lib/actions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import Link from 'next/link';
+
+function CreateEndpointButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending}>
+            {pending ? 'Creating...' : 'Create Endpoint'}
+        </Button>
+    );
+}
+
+function AddEndpointDialog({ accounts, open, setOpen }: { accounts: Account[], open: boolean, setOpen: (open: boolean) => void }) {
+    const { toast } = useToast();
+    const formRef = React.useRef<HTMLFormElement>(null);
+    const [state, formAction] = useActionState<SmsEndpointState, FormData>(createSmsEndpoint, undefined);
+
+    React.useEffect(() => {
+        if (!state) return;
+        toast({
+            title: state.error ? 'Error' : 'Success',
+            description: state.message,
+            variant: state.error ? 'destructive' : 'default',
+        });
+        if (!state.error) {
+            setOpen(false);
+            formRef.current?.reset();
+        }
+    }, [state, toast, setOpen]);
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create New SMS Endpoint</DialogTitle>
+                    <DialogDescription>
+                        Select an account from your Chart of Accounts to generate a unique POST URL. You can create multiple endpoints for the same account.
+                    </DialogDescription>
+                </DialogHeader>
+                <form action={formAction} ref={formRef}>
+                    <div className="py-4">
+                        <Label htmlFor="accountId">Account</Label>
+                        <Select name="accountId" required>
+                            <SelectTrigger><SelectValue placeholder="Select an account..." /></SelectTrigger>
+                            <SelectContent>
+                                {accounts.map(acc => (
+                                    <SelectItem key={acc.id} value={acc.id}>
+                                        {acc.name} ({acc.currency})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">Cancel</Button>
+                        </DialogClose>
+                        <CreateEndpointButton />
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 
 export default function SmsGatewaySetupPage() {
-    const [validAccounts, setValidAccounts] = React.useState<Account[]>([]);
-    const [potentialAccounts, setPotentialAccounts] = React.useState<Account[]>([]);
+    const [endpoints, setEndpoints] = React.useState<SmsEndpoint[]>([]);
+    const [accounts, setAccounts] = React.useState<Account[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [dialogOpen, setDialogOpen] = React.useState(false);
+    const [endpointToDelete, setEndpointToDelete] = React.useState<SmsEndpoint | null>(null);
+
     const { toast } = useToast();
     const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
     React.useEffect(() => {
+        const endpointsRef = ref(db, 'sms_endpoints/');
         const accountsRef = ref(db, 'accounts/');
-        const unsubscribe = onValue(accountsRef, (snapshot) => {
+
+        const unsubEndpoints = onValue(endpointsRef, (snapshot) => {
             const data = snapshot.val();
-            if (data) {
-                const list: Account[] = Object.keys(data).map(key => ({
-                    id: key,
-                    ...data[key]
-                }));
-                const nonGroupAccounts = list.filter(acc => !acc.isGroup);
-
-                const valid = nonGroupAccounts.filter(acc => acc.currency);
-                valid.sort((a, b) => a.id.localeCompare(b.id));
-                setValidAccounts(valid);
-
-                const potential = nonGroupAccounts.filter(acc => !acc.currency);
-                potential.sort((a, b) => a.id.localeCompare(b.id));
-                setPotentialAccounts(potential);
-
-            } else {
-                setValidAccounts([]);
-                setPotentialAccounts([]);
-            }
+            const list: SmsEndpoint[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setEndpoints(list);
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        const unsubAccounts = onValue(accountsRef, (snapshot) => {
+            const data = snapshot.val();
+            const list: Account[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            setAccounts(list.filter(acc => !acc.isGroup && acc.currency));
+        });
+
+        return () => {
+            unsubEndpoints();
+            unsubAccounts();
+        };
     }, []);
+
+    const handleDelete = async () => {
+        if (!endpointToDelete) return;
+        const result = await deleteSmsEndpoint(endpointToDelete.id);
+        toast({
+            title: result.error ? 'Error' : 'Success',
+            description: result.message,
+            variant: result.error ? 'destructive' : 'default',
+        });
+        setEndpointToDelete(null);
+    };
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -62,18 +165,8 @@ export default function SmsGatewaySetupPage() {
     if (!databaseURL) {
         return (
             <>
-                <PageHeader
-                    title="SMS Gateway Setup"
-                    description="Configure your SMS gateway to post messages for AI-powered parsing."
-                />
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-destructive">Configuration Error</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p>The `NEXT_PUBLIC_FIREBASE_DATABASE_URL` environment variable is not set. Please configure it to generate the endpoint URLs.</p>
-                    </CardContent>
-                </Card>
+                <PageHeader title="SMS Gateway Setup" description="Configure your SMS gateway to post messages." />
+                <Card><CardContent className="p-6">The `NEXT_PUBLIC_FIREBASE_DATABASE_URL` environment variable is not set.</CardContent></Card>
             </>
         );
     }
@@ -84,126 +177,94 @@ export default function SmsGatewaySetupPage() {
         <>
             <PageHeader
                 title="SMS Gateway Setup"
-                description="Configure your SMS gateway to post messages for AI-powered parsing."
-            />
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader className="flex-row items-center gap-4 space-y-0">
-                        <div className="p-3 bg-primary/10 rounded-full">
-                           <Bot className="h-6 w-6 text-primary" />
-                        </div>
-                        <div>
-                            <CardTitle>AI-Powered SMS Parsing</CardTitle>
-                            <CardDescription>
-                                This system now uses a powerful AI model to parse incoming SMS messages. 
-                                Please ensure your Gemini API key is set correctly.
-                            </CardDescription>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                         <p className="text-sm text-muted-foreground">
-                            The AI parser is designed to be flexible and understand various SMS formats automatically. 
-                            For it to work, you must add your Google AI Gemini API key in the main application settings.
-                            The key must also be available as a <code className="font-mono bg-muted p-1 rounded-md">GEMINI_API_KEY</code> environment variable in your hosting backend.
-                        </p>
-                    </CardContent>
-                    <CardFooter>
-                        <Button asChild variant="outline">
-                            <Link href="/settings">
-                                <Settings className="mr-2 h-4 w-4" />
-                                Go to Settings
-                            </Link>
-                        </Button>
-                    </CardFooter>
-                </Card>
+                description="Create and manage unique endpoints for your SMS providers."
+            >
+                <Button onClick={() => setDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Endpoint
+                </Button>
+            </PageHeader>
+            <AddEndpointDialog accounts={accounts} open={dialogOpen} setOpen={setDialogOpen} />
 
-                <h2 className="text-xl font-semibold tracking-tight">Active Account Endpoints</h2>
-                 <p className="text-sm text-muted-foreground">
-                    Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to these unique URLs. Each URL corresponds to a specific account in your Chart of Accounts.
-                </p>
+             <Card>
+                <CardHeader className="flex-row items-center gap-4 space-y-0">
+                    <div className="p-3 bg-primary/10 rounded-full">
+                        <Bot className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                        <CardTitle>Legacy Parser</CardTitle>
+                        <CardDescription>
+                            This system now uses a regex-based parser. To add support for new formats, please contact your developer.
+                        </CardDescription>
+                    </div>
+                </CardHeader>
+             </Card>
 
-                {loading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                        <Card key={i}>
-                            <CardHeader>
-                                <Skeleton className="h-6 w-1/2" />
-                                <Skeleton className="h-4 w-1/4" />
-                            </CardHeader>
-                            <CardContent>
-                                <Skeleton className="h-10 w-full" />
-                            </CardContent>
-                        </Card>
-                    ))
-                ) : validAccounts.length > 0 ? (
-                    validAccounts.map(account => {
-                        const endpointUrl = `${sanitizedDbUrl}/incoming/${account.id}.json`;
-                        return (
-                            <Card key={account.id}>
-                                <CardHeader>
-                                    <CardTitle>{account.name} ({account.id})</CardTitle>
-                                    <CardDescription>Default Currency: {account.currency}</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <Label htmlFor={`endpoint-${account.id}`}>POST URL</Label>
-                                    <div className="flex items-center space-x-2">
-                                        <Input id={`endpoint-${account.id}`} value={endpointUrl} readOnly />
-                                        <Button variant="outline" size="icon" onClick={() => handleCopy(endpointUrl)}>
-                                            <Copy className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })
-                ) : (
-                     <Card>
-                        <CardContent className="p-6">
-                            <p className="text-center text-muted-foreground">No transaction accounts with a currency assigned were found in your Chart of Accounts. Please add one first.</p>
-                        </CardContent>
-                    </Card>
-                )}
+            <Card className="mt-6">
+                <CardHeader>
+                    <CardTitle>Active Endpoints</CardTitle>
+                    <CardDescription>
+                         Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to these unique URLs.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Account</TableHead>
+                                    <TableHead>POST URL</TableHead>
+                                    <TableHead>Created At</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">Loading endpoints...</TableCell></TableRow>
+                                ) : endpoints.length > 0 ? (
+                                    endpoints.map(endpoint => {
+                                        const endpointUrl = `${sanitizedDbUrl}/incoming/${endpoint.id}.json`;
+                                        return (
+                                            <TableRow key={endpoint.id}>
+                                                <TableCell className="font-medium">{endpoint.accountName}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Input value={endpointUrl} readOnly className="h-8 font-mono" />
+                                                        <Button variant="outline" size="icon" onClick={() => handleCopy(endpointUrl)}>
+                                                            <Copy className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>{format(new Date(endpoint.createdAt), 'PPP')}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => setEndpointToDelete(endpoint)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                ) : (
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No endpoints created yet.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
 
-                <h2 className="text-xl font-semibold tracking-tight mt-8">Generate More Endpoints</h2>
-                 <p className="text-sm text-muted-foreground">
-                    The accounts below can be used for SMS parsing but do not have a currency assigned. To generate an endpoint, edit the account and assign a currency.
-                </p>
-                 {loading ? (
-                    Array.from({ length: 2 }).map((_, i) => (
-                        <Card key={`pot-${i}`}>
-                             <CardHeader>
-                                <Skeleton className="h-6 w-1/2" />
-                                <Skeleton className="h-4 w-1/4" />
-                            </CardHeader>
-                             <CardFooter>
-                                 <Skeleton className="h-9 w-48" />
-                             </CardFooter>
-                        </Card>
-                    ))
-                 ) : potentialAccounts.length > 0 ? (
-                    potentialAccounts.map(account => (
-                        <Card key={account.id}>
-                            <CardHeader>
-                                <CardTitle>{account.name} ({account.id})</CardTitle>
-                                <CardDescription>No currency assigned. An endpoint cannot be generated.</CardDescription>
-                            </CardHeader>
-                            <CardFooter>
-                                 <Button asChild variant="secondary">
-                                    <Link href={`/accounting/chart-of-accounts/edit/${account.id}`}>
-                                        <Settings className="mr-2 h-4 w-4" />
-                                        Configure Account to Generate
-                                    </Link>
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    ))
-                 ) : (
-                     <Card>
-                        <CardContent className="p-6">
-                            <p className="text-center text-muted-foreground">All possible accounts already have active endpoints.</p>
-                        </CardContent>
-                    </Card>
-                 )}
-            </div>
+            <AlertDialog open={!!endpointToDelete} onOpenChange={(open) => !open && setEndpointToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete the endpoint. Any gateway using this URL will fail.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

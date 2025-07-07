@@ -1241,14 +1241,61 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
 
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 
+export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
+
+export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+    const accountId = formData.get('accountId') as string;
+    if (!accountId) {
+        return { message: 'Account selection is required.', error: true };
+    }
+
+    try {
+        const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
+        if (!accountSnapshot.exists()) {
+            return { message: 'Selected account not found.', error: true };
+        }
+        const accountName = (accountSnapshot.val() as Account).name;
+
+        const newEndpointRef = push(ref(db, 'sms_endpoints'));
+        await set(newEndpointRef, {
+            accountId,
+            accountName,
+            createdAt: new Date().toISOString(),
+        });
+
+        revalidatePath('/sms/settings');
+        return { message: 'Endpoint created successfully.' };
+
+    } catch (error) {
+        console.error('Create SMS Endpoint Error:', error);
+        return { message: 'Database Error: Failed to create endpoint.', error: true };
+    }
+}
+
+export async function deleteSmsEndpoint(endpointId: string): Promise<SmsEndpointState> {
+    if (!endpointId) {
+        return { message: 'Endpoint ID is required.', error: true };
+    }
+    try {
+        await remove(ref(db, `sms_endpoints/${endpointId}`));
+        revalidatePath('/sms/settings');
+        return { message: 'Endpoint deleted successfully.' };
+    } catch (error) {
+        console.error('Delete SMS Endpoint Error:', error);
+        return { message: 'Database Error: Failed to delete endpoint.', error: true };
+    }
+}
+
 export async function processIncomingSms(prevState: ProcessSmsState, formData: FormData): Promise<ProcessSmsState> {
     const incomingSmsRef = ref(db, 'incoming');
+    const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
 
     try {
-        const [incomingSnapshot, accountsSnapshot] = await Promise.all([
+        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot] = await Promise.all([
             get(incomingSmsRef),
+            get(smsEndpointsRef),
             get(chartOfAccountsRef),
         ]);
 
@@ -1257,6 +1304,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         const allIncoming = incomingSnapshot.val();
+        const allEndpoints: Record<string, { accountId: string, accountName: string }> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         
         const updates: { [key: string]: any } = {};
@@ -1264,7 +1312,24 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let errorCount = 0;
         let successCount = 0;
 
-        const processMessageAndUpdate = async (payload: any, accountId: string, account: Account, messageId?: string) => {
+        const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
+            const endpointMapping = allEndpoints[endpointId];
+            
+            // Cleanup orphaned incoming messages
+            if (!endpointMapping) {
+                updates[`/incoming/${endpointId}`] = null;
+                return;
+            }
+
+            const accountId = endpointMapping.accountId;
+            const account = allChartOfAccounts[accountId];
+            
+            // Cleanup if the linked account no longer exists
+            if (!account) {
+                updates[`/incoming/${endpointId}`] = null;
+                return;
+            }
+
             let smsBody: string;
 
             if (typeof payload === 'string') {
@@ -1276,9 +1341,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
             
             if (messageId) {
-                updates[`/incoming/${accountId}/${messageId}`] = null;
+                updates[`/incoming/${endpointId}/${messageId}`] = null;
             } else {
-                 updates[`/incoming/${accountId}`] = null;
+                 updates[`/incoming/${endpointId}`] = null;
             }
 
             if (smsBody.trim() === '') {
@@ -1320,22 +1385,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
         };
 
-        for (const accountId in allIncoming) {
-            const account = allChartOfAccounts[accountId];
-            if (!account || account.isGroup) {
-                updates[`/incoming/${accountId}`] = null;
-                continue; 
-            }
-
-            const messagesNode = allIncoming[accountId];
+        for (const endpointId in allIncoming) {
+            const messagesNode = allIncoming[endpointId];
             
             if (typeof messagesNode === 'object' && messagesNode !== null) {
                 const messagePromises = Object.keys(messagesNode).map(messageId => 
-                    processMessageAndUpdate(messagesNode[messageId], accountId, account, messageId)
+                    processMessageAndUpdate(messagesNode[messageId], endpointId, messageId)
                 );
                 await Promise.all(messagePromises);
             } else if (typeof messagesNode === 'string') {
-                await processMessageAndUpdate(messagesNode, accountId, account);
+                await processMessageAndUpdate(messagesNode, endpointId);
             }
         }
 

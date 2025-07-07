@@ -140,3 +140,10 @@ export interface ParsedSms {
   person?: string;
   currency?: string;
 }
+
+export interface SmsEndpoint {
+    id: string;
+    accountId: string;
+    accountName: string;
+    createdAt: string;
+}
