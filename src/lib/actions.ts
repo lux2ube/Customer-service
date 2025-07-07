@@ -1354,29 +1354,50 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let processedCount = 0;
         let errorCount = 0;
 
-        const buildRegexFromExample = (example: string, identity_source: SmsParser['identity_source']): RegExp | null => {
+        const buildRegexFromExample = (example: string, identity_source: SmsParser['identity_source']): { regex: RegExp, amountIndex: number, clientIndex: number } | null => {
             if (!example.includes('AMOUNT')) return null;
 
-            // Escape special regex characters in the example string
             let pattern = example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-            // Replace AMOUNT placeholder
-            pattern = pattern.replace('AMOUNT', '(\\d[\\d,.]*)');
-
-            // Replace CLIENT placeholder based on identity source
-            if (pattern.includes('CLIENT')) {
-                let clientPattern = '(.+?)'; // Default: non-greedy match for any characters
+            
+            const amountPattern = '(\\d[\\d,.,٫]*)';
+            let clientPattern = '(.+?)'; // Default
+            if (example.includes('CLIENT')) {
                 if (identity_source === 'first_last_name' || identity_source === 'first_second_name') {
-                    // Matches two groups of non-space characters separated by a space
-                    clientPattern = '(\\S+\\s\\S+)';
+                    clientPattern = '(\\S+\\s+\\S+)';
                 } else if (identity_source === 'partial_name') {
-                    // Matches a single group of non-space characters
                     clientPattern = '(\\S+)';
                 }
-                pattern = pattern.replace('CLIENT', clientPattern);
+            }
+
+            const amountIndexInExample = example.indexOf('AMOUNT');
+            const clientIndexInExample = example.indexOf('CLIENT');
+
+            let amountCaptureIndex = -1;
+            let clientCaptureIndex = -1;
+            let currentCaptureIndex = 1;
+
+            if (clientIndexInExample === -1) { // No CLIENT placeholder
+                pattern = pattern.replace('AMOUNT', amountPattern);
+                amountCaptureIndex = currentCaptureIndex;
+            } else {
+                if (amountIndexInExample < clientIndexInExample) {
+                    pattern = pattern.replace('AMOUNT', amountPattern);
+                    pattern = pattern.replace('CLIENT', clientPattern);
+                    amountCaptureIndex = currentCaptureIndex++;
+                    clientCaptureIndex = currentCaptureIndex;
+                } else {
+                    pattern = pattern.replace('CLIENT', clientPattern);
+                    pattern = pattern.replace('AMOUNT', amountPattern);
+                    clientCaptureIndex = currentCaptureIndex++;
+                    amountCaptureIndex = currentCaptureIndex;
+                }
             }
             
-            return new RegExp(pattern, 'i');
+            return {
+                regex: new RegExp(pattern, 'i'),
+                amountIndex: amountCaptureIndex,
+                clientIndex: clientCaptureIndex
+            };
         };
 
         for (const parserId in allIncoming) {
@@ -1391,18 +1412,23 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 const smsBody = messages[messageId];
                 let parsed = false;
 
-                const processMatch = (match: RegExpMatchArray, type: 'deposit' | 'withdraw') => {
-                    const amount = parseFloat(match[1].replace(/,/g, ''));
-                    let client_identifier = '';
+                const processMatch = (match: RegExpMatchArray, type: 'deposit' | 'withdraw', amountIndex: number, clientIndex: number) => {
+                    const amountString = match[amountIndex];
+                    if (!amountString) return;
+                    const amount = parseFloat(amountString.replace(/,/g, '').replace(/٫/g, '.'));
+
+                    if (isNaN(amount)) return;
                     
-                    if (parser.deposit_example.includes('CLIENT')) {
-                       client_identifier = match[2]?.trim() || '';
+                    let client_identifier = '';
+                    if (clientIndex !== -1) {
+                       const clientString = match[clientIndex];
+                       if (clientString) client_identifier = clientString.trim();
                     }
                     
                     const newTxId = push(transactionsRef).key;
                     if (newTxId) {
                         updates[`/sms_transactions/${newTxId}`] = {
-                            client_name: client_identifier,
+                            client_name: client_identifier || 'Unknown',
                             account_id: parser.account_id,
                             account_name: account.name,
                             amount,
@@ -1418,21 +1444,21 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 };
                 
                 // Try to parse as deposit
-                const depositRegex = buildRegexFromExample(parser.deposit_example, parser.identity_source);
-                if (depositRegex) {
-                    const match = smsBody.match(depositRegex);
+                const depositRegexInfo = buildRegexFromExample(parser.deposit_example, parser.identity_source);
+                if (depositRegexInfo) {
+                    const match = smsBody.match(depositRegexInfo.regex);
                     if (match) {
-                        processMatch(match, 'deposit');
+                        processMatch(match, 'deposit', depositRegexInfo.amountIndex, depositRegexInfo.clientIndex);
                     }
                 }
 
                 // If not a deposit, try as withdrawal
                 if (!parsed) {
-                    const withdrawRegex = buildRegexFromExample(parser.withdraw_example, parser.identity_source);
-                     if (withdrawRegex) {
-                        const match = smsBody.match(withdrawRegex);
+                    const withdrawRegexInfo = buildRegexFromExample(parser.withdraw_example, parser.identity_source);
+                     if (withdrawRegexInfo) {
+                        const match = smsBody.match(withdrawRegexInfo.regex);
                         if (match) {
-                            processMatch(match, 'withdraw');
+                            processMatch(match, 'withdraw', withdrawRegexInfo.amountIndex, withdrawRegexInfo.clientIndex);
                         }
                     }
                 }
