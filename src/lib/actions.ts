@@ -8,7 +8,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms } from './types';
-import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
+import { parseSms } from '@/lib/sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1245,25 +1245,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const incomingSmsRef = ref(db, 'incoming');
     const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
-    const settingsRef = ref(db, 'settings');
 
     try {
-        const [incomingSnapshot, accountsSnapshot, settingsSnapshot] = await Promise.all([
+        const [incomingSnapshot, accountsSnapshot] = await Promise.all([
             get(incomingSmsRef),
             get(chartOfAccountsRef),
-            get(settingsRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
         }
-        
-        if (!settingsSnapshot.exists() || !settingsSnapshot.val().gemini_api_key) {
-            return { message: "Gemini API Key is not set in Settings. Please configure it to enable SMS parsing.", error: true };
-        }
-        
-        const settings: Settings = settingsSnapshot.val();
-        const geminiApiKey = settings.gemini_api_key!;
         
         const allIncoming = incomingSnapshot.val();
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
@@ -1298,8 +1289,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const newTxId = push(transactionsRef).key;
             if (!newTxId) return;
 
-            // Call the new AI parser
-            const parsed: ParsedSms | null = await parseSmsWithAi(smsBody, geminiApiKey);
+            const parsed: ParsedSms | null = parseSms(smsBody);
             
             if (parsed) {
                 successCount++;
