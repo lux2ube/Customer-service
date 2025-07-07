@@ -134,8 +134,9 @@ export interface SmsTransaction {
 }
 
 export interface ParsedSms {
-  type: 'credit' | 'debit';
-  amount: number;
-  person: string;
-  currency: string;
+  parsed: boolean;
+  type?: 'credit' | 'debit';
+  amount?: number;
+  person?: string;
+  currency?: string;
 }
