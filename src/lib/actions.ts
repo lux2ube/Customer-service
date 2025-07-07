@@ -7,7 +7,7 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction } from './types';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1298,4 +1298,18 @@ export async function manageSmsParser(parserId: string | null, prevState: SmsPar
 
     revalidatePath('/sms/settings');
     return { success: true, message: `Parser ${parserId ? 'updated' : 'created'} successfully.` };
+}
+
+export async function updateSmsTransactionStatus(id: string, status: SmsTransaction['status']): Promise<{success: boolean, message?: string}> {
+    if (!id || !status) {
+        return { success: false, message: 'Invalid ID or status provided.' };
+    }
+    try {
+        const txRef = ref(db, `sms_transactions/${id}`);
+        await update(txRef, { status });
+        revalidatePath('/sms/transactions');
+        return { success: true };
+    } catch (error) {
+        return { success: false, message: 'Database error: Failed to update status.' };
+    }
 }

@@ -125,3 +125,17 @@ export interface SmsParser {
     active: boolean;
     created_at: string;
 }
+
+export interface SmsTransaction {
+    id: string;
+    client_name: string;
+    account_id: string;
+    account_name?: string; // for display
+    amount: number;
+    currency: string;
+    type: 'deposit' | 'withdraw';
+    status: 'pending' | 'matched' | 'used' | 'rejected';
+    parsed_at: string;
+    raw_sms: string;
+    transaction_id?: string; // To store the linked transaction ID
+}
