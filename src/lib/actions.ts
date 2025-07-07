@@ -1295,11 +1295,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const settingsRef = ref(db, 'settings');
 
     try {
-        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot] = await Promise.all([
+        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot, smsTransactionsSnapshot] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(settingsRef),
+            get(transactionsRef) // Fetch all existing SMS transactions
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -1311,8 +1312,18 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const settings: Settings | null = settingsSnapshot.val();
         
+        // Create a set of recent SMS bodies for quick duplicate checking
+        const allSmsTransactions: SmsTransaction[] = smsTransactionsSnapshot.exists() ? Object.values(smsTransactionsSnapshot.val()) : [];
+        const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const recentSmsBodies = new Set(
+            allSmsTransactions
+                .filter(tx => new Date(tx.parsed_at).getTime() > twentyFourHoursAgo)
+                .map(tx => tx.raw_sms.trim()) // Store trimmed version for consistent matching
+        );
+        
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
+        let duplicateCount = 0;
         let regexSuccessCount = 0;
         let aiSuccessCount = 0;
         let failedCount = 0;
@@ -1320,18 +1331,19 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
             const endpointMapping = allEndpoints[endpointId];
             
-            if (!endpointMapping) {
-                updates[`/incoming/${endpointId}`] = null;
-                return;
+            // Always remove the message from the incoming queue
+            if (messageId) {
+                updates[`/incoming/${endpointId}/${messageId}`] = null;
+            } else {
+                 updates[`/incoming/${endpointId}`] = null;
             }
+
+            if (!endpointMapping) return;
 
             const accountId = endpointMapping.accountId;
             const account = allChartOfAccounts[accountId];
             
-            if (!account) {
-                updates[`/incoming/${endpointId}`] = null;
-                return;
-            }
+            if (!account) return;
 
             let smsBody: string;
             if (typeof payload === 'object' && payload !== null) {
@@ -1340,26 +1352,27 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 smsBody = String(payload);
             }
             
-            if (messageId) {
-                updates[`/incoming/${endpointId}/${messageId}`] = null;
-            } else {
-                 updates[`/incoming/${endpointId}`] = null;
+            const trimmedSmsBody = smsBody.trim();
+            if (trimmedSmsBody === '') return;
+            
+            // Check for duplicates based on the entire message body within the last 24 hours
+            if (recentSmsBodies.has(trimmedSmsBody)) {
+                duplicateCount++;
+                return; // Skip processing
             }
-
-            if (smsBody.trim() === '') return;
 
             processedCount++;
             const newTxId = push(transactionsRef).key;
             if (!newTxId) return;
 
             // Stage 1: Try Regex Parser first for known formats
-            let parsed: ParsedSms | null = parseSms(smsBody);
+            let parsed: ParsedSms | null = parseSms(trimmedSmsBody);
 
             if (parsed) {
                 regexSuccessCount++;
             } else {
                 // Stage 2: If regex fails, fallback to AI Parser
-                parsed = await parseSmsWithAi(smsBody, settings?.gemini_api_key || '');
+                parsed = await parseSmsWithAi(trimmedSmsBody, settings?.gemini_api_key || '');
                 if (parsed) {
                     aiSuccessCount++;
                 }
@@ -1375,8 +1388,10 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     type: parsed.type,
                     status: 'pending',
                     parsed_at: new Date().toISOString(),
-                    raw_sms: smsBody,
+                    raw_sms: trimmedSmsBody, // Store the trimmed version
                 };
+                // Add to set to prevent processing duplicates in the same run
+                recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
@@ -1388,7 +1403,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     type: null,
                     status: 'rejected',
                     parsed_at: new Date().toISOString(),
-                    raw_sms: smsBody,
+                    raw_sms: trimmedSmsBody,
                 };
             }
         };
@@ -1412,7 +1427,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         
         revalidatePath('/sms/transactions');
         let message = `Processed ${processedCount} message(s): ${regexSuccessCount} by regex, ${aiSuccessCount} by AI, ${failedCount} failed.`;
-
+        if (duplicateCount > 0) {
+            message += ` Skipped ${duplicateCount} duplicate message(s).`;
+        }
         return { message, error: failedCount > 0 };
 
     } catch(error: any) {
