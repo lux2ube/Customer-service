@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2, MessageSquare } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -17,7 +17,7 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, Transaction, Settings } from '@/lib/types';
+import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
@@ -53,6 +53,7 @@ const initialFormData: Transaction = {
     status: 'Pending',
     flags: [],
     createdAt: '',
+    linkedSmsId: '',
 };
 
 function BankAccountSelector({
@@ -121,6 +122,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [settings, setSettings] = React.useState<Settings | null>(null);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     
+    // Suggestion State
+    const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
+    
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
@@ -165,8 +170,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (transaction && !isDataLoading) {
             const formState = { ...initialFormData, ...transaction };
             
-            // On initial load, if there's no bank account set on the transaction,
-            // try to populate it with the client's favorite.
             if (client?.favoriteBankAccountId && !formState.bankAccountId) {
                 const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
                 if (favoriteAccount) {
@@ -179,8 +182,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
 
-
-    // Recalculate derived fields when form data changes
     React.useEffect(() => {
         if (isDataLoading) return;
 
@@ -201,75 +202,133 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [state, toast]);
     
+    // Effect to fetch SMS suggestions
+    React.useEffect(() => {
+        const fetchSuggestions = async () => {
+            if (!formData.clientId || !formData.bankAccountId) {
+                setSuggestedSms([]);
+                return;
+            }
+
+            setIsLoadingSuggestions(true);
+            try {
+                const [smsSnapshot, clientSnapshot] = await Promise.all([
+                    get(ref(db, 'sms_transactions')),
+                    get(ref(db, `clients/${formData.clientId}`)),
+                ]);
+
+                if (!smsSnapshot.exists() || !clientSnapshot.exists()) {
+                    setSuggestedSms([]);
+                    setIsLoadingSuggestions(false);
+                    return;
+                }
+
+                const allSmsTxs: SmsTransaction[] = Object.values(smsSnapshot.val());
+                const client = clientSnapshot.val() as Client;
+                const clientNameParts = client.name.toLowerCase().split(/\s+/).filter(p => p.length > 2);
+                const clientPhone = client.phone.replace(/[^0-9]/g, '');
+
+                const matches = allSmsTxs.filter(sms => {
+                    if (sms.status !== 'pending' || sms.account_id !== formData.bankAccountId) return false;
+                    
+                    const formTxType = formData.type.toLowerCase();
+                    const smsTxType = sms.type === 'credit' ? 'deposit' : 'withdraw';
+                    if (formTxType !== smsTxType) return false;
+
+                    const smsPerson = sms.client_name?.toLowerCase();
+                    if (!smsPerson) return false;
+                    
+                    if (clientPhone && smsPerson.includes(clientPhone)) return true;
+                    
+                    let matchCount = 0;
+                    for (const part of clientNameParts) {
+                        if (smsPerson.includes(part)) matchCount++;
+                    }
+                    return matchCount >= 2;
+                });
+                
+                setSuggestedSms(matches);
+            } catch (error) {
+                console.error("Failed to fetch SMS suggestions:", error);
+                setSuggestedSms([]);
+            } finally {
+                setIsLoadingSuggestions(false);
+            }
+        };
+
+        fetchSuggestions();
+    }, [formData.clientId, formData.bankAccountId, formData.type]);
+    
     const getNumberValue = (value: string | number) => {
         const num = parseFloat(String(value));
         return isNaN(num) ? 0 : num;
     };
-    
+
+    const recalculateFinancials = React.useCallback((amount: number, type: Transaction['type'], currency: Transaction['currency'], hash: string | undefined, usdtFromSync: number | undefined): Partial<Transaction> => {
+        const result: Partial<Pick<Transaction, 'amount_usd' | 'fee_usd' | 'expense_usd' | 'amount_usdt'>> = {};
+        if (!settings || !currency) return result;
+        
+        const rate = getRate(currency);
+        if (rate <= 0) return result;
+        
+        const newAmountUSD = amount * rate;
+        result.amount_usd = parseFloat(newAmountUSD.toFixed(2));
+        
+        if (hash) {
+            let newFeeUSD = 0;
+            let newExpenseUSD = 0;
+            const fixedUsdtAmount = usdtFromSync || 0;
+
+            if (type === 'Deposit') {
+                const difference = newAmountUSD - fixedUsdtAmount;
+                if (difference >= 0) newFeeUSD = difference;
+                else newExpenseUSD = -difference;
+            } else { // Withdraw
+                const difference = fixedUsdtAmount - newAmountUSD;
+                if (difference >= 0) newFeeUSD = difference;
+                else newExpenseUSD = -difference;
+            }
+            result.fee_usd = parseFloat(newFeeUSD.toFixed(2));
+            result.expense_usd = parseFloat(newExpenseUSD.toFixed(2));
+            result.amount_usdt = fixedUsdtAmount;
+        } else {
+            let finalFee = 0;
+            let newUsdtAmount = 0;
+            
+            if (type === 'Deposit') {
+                const feePercent = (settings.deposit_fee_percent || 0) / 100;
+                const calculatedFee = newAmountUSD * feePercent;
+                finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
+                newUsdtAmount = newAmountUSD - finalFee;
+            } else {
+                const feePercent = (settings.withdraw_fee_percent || 0) / 100;
+                if (feePercent < 0 || feePercent >= 1) {
+                    finalFee = 0;
+                } else {
+                    const grossAmount = newAmountUSD / (1 - feePercent);
+                    finalFee = grossAmount - newAmountUSD;
+                    newUsdtAmount = grossAmount;
+                }
+            }
+            result.fee_usd = parseFloat(finalFee.toFixed(2));
+            result.expense_usd = 0;
+            result.amount_usdt = parseFloat(newUsdtAmount.toFixed(2));
+        }
+        
+        return result;
+    }, [settings, getRate]);
+
     const handleManualAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
         pristineRef.current = false;
 
         setFormData(prev => {
-            if (!settings || !prev.currency) return { ...prev, amount: newAmountNum };
-
-            const rate = getRate(prev.currency);
-            if (rate <= 0) return { ...prev, amount: newAmountNum };
-            
-            const newAmountUSD = newAmountNum * rate;
-            
-            if (prev.hash) { // SYNCED TRANSACTION LOGIC
-                let newFeeUSD = 0;
-                let newExpenseUSD = 0;
-                const fixedUsdtAmount = prev.amount_usdt;
-
-                if (prev.type === 'Deposit') {
-                    const difference = newAmountUSD - fixedUsdtAmount;
-                    if (difference >= 0) newFeeUSD = difference;
-                    else newExpenseUSD = -difference;
-                } else { // Withdraw
-                    const difference = fixedUsdtAmount - newAmountUSD;
-                    if (difference >= 0) newFeeUSD = difference;
-                    else newExpenseUSD = -difference;
-                }
-                
-                return {
-                    ...prev,
-                    amount: newAmountNum,
-                    amount_usd: parseFloat(newAmountUSD.toFixed(2)),
-                    fee_usd: parseFloat(newFeeUSD.toFixed(2)),
-                    expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
-                };
-
-            } else { // MANUAL TRANSACTION LOGIC
-                let finalFee = 0;
-                let newUsdtAmount = 0;
-                
-                if (prev.type === 'Deposit') {
-                    const feePercent = (settings.deposit_fee_percent || 0) / 100;
-                    const calculatedFee = newAmountUSD * feePercent;
-                    finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                    newUsdtAmount = newAmountUSD - finalFee;
-                } else { // Withdraw
-                    const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                    if (feePercent < 0 || feePercent >= 1) { // prevent division by zero or negative
-                        finalFee = 0;
-                    } else {
-                        const grossAmount = newAmountUSD / (1 - feePercent);
-                        finalFee = grossAmount - newAmountUSD;
-                        newUsdtAmount = grossAmount;
-                    }
-                }
-                
-                return {
-                    ...prev,
-                    amount: newAmountNum,
-                    amount_usd: parseFloat(newAmountUSD.toFixed(2)),
-                    fee_usd: parseFloat(finalFee.toFixed(2)),
-                    expense_usd: 0,
-                    amount_usdt: parseFloat(newUsdtAmount.toFixed(2)),
-                };
-            }
+            const updates = recalculateFinancials(newAmountNum, prev.type, prev.currency, prev.hash, prev.amount_usdt);
+            return {
+                ...prev,
+                amount: newAmountNum,
+                ...updates
+            };
         });
     };
 
@@ -308,6 +367,23 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
             };
         });
+    };
+
+    const handleSuggestionClick = (sms: SmsTransaction) => {
+        const newAmount = sms.amount || 0;
+        const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
+
+        setFormData(prev => {
+            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, undefined, undefined);
+            return {
+                ...prev,
+                amount: newAmount,
+                currency: smsCurrency,
+                linkedSmsId: sms.id,
+                ...updates,
+            }
+        });
+        setSuggestedSms([]);
     };
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {
@@ -453,6 +529,25 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                         </CardContent>
                     </Card>
+
+                    {(isLoadingSuggestions || suggestedSms.length > 0) && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>SMS Suggestions</CardTitle>
+                                <CardDescription>Matching pending SMS messages for this client and account. Click to apply.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-wrap gap-2">
+                                {isLoadingSuggestions && <p className="text-sm text-muted-foreground">Loading suggestions...</p>}
+                                {!isLoadingSuggestions && suggestedSms.map(sms => (
+                                    <Button key={sms.id} type="button" variant="outline" size="sm" onClick={() => handleSuggestionClick(sms)}>
+                                        <MessageSquare className="mr-2 h-3 w-3" />
+                                        {sms.amount} {sms.currency} ({format(new Date(sms.parsed_at), 'MMM d')})
+                                    </Button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Financial Details</CardTitle>
@@ -495,6 +590,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                         </CardContent>
                         <CardFooter>
+                            <input type="hidden" name="linkedSmsId" value={formData.linkedSmsId || ''} />
                             <SubmitButton />
                         </CardFooter>
                     </Card>

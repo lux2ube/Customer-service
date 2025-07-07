@@ -361,6 +361,7 @@ const TransactionSchema = z.object({
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
     flags: z.array(z.string()).optional(),
+    linkedSmsId: z.string().optional().nullable(),
 });
 
 
@@ -561,6 +562,22 @@ export async function createTransaction(transactionId: string | null, prevState:
             });
         } catch (e) {
             console.error(`Failed to update favorite bank account for client ${finalData.clientId}:`, e);
+        }
+    }
+
+    // Link SMS if provided
+    const { linkedSmsId } = finalData;
+    if (linkedSmsId) {
+        try {
+            const smsTxRef = ref(db, `sms_transactions/${linkedSmsId}`);
+            const smsUpdateData = {
+                status: 'used' as const,
+                transaction_id: newId,
+            };
+            await update(smsTxRef, smsUpdateData);
+        } catch (e) {
+            // Log this but don't fail the whole transaction
+            console.error(`Failed to update linked SMS transaction ${linkedSmsId}:`, e);
         }
     }
 

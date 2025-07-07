@@ -66,6 +66,7 @@ export interface Transaction {
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     flags: ('AML' | 'KYC' | 'Other' | 'Blacklisted')[];
     createdAt: string;
+    linkedSmsId?: string;
 }
 
 export interface Account {
