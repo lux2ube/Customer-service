@@ -11,12 +11,12 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) from ATM - YKB',
-        regex: /^خصم (\d+)ر\.ي سحب من الصراف الآلي YKB رص:.*?ر\.ي$/,
-        map: { type: 'debit', amount: 1, currency: 'YER', person: 'YKB ATM' }
+        regex: /^خصم (\d+)(ر\.ي) سحب من الصراف الآلي YKB رص:.*?ر\.ي$/,
+        map: { type: 'debit', amount: 1, currency: 2, person: 'YKB ATM' }
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR',
-        regex: /^خصم ([\d,.]+)ر\.س سحب نقدي رص:.*?ر\.س$/,
+        regex: /^خصم ([\d,.]+) ر\.س سحب نقدي رص:.*?ر\.س$/,
         map: { type: 'debit', amount: 1, currency: 'SAR', person: 'Cash Withdrawal' }
     },
     {
@@ -65,7 +65,7 @@ const parsers = [
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
     },
     {
-        name: 'Debit (Tahweel) with checkmarks',
+        name: 'Debit (Tam Tahweel) with checkmarks',
         regex: /^تم\s*√\s*√\s*تحويل([\d,.]+) (SAR|USD|YER) لـ (.*?) بنجاح.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
