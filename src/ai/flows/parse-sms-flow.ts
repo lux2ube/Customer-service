@@ -8,18 +8,15 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
+import { 
+    SmsParseInputSchema, 
+    ParsedSmsOutputSchema,
+    type SmsParseInput,
+    type ParsedSmsOutput
+} from '@/lib/types';
 
-export const SmsParseInputSchema = z.string().describe("The raw SMS message content.");
-export type SmsParseInput = z.infer<typeof SmsParseInputSchema>;
-
-export const ParsedSmsOutputSchema = z.object({
-  type: z.enum(['credit', 'debit', 'unknown']).describe("The type of transaction. 'credit' is a deposit, 'debit' is a withdrawal."),
-  amount: z.number().nullable().describe("The numeric amount of the transaction."),
-  currency: z.string().nullable().describe("The currency code (e.g., YER, SAR, USD)."),
-  person: z.string().nullable().describe("The name of the other person involved in the transaction."),
-});
-export type ParsedSmsOutput = z.infer<typeof ParsedSmsOutputSchema>;
+// Re-exporting types is allowed in "use server" files.
+export type { SmsParseInput, ParsedSmsOutput };
 
 export async function parseSms(input: SmsParseInput): Promise<ParsedSmsOutput> {
   return parseSmsFlow(input);

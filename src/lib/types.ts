@@ -1,4 +1,5 @@
 
+import { z } from 'zod';
 
 export interface KycDocument {
     name: string;
@@ -132,9 +133,16 @@ export interface SmsTransaction {
     transaction_id?: string; // To store the linked transaction ID
 }
 
-export type ParsedSms = {
-  type: "credit" | "debit" | "unknown";
-  amount: number | null;
-  currency: string | null;
-  person: string | null;
-};
+export const SmsParseInputSchema = z.string().describe("The raw SMS message content.");
+export type SmsParseInput = z.infer<typeof SmsParseInputSchema>;
+
+export const ParsedSmsOutputSchema = z.object({
+  type: z.enum(['credit', 'debit', 'unknown']).describe("The type of transaction. 'credit' is a deposit, 'debit' is a withdrawal."),
+  amount: z.number().nullable().describe("The numeric amount of the transaction."),
+  currency: z.string().nullable().describe("The currency code (e.g., YER, SAR, USD)."),
+  person: z.string().nullable().describe("The name of the other person involved in the transaction."),
+});
+export type ParsedSmsOutput = z.infer<typeof ParsedSmsOutputSchema>;
+
+// The old ParsedSms type is deprecated in favor of the Zod schema above.
+export type ParsedSms = ParsedSmsOutput;
