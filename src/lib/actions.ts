@@ -70,7 +70,7 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
         return {
             errors: {
                 debit_account: ['Debit and credit accounts cannot be the same.'],
-                credit_account: ['Debit and credit accounts cannot be the same.'],
+                credit_account: ['Debit and credit accounts must be the same.'],
             },
             message: 'Debit and credit accounts must be different.'
         }
@@ -1304,6 +1304,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
                 if (messageId) {
                     updates[`/incoming/${accountId}/${messageId}`] = null;
+                } else {
+                    // Handle cases where messages are stored as a single string
+                    updates[`/incoming/${accountId}`] = null;
                 }
             };
             
@@ -1313,7 +1316,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 }
             } else if (typeof messagesNode === 'string') {
                 processMessage(messagesNode);
-                updates[`/incoming/${accountId}`] = null;
             }
         }
 

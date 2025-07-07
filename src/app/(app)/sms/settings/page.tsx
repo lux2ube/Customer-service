@@ -12,7 +12,7 @@ import { ref, onValue } from 'firebase/database';
 import type { BankAccount } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export default function SmsSettingsPage() {
+export default function SmsGatewaySetupPage() {
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
     const [loading, setLoading] = React.useState(true);
     const { toast } = useToast();
@@ -50,8 +50,8 @@ export default function SmsSettingsPage() {
         return (
             <>
                 <PageHeader
-                    title="SMS Gateway Settings"
-                    description="Configure your SMS gateway to post messages to these endpoints."
+                    title="SMS Gateway Setup"
+                    description="Configure your SMS gateway to post messages to these unique endpoints for each bank account."
                 />
                 <Card>
                     <CardHeader>
@@ -70,7 +70,7 @@ export default function SmsSettingsPage() {
     return (
         <>
             <PageHeader
-                title="SMS Gateway Settings"
+                title="SMS Gateway Setup"
                 description="Configure your SMS gateway to post messages to these unique endpoints for each bank account."
             />
             <div className="space-y-4">
@@ -105,7 +105,7 @@ export default function SmsSettingsPage() {
                                 </CardContent>
                                 <CardFooter>
                                     <p className="text-xs text-muted-foreground">
-                                        Use this URL as the endpoint for your SMS gateway to send messages related to this account.
+                                        Use this URL as the endpoint for your SMS gateway. It should `POST` the raw SMS body as the JSON payload.
                                     </p>
                                 </CardFooter>
                             </Card>

@@ -1,7 +1,5 @@
 import type { ParsedSms } from './types';
 
-// This is a mapping of currency symbols/codes found in SMS messages
-// to a standardized currency code.
 const currencyMap: { [key: string]: string } = {
   "ر.ي": "YER",
   "ر.س": "SAR",
@@ -22,59 +20,54 @@ export function parseSms(message: string): ParsedSms {
   const normalizedMessage = message.replace('√', '').trim();
 
   // A dictionary of robust patterns to try in order.
-  // They are designed to be flexible with whitespace (\s*).
+  // Each regex is designed to be flexible with whitespace and uses named capture groups.
   const patterns = [
-    // Matches: "أودع/باسم محمد لحسابك6900 YERرصيدك..."
-    // This is a very flexible pattern for deposit messages starting with "أودع/".
+    // PATTERN 1: For "أودع" (deposit) messages, especially with no spaces.
+    // Example: "أودع/باسم محمد لحسابك6900 YERرصيدك132888٫9YER"
     {
-      regex: /أودع\/(.+?)\s*لحسابك\s*([\d,.,٫]+)\s*(\S+)\s*رصيدك/,
-      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, person: m[1], amount: m[2], currency: m[3] })
+      regex: /أودع\/(?<person>.+?)\s*لحسابك\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+?)\s*رصيدك/,
+      type: 'credit' as const
     },
-    // Matches: "استلمت مبلغ 42500 YER من 770909099 رصيدك..." or "استلمت 6,000.00 من صدام حسن احمد ا رصيدك..."
-    // This handles the common "استلمت" (Received) format.
+    // PATTERN 2: For "استلمت" (Received) messages.
+    // Examples: "استلمت مبلغ 42500 YER من 770909099 رصيدك..." or "استلمت 6,000.00 من صدام حسن احمد ا رصيدك..."
     {
-      regex: /استلمت(?:\s*مبلغ)?\s*([\d,.,٫]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
-      map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
+      regex: /استلمت(?:\s*مبلغ)?\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/,
+      type: 'credit' as const
     },
-    // Matches: "إضافة3000.00 SARمن خالد الحبيشي رصيدك..."
-    // This handles the common "إضافة" (Addition) format.
+    // PATTERN 3: For "إضافة" (Addition) messages.
+    // Example: "إضافة3000.00 SARمن خالد الحبيشي رصيدك..."
     {
-        regex: /إضافة\s*([\d,.,٫]+)\s*(\S+)?\s*من\s*(.+?)\s*رصيدك/,
-        map: (m: RegExpMatchArray) => ({ type: 'credit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
+        regex: /إضافة\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*من\s*(?<person>.+?)\s*رصيدك/,
+        type: 'credit' as const
     },
-    // A combined pattern for "حولت" (Transferred) or "تحويل" (Transfer) messages.
+    // PATTERN 4: A combined pattern for "حولت" (Transferred) or "تحويل" (Transfer) debit messages.
     // Example: "حولت6,000.00لـباسم مصلح علي م..." or "تحويل3000.00 SAR لـ وائل ابو عدله بنجاح..."
     {
-      regex: /(?:حولت|تحويل)\s*([\d,.,٫]+)\s*(\S+)?\s*لـ\s*(.+?)\s*(?:بنجاح|رسوم)/,
-      map: (m: RegExpMatchArray) => ({ type: 'debit' as const, amount: m[1], currency: m[2] || 'YER', person: m[3] })
+      regex: /(?:حولت|تحويل)\s*(?<amount>[\d,.,٫]+)\s*(?<currency>\S+)?\s*لـ\s*(?<person>.+?)\s*(?:بنجاح|رسوم)/,
+      type: 'debit' as const
     },
   ];
 
   for (const p of patterns) {
-    const match = normalizedMessage.match(p.regex);
-    if (match) {
-      try {
-        const result = p.map(match);
+    const match = p.regex.exec(normalizedMessage);
+    if (match && match.groups) {
+        const { amount, currency: rawCurrency, person } = match.groups;
         // Replace both standard and Arabic commas before parsing the number.
-        const amount = parseFloat(result.amount.replace(/[,٫]/g, ''));
+        const parsedAmount = parseFloat(amount.replace(/[,٫]/g, ''));
         
         // Handle currency mapping. Default to null if not present.
-        const currencySymbol = result.currency?.trim().toUpperCase();
+        const currencySymbol = rawCurrency?.trim().toUpperCase();
         const currency = currencySymbol ? (currencyMap[currencySymbol] || currencySymbol) : null;
 
-        if (!isNaN(amount)) {
+        if (!isNaN(parsedAmount) && person) {
           return {
-            type: result.type,
-            amount,
+            type: p.type,
+            amount: parsedAmount,
             currency,
-            person: result.person.trim(),
+            person: person.trim(),
             raw: message,
           };
         }
-      } catch (e) {
-        // This helps in debugging if a pattern's map function has an error.
-        console.error("Error applying map function for pattern:", p.regex, "Original Message:", message, e);
-      }
     }
   }
 
