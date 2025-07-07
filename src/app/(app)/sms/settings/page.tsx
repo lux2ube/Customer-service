@@ -16,7 +16,8 @@ import Link from 'next/link';
 import { Label } from '@/components/ui/label';
 
 export default function SmsGatewaySetupPage() {
-    const [accounts, setAccounts] = React.useState<Account[]>([]);
+    const [validAccounts, setValidAccounts] = React.useState<Account[]>([]);
+    const [potentialAccounts, setPotentialAccounts] = React.useState<Account[]>([]);
     const [loading, setLoading] = React.useState(true);
     const { toast } = useToast();
     const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
@@ -30,11 +31,19 @@ export default function SmsGatewaySetupPage() {
                     id: key,
                     ...data[key]
                 }));
-                const filteredList = list.filter(acc => !acc.isGroup && acc.currency);
-                filteredList.sort((a, b) => a.id.localeCompare(b.id));
-                setAccounts(filteredList);
+                const nonGroupAccounts = list.filter(acc => !acc.isGroup);
+
+                const valid = nonGroupAccounts.filter(acc => acc.currency);
+                valid.sort((a, b) => a.id.localeCompare(b.id));
+                setValidAccounts(valid);
+
+                const potential = nonGroupAccounts.filter(acc => !acc.currency);
+                potential.sort((a, b) => a.id.localeCompare(b.id));
+                setPotentialAccounts(potential);
+
             } else {
-                setAccounts([]);
+                setValidAccounts([]);
+                setPotentialAccounts([]);
             }
             setLoading(false);
         });
@@ -108,7 +117,7 @@ export default function SmsGatewaySetupPage() {
                     </CardFooter>
                 </Card>
 
-                <h2 className="text-xl font-semibold tracking-tight">Account Endpoints</h2>
+                <h2 className="text-xl font-semibold tracking-tight">Active Account Endpoints</h2>
                  <p className="text-sm text-muted-foreground">
                     Configure your SMS gateway to `POST` the raw SMS body as a JSON payload to these unique URLs. Each URL corresponds to a specific account in your Chart of Accounts.
                 </p>
@@ -125,8 +134,8 @@ export default function SmsGatewaySetupPage() {
                             </CardContent>
                         </Card>
                     ))
-                ) : accounts.length > 0 ? (
-                    accounts.map(account => {
+                ) : validAccounts.length > 0 ? (
+                    validAccounts.map(account => {
                         const endpointUrl = `${sanitizedDbUrl}/incoming/${account.id}.json`;
                         return (
                             <Card key={account.id}>
@@ -153,6 +162,47 @@ export default function SmsGatewaySetupPage() {
                         </CardContent>
                     </Card>
                 )}
+
+                <h2 className="text-xl font-semibold tracking-tight mt-8">Generate More Endpoints</h2>
+                 <p className="text-sm text-muted-foreground">
+                    The accounts below can be used for SMS parsing but do not have a currency assigned. To generate an endpoint, edit the account and assign a currency.
+                </p>
+                 {loading ? (
+                    Array.from({ length: 2 }).map((_, i) => (
+                        <Card key={`pot-${i}`}>
+                             <CardHeader>
+                                <Skeleton className="h-6 w-1/2" />
+                                <Skeleton className="h-4 w-1/4" />
+                            </CardHeader>
+                             <CardFooter>
+                                 <Skeleton className="h-9 w-48" />
+                             </CardFooter>
+                        </Card>
+                    ))
+                 ) : potentialAccounts.length > 0 ? (
+                    potentialAccounts.map(account => (
+                        <Card key={account.id}>
+                            <CardHeader>
+                                <CardTitle>{account.name} ({account.id})</CardTitle>
+                                <CardDescription>No currency assigned. An endpoint cannot be generated.</CardDescription>
+                            </CardHeader>
+                            <CardFooter>
+                                 <Button asChild variant="secondary">
+                                    <Link href={`/accounting/chart-of-accounts/edit/${account.id}`}>
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        Configure Account to Generate
+                                    </Link>
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    ))
+                 ) : (
+                     <Card>
+                        <CardContent className="p-6">
+                            <p className="text-center text-muted-foreground">All possible accounts already have active endpoints.</p>
+                        </CardContent>
+                    </Card>
+                 )}
             </div>
         </>
     );
