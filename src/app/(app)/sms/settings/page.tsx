@@ -1,7 +1,7 @@
-
 'use client';
 
 import * as React from 'react';
+import { useActionState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,7 +31,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { useActionState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { createSmsEndpoint, deleteSmsEndpoint, type SmsEndpointState } from '@/lib/actions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -192,12 +192,22 @@ export default function SmsGatewaySetupPage() {
                         <Bot className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                        <CardTitle>Legacy Parser</CardTitle>
+                        <CardTitle>Hybrid Parsing System</CardTitle>
                         <CardDescription>
-                            This system now uses a regex-based parser. To add support for new formats, please contact your developer.
+                            This system uses a reliable Regex parser for known SMS formats. For new, unknown formats, it intelligently falls back to an AI parser.
                         </CardDescription>
                     </div>
                 </CardHeader>
+                <CardContent>
+                     <p className="text-sm text-muted-foreground">
+                        To enable the AI fallback for new message formats, please ensure your Gemini API key is set in the main settings.
+                    </p>
+                    <Button asChild variant="link" className="p-0 h-auto mt-2">
+                        <Link href="/settings">
+                            Go to Settings <SettingsIcon className="ml-2 h-4 w-4" />
+                        </Link>
+                    </Button>
+                </CardContent>
              </Card>
 
             <Card className="mt-6">
