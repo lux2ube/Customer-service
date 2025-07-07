@@ -612,9 +612,9 @@ export async function createTransaction(transactionId: string | null, prevState:
                 debit_account: debitAccountId,
                 credit_account: creditAccountId,
                 debit_amount: debitAmount,
+                credit_currency: creditAccount.currency || 'USD',
                 credit_amount: creditAmount,
                 debit_currency: debitAccount.currency || 'USD',
-                credit_currency: creditAccount.currency || 'USD',
                 amount_usd: amountUsd,
                 debit_account_name: debitAccount.name,
                 credit_account_name: creditAccount.name,
@@ -1281,7 +1281,12 @@ export async function manageSmsParser(parserId: string | null, prevState: SmsPar
             const newId = newParserRef.key;
             if (!newId) throw new Error('Could not create new parser ID.');
 
-            const endpoint_url = `https://smsapi-f9f6d-default-rtdb.firebaseio.com/incoming/${newId}.json`;
+            const databaseUrl = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+            if (!databaseUrl) {
+                return { message: 'Firebase Database URL is not configured. Cannot generate endpoint URL.', success: false };
+            }
+            // Ensure URL is clean before appending. The .json suffix is required for the REST API.
+            const endpoint_url = `${databaseUrl.replace(/\/$/, '')}/incoming/${newId}.json`;
 
             const newParserData = {
                 ...data,
@@ -1313,3 +1318,5 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
         return { success: false, message: 'Database error: Failed to update status.' };
     }
 }
+
+    
