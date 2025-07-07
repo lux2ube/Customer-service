@@ -11,8 +11,6 @@ import type { ParsedSms } from './types';
  * 3. Named capture groups `(?<group_name>...)` are used to extract data reliably.
  * 4. The patterns are designed to be flexible with whitespace (`\s*`) to handle real-world SMS inconsistencies.
  * 5. All patterns use the `/u` flag for proper Unicode handling in the Node.js environment.
- *
- * To support a new SMS format, simply add a new object to the `patterns` array.
  */
 
 const currencyMap: { [key: string]: string } = {
@@ -32,14 +30,13 @@ export function parseSms(message: string): ParsedSms {
 
   const patterns = [
     /**
-     * PATTERN 1: For "أودع" (deposit) messages. Made more robust.
-     * The `u` flag is added for proper Unicode handling.
-     * `\s*` handles inconsistent spacing.
-     * `(?:باسم\s*)?` makes the word "باسم" optional.
-     * Example: "أودع/باسم محمد لحسابك6900 YERرصيدك132888٫9YER"
+     * PATTERN 1: For "أودع" (deposit) messages. This is the most precise pattern.
+     * It captures the person's name as everything between "أودع/" and "لحسابك", which is less ambiguous.
+     * It correctly handles cases with no space like "لحسابك35000" and "YERرصيدك".
+     * Example: "أودع/محمد احمد لحسابك35000 YERرصيدك181688٫9YER"
      */
     {
-      regex: /أودع\s*\/\s*(?:باسم\s*)?(?<person>.+?)\s*لحسابك\s*(?<amount>[\d,٫.]+)\s*(?<currency>\S+?)\s*رصيدك/u,
+      regex: /أودع\/(?:باسم\s*)?(?<person>.*?)لحسابك(?<amount>[\d,٫.]+)\s*(?<currency>YER|SAR|USD|ر\.ي|ر\.س)\s*رصيدك/u,
       type: 'credit' as const
     },
 
