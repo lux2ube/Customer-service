@@ -64,12 +64,12 @@ const parsers = [
     },
     {
         name: 'Debit (Tam Tahweel) with checkmarks',
-        regex: /^تم\s*√\s*√\s*تحويل\s*([\d,٫.]+)\s*.*? لـ (.*?) بنجاح.*$/,
+        regex: /تم\s*√\s*√\s*تحويل\s*([\d,٫.]+)\s*.*? لـ (.*?) بنجاح.*$/,
         map: { type: 'debit', amount: 1, person: 2 }
     },
     {
         name: 'Debit (Tam Sahab) with checkmarks and optional spaces',
-        regex: /^تم\s*√\s*√\s*سحب\s*([\d,٫.]+)\s*.*? رصيدك.*$/,
+        regex: /تم\s*√\s*√\s*سحب\s*([\d,٫.]+)\s*.*? رصيدك.*$/,
         map: { type: 'debit', amount: 1, person: 'Self Withdrawal' }
     },
 
@@ -131,8 +131,7 @@ const parsers = [
     },
     {
         name: 'Credit (Idafa) with checkmarks (Robust)',
-        // This more robust rule handles conjoined words (e.g. YERمن) and flexible spacing.
-        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,٫.]+)[^\d\s]*\s*من\s*(.*?)\s+رصيدك.*$/i,
+        regex: /تم\s*√\s*√\s*إضافة\s*([\d,٫.]+)[^\d\s]*\s*من\s*(.*?)\s+رصيدك.*$/i,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
