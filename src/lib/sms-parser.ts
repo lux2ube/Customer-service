@@ -17,7 +17,7 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) YER to Kash number',
-        regex: /^خصم ([\d,.]+)(ر\.ي) مقابل تحويل لمحفظة\/بنك رص:.*? الى (كاش رقم \d+)$/,
+        regex: /^خصم ([\d,.]+)(р\.ي) مقابل تحويل لمحفظة\/بنك رص:.*? الى (كاش رقم \d+)$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
@@ -27,17 +27,17 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) from ATM - YKB',
-        regex: /^خصم ([\d,.]+)(ر\.ي) سحب من الصراف الآلي YKB رص:.*?ر\.ي$/,
+        regex: /^خصم ([\d,.]+)(р\.ي) سحب من الصراف الآلي YKB رص:.*?р\.ي$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 'YKB ATM' }
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR - no space',
-        regex: /^خصم ([\d,.]+)ر\.س سحب نقدي رص:.*?ر\.س$/,
+        regex: /^خصم ([\d,.]+)р\.س سحب نقدي رص:.*?р\.س$/,
         map: { type: 'debit', amount: 1, currency: 'SAR', person: 'Cash Withdrawal' }
     },
     {
         name: 'Debit (Khasm) from ATM',
-        regex: /^خصم ([\d,.]+)(ر\.ي) سحب من (.*?) رص:.*$/,
+        regex: /^خصم ([\d,.]+)(р\.ي) سحب من (.*?) رص:.*$/,
         map: { type: 'debit', amount: 1, currency: 2, person: 3 }
     },
     {
@@ -75,6 +75,11 @@ const parsers = [
 
     // --- DEBIT (HAWALT) ---
     {
+        name: 'Debit (Hawalt) with fees and final currency',
+        regex: /^حولت([\d,.]+)لـ(.*?)\s+رسوم\s+[\d,.]+\s+رصيدك\s+[\d,.]+(ر\.ي|р\.с|YER|SAR|USD)$/,
+        map: { type: 'debit', amount: 1, person: 2, currency: 3 }
+    },
+    {
         name: 'Debit (Hawalt) with lamed preposition',
         regex: /^حولت([\d,.]+)لـ([\D]+?)\s*(?:رسوم|م).*/,
         map: { type: 'debit', amount: 1, person: 2, currency: 'YER' }
@@ -83,7 +88,7 @@ const parsers = [
     // --- CREDIT (AWDA'/AWDAAT) ---
     {
         name: 'Credit (Awda\') with slash and optional space currency',
-        regex: /^أودع\/(.*?) لحسابك([\d,.]+)\s*(YER|SAR|USD).*$/,
+        regex: /^[أا]ودع\/(.*?) لحسابك([\d,.]+)\s*(YER|SAR|USD).*$/,
         map: { type: 'credit', person: 1, amount: 2, currency: 3 }
     },
     {
@@ -93,7 +98,7 @@ const parsers = [
     },
      {
         name: 'Credit (Tam Eidaa) YER via Agent',
-        regex: /^تم إيداع ([\d,.]+)ر\.ي عبر (.*?) رصيدك .*? ر\.ي$/,
+        regex: /^تم إيداع ([\d,.]+)р\.ي عبر (.*?) رصيدك .*? р\.ي$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
 
@@ -101,22 +106,22 @@ const parsers = [
     // --- CREDIT (IDIF/ADIFA) ---
     {
         name: 'Credit (Idif) from person with "mogabel"',
-        regex: /^اضيف ([\d,.]+)ر\.ي مقابل تحويل مشترك رص:.*? من (.*)$/,
+        regex: /^اضيف ([\d,.]+)р\.ي مقابل تحويل مشترك رص:.*? من (.*)$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
     {
         name: 'Credit (Idif) from Mobile Money',
-        regex: /^اضيف ([\d,.]+)(ر\.ي) مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)$/,
+        regex: /^اضيف ([\d,.]+)(р\.ي) مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Credit (Idif) for Hawala exchange',
-        regex: /^اضيف ([\d,.]+)(ر\.ي) مقابل صرف حوالة الى المحفظة رص:.*? من (.*)$/,
+        regex: /^اضيف ([\d,.]+)(р\.ي) مقابل صرف حوالة الى المحفظة رص:.*? من (.*)$/,
         map: { type: 'credit', amount: 1, currency: 2, person: 3 }
     },
     {
         name: 'Credit (Idif) from person with optional phone',
-        regex: /^اضيف ([\d,.]+)ر\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?$/,
+        regex: /^اضيف ([\d,.]+)р\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
     {
@@ -138,12 +143,12 @@ const parsers = [
     },
     {
         name: 'Credit (Istalamt) amount YER from person',
-        regex: /^[أا]ستلمت ([\d,.]+)ر\.ي من (.*?) رصيدك .*? ر\.ي$/,
+        regex: /^[أا]ستلمت ([\d,.]+)р\.ي من (.*?) رصيدك .*? р\.ي$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
     {
         name: 'Credit (Istalamt) general with YER balance',
-        regex: /^[أا]ستلمت ([\d,.]+) من (.*?)(?: ا)? رصيدك.*? ر\.ي$/,
+        regex: /^[أا]ستلمت ([\d,.]+) من (.*?)(?: ا)? رصيدك.*? р\.ي$/,
         map: { type: 'credit', amount: 1, person: 2, currency: 'YER' }
     },
 ];
@@ -154,8 +159,8 @@ function cleanAndParseFloat(value: string): number {
 }
 
 function mapCurrency(currency: string): string {
-    if (currency === 'ر.ي') return 'YER';
-    if (currency === 'ر.س') return 'SAR';
+    if (currency === 'ر.ي' || currency === 'р.ي') return 'YER';
+    if (currency === 'р.с' || currency === 'ر.س') return 'SAR';
     return currency;
 }
 
