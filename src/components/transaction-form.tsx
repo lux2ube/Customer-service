@@ -717,16 +717,22 @@ function ClientSelector({ clients, value, onSelect }: { clients: Client[], value
         const lowercasedSearch = search.toLowerCase().trim();
         if (!lowercasedSearch) return [];
 
+        const searchTerms = lowercasedSearch.split(' ').filter(Boolean);
+
         return clients.filter(client => {
             const name = (client.name || '').toLowerCase();
             const phone = getPhone(client.phone).toLowerCase();
             
-            // Match if name or phone starts with the search term
-            if (name.startsWith(lowercasedSearch) || phone.startsWith(lowercasedSearch)) {
+            // Direct substring match on phone first
+            if (phone.includes(lowercasedSearch)) {
                 return true;
             }
-            // Match if any word in the name starts with the search term
-            return name.split(' ').some(part => part.startsWith(lowercasedSearch));
+
+            // For name, check if all search terms match the start of some word in the name
+            const nameWords = name.split(' ');
+            return searchTerms.every(term => 
+                nameWords.some(nameWord => nameWord.startsWith(term))
+            );
         });
     }, [search, clients]);
 

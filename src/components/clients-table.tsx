@@ -36,12 +36,25 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
   const filteredClients = React.useMemo(() => {
     let filtered = [...clients];
     if (search) {
-        const lowercasedSearch = search.toLowerCase();
-        filtered = filtered.filter(client => 
-            (client.name?.toLowerCase() || '').includes(lowercasedSearch) ||
-            (getClientPhoneString(client.phone).toLowerCase()).includes(lowercasedSearch) ||
-            (client.id?.toLowerCase() || '').includes(lowercasedSearch)
-        );
+        const lowercasedSearch = search.toLowerCase().trim();
+        const searchTerms = lowercasedSearch.split(' ').filter(Boolean);
+
+        filtered = filtered.filter(client => {
+            const name = (client.name?.toLowerCase() || '');
+            const phone = (getClientPhoneString(client.phone).toLowerCase());
+            const id = (client.id?.toLowerCase() || '');
+
+            // ID and Phone can be a direct substring match
+            if (id.includes(lowercasedSearch) || phone.includes(lowercasedSearch)) {
+                return true;
+            }
+            
+            // For name, check if all search terms match the start of some word in the name
+            const nameWords = name.split(' ');
+            return searchTerms.every(term => 
+                nameWords.some(nameWord => nameWord.startsWith(term))
+            );
+        });
     }
     return filtered;
   }, [clients, search]);
