@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { cn } from '@/lib/utils';
+import { cn, normalizeArabic } from '@/lib/utils';
 
 type SortableKeys = keyof Transaction;
 
@@ -49,21 +49,36 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
 
     // Search filter
     if (search) {
-        const lowercasedSearch = search.toLowerCase();
+        const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
+        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
+
         filtered = filtered.filter(tx => {
-            return (
-                tx.id.toLowerCase().includes(lowercasedSearch) ||
-                tx.clientName?.toLowerCase().includes(lowercasedSearch) ||
-                tx.type.toLowerCase().includes(lowercasedSearch) ||
-                tx.amount.toString().includes(lowercasedSearch) ||
-                tx.currency.toLowerCase().includes(lowercasedSearch) ||
-                tx.amount_usd.toString().includes(lowercasedSearch) ||
-                tx.status.toLowerCase().includes(lowercasedSearch) ||
-                tx.hash?.toLowerCase().includes(lowercasedSearch) ||
-                tx.remittance_number?.toLowerCase().includes(lowercasedSearch) ||
-                tx.notes?.toLowerCase().includes(lowercasedSearch) ||
-                tx.client_wallet_address?.toLowerCase().includes(lowercasedSearch)
+            // Smart search for client name
+            const clientName = normalizeArabic(tx.clientName?.toLowerCase() || '');
+            const clientNameWords = clientName.split(' ');
+            const clientNameMatch = searchTerms.every(term => 
+                clientNameWords.some(nameWord => nameWord.startsWith(term))
             );
+
+            if (clientNameMatch) {
+                return true;
+            }
+
+            // Simple search for other fields, using the normalized search term for consistency
+            const otherFieldsMatch = (
+                tx.id.toLowerCase().includes(normalizedSearch) ||
+                tx.type.toLowerCase().includes(normalizedSearch) ||
+                tx.amount.toString().includes(normalizedSearch) ||
+                tx.currency.toLowerCase().includes(normalizedSearch) ||
+                tx.amount_usd.toString().includes(normalizedSearch) ||
+                tx.status.toLowerCase().includes(normalizedSearch) ||
+                tx.hash?.toLowerCase().includes(normalizedSearch) ||
+                tx.remittance_number?.toLowerCase().includes(normalizedSearch) ||
+                (tx.notes && normalizeArabic(tx.notes.toLowerCase()).includes(normalizedSearch)) ||
+                tx.client_wallet_address?.toLowerCase().includes(normalizedSearch)
+            );
+            
+            return otherFieldsMatch;
         });
     }
 
