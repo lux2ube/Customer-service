@@ -1418,14 +1418,21 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const rulesRef = ref(db, 'sms_parsing_rules');
 
     try {
-        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot, smsTransactionsSnapshot, rulesSnapshot] = await Promise.all([
+        const promiseResults = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(settingsRef),
-            get(smsTransactionsSnapshot),
+            get(transactionsRef),
             get(rulesRef),
         ]);
+
+        const incomingSnapshot = promiseResults[0];
+        const endpointsSnapshot = promiseResults[1];
+        const accountsSnapshot = promiseResults[2];
+        const settingsSnapshot = promiseResults[3];
+        const smsTransactionsSnapshot = promiseResults[4];
+        const rulesSnapshot = promiseResults[5];
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
