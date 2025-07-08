@@ -226,8 +226,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
                 const allSmsTxs: SmsTransaction[] = Object.values(smsSnapshot.val());
                 const client = clientSnapshot.val() as Client;
-                const clientNameSet = new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1));
-                const clientPhone = client.phone.replace(/[^0-9]/g, '');
+                
+                if (!client) {
+                    setSuggestedSms([]);
+                    setIsLoadingSuggestions(false);
+                    return;
+                }
+
+                const clientNameSet = client.name ? new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1)) : new Set<string>();
+                const clientPhone = client.phone ? client.phone.replace(/[^0-9]/g, '') : '';
 
                 const matches = allSmsTxs.filter(sms => {
                     if (sms.status !== 'pending' || sms.account_id !== formData.bankAccountId) return false;
