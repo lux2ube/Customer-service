@@ -130,8 +130,9 @@ const parsers = [
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
-        name: 'Credit (Idafa) with checkmarks and conjoined text',
-        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,٫.]+).*?من\s+(.*?)\s+رصيدك.*$/,
+        name: 'Credit (Idafa) with checkmarks (Robust)',
+        // This more robust rule handles conjoined words (e.g. YERمن) and flexible spacing.
+        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,٫.]+)[^\d\s]*\s*من\s*(.*?)\s+رصيدك.*$/i,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
