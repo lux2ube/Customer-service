@@ -723,7 +723,7 @@ function ClientSelector({ clients, value, onSelect }: { clients: Client[], value
             const name = normalizeArabic((client.name || '').toLowerCase());
             const phone = getPhone(client.phone).toLowerCase();
             
-            // Direct substring match on phone first. Use original search value.
+            // Direct substring match on phone first. Use original search for phone.
             if (phone.includes(search.trim())) {
                 return true;
             }
