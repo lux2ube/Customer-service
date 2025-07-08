@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from './firebase';
-import { push, ref, set, update, get, remove } from 'firebase/database';
+import { push, ref, set, update, get, remove, query, orderByChild, equalTo, startAt, endAt, limitToFirst } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -138,6 +138,44 @@ const ClientSchema = z.object({
     review_flags: z.array(z.string()).optional(),
 });
 
+async function _updateClientSearchIndex(clientId: string, clientData: Pick<Client, 'name' | 'phone'>) {
+    const searchIndexRef = ref(db, 'client_search_index');
+    
+    const oldEntriesQuery = query(searchIndexRef, orderByChild('clientId'), equalTo(clientId));
+    const oldEntriesSnapshot = await get(oldEntriesQuery);
+    const updates: { [key: string]: null } = {};
+    if (oldEntriesSnapshot.exists()) {
+        oldEntriesSnapshot.forEach(child => {
+            updates[child.key!] = null;
+        });
+        await update(searchIndexRef, updates);
+    }
+    
+    const newIndexEntries: { [key: string]: any } = {};
+    const searchTerms = new Set<string>();
+    
+    if (clientData.name) {
+        searchTerms.add(clientData.name.toLowerCase().trim());
+    }
+    
+    const phones = Array.isArray(clientData.phone) ? clientData.phone : [clientData.phone].filter(Boolean);
+    phones.forEach(phone => {
+        if (phone) {
+            searchTerms.add(phone.trim());
+        }
+    });
+
+    searchTerms.forEach(term => {
+        const newEntryRef = push(searchIndexRef);
+        newIndexEntries[newEntryRef.key!] = { clientId, term };
+    });
+
+    if (Object.keys(newIndexEntries).length > 0) {
+        await update(searchIndexRef, newIndexEntries);
+    }
+}
+
+
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) {
@@ -145,7 +183,6 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         throw new Error(errorMsg);
     }
     
-    // Handle file uploads
     const kycFiles = formData.getAll('kyc_files') as File[];
     const uploadedDocuments: KycDocument[] = [];
 
@@ -199,11 +236,8 @@ export async function createClient(clientId: string | null, prevState: ClientFor
             for (const item of blacklistItems) {
                 if (isBlacklisted) break;
                 if (item.type === 'Name') {
-                    // Split client name and blacklisted name into words for more flexible matching.
                     const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
                     const blacklistWords = item.value.toLowerCase().split(/\s+/);
-                    
-                    // Check if all words from the blacklist entry are present in the client's name.
                     if (blacklistWords.every(word => clientWords.has(word))) {
                         isBlacklisted = true;
                     }
@@ -249,6 +283,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
                 createdAt: new Date().toISOString()
             });
         }
+        await _updateClientSearchIndex(newId, validatedFields.data);
     } catch (error) {
         return { message: 'Database Error: Failed to save client data. Check server logs.' }
     }
@@ -1289,7 +1324,6 @@ export async function matchSmsTransaction(smsId: string): Promise<{success: bool
             return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
         }
         await update(txRef, { status: 'matched' });
-        // Do not revalidate here to prevent form reload on click
         return { success: true };
     } catch (error) {
         return { success: false, message: 'Database error: Failed to update status.' };
@@ -1541,34 +1575,34 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
             if (group.length > 1) {
                 mergedGroups++;
 
-                // Sort by creation date to find the primary client
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 
                 const primaryClient = group[0];
                 const duplicates = group.slice(1);
                 
-                // Aggregate data from duplicates
-                const allPhones = new Set(primaryClient.phone || []);
+                const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
                 const allBep20 = new Set(primaryClient.bep20_addresses || []);
 
-                duplicates.forEach(dup => {
+                for (const dup of duplicates) {
                     deletedClients++;
-                    (dup.phone || []).forEach(p => allPhones.add(p));
+                    (Array.isArray(dup.phone) ? dup.phone : [dup.phone]).forEach(p => p && allPhones.add(p));
                     (dup.bep20_addresses || []).forEach(a => allBep20.add(a));
                     (dup.kyc_documents || []).forEach(doc => {
                         if (!allKycDocs.has(doc.url)) {
                             allKycDocs.set(doc.url, doc);
                         }
                     });
-                    // Mark duplicate for deletion
+                    
                     updates[`/clients/${dup.id}`] = null;
-                });
+                    await _updateClientSearchIndex(dup.id, { name: '', phone: [] });
+                };
 
-                // Prepare update for the primary client
                 updates[`/clients/${primaryClient.id}/phone`] = Array.from(allPhones);
                 updates[`/clients/${primaryClient.id}/bep20_addresses`] = Array.from(allBep20);
                 updates[`/clients/${primaryClient.id}/kyc_documents`] = Array.from(allKycDocs.values());
+
+                await _updateClientSearchIndex(primaryClient.id, { name: primaryClient.name, phone: Array.from(allPhones) });
             }
         }
 
@@ -1626,5 +1660,78 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
         return {};
     } catch (error) {
         return { message: 'Database error: Failed to delete rule.' };
+    }
+}
+
+// --- Client Search Action ---
+export async function searchClients(queryText: string): Promise<{ id: string; name: string; }[]> {
+    if (!queryText || queryText.trim().length < 2) {
+        return [];
+    }
+
+    const normalizedQuery = queryText.toLowerCase().trim();
+    const searchIndexRef = ref(db, 'client_search_index');
+    const searchQuery = query(
+        searchIndexRef,
+        orderByChild('term'),
+        startAt(normalizedQuery),
+        endAt(normalizedQuery + '\uf8ff'),
+        limitToFirst(20)
+    );
+
+    const snapshot = await get(searchQuery);
+    if (!snapshot.exists()) {
+        return [];
+    }
+
+    const clientIds = new Set<string>();
+    snapshot.forEach(child => {
+        clientIds.add(child.val().clientId);
+    });
+
+    const clientPromises = Array.from(clientIds).map(id => get(ref(db, `clients/${id}`)));
+    const clientSnapshots = await Promise.all(clientPromises);
+
+    return clientSnapshots
+        .filter(snap => snap.exists())
+        .map(snap => {
+            const clientData = snap.val() as Client;
+            const phoneStr = Array.isArray(clientData.phone) ? clientData.phone.join(', ') : clientData.phone;
+            return {
+                id: snap.key!,
+                name: `${clientData.name} (${phoneStr || 'No phone'})`,
+            };
+        });
+}
+
+
+// --- Maintenance Actions ---
+export type IndexBuildState = { message?: string; error?: boolean; } | undefined;
+
+export async function buildClientSearchIndex(prevState: IndexBuildState, formData: FormData): Promise<IndexBuildState> {
+    try {
+        const clientsRef = ref(db, 'clients');
+        const clientsSnapshot = await get(clientsRef);
+        if (!clientsSnapshot.exists()) {
+            return { message: "No clients found to index.", error: false };
+        }
+        
+        const searchIndexRef = ref(db, 'client_search_index');
+        await set(searchIndexRef, null);
+
+        const clientsData: Record<string, Client> = clientsSnapshot.val();
+        let indexedCount = 0;
+        
+        const indexPromises = Object.entries(clientsData).map(async ([clientId, clientData]) => {
+            await _updateClientSearchIndex(clientId, clientData);
+            indexedCount++;
+        });
+        
+        await Promise.all(indexPromises);
+        
+        return { message: `Successfully built search index for ${indexedCount} clients.`, error: false };
+    } catch (error: any) {
+        console.error("Build Search Index Error:", error);
+        return { message: error.message || "An unknown error occurred while building the index.", error: true };
     }
 }

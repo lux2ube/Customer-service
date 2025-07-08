@@ -9,7 +9,7 @@ import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState, matchSmsTransaction } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, matchSmsTransaction, searchClients } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Command as CommandPrimitive } from 'cmdk';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
@@ -117,7 +118,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
 
     // Data state
-    const [clients, setClients] = React.useState<Client[]>([]);
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
@@ -147,11 +147,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     // Effect for fetching supporting data from Firebase
     React.useEffect(() => {
-        const clientsRef = ref(db, 'clients');
         const accountsRef = ref(db, 'accounts');
         const settingsRef = ref(db, 'settings');
 
-        const unsubClients = onValue(clientsRef, (snap) => setClients(snap.val() ? Object.keys(snap.val()).map(key => ({ id: key, ...snap.val()[key] })) : []));
         const unsubAccounts = onValue(accountsRef, (snap) => {
             const allAccounts: Account[] = snap.val() ? Object.keys(snap.val()).map(key => ({ id: key, ...snap.val()[key] })) : [];
             setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
@@ -159,11 +157,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
         const unsubSettings = onValue(settingsRef, (snap) => setSettings(snap.val() || null));
         
-        Promise.all([ get(clientsRef), get(accountsRef), get(settingsRef) ]).then(() => {
+        Promise.all([ get(accountsRef), get(settingsRef) ]).then(() => {
             setIsDataLoading(false);
         });
 
-        return () => { unsubClients(); unsubAccounts(); unsubSettings(); };
+        return () => { unsubAccounts(); unsubSettings(); };
     }, []);
 
     // Effect to set initial form data when editing a transaction
@@ -424,8 +422,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
-    const handleClientSelect = (clientId: string) => {
-        const selectedClient = clients.find(c => c.id === clientId);
+    const handleClientSelect = async (clientId: string) => {
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        if (!clientSnapshot.exists()) return;
+        
+        const selectedClient = clientSnapshot.val() as Client;
+
         const favoriteAccount = selectedClient 
             ? bankAccounts.find(acc => acc.id === selectedClient.favoriteBankAccountId)
             : undefined;
@@ -533,12 +535,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                             <Label>Client</Label>
-                                <DataCombobox 
+                                <ClientSearchCombobox
                                     name="clientId" 
-                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${(Array.isArray(c.phone) ? c.phone : [c.phone]).join(', ')})`}))} 
-                                    placeholder="Search by name or phone..." 
                                     value={formData.clientId} 
                                     onSelect={handleClientSelect}
+                                    initialName={client?.name}
+                                    initialPhone={client?.phone}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -708,47 +710,89 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     );
 }
 
-function DataCombobox({ name, data, placeholder, value, onSelect }: { name: string, data: {id: string, name: string}[], placeholder: string, value?: string | null, onSelect?: (value: string) => void }) {
-  const [open, setOpen] = React.useState(false);
-  
-  const handleSelect = (currentValue: string) => {
-    const finalValue = currentValue === value ? "" : currentValue;
-    if (onSelect) {
-      onSelect(finalValue);
-    }
-    setOpen(false);
-  };
+function ClientSearchCombobox({ name, value, onSelect, initialName, initialPhone }: { name: string; value?: string | null; onSelect: (value: string) => void; initialName?: string | null; initialPhone?: string | string[] | null; }) {
+    const [open, setOpen] = React.useState(false);
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [results, setResults] = React.useState<{ id: string, name: string }[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [selectedValue, setSelectedValue] = React.useState(value);
+    const [selectedName, setSelectedName] = React.useState<string | null>(null);
 
-  return (
-    <>
-    <input type="hidden" name={name} value={value || ""} />
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
-          {value ? data.find((d) => d.id === value)?.name : placeholder}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
-          <CommandInput placeholder="Search..." />
-          <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup>
-                {data.map((d) => (
-                <CommandItem
-                    key={d.id}
-                    value={`${d.id} ${d.name}`}
-                    onSelect={() => handleSelect(d.id)}>
-                    <Check className={cn("mr-2 h-4 w-4", value === d.id ? "opacity-100" : "opacity-0")}/>
-                    <span>{d.name}</span>
-                </CommandItem>
-                ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-    </>
-  )
+    React.useEffect(() => {
+        if (value && initialName && initialPhone) {
+            const phoneStr = Array.isArray(initialPhone) ? initialPhone.join(', ') : initialPhone;
+            setSelectedName(`${initialName} (${phoneStr})`);
+        }
+    }, [value, initialName, initialPhone]);
+    
+    React.useEffect(() => {
+        if (searchQuery.length < 2) {
+            setResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        const handler = setTimeout(async () => {
+            const searchResults = await searchClients(searchQuery);
+            setResults(searchResults);
+            setIsLoading(false);
+        }, 300);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [searchQuery]);
+
+    React.useEffect(() => {
+        setSelectedValue(value);
+    }, [value]);
+
+    const handleSelect = (clientId: string) => {
+        const selectedResult = results.find(r => r.id === clientId);
+        onSelect(clientId);
+        setSelectedValue(clientId);
+        setSelectedName(selectedResult?.name || null);
+        setOpen(false);
+    };
+    
+    const displayName = selectedName || (selectedValue ? "Loading..." : "Search by name or phone...");
+    
+    return (
+        <>
+            <input type="hidden" name={name} value={selectedValue || ""} />
+            <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+                        <span className="truncate">{displayName}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command shouldFilter={false}>
+                        <CommandInput 
+                            placeholder="Type to search..." 
+                            value={searchQuery}
+                            onValueChange={setSearchQuery}
+                        />
+                        <CommandList>
+                            {isLoading && <CommandPrimitive.Loading><div className="p-2 text-sm text-center">Loading...</div></CommandPrimitive.Loading>}
+                            {!isLoading && searchQuery.length > 1 && results.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                             {!isLoading && searchQuery.length <= 1 && <CommandEmpty>Please enter at least 2 characters.</CommandEmpty>}
+                            <CommandGroup>
+                                {results.map((client) => (
+                                <CommandItem
+                                    key={client.id}
+                                    value={client.id}
+                                    onSelect={() => handleSelect(client.id)}>
+                                    <Check className={cn("mr-2 h-4 w-4", selectedValue === client.id ? "opacity-100" : "opacity-0")}/>
+                                    <span>{client.name}</span>
+                                </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+        </>
+    );
 }

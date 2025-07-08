@@ -2,6 +2,7 @@
 'use client';
 
 import * as React from 'react';
+import { useActionState, useFormStatus } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,8 @@ import { ref, onValue, update } from 'firebase/database';
 import type { Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save } from 'lucide-react';
+import { Save, Search, Loader2 } from 'lucide-react';
+import { buildClientSearchIndex, type IndexBuildState } from '@/lib/actions';
 
 const initialSettings: Settings = {
     yer_usd: 0.0016,
@@ -25,6 +27,53 @@ const initialSettings: Settings = {
     bsc_wallet_address: '',
     gemini_api_key: '',
 };
+
+function BuildIndexButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button variant="outline" type="submit" disabled={pending}>
+             {pending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Building...</>
+            ) : (
+                <><Search className="mr-2 h-4 w-4" />Build Client Search Index</>
+            )}
+        </Button>
+    )
+}
+
+function MaintenanceCard() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<IndexBuildState, FormData>(buildClientSearchIndex, undefined);
+
+    React.useEffect(() => {
+        if (state?.message) {
+            toast({
+                title: state.error ? 'Build Failed' : 'Build Complete',
+                description: state.message,
+                variant: state.error ? 'destructive' : 'default',
+            });
+        }
+    }, [state, toast]);
+
+    return (
+         <Card>
+            <CardHeader>
+                <CardTitle>Maintenance Actions</CardTitle>
+                <CardDescription>Run these utilities to manage system data.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form action={formAction}>
+                    <div className="flex flex-col gap-2">
+                        <BuildIndexButton />
+                         <p className="text-xs text-muted-foreground">
+                            Click this to create or update the search index for all clients. This is required for the client search in the transaction form to work correctly.
+                        </p>
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+    );
+}
 
 export default function SettingsPage() {
     const [settings, setSettings] = React.useState<Settings>(initialSettings);
@@ -185,6 +234,9 @@ export default function SettingsPage() {
                         </div>
                     </CardContent>
                 </Card>
+                
+                <MaintenanceCard />
+
                 <div className="flex justify-start">
                      <Button onClick={handleSave} disabled={saving}>
                         <Save className="mr-2 h-4 w-4" />
