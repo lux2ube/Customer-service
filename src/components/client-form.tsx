@@ -37,7 +37,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
 
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
-        phone: client?.phone && client.phone.length > 0 ? client.phone : [''],
+        phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
         favoriteBankAccountId: client?.favoriteBankAccountId || 'none',
@@ -47,7 +47,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
         if (client) {
             setFormData({
                 name: client.name || '',
-                phone: client.phone && client.phone.length > 0 ? client.phone : [''],
+                phone: client.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
                 verification_status: client.verification_status || 'Pending',
                 review_flags: client.review_flags || [],
                 favoriteBankAccountId: client.favoriteBankAccountId || 'none',

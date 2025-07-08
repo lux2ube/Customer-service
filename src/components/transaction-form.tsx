@@ -235,7 +235,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 }
 
                 const clientNameSet = client.name ? new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1)) : new Set<string>();
-                const clientPhones = (client.phone || []).map(p => p.replace(/[^0-9]/g, ''));
+                const clientPhones = (client.phone ? (Array.isArray(client.phone) ? client.phone : [client.phone]) : []).map(p => p.replace(/[^0-9]/g, ''));
 
                 const matches = allSmsTxs.filter(sms => {
                     if (sms.status !== 'pending' || sms.account_id !== formData.bankAccountId) return false;
@@ -534,7 +534,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             <Label>Client</Label>
                                 <DataCombobox 
                                     name="clientId" 
-                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone.join(', ')})`}))} 
+                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${(Array.isArray(c.phone) ? c.phone : [c.phone]).join(', ')})`}))} 
                                     placeholder="Search by name or phone..." 
                                     value={formData.clientId} 
                                     onSelect={handleClientSelect}

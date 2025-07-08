@@ -47,7 +47,7 @@ export default function ClientsPage() {
     const exportableData = exportData.map(client => ({
         id: client.id,
         name: client.name,
-        phone: client.phone?.join(', ') || '',
+        phone: (Array.isArray(client.phone) ? client.phone.join(', ') : client.phone) || '',
         verification_status: client.verification_status,
         review_flags: client.review_flags?.join(', ') || 'None',
         createdAt: client.createdAt,
