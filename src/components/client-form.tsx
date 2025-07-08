@@ -37,7 +37,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
 
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
-        phone: client?.phone || '',
+        phone: client?.phone && client.phone.length > 0 ? client.phone : [''],
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
         favoriteBankAccountId: client?.favoriteBankAccountId || 'none',
@@ -47,7 +47,7 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
         if (client) {
             setFormData({
                 name: client.name || '',
-                phone: client.phone || '',
+                phone: client.phone && client.phone.length > 0 ? client.phone : [''],
                 verification_status: client.verification_status || 'Pending',
                 review_flags: client.review_flags || [],
                 favoriteBankAccountId: client.favoriteBankAccountId || 'none',
@@ -72,6 +72,23 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
             return { ...prev, review_flags: newFlags };
         });
     };
+    
+    const handlePhoneChange = (index: number, value: string) => {
+        const newPhones = [...formData.phone];
+        newPhones[index] = value;
+        setFormData({ ...formData, phone: newPhones });
+    };
+
+    const addPhoneNumber = () => {
+        setFormData({ ...formData, phone: [...formData.phone, ''] });
+    };
+
+    const removePhoneNumber = (index: number) => {
+        if (formData.phone.length > 1) {
+            const newPhones = formData.phone.filter((_, i) => i !== index);
+            setFormData({ ...formData, phone: newPhones });
+        }
+    };
 
     return (
         <form action={formAction} className="space-y-3">
@@ -95,16 +112,31 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="phone">Phone Number</Label>
-                            <Input 
-                                id="phone" 
-                                name="phone" 
-                                placeholder="e.g., 555-1234" 
-                                value={formData.phone}
-                                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                                required 
-                            />
-                            {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone[0]}</p>}
+                            <Label>Phone Number(s)</Label>
+                            {formData.phone.map((phone, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                    <Input
+                                        name="phone"
+                                        placeholder="e.g., 555-1234"
+                                        value={phone}
+                                        onChange={(e) => handlePhoneChange(index, e.target.value)}
+                                        required
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removePhoneNumber(index)}
+                                        disabled={formData.phone.length <= 1}
+                                    >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                            ))}
+                            <Button type="button" variant="outline" size="sm" onClick={addPhoneNumber}>
+                                Add another phone
+                            </Button>
+                            {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone.join(', ')}</p>}
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-3">

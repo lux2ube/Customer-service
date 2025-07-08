@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -11,6 +12,7 @@ import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import type { Client } from '@/lib/types';
+import { MergeClientsButton } from '@/components/merge-clients-button';
 
 export default function ClientsPage() {
     const [clients, setClients] = React.useState<Client[]>([]);
@@ -45,7 +47,7 @@ export default function ClientsPage() {
     const exportableData = exportData.map(client => ({
         id: client.id,
         name: client.name,
-        phone: client.phone,
+        phone: client.phone?.join(', ') || '',
         verification_status: client.verification_status,
         review_flags: client.review_flags?.join(', ') || 'None',
         createdAt: client.createdAt,
@@ -58,6 +60,7 @@ export default function ClientsPage() {
                 description="Manage customer profiles and history."
             >
                 <div className="flex flex-wrap items-center gap-2">
+                    <MergeClientsButton />
                     <ImportClientsButton />
                     <ExportButton 
                         data={exportableData} 

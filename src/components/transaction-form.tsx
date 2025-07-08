@@ -235,7 +235,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 }
 
                 const clientNameSet = client.name ? new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1)) : new Set<string>();
-                const clientPhone = client.phone ? client.phone.replace(/[^0-9]/g, '') : '';
+                const clientPhones = (client.phone || []).map(p => p.replace(/[^0-9]/g, ''));
 
                 const matches = allSmsTxs.filter(sms => {
                     if (sms.status !== 'pending' || sms.account_id !== formData.bankAccountId) return false;
@@ -247,7 +247,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     const smsPerson = sms.client_name?.toLowerCase();
                     if (!smsPerson) return false;
                     
-                    if (clientPhone && smsPerson.includes(clientPhone)) return true;
+                    if (clientPhones.some(p => p && smsPerson.includes(p))) return true;
                     
                     const smsNameParts = smsPerson.split(/\s+/).filter(p => p.length > 1);
                     if (smsNameParts.length === 0) return false;
@@ -534,7 +534,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             <Label>Client</Label>
                                 <DataCombobox 
                                     name="clientId" 
-                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone})`}))} 
+                                    data={clients.map(c => ({id: c.id, name: `${c.name} (${c.phone.join(', ')})`}))} 
                                     placeholder="Search by name or phone..." 
                                     value={formData.clientId} 
                                     onSelect={handleClientSelect}

@@ -33,7 +33,7 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
         const lowercasedSearch = search.toLowerCase();
         filtered = filtered.filter(client => 
             (client.name?.toLowerCase() || '').includes(lowercasedSearch) ||
-            (client.phone?.toLowerCase() || '').includes(lowercasedSearch) ||
+            (client.phone?.join(' ').toLowerCase() || '').includes(lowercasedSearch) ||
             (client.id?.toLowerCase() || '').includes(lowercasedSearch)
         );
     }
@@ -87,7 +87,7 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
                 filteredClients.map(client => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.name}</TableCell>
-                    <TableCell>{client.phone}</TableCell>
+                    <TableCell>{client.phone?.join(', ')}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(client.verification_status)}>
                         {client.verification_status}

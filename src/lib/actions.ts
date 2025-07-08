@@ -131,7 +131,7 @@ export type ClientFormState =
 
 const ClientSchema = z.object({
     name: z.string().min(1, { message: 'Name is required.' }),
-    phone: z.string().min(1, { message: 'Phone is required.' }),
+    phone: z.array(z.string().min(1, { message: 'Phone number cannot be empty.' })).min(1, { message: 'At least one phone number is required.' }),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
     favoriteBankAccountId: z.string().optional().nullable(),
@@ -174,7 +174,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     const favoriteBankAccountIdValue = formData.get('favoriteBankAccountId');
     const dataToValidate = {
         name: formData.get('name'),
-        phone: formData.get('phone'),
+        phone: formData.getAll('phone'),
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
         favoriteBankAccountId: favoriteBankAccountIdValue === 'none' ? null : favoriteBankAccountIdValue,
@@ -195,9 +195,10 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         if (blacklistSnapshot.exists()) {
             const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
             const clientName = validatedFields.data.name;
-            const clientPhone = validatedFields.data.phone;
+            const clientPhones = validatedFields.data.phone;
 
             for (const item of blacklistItems) {
+                if (isBlacklisted) break;
                 if (item.type === 'Name') {
                     // Split client name and blacklisted name into words for more flexible matching.
                     const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
@@ -206,12 +207,15 @@ export async function createClient(clientId: string | null, prevState: ClientFor
                     // Check if all words from the blacklist entry are present in the client's name.
                     if (blacklistWords.every(word => clientWords.has(word))) {
                         isBlacklisted = true;
-                        break;
                     }
                 }
-                if (item.type === 'Phone' && clientPhone === item.value) {
-                    isBlacklisted = true;
-                    break;
+                if (item.type === 'Phone') {
+                    for (const clientPhone of clientPhones) {
+                        if (clientPhone === item.value) {
+                            isBlacklisted = true;
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -1002,7 +1006,7 @@ export async function importClients(prevState: ImportState, formData: FormData):
 
             const newClient: Omit<Client, 'id'> = {
                 name: name,
-                phone: phoneNumber,
+                phone: [phoneNumber],
                 verification_status: 'Active',
                 review_flags: [],
                 createdAt: new Date(dateOfAddition).toISOString(),
@@ -1112,7 +1116,7 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
             
             // Check against phone blacklist
             for (const item of phoneBlacklist) {
-                 if (client.phone === item.value) {
+                if (client.phone?.includes(item.value)) {
                     if (!currentFlags.includes('Blacklisted')) {
                         currentFlags.push('Blacklisted');
                         needsUpdate = true;
@@ -1474,5 +1478,85 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     } catch(error: any) {
         console.error("SMS Processing Error:", error);
         return { message: error.message || "An unknown error occurred during SMS processing.", error: true };
+    }
+}
+
+// --- Client Merge Action ---
+export type MergeState = { message?: string; error?: boolean; } | undefined;
+
+export async function mergeDuplicateClients(prevState: MergeState, formData: FormData): Promise<MergeState> {
+    try {
+        const clientsRef = ref(db, 'clients');
+        const clientsSnapshot = await get(clientsRef);
+
+        if (!clientsSnapshot.exists()) {
+            return { message: "No clients found to merge.", error: false };
+        }
+
+        const clientsData: Record<string, Client> = clientsSnapshot.val();
+        
+        const clientsByName: Record<string, Client[]> = {};
+
+        // Group clients by a normalized name
+        for (const clientId in clientsData) {
+            const client = { id: clientId, ...clientsData[clientId] };
+            const normalizedName = client.name.trim().toLowerCase();
+            
+            if (!clientsByName[normalizedName]) {
+                clientsByName[normalizedName] = [];
+            }
+            clientsByName[normalizedName].push(client);
+        }
+
+        const updates: { [key: string]: any } = {};
+        let mergedGroups = 0;
+        let deletedClients = 0;
+
+        for (const name in clientsByName) {
+            const group = clientsByName[name];
+            if (group.length > 1) {
+                mergedGroups++;
+
+                // Sort by creation date to find the primary client
+                group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                
+                const primaryClient = group[0];
+                const duplicates = group.slice(1);
+                
+                // Aggregate data from duplicates
+                const allPhones = new Set(primaryClient.phone || []);
+                const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
+                const allBep20 = new Set(primaryClient.bep20_addresses || []);
+
+                duplicates.forEach(dup => {
+                    deletedClients++;
+                    (dup.phone || []).forEach(p => allPhones.add(p));
+                    (dup.bep20_addresses || []).forEach(a => allBep20.add(a));
+                    (dup.kyc_documents || []).forEach(doc => {
+                        if (!allKycDocs.has(doc.url)) {
+                            allKycDocs.set(doc.url, doc);
+                        }
+                    });
+                    // Mark duplicate for deletion
+                    updates[`/clients/${dup.id}`] = null;
+                });
+
+                // Prepare update for the primary client
+                updates[`/clients/${primaryClient.id}/phone`] = Array.from(allPhones);
+                updates[`/clients/${primaryClient.id}/bep20_addresses`] = Array.from(allBep20);
+                updates[`/clients/${primaryClient.id}/kyc_documents`] = Array.from(allKycDocs.values());
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/clients');
+        return { message: `Merge complete. Merged ${mergedGroups} groups of clients and removed ${deletedClients} duplicates.`, error: false };
+
+    } catch (error: any) {
+        console.error("Client Merge Error:", error);
+        return { message: error.message || "An unknown error occurred during the merge.", error: true };
     }
 }

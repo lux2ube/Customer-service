@@ -13,7 +13,7 @@ export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other' | 'Blackli
 export interface Client {
     id: string;
     name: string; // The full name of the client
-    phone: string;
+    phone: string[];
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];
