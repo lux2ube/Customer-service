@@ -1437,13 +1437,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const settings: Settings | null = settingsSnapshot.val();
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
         
-        // Create a set of recent SMS bodies for quick duplicate checking
         const allSmsTransactions: SmsTransaction[] = smsTransactionsSnapshot.exists() ? Object.values(smsTransactionsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
             allSmsTransactions
-                .filter(tx => new Date(tx.parsed_at).getTime() > twentyFourHoursAgo)
-                .map(tx => tx.raw_sms.trim()) // Store trimmed version for consistent matching
+                .filter(tx => tx.parsed_at && new Date(tx.parsed_at).getTime() > twentyFourHoursAgo && tx.raw_sms)
+                .map(tx => tx.raw_sms.trim())
         );
         
         const updates: { [key: string]: any } = {};
