@@ -1276,7 +1276,6 @@ export async function matchSmsTransaction(smsId: string): Promise<{success: bool
             return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
         }
         await update(txRef, { status: 'matched' });
-        revalidatePath('/sms/transactions');
         return { success: true };
     } catch (error) {
         return { success: false, message: 'Database error: Failed to update status.' };
