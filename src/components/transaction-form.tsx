@@ -705,32 +705,65 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
 
 function ClientSelector({ clients, value, onSelect }: { clients: Client[], value?: string | null, onSelect: (id: string) => void }) {
     const [open, setOpen] = React.useState(false);
+    const [search, setSearch] = React.useState("");
+
     const selectedClient = value ? clients.find(c => c.id === value) : null;
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || 'No phone';
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const filteredClients = React.useMemo(() => {
+        if (!search) {
+            return [];
+        }
+        const lowercasedSearch = search.toLowerCase().trim();
+        if (!lowercasedSearch) return [];
+
+        return clients.filter(client => {
+            const name = (client.name || '').toLowerCase();
+            const phone = getPhone(client.phone).toLowerCase();
+            
+            // Match if name or phone starts with the search term
+            if (name.startsWith(lowercasedSearch) || phone.startsWith(lowercasedSearch)) {
+                return true;
+            }
+            // Match if any word in the name starts with the search term
+            return name.split(' ').some(part => part.startsWith(lowercasedSearch));
+        });
+    }, [search, clients]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-auto min-h-8 py-1">
-                    <span className="truncate">
-                        {selectedClient ? `${selectedClient.name} (${getPhone(selectedClient.phone)})` : "Select a client..."}
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-auto min-h-10 py-2">
+                     <span className="truncate">
+                        {selectedClient ? (
+                            <div>
+                                <div className="truncate font-medium">{selectedClient.name}</div>
+                                <div className="text-xs text-muted-foreground truncate">{getPhone(selectedClient.phone)}</div>
+                            </div>
+                        ) : "Select a client..."}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                 <Command>
-                    <CommandInput placeholder="Search clients by name or phone..." />
+                    <CommandInput placeholder="Search by name or phone..." onValueChange={setSearch} />
                     <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
+                         {search.length === 0 && (
+                             <CommandEmpty>Start typing to search for a client.</CommandEmpty>
+                        )}
+                        {search.length > 0 && filteredClients.length === 0 && (
+                            <CommandEmpty>No client found.</CommandEmpty>
+                        )}
                         <CommandGroup>
-                            {clients.map(client => (
+                            {filteredClients.map(client => (
                                 <CommandItem
                                     key={client.id}
                                     value={`${client.id} ${client.name} ${getPhone(client.phone)}`}
                                     onSelect={() => {
                                         onSelect(client.id);
                                         setOpen(false);
+                                        setSearch("");
                                     }}
                                 >
                                     <Check className={cn("mr-2 h-4 w-4", value === client.id ? "opacity-100" : "opacity-0")} />
