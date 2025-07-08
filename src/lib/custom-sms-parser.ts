@@ -7,46 +7,51 @@ function escapeRegex(string: string): string {
 }
 
 function cleanAndParseFloat(value: string): number {
-    // Removes commas and other non-numeric characters before parsing.
-    return parseFloat(value.replace(/,/g, '').trim());
+    // Removes commas, Arabic decimal separators, and other non-numeric characters before parsing.
+    return parseFloat(value.replace(/,/g, '').replace(/٫/g, '.').trim());
 }
 
 export function parseSmsWithCustomRules(smsBody: string, rules: SmsParsingRule[]): ParsedSms | null {
-    // Use a cleaned version of the SMS for matching, replacing multiple spaces with a single one.
     const cleanedSms = smsBody.replace(/\s+/g, ' ').trim();
 
     for (const rule of rules) {
         try {
-            // Construct a single, powerful regex from the rule's markers.
-            // This captures the amount and the person in one pass.
-            // The `.*?` is a non-greedy match for any characters in between the markers.
-            const fullPattern = new RegExp(
+            // --- Extract Amount Independently ---
+            const amountPattern = new RegExp(
                 escapeRegex(rule.amountStartsAfter) +
-                '([\\d,.]+)' + // Capture group 1: The amount (digits, commas, dots)
-                escapeRegex(rule.amountEndsBefore) +
-                '.*?' + // Any characters between amount and person
-                escapeRegex(rule.personStartsAfter) +
-                '(.*?)' + // Capture group 2: The person's name
-                escapeRegex(rule.personEndsBefore),
-                'i' // Case-insensitive matching
+                '\\s*([\\d,.]+?)\\s*' + // Capture group 1: The amount (non-greedy)
+                escapeRegex(rule.amountEndsBefore),
+                'i' // Case-insensitive
             );
-
-            const match = cleanedSms.match(fullPattern);
-
-            if (match && match[1] && match[2]) {
-                const amount = cleanAndParseFloat(match[1]);
-                const person = match[2].trim();
-
-                // Ensure we got valid data before returning
-                if (!isNaN(amount) && person) {
-                    return {
-                        parsed: true,
-                        type: rule.type,
-                        amount,
-                        person,
-                    };
-                }
+            const amountMatch = cleanedSms.match(amountPattern);
+            if (!amountMatch || !amountMatch[1]) {
+                continue; // Amount not found, try next rule
             }
+            const amount = cleanAndParseFloat(amountMatch[1]);
+            
+            // --- Extract Person Independently ---
+            const personPattern = new RegExp(
+                escapeRegex(rule.personStartsAfter) +
+                '\\s*(.*?)\\s*' + // Capture group 1: The person's name (non-greedy)
+                escapeRegex(rule.personEndsBefore),
+                'i' // Case-insensitive
+            );
+            const personMatch = cleanedSms.match(personPattern);
+            if (!personMatch || !personMatch[1]) {
+                continue; // Person not found, try next rule
+            }
+            const person = personMatch[1].trim();
+
+            // Ensure we got valid data from both extractions
+            if (!isNaN(amount) && person) {
+                return {
+                    parsed: true,
+                    type: rule.type,
+                    amount,
+                    person,
+                };
+            }
+
         } catch (e) {
             console.error(`Error applying custom rule "${rule.name}":`, e);
             continue; // Move to the next rule if this one fails
