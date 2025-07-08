@@ -1,0 +1,7 @@
+{
+  "rules": {
+    "client_search_index": {
+      ".indexOn": "term"
+    }
+  }
+}
