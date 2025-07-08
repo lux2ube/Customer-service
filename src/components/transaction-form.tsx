@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader2, Share2, MessageSquare } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -14,11 +14,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { cn, normalizeArabic } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
@@ -421,16 +420,25 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
-    const handleClientSelect = (client: Client) => {
+    const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
-        const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-
-        setFormData(prev => ({
-            ...prev,
-            clientId: client.id,
-            bankAccountId: favoriteAccount?.id || '',
-            currency: favoriteAccount?.currency || 'USD',
-        }));
+        
+        if (client) {
+            const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
+            setFormData(prev => ({
+                ...prev,
+                clientId: client.id,
+                bankAccountId: favoriteAccount?.id || '',
+                currency: favoriteAccount?.currency || 'USD',
+            }));
+        } else {
+             setFormData(prev => ({
+                ...prev,
+                clientId: '',
+                bankAccountId: '',
+                currency: 'USD',
+            }));
+        }
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
@@ -701,16 +709,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     );
 }
 
-function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client) => void; }) {
-    const [open, setOpen] = React.useState(false);
-    const [search, setSearch] = React.useState("");
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
+    const [search, setSearch] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isOpen, setIsOpen] = React.useState(false);
+    const wrapperRef = React.useRef<HTMLDivElement>(null);
 
     // Debounce search input
     React.useEffect(() => {
-        if (!search || search.trim().length < 2) {
+        if (!isOpen || search.trim().length < 2) {
             setSearchResults([]);
+            if (search.trim().length === 0 && selectedClient) {
+                // User cleared the input, so un-select the client
+                onSelect(null);
+            }
             return;
         }
 
@@ -719,65 +732,78 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
             const results = await searchClients(search);
             setSearchResults(results);
             setIsLoading(false);
-        }, 300); // 300ms debounce
+        }, 300);
 
         return () => clearTimeout(timerId);
-    }, [search]);
+    }, [search, isOpen, onSelect, selectedClient]);
     
+    // Update input text when client is selected from parent (e.g. on initial load)
+    React.useEffect(() => {
+        if (selectedClient) {
+            setSearch(selectedClient.name);
+        } else {
+            setSearch("");
+        }
+    }, [selectedClient]);
+
+    // Handle clicking outside to close
+    React.useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+                // If user clicks away without selecting, restore the selected client's name
+                setSearch(selectedClient?.name || "");
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [wrapperRef, selectedClient]);
+
+
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        setOpen(false);
-        setSearch(""); // Clear search results after selection
+        setIsOpen(false);
+        setSearch(client.name);
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-auto min-h-10 py-2">
-                     <span className="truncate">
-                        {selectedClient ? (
-                            <div>
-                                <div className="truncate font-medium">{selectedClient.name}</div>
-                                <div className="text-xs text-muted-foreground truncate">{getPhone(selectedClient.phone)}</div>
-                            </div>
-                        ) : "Select a client..."}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command>
-                    <CommandInput placeholder="Search by name or phone..." value={search} onValueChange={setSearch} />
-                    <CommandList>
-                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && search.length > 0 && searchResults.length === 0 && (
-                            <CommandEmpty>No client found.</CommandEmpty>
+        <div className="relative" ref={wrapperRef}>
+            <Input
+                placeholder="Search by name or phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setIsOpen(true)}
+                autoComplete="off"
+            />
+            {isOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground rounded-md border shadow-lg max-h-60 overflow-y-auto">
+                     <ul className="p-1">
+                        {isLoading && <li className="px-2 py-1.5 text-sm text-muted-foreground">Searching...</li>}
+                        {!isLoading && search.length > 1 && searchResults.length === 0 && (
+                            <li className="px-2 py-1.5 text-sm text-muted-foreground">No client found.</li>
                         )}
-                        {!isLoading && search.length === 0 && (
-                             <CommandEmpty>Start typing to search for a client.</CommandEmpty>
+                        {!isLoading && search.length < 2 && (
+                            <li className="px-2 py-1.5 text-sm text-muted-foreground">Keep typing to search...</li>
                         )}
-                        <CommandGroup>
-                            {searchResults.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={`${client.id} ${client.name} ${getPhone(client.phone)}`}
-                                    onSelect={() => handleSelect(client)}
-                                >
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                    <div className="flex-1 truncate">
-                                        <div className="truncate">{client.name}</div>
-                                        <div className="text-xs text-muted-foreground truncate">{getPhone(client.phone)}</div>
-                                    </div>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
+                        {searchResults.map(client => (
+                            <li 
+                                key={client.id}
+                                className="flex flex-col px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                                onMouseDown={(e) => {
+                                    e.preventDefault(); // Prevent input from losing focus before click is registered
+                                    handleSelect(client)
+                                }}
+                            >
+                                <span className="font-medium">{client.name}</span>
+                                <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
     );
 }
-
     
