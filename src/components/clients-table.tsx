@@ -17,6 +17,7 @@ import { Button } from './ui/button';
 import Link from 'next/link';
 import { Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { normalizeArabic } from '@/lib/utils';
 
 interface ClientsTableProps {
     clients: Client[];
@@ -36,16 +37,16 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
   const filteredClients = React.useMemo(() => {
     let filtered = [...clients];
     if (search) {
-        const lowercasedSearch = search.toLowerCase().trim();
-        const searchTerms = lowercasedSearch.split(' ').filter(Boolean);
+        const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
+        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
 
         filtered = filtered.filter(client => {
-            const name = (client.name?.toLowerCase() || '');
+            const name = normalizeArabic(client.name?.toLowerCase() || '');
             const phone = (getClientPhoneString(client.phone).toLowerCase());
             const id = (client.id?.toLowerCase() || '');
 
-            // ID and Phone can be a direct substring match
-            if (id.includes(lowercasedSearch) || phone.includes(lowercasedSearch)) {
+            // ID and Phone can be a direct substring match. Use original search for phone.
+            if (id.includes(normalizedSearch) || phone.includes(search.trim())) {
                 return true;
             }
             

@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { cn } from '@/lib/utils';
+import { cn, normalizeArabic } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
@@ -714,17 +714,17 @@ function ClientSelector({ clients, value, onSelect }: { clients: Client[], value
         if (!search) {
             return [];
         }
-        const lowercasedSearch = search.toLowerCase().trim();
-        if (!lowercasedSearch) return [];
+        const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
+        if (!normalizedSearch) return [];
 
-        const searchTerms = lowercasedSearch.split(' ').filter(Boolean);
+        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
 
         return clients.filter(client => {
-            const name = (client.name || '').toLowerCase();
+            const name = normalizeArabic((client.name || '').toLowerCase());
             const phone = getPhone(client.phone).toLowerCase();
             
-            // Direct substring match on phone first
-            if (phone.includes(lowercasedSearch)) {
+            // Direct substring match on phone first. Use original search value.
+            if (phone.includes(search.trim())) {
                 return true;
             }
 
