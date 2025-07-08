@@ -224,7 +224,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     return;
                 }
 
-                const allSmsTxs: SmsTransaction[] = Object.values(smsSnapshot.val());
+                const smsData = smsSnapshot.val() || {};
+                const allSmsTxs: SmsTransaction[] = Object.keys(smsData).map(key => ({ id: key, ...smsData[key] }));
                 const client = clientSnapshot.val() as Client;
                 
                 if (!client) {
