@@ -97,6 +97,7 @@ function BankAccountSelector({
       ))}
       {!showAll && sortedAccounts.length > 3 && (
         <Button
+          key="show-more"
           type="button"
           variant="ghost"
           size="xs"
