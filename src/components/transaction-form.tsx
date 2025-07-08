@@ -390,7 +390,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
 
         setFormData(prev => {
-            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, undefined, undefined);
+            // Pass the existing hash and usdt amount to preserve them for synced transactions
+            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.amount_usdt);
             return {
                 ...prev,
                 amount: newAmount,
