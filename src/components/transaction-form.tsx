@@ -9,7 +9,7 @@ import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState, matchSmsTransaction } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, matchSmsTransaction, searchClients } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -111,7 +111,7 @@ function BankAccountSelector({
   );
 }
 
-export function TransactionForm({ transaction, client, clients = [] }: { transaction?: Transaction, client?: Client | null, clients: Client[] }) {
+export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
@@ -133,6 +133,7 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
     const pristineRef = React.useRef(false);
 
     const [formData, setFormData] = React.useState<Transaction>(initialFormData);
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
 
     const getRate = React.useCallback((currency?: string) => {
         if (!currency || !settings) return 1;
@@ -175,7 +176,7 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
                     formState.currency = favoriteAccount.currency || 'USD';
                 }
             }
-
+            setSelectedClient(client || null);
             setFormData(formState);
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
@@ -420,15 +421,13 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
         setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
-    const handleClientSelect = (clientId: string) => {
-        const selectedClient = clients.find(c => c.id === clientId);
-        if (!selectedClient) return;
-
-        const favoriteAccount = bankAccounts.find(acc => acc.id === selectedClient.favoriteBankAccountId);
+    const handleClientSelect = (client: Client) => {
+        setSelectedClient(client);
+        const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
 
         setFormData(prev => ({
             ...prev,
-            clientId: clientId,
+            clientId: client.id,
             bankAccountId: favoriteAccount?.id || '',
             currency: favoriteAccount?.currency || 'USD',
         }));
@@ -457,7 +456,7 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
     };
 
     const handleShareInvoice = async () => {
-        if (!invoiceRef.current || !transaction || !client) return;
+        if (!invoiceRef.current || !transaction || !selectedClient) return;
         setIsSharing(true);
         try {
             const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: null });
@@ -470,7 +469,7 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
                     }
                     const file = new File([blob], `invoice-${transaction.id.slice(-8).toUpperCase()}.png`, { type: 'image/png' });
                     try {
-                        await navigator.share({ files: [file], title: `Invoice for ${client.name}`, text: `Here is the invoice for transaction ${transaction.id}.` });
+                        await navigator.share({ files: [file], title: `Invoice for ${selectedClient.name}`, text: `Here is the invoice for transaction ${transaction.id}.` });
                     } catch (error) { console.log("Sharing cancelled or failed", error); } finally { setIsSharing(false); }
                 }, 'image/png');
             } else {
@@ -487,10 +486,10 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
 
     return (
         <>
-            {transaction && client && (
+            {transaction && selectedClient && (
                 <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
                     <div className="w-[420px]">
-                        <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={client} />
+                        <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={selectedClient} />
                     </div>
                 </div>
             )}
@@ -528,10 +527,9 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
                                 </div>
                             </div>
                             <div className="space-y-2">
-                            <Label>Client</Label>
-                                <ClientSelector 
-                                    clients={clients}
-                                    value={formData.clientId}
+                                <Label>Client</Label>
+                                <ClientSelector
+                                    selectedClient={selectedClient}
                                     onSelect={handleClientSelect}
                                 />
                                 <input type="hidden" name="clientId" value={formData.clientId || ""} />
@@ -623,7 +621,7 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
                     </Card>
                 </div>
                 <div className="md:col-span-1 space-y-3">
-                    {transaction && client && (
+                    {transaction && selectedClient && (
                         <Card>
                             <CardHeader>
                                 <CardTitle>Actions</CardTitle>
@@ -703,38 +701,36 @@ export function TransactionForm({ transaction, client, clients = [] }: { transac
     );
 }
 
-function ClientSelector({ clients, value, onSelect }: { clients: Client[], value?: string | null, onSelect: (id: string) => void }) {
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client) => void; }) {
     const [open, setOpen] = React.useState(false);
     const [search, setSearch] = React.useState("");
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
 
-    const selectedClient = value ? clients.find(c => c.id === value) : null;
+    // Debounce search input
+    React.useEffect(() => {
+        if (!search || search.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        const timerId = setTimeout(async () => {
+            const results = await searchClients(search);
+            setSearchResults(results);
+            setIsLoading(false);
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(timerId);
+    }, [search]);
+    
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
-    const filteredClients = React.useMemo(() => {
-        if (!search) {
-            return [];
-        }
-        const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
-        if (!normalizedSearch) return [];
-
-        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
-
-        return clients.filter(client => {
-            const name = normalizeArabic((client.name || '').toLowerCase());
-            const phone = getPhone(client.phone).toLowerCase();
-            
-            // Direct substring match on phone first. Use original search for phone.
-            if (phone.includes(search.trim())) {
-                return true;
-            }
-
-            // For name, check if all search terms match the start of some word in the name
-            const nameWords = name.split(' ');
-            return searchTerms.every(term => 
-                nameWords.some(nameWord => nameWord.startsWith(term))
-            );
-        });
-    }, [search, clients]);
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        setOpen(false);
+        setSearch(""); // Clear search results after selection
+    };
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -753,26 +749,23 @@ function ClientSelector({ clients, value, onSelect }: { clients: Client[], value
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                 <Command>
-                    <CommandInput placeholder="Search by name or phone..." onValueChange={setSearch} />
+                    <CommandInput placeholder="Search by name or phone..." value={search} onValueChange={setSearch} />
                     <CommandList>
-                         {search.length === 0 && (
-                             <CommandEmpty>Start typing to search for a client.</CommandEmpty>
-                        )}
-                        {search.length > 0 && filteredClients.length === 0 && (
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && search.length > 0 && searchResults.length === 0 && (
                             <CommandEmpty>No client found.</CommandEmpty>
                         )}
+                        {!isLoading && search.length === 0 && (
+                             <CommandEmpty>Start typing to search for a client.</CommandEmpty>
+                        )}
                         <CommandGroup>
-                            {filteredClients.map(client => (
+                            {searchResults.map(client => (
                                 <CommandItem
                                     key={client.id}
                                     value={`${client.id} ${client.name} ${getPhone(client.phone)}`}
-                                    onSelect={() => {
-                                        onSelect(client.id);
-                                        setOpen(false);
-                                        setSearch("");
-                                    }}
+                                    onSelect={() => handleSelect(client)}
                                 >
-                                    <Check className={cn("mr-2 h-4 w-4", value === client.id ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex-1 truncate">
                                         <div className="truncate">{client.name}</div>
                                         <div className="text-xs text-muted-foreground truncate">{getPhone(client.phone)}</div>
@@ -786,3 +779,5 @@ function ClientSelector({ clients, value, onSelect }: { clients: Client[], value
         </Popover>
     );
 }
+
+    

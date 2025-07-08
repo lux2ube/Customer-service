@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from './firebase';
-import { push, ref, set, update, get, remove } from 'firebase/database';
+import { push, ref, set, update, get, remove, query, orderByChild, startAt, endAt } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -11,6 +11,7 @@ import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem
 import { parseSms } from '@/lib/sms-parser';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
+import { normalizeArabic } from './utils';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -338,6 +339,53 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
 
     // Default action is to update/create the client
     return createClient(clientId, prevState, formData);
+}
+
+export async function searchClients(searchTerm: string): Promise<Client[]> {
+    if (!searchTerm || searchTerm.trim().length < 2) {
+        return [];
+    }
+
+    try {
+        const clientsRef = ref(db, 'clients');
+        const snapshot = await get(clientsRef);
+
+        if (!snapshot.exists()) {
+            return [];
+        }
+        
+        const allClientsData: Record<string, Client> = snapshot.val();
+        const allClients: Client[] = Object.keys(allClientsData).map(key => ({
+            id: key,
+            ...allClientsData[key]
+        }));
+        
+        const normalizedSearch = normalizeArabic(searchTerm.toLowerCase().trim());
+        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
+        const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
+
+        const filtered = allClients.filter(client => {
+            const phone = getPhone(client.phone).toLowerCase();
+            
+            // Prioritize phone number matches
+            if (phone.includes(searchTerm.trim())) {
+                return true;
+            }
+
+            // Then check name
+            const name = normalizeArabic((client.name || '').toLowerCase());
+            const nameWords = name.split(' ');
+            return searchTerms.every(term => 
+                nameWords.some(nameWord => nameWord.startsWith(term))
+            );
+        });
+
+        // Return a limited number of results for performance
+        return filtered.slice(0, 20);
+    } catch (error) {
+        console.error("Error searching clients:", error);
+        return [];
+    }
 }
 
 
@@ -1622,3 +1670,5 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
         return { message: 'Database error: Failed to delete rule.' };
     }
 }
+
+    
