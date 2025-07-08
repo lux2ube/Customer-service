@@ -20,6 +20,7 @@ import {
   MessageCircle,
   ShieldAlert,
   Settings2,
+  Pilcrow,
 } from 'lucide-react';
 
 const menuItems = [
@@ -36,6 +37,7 @@ const menuItems = [
   { type: 'divider' },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
+  { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
 ];
 
 export function Nav() {

@@ -147,3 +147,14 @@ export interface SmsEndpoint {
     accountName: string;
     createdAt: string;
 }
+
+export interface SmsParsingRule {
+    id: string;
+    name: string;
+    type: 'credit' | 'debit';
+    amountStartsAfter: string;
+    amountEndsBefore: string;
+    personStartsAfter: string;
+    personEndsBefore: string;
+    createdAt: string;
+}

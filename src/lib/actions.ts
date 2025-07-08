@@ -7,9 +7,10 @@ import { push, ref, set, update, get, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule } from './types';
 import { parseSms } from '@/lib/sms-parser';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
+import { parseSmsWithCustomRules } from './custom-sms-parser';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1348,14 +1349,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
     const settingsRef = ref(db, 'settings');
+    const rulesRef = ref(db, 'sms_parsing_rules');
 
     try {
-        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot, smsTransactionsSnapshot] = await Promise.all([
+        const [incomingSnapshot, endpointsSnapshot, accountsSnapshot, settingsSnapshot, smsTransactionsSnapshot, rulesSnapshot] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(settingsRef),
-            get(transactionsRef) // Fetch all existing SMS transactions
+            get(transactionsRef),
+            get(rulesRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -1366,6 +1369,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allEndpoints: Record<string, { accountId: string, accountName: string }> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const settings: Settings | null = settingsSnapshot.val();
+        const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
         
         // Create a set of recent SMS bodies for quick duplicate checking
         const allSmsTransactions: SmsTransaction[] = smsTransactionsSnapshot.exists() ? Object.values(smsTransactionsSnapshot.val()) : [];
@@ -1379,6 +1383,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let duplicateCount = 0;
+        let customSuccessCount = 0;
         let regexSuccessCount = 0;
         let aiSuccessCount = 0;
         let failedCount = 0;
@@ -1420,17 +1425,24 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const newTxId = push(transactionsRef).key;
             if (!newTxId) return;
 
-            // Stage 1: Try Regex Parser first for known formats
-            let parsed: ParsedSms | null = parseSms(trimmedSmsBody);
+            let parsed: ParsedSms | null = null;
+            
+            // Stage 1: Custom Rules
+            if (customRules.length > 0) {
+                parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
+                if (parsed) customSuccessCount++;
+            }
 
-            if (parsed) {
-                regexSuccessCount++;
-            } else {
-                // Stage 2: If regex fails, fallback to AI Parser
+            // Stage 2: Static Regex Parser
+            if (!parsed) {
+                parsed = parseSms(trimmedSmsBody);
+                if (parsed) regexSuccessCount++;
+            }
+            
+            // Stage 3: AI Parser (if everything else fails)
+            if (!parsed) {
                 parsed = await parseSmsWithAi(trimmedSmsBody, settings?.gemini_api_key || '');
-                if (parsed) {
-                    aiSuccessCount++;
-                }
+                if (parsed) aiSuccessCount++;
             }
             
             if (parsed) {
@@ -1481,7 +1493,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Processed ${processedCount} message(s): ${regexSuccessCount} by regex, ${aiSuccessCount} by AI, ${failedCount} failed.`;
+        let message = `Processed ${processedCount} message(s): ${customSuccessCount} by custom, ${regexSuccessCount} by regex, ${aiSuccessCount} by AI, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;
         }
@@ -1570,5 +1582,49 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
     } catch (error: any) {
         console.error("Client Merge Error:", error);
         return { message: error.message || "An unknown error occurred during the merge.", error: true };
+    }
+}
+
+
+// --- SMS Parsing Rule Actions ---
+export type ParsingRuleFormState = { message?: string } | undefined;
+
+const SmsParsingRuleSchema = z.object({
+    name: z.string().min(1, { message: 'Rule name is required.' }),
+    type: z.enum(['credit', 'debit']),
+    amountStartsAfter: z.string().min(1, { message: 'This marker is required.' }),
+    amountEndsBefore: z.string().min(1, { message: 'This marker is required.' }),
+    personStartsAfter: z.string().min(1, { message: 'This marker is required.' }),
+    personEndsBefore: z.string().min(1, { message: 'This marker is required.' }),
+});
+
+export async function createSmsParsingRule(formData: FormData): Promise<ParsingRuleFormState> {
+    const validatedFields = SmsParsingRuleSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return { message: validatedFields.error.flatten().fieldErrors.name?.[0] || 'Invalid data.' };
+    }
+
+    try {
+        const newRef = push(ref(db, 'sms_parsing_rules'));
+        await set(newRef, {
+            ...validatedFields.data,
+            createdAt: new Date().toISOString(),
+        });
+        revalidatePath('/sms/parsing');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to save rule.' };
+    }
+}
+
+export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormState> {
+    if (!id) return { message: 'Invalid ID.' };
+    try {
+        await remove(ref(db, `sms_parsing_rules/${id}`));
+        revalidatePath('/sms/parsing');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to delete rule.' };
     }
 }
