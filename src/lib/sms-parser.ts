@@ -130,8 +130,8 @@ const parsers = [
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
-        name: 'Credit (Idafa) with checkmarks and optional space currency',
-        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,٫.]+)\s*.*? من (.*?) رصيدك.*$/,
+        name: 'Credit (Idafa) with checkmarks and conjoined text',
+        regex: /^تم\s*√\s*√\s*إضافة\s*([\d,٫.]+).*?من\s+(.*?)\s+رصيدك.*$/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
