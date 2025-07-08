@@ -76,7 +76,7 @@ const parsers = [
     // --- DEBIT (HAWALT) ---
     {
         name: 'Debit (Hawalt) with fees and final currency',
-        regex: /^حولت([\d,.]+)لـ(.*?)\s+رسوم\s+[\d,.]+\s+رصيدك\s+[\d,.]+(ر\.ي|р\.с|YER|SAR|USD)$/,
+        regex: /^حولت([\d,.]+)\s*لـ(.*?)\s+رسوم\s+[\d,.]+\s+رصيدك\s+[\d,.]+(ر\.ي|р\.с|YER|SAR|USD)$/,
         map: { type: 'debit', amount: 1, person: 2, currency: 3 }
     },
     {
@@ -104,6 +104,11 @@ const parsers = [
 
 
     // --- CREDIT (IDIF/ADIFA) ---
+    {
+        name: 'Credit (Idif) conjoined currency from person',
+        regex: /^اضيف ([\d,.]+)(р\.с|р\.ي|ر\.س|ر\.ي|SAR|YER|USD) تحويل مشترك رص:.*? من (.*)$/,
+        map: { type: 'credit', amount: 1, currency: 2, person: 3 }
+    },
     {
         name: 'Credit (Idif) from person with "mogabel"',
         regex: /^اضيف ([\d,.]+)р\.ي مقابل تحويل مشترك رص:.*? من (.*)$/,
