@@ -16,6 +16,16 @@ import { Checkbox } from './ui/checkbox';
 import type { Client, ReviewFlag, KycDocument, Account, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 
 const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
@@ -23,7 +33,7 @@ const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Othe
 function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} name="intent" value="save_client">
             {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Client</>}
         </Button>
     );
@@ -35,12 +45,28 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
     const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
     const [state, formAction] = useActionState<ClientFormState, FormData>(action, undefined);
 
+    const formRef = React.useRef<HTMLFormElement>(null);
+
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
         phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
     });
+
+    const [kycDocuments, setKycDocuments] = React.useState(client?.kyc_documents || []);
+    const [bep20Addresses, setBep20Addresses] = React.useState(client?.bep20_addresses || []);
+    const [favoriteBankAccount, setFavoriteBankAccount] = React.useState({
+        id: client?.favoriteBankAccountId,
+        name: client?.favoriteBankAccountName
+    });
+
+    const [dialogState, setDialogState] = React.useState<{
+        open: boolean;
+        title: string;
+        description: string;
+        intent: string;
+    } | null>(null);
 
     const usedBankAccounts = React.useMemo(() => {
         if (!transactions) return [];
@@ -75,22 +101,22 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
     }, [transactions]);
 
     React.useEffect(() => {
-        if (client) {
-            setFormData({
-                name: client.name || '',
-                phone: client.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
-                verification_status: client.verification_status || 'Pending',
-                review_flags: client.review_flags || [],
-            });
-        }
-    }, [client]);
-    
-    React.useEffect(() => {
-        if (state?.message) {
-             toast({ variant: 'destructive', title: 'Error', description: state.message });
+        if (state?.message && !state.success) {
+            toast({ variant: 'destructive', title: 'Error', description: state.message });
         }
         if (state?.success) {
             toast({ title: 'Success', description: state.message });
+
+            // Update local state to reflect successful deletions
+            if (state.intent?.startsWith('delete:')) {
+                const docName = state.intent.split(':')[1];
+                setKycDocuments(prev => prev.filter(doc => doc.name !== docName));
+            } else if (state.intent?.startsWith('delete_address:')) {
+                const address = state.intent.split(':')[1];
+                setBep20Addresses(prev => prev.filter(a => a !== address));
+            } else if (state.intent?.startsWith('unfavorite_bank_account:')) {
+                setFavoriteBankAccount({ id: undefined, name: undefined });
+            }
         }
     }, [state, toast]);
 
@@ -120,8 +146,26 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
         }
     };
 
+    const handleDeleteClick = (intent: string, title: string, description: string) => {
+        setDialogState({ open: true, intent, title, description });
+    };
+
+    const handleDialogConfirm = () => {
+        if (dialogState && formRef.current) {
+            const formData = new FormData(formRef.current);
+            formData.set('intent', dialogState.intent);
+            formAction(formData);
+            setDialogState(null); // Close dialog
+        }
+    };
+    
+    const handleDialogCancel = () => {
+        setDialogState(null);
+    };
+
     return (
-        <form action={formAction} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+        <form action={formAction} ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-1 space-y-4">
                 <Card>
                     <CardHeader>
@@ -194,7 +238,7 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                         <div className="space-y-2">
                             <Label>Favorite Bank Account</Label>
                             <Input
-                                value={client?.favoriteBankAccountName ? `${client.favoriteBankAccountName} (${client.favoriteBankAccountId})` : 'None'}
+                                value={favoriteBankAccount?.name ? `${favoriteBankAccount.name} (${favoriteBankAccount.id})` : 'None'}
                                 readOnly
                                 disabled
                             />
@@ -236,9 +280,12 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                                             <p className="text-xs text-muted-foreground">Last used: {format(parseISO(account.lastUsed), 'PPP')}</p>
                                         </div>
                                         <Button
-                                            type="submit"
-                                            name="intent"
-                                            value={`unfavorite_bank_account:${account.id}`}
+                                            type="button"
+                                            onClick={() => handleDeleteClick(
+                                                `unfavorite_bank_account:${account.id}`,
+                                                'Unlink Favorite Account?',
+                                                `Are you sure you want to remove the favorite link to bank account "${account.name}"? This only applies if it is the current favorite.`
+                                            )}
                                             variant="ghost"
                                             size="icon"
                                             title="Unset as favorite if this is the favorite account"
@@ -259,9 +306,9 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                         <CardDescription>Addresses are automatically added from confirmed deposit transactions.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {client?.bep20_addresses && client.bep20_addresses.length > 0 ? (
+                        {bep20Addresses && bep20Addresses.length > 0 ? (
                             <ul className="divide-y divide-border rounded-md border bg-background">
-                                {client.bep20_addresses.map((address) => (
+                                {bep20Addresses.map((address) => (
                                     <li key={address} className="flex items-center justify-between p-3 text-sm">
                                         <div>
                                             <p className="font-mono break-all">{address}</p>
@@ -270,9 +317,12 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                                             )}
                                         </div>
                                         <Button
-                                            type="submit"
-                                            name="intent"
-                                            value={`delete_address:${address}`}
+                                            type="button"
+                                            onClick={() => handleDeleteClick(
+                                                `delete_address:${address}`,
+                                                'Delete Address?',
+                                                `Are you sure you want to remove the address "${address}"? This cannot be undone.`
+                                            )}
                                             variant="ghost"
                                             size="icon"
                                         >
@@ -291,11 +341,11 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                         <CardTitle>KYC Documents</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                        {client?.kyc_documents && client.kyc_documents.length > 0 && (
+                        {kycDocuments && kycDocuments.length > 0 && (
                             <div className="space-y-2">
                                 <Label>Uploaded Documents</Label>
                                 <ul className="divide-y divide-border rounded-md border bg-background">
-                                    {client.kyc_documents.map((doc) => (
+                                    {kycDocuments.map((doc) => (
                                         <li key={doc.name} className="flex items-center justify-between p-3 text-sm">
                                             <Button variant="link" asChild className="p-0 h-auto justify-start">
                                                 <Link href={doc.url} target="_blank" rel="noopener noreferrer">
@@ -303,9 +353,12 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                                                 </Link>
                                             </Button>
                                             <Button
-                                                type="submit"
-                                                name="intent"
-                                                value={`delete:${doc.name}`}
+                                                type="button"
+                                                onClick={() => handleDeleteClick(
+                                                    `delete:${doc.name}`,
+                                                    'Delete Document?',
+                                                    `Are you sure you want to delete the document "${doc.name}"? This cannot be undone.`
+                                                )}
                                                 variant="ghost"
                                                 size="icon"
                                             >
@@ -328,5 +381,19 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                 <SubmitButton />
             </div>
         </form>
+
+        <AlertDialog open={!!dialogState?.open} onOpenChange={(open) => !open && handleDialogCancel()}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>{dialogState?.title}</AlertDialogTitle>
+                    <AlertDialogDescription>{dialogState?.description}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleDialogCancel}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDialogConfirm}>Continue</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        </>
     );
 }

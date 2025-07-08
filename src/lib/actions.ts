@@ -126,6 +126,7 @@ export type ClientFormState =
       };
       message?: string;
       success?: boolean;
+      intent?: string;
     }
   | undefined;
 
@@ -280,7 +281,7 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
-            return { success: true, message: "Document deleted successfully." };
+            return { success: true, message: "Document deleted successfully.", intent };
         } catch (error) {
             const errorMessage = (error as any)?.code;
             let userMessage = `Failed to delete document. Please check server logs.`;
@@ -305,7 +306,7 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
-            return { success: true, message: "Address removed successfully." };
+            return { success: true, message: "Address removed successfully.", intent };
         } catch (error) {
             console.error("Failed to delete address:", error);
             return { message: 'Database Error: Failed to remove address.' };
@@ -326,9 +327,9 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
                         favoriteBankAccountName: null
                     });
                      revalidatePath(`/clients/${clientId}/edit`);
-                    return { success: true, message: "Client's favorite bank account link has been removed." };
+                    return { success: true, message: "Client's favorite bank account link has been removed.", intent };
                 } else {
-                    return { success: true, message: "This was not the favorite account, so no link was removed." };
+                    return { success: true, message: "This was not the favorite account, so no link was removed.", intent };
                 }
             }
              return { message: 'Client not found.' };
@@ -1287,7 +1288,7 @@ export async function matchSmsTransaction(smsId: string): Promise<{success: bool
             return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
         }
         await update(txRef, { status: 'matched' });
-        // Do not revalidate here to prevent form reload
+        // Do not revalidate here to prevent form reload on click
         return { success: true };
     } catch (error) {
         return { success: false, message: 'Database error: Failed to update status.' };
