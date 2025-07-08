@@ -1,5 +1,7 @@
 {
   "rules": {
+    ".read": "true",
+    ".write": "true",
     "client_search_index": {
       ".indexOn": "term"
     }
