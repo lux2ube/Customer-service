@@ -127,7 +127,7 @@ export interface SmsTransaction {
     account_name?: string; // for display
     amount: number | null;
     currency: string | null;
-    type: 'deposit' | 'withdraw' | null;
+    type: 'credit' | 'debit' | null;
     status: 'pending' | 'matched' | 'used' | 'rejected';
     parsed_at: string;
     raw_sms: string;
@@ -139,7 +139,6 @@ export interface ParsedSms {
   type?: 'credit' | 'debit';
   amount?: number;
   person?: string;
-  currency?: string;
 }
 
 export interface SmsEndpoint {

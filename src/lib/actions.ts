@@ -1398,7 +1398,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const accountId = endpointMapping.accountId;
             const account = allChartOfAccounts[accountId];
             
-            if (!account) return;
+            if (!account || !account.currency) return; // Skip if account or its currency isn't defined
 
             let smsBody: string;
             if (typeof payload === 'object' && payload !== null) {
@@ -1439,7 +1439,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     account_id: accountId,
                     account_name: account.name,
                     amount: parsed.amount,
-                    currency: parsed.currency || account.currency,
+                    currency: account.currency, // Use currency from the account
                     type: parsed.type,
                     status: 'pending',
                     parsed_at: new Date().toISOString(),
