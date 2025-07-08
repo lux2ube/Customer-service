@@ -367,18 +367,39 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
         const filtered = allClients.filter(client => {
             const phone = getPhone(client.phone).toLowerCase();
             
-            // Prioritize phone number matches
             if (phone.includes(searchTerm.trim())) {
                 return true;
             }
 
-            // Then check name
             const name = normalizeArabic((client.name || '').toLowerCase());
             const nameWords = name.split(' ');
             return searchTerms.every(term => 
                 nameWords.some(nameWord => nameWord.startsWith(term))
             );
         });
+
+        // New Sorting Logic for prioritization
+        if (searchTerms.length === 1) {
+            filtered.sort((a, b) => {
+                const aName = normalizeArabic((a.name || '').toLowerCase());
+                const bName = normalizeArabic((b.name || '').toLowerCase());
+                const aFirstName = aName.split(' ')[0];
+                const bFirstName = bName.split(' ')[0];
+
+                const aIsFirstNameMatch = aFirstName.startsWith(normalizedSearch);
+                const bIsFirstNameMatch = bFirstName.startsWith(normalizedSearch);
+                
+                if (aIsFirstNameMatch && !bIsFirstNameMatch) {
+                    return -1; // a comes first
+                }
+                if (!aIsFirstNameMatch && bIsFirstNameMatch) {
+                    return 1; // b comes first
+                }
+                
+                // For ties, or if neither is a first name match, sort by full name alphabetically
+                return aName.localeCompare(bName);
+            });
+        }
 
         // Return a limited number of results for performance
         return filtered.slice(0, 20);
@@ -1402,7 +1423,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(settingsRef),
-            get(transactionsRef),
+            get(smsTransactionsSnapshot),
             get(rulesRef),
         ]);
 
