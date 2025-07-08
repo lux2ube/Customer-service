@@ -4,7 +4,7 @@ import { ClientForm } from "@/components/client-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, Transaction } from '@/lib/types';
 import { notFound } from "next/navigation";
 
 async function getClient(id: string): Promise<Client | null> {
@@ -14,6 +14,17 @@ async function getClient(id: string): Promise<Client | null> {
         return { id, ...snapshot.val() };
     }
     return null;
+}
+
+async function getClientTransactions(clientId: string): Promise<Transaction[]> {
+    const transactionsRef = ref(db, 'transactions');
+    const snapshot = await get(transactionsRef);
+    if (!snapshot.exists()) {
+        return [];
+    }
+    const allTransactions: Transaction[] = Object.values(snapshot.val());
+    // Filter for transactions that are confirmed and belong to the specific client
+    return allTransactions.filter(tx => tx.clientId === clientId && tx.status === 'Confirmed');
 }
 
 async function getBankAccounts(): Promise<Account[]> {
@@ -37,6 +48,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
     }
 
     const bankAccounts = await getBankAccounts();
+    const transactions = await getClientTransactions(params.id);
 
     return (
         <>
@@ -45,7 +57,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
                 description="Update the client's profile details."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ClientForm client={client} bankAccounts={bankAccounts} />
+                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} />
             </Suspense>
         </>
     );

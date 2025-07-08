@@ -134,7 +134,6 @@ const ClientSchema = z.object({
     phone: z.array(z.string().min(1, { message: 'Phone number cannot be empty.' })).min(1, { message: 'At least one phone number is required.' }),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
-    favoriteBankAccountId: z.string().optional().nullable(),
 });
 
 export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
@@ -171,13 +170,11 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         }
     }
 
-    const favoriteBankAccountIdValue = formData.get('favoriteBankAccountId');
     const dataToValidate = {
         name: formData.get('name'),
         phone: formData.getAll('phone'),
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
-        favoriteBankAccountId: favoriteBankAccountIdValue === 'none' ? null : favoriteBankAccountIdValue,
     };
 
     const validatedFields = ClientSchema.safeParse(dataToValidate);
@@ -232,17 +229,6 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         }
     }
     
-    if (finalData.favoriteBankAccountId) {
-        try {
-            const accountSnapshot = await get(ref(db, `accounts/${finalData.favoriteBankAccountId}`));
-            if (accountSnapshot.exists()) {
-                finalData.favoriteBankAccountName = (accountSnapshot.val() as Account).name;
-            }
-        } catch (e) { console.error("Could not fetch favorite bank account name"); }
-    } else {
-        finalData.favoriteBankAccountName = undefined;
-    }
-
     const dataForFirebase = stripUndefined(finalData);
 
     try {
@@ -323,6 +309,31 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
         } catch (error) {
             console.error("Failed to delete address:", error);
             return { message: 'Database Error: Failed to remove address.' };
+        }
+    } else if (intent?.startsWith('unfavorite_bank_account:')) {
+        const accountIdToUnfavorite = intent.substring('unfavorite_bank_account:'.length);
+        if (!accountIdToUnfavorite) {
+            return { message: 'Bank account ID not provided.' };
+        }
+        try {
+            const clientRef = ref(db, `clients/${clientId}`);
+            const snapshot = await get(clientRef);
+            if (snapshot.exists()) {
+                const clientData = snapshot.val() as Client;
+                if (clientData.favoriteBankAccountId === accountIdToUnfavorite) {
+                    await update(clientRef, {
+                        favoriteBankAccountId: null,
+                        favoriteBankAccountName: null
+                    });
+                     revalidatePath(`/clients/${clientId}/edit`);
+                    return { success: true, message: "Client's favorite bank account link has been removed." };
+                } else {
+                    return { success: true, message: "This was not the favorite account, so no link was removed." };
+                }
+            }
+             return { message: 'Client not found.' };
+        } catch (error) {
+            return { message: 'Database Error: Failed to remove favorite bank account link.' };
         }
     }
 
@@ -1276,6 +1287,7 @@ export async function matchSmsTransaction(smsId: string): Promise<{success: bool
             return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
         }
         await update(txRef, { status: 'matched' });
+        // Do not revalidate here to prevent form reload
         return { success: true };
     } catch (error) {
         return { success: false, message: 'Database error: Failed to update status.' };

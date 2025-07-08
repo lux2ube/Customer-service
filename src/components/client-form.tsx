@@ -13,10 +13,10 @@ import { createClient, manageClient, type ClientFormState } from '@/lib/actions'
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, ReviewFlag, KycDocument, Account } from '@/lib/types';
-import { Separator } from './ui/separator';
+import type { Client, ReviewFlag, KycDocument, Account, Transaction } from '@/lib/types';
 import Link from 'next/link';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { format, parseISO } from 'date-fns';
+
 
 const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
 
@@ -29,7 +29,7 @@ function SubmitButton() {
     );
 }
 
-export function ClientForm({ client, bankAccounts }: { client?: Client, bankAccounts?: Account[] }) {
+export function ClientForm({ client, bankAccounts, transactions }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[] }) {
     const { toast } = useToast();
     
     const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
@@ -40,8 +40,39 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
         phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
-        favoriteBankAccountId: client?.favoriteBankAccountId || 'none',
     });
+
+    const usedBankAccounts = React.useMemo(() => {
+        if (!transactions) return [];
+        const accountsMap = new Map<string, { name: string, lastUsed: string }>();
+        transactions
+            .filter(tx => tx.bankAccountId && tx.bankAccountName)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .forEach(tx => {
+                if (!accountsMap.has(tx.bankAccountId!)) {
+                    accountsMap.set(tx.bankAccountId!, {
+                        name: tx.bankAccountName!,
+                        lastUsed: tx.date,
+                    });
+                }
+            });
+        return Array.from(accountsMap.entries()).map(([id, data]) => ({ id, ...data }));
+    }, [transactions]);
+
+    const cryptoWalletsLastUsed = React.useMemo(() => {
+        if (!transactions) return new Map<string, string>();
+        const lastUsedMap = new Map<string, string>();
+        transactions
+            .filter(tx => tx.client_wallet_address)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .forEach(tx => {
+                const address = tx.client_wallet_address!.toLowerCase();
+                if (!lastUsedMap.has(address)) {
+                    lastUsedMap.set(address, tx.date);
+                }
+            });
+        return lastUsedMap;
+    }, [transactions]);
 
     React.useEffect(() => {
         if (client) {
@@ -50,7 +81,6 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                 phone: client.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
                 verification_status: client.verification_status || 'Pending',
                 review_flags: client.review_flags || [],
-                favoriteBankAccountId: client.favoriteBankAccountId || 'none',
             });
         }
     }, [client]);
@@ -91,14 +121,14 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
     };
 
     return (
-        <form action={formAction} className="space-y-3">
-            <Card>
-                <CardHeader>
-                    <CardTitle>{client ? 'Edit' : 'New'} Client</CardTitle>
-                    <CardDescription>Fill in the details for the client profile.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="grid md:grid-cols-2 gap-3">
+        <form action={formAction} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-1 space-y-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{client ? 'Edit' : 'New'} Client</CardTitle>
+                        <CardDescription>Fill in the details for the client profile.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Full Name</Label>
                             <Input 
@@ -138,8 +168,6 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                             </Button>
                             {state?.errors?.phone && <p className="text-sm text-destructive">{state.errors.phone.join(', ')}</p>}
                         </div>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-3">
                         <div className="space-y-2">
                             <Label>Verification Status</Label>
                              <RadioGroup 
@@ -164,57 +192,83 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                              {state?.errors?.verification_status && <p className="text-sm text-destructive">{state.errors.verification_status[0]}</p>}
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="favoriteBankAccountId">Favorite Bank Account</Label>
-                            <Select 
-                                name="favoriteBankAccountId" 
-                                value={formData.favoriteBankAccountId}
-                                onValueChange={(value) => setFormData({...formData, favoriteBankAccountId: value})}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a favorite account..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">None</SelectItem>
-                                    {bankAccounts?.map(account => (
-                                        <SelectItem key={account.id} value={account.id}>
-                                            {account.name} ({account.currency})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Favorite Bank Account</Label>
+                            <Input
+                                value={client?.favoriteBankAccountName ? `${client.favoriteBankAccountName} (${client.favoriteBankAccountId})` : 'None'}
+                                readOnly
+                                disabled
+                            />
                             <p className="text-xs text-muted-foreground">This is automatically set by the last confirmed transaction.</p>
                         </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Review Flags</Label>
-                        <div className="flex flex-wrap items-center gap-4 pt-2">
-                            {reviewFlags.map(flag => (
-                            <div key={flag} className="flex items-center space-x-2">
-                                <Checkbox 
-                                    id={`flag-${flag}`} 
-                                    name="review_flags" 
-                                    value={flag} 
-                                    checked={formData.review_flags?.includes(flag)}
-                                    onCheckedChange={(checked) => handleFlagChange(flag, !!checked)}
-                                />
-                                <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
+                        <div className="space-y-2">
+                            <Label>Review Flags</Label>
+                            <div className="flex flex-wrap items-center gap-4 pt-2">
+                                {reviewFlags.map(flag => (
+                                <div key={flag} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                        id={`flag-${flag}`} 
+                                        name="review_flags" 
+                                        value={flag} 
+                                        checked={formData.review_flags?.includes(flag)}
+                                        onCheckedChange={(checked) => handleFlagChange(flag, !!checked)}
+                                    />
+                                    <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
+                                </div>
+                                ))}
                             </div>
-                            ))}
                         </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                        <h3 className="text-base font-medium">BEP20 Addresses</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Addresses are automatically added from confirmed deposit transactions.
-                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+            <div className="md:col-span-1 space-y-4">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Bank Accounts Used</CardTitle>
+                        <CardDescription>Accounts from confirmed transactions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {usedBankAccounts.length > 0 ? (
+                            <ul className="divide-y divide-border rounded-md border bg-background">
+                                {usedBankAccounts.map((account) => (
+                                    <li key={account.id} className="flex items-center justify-between p-3 text-sm">
+                                        <div>
+                                            <p className="font-medium">{account.name}</p>
+                                            <p className="text-xs text-muted-foreground">Last used: {format(parseISO(account.lastUsed), 'PPP')}</p>
+                                        </div>
+                                        <Button
+                                            type="submit"
+                                            name="intent"
+                                            value={`unfavorite_bank_account:${account.id}`}
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Unset as favorite if this is the favorite account"
+                                        >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-muted-foreground p-3 border rounded-md">No bank accounts used in confirmed transactions.</p>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Crypto Wallets Used (BEP20)</CardTitle>
+                        <CardDescription>Addresses are automatically added from confirmed deposit transactions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
                         {client?.bep20_addresses && client.bep20_addresses.length > 0 ? (
                             <ul className="divide-y divide-border rounded-md border bg-background">
-                                {client.bep20_addresses.map((address, index) => (
-                                    <li key={index} className="flex items-center justify-between p-3 text-sm">
-                                        <span className="font-mono break-all">{address}</span>
+                                {client.bep20_addresses.map((address) => (
+                                    <li key={address} className="flex items-center justify-between p-3 text-sm">
+                                        <div>
+                                            <p className="font-mono break-all">{address}</p>
+                                            {cryptoWalletsLastUsed.has(address.toLowerCase()) && (
+                                                <p className="text-xs text-muted-foreground">Last used: {format(parseISO(cryptoWalletsLastUsed.get(address.toLowerCase())!), 'PPP')}</p>
+                                            )}
+                                        </div>
                                         <Button
                                             type="submit"
                                             name="intent"
@@ -228,14 +282,15 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-sm text-muted-foreground p-3 border rounded-md">No BEP20 addresses recorded for this client.</p>
+                             <p className="text-sm text-muted-foreground p-3 border rounded-md">No BEP20 addresses recorded for this client.</p>
                         )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-3">
-                        <h3 className="text-base font-medium">KYC Documents</h3>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>KYC Documents</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
                         {client?.kyc_documents && client.kyc_documents.length > 0 && (
                             <div className="space-y-2">
                                 <Label>Uploaded Documents</Label>
@@ -266,12 +321,12 @@ export function ClientForm({ client, bankAccounts }: { client?: Client, bankAcco
                             <Input id="kyc_files" name="kyc_files" type="file" multiple />
                             <p className="text-sm text-muted-foreground">You can select multiple files at once.</p>
                         </div>
-                    </div>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                    <SubmitButton />
-                </CardFooter>
-            </Card>
+                    </CardContent>
+                </Card>
+            </div>
+             <div className="md:col-span-2 flex justify-end">
+                <SubmitButton />
+            </div>
         </form>
     );
 }
