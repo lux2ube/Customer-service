@@ -9,7 +9,7 @@ import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState, matchSmsTransaction, searchClients } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, matchSmsTransaction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -19,7 +19,6 @@ import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Command as CommandPrimitive } from 'cmdk';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
@@ -112,7 +111,7 @@ function BankAccountSelector({
   );
 }
 
-export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
+export function TransactionForm({ transaction, client, clients = [] }: { transaction?: Transaction, client?: Client | null, clients: Client[] }) {
     const { toast } = useToast();
     const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
     const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
@@ -388,8 +387,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
 
         setFormData(prev => {
-            // Pass the existing hash and usdt amount to preserve them for synced transactions
-            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.amount_usdt);
+            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.hash ? prev.amount_usdt : undefined);
             return {
                 ...prev,
                 amount: newAmount,
@@ -422,15 +420,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
-    const handleClientSelect = async (clientId: string) => {
-        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
-        if (!clientSnapshot.exists()) return;
-        
-        const selectedClient = clientSnapshot.val() as Client;
+    const handleClientSelect = (clientId: string) => {
+        const selectedClient = clients.find(c => c.id === clientId);
+        if (!selectedClient) return;
 
-        const favoriteAccount = selectedClient 
-            ? bankAccounts.find(acc => acc.id === selectedClient.favoriteBankAccountId)
-            : undefined;
+        const favoriteAccount = bankAccounts.find(acc => acc.id === selectedClient.favoriteBankAccountId);
 
         setFormData(prev => ({
             ...prev,
@@ -535,13 +529,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                             <div className="space-y-2">
                             <Label>Client</Label>
-                                <ClientSearchCombobox
-                                    name="clientId" 
-                                    value={formData.clientId} 
+                                <ClientSelector 
+                                    clients={clients}
+                                    value={formData.clientId}
                                     onSelect={handleClientSelect}
-                                    initialName={client?.name}
-                                    initialPhone={client?.phone}
                                 />
+                                <input type="hidden" name="clientId" value={formData.clientId || ""} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Bank Account</Label>
@@ -710,89 +703,47 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     );
 }
 
-function ClientSearchCombobox({ name, value, onSelect, initialName, initialPhone }: { name: string; value?: string | null; onSelect: (value: string) => void; initialName?: string | null; initialPhone?: string | string[] | null; }) {
+function ClientSelector({ clients, value, onSelect }: { clients: Client[], value?: string | null, onSelect: (id: string) => void }) {
     const [open, setOpen] = React.useState(false);
-    const [searchQuery, setSearchQuery] = React.useState("");
-    const [results, setResults] = React.useState<{ id: string, name: string }[]>([]);
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [selectedValue, setSelectedValue] = React.useState(value);
-    const [selectedName, setSelectedName] = React.useState<string | null>(null);
+    const selectedClient = value ? clients.find(c => c.id === value) : null;
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || 'No phone';
 
-    React.useEffect(() => {
-        if (value && initialName && initialPhone) {
-            const phoneStr = Array.isArray(initialPhone) ? initialPhone.join(', ') : initialPhone;
-            setSelectedName(`${initialName} (${phoneStr})`);
-        }
-    }, [value, initialName, initialPhone]);
-    
-    React.useEffect(() => {
-        if (searchQuery.length < 2) {
-            setResults([]);
-            return;
-        }
-
-        setIsLoading(true);
-        const handler = setTimeout(async () => {
-            const searchResults = await searchClients(searchQuery);
-            setResults(searchResults);
-            setIsLoading(false);
-        }, 300);
-
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [searchQuery]);
-
-    React.useEffect(() => {
-        setSelectedValue(value);
-    }, [value]);
-
-    const handleSelect = (clientId: string) => {
-        const selectedResult = results.find(r => r.id === clientId);
-        onSelect(clientId);
-        setSelectedValue(clientId);
-        setSelectedName(selectedResult?.name || null);
-        setOpen(false);
-    };
-    
-    const displayName = selectedName || (selectedValue ? "Loading..." : "Search by name or phone...");
-    
     return (
-        <>
-            <input type="hidden" name={name} value={selectedValue || ""} />
-            <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
-                        <span className="truncate">{displayName}</span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                    <Command shouldFilter={false}>
-                        <CommandInput 
-                            placeholder="Type to search..." 
-                            value={searchQuery}
-                            onValueChange={setSearchQuery}
-                        />
-                        <CommandList>
-                            {isLoading && <CommandPrimitive.Loading><div className="p-2 text-sm text-center">Loading...</div></CommandPrimitive.Loading>}
-                            {!isLoading && searchQuery.length > 1 && results.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
-                             {!isLoading && searchQuery.length <= 1 && <CommandEmpty>Please enter at least 2 characters.</CommandEmpty>}
-                            <CommandGroup>
-                                {results.map((client) => (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-auto min-h-8 py-1">
+                    <span className="truncate">
+                        {selectedClient ? `${selectedClient.name} (${getPhone(selectedClient.phone)})` : "Select a client..."}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                    <CommandInput placeholder="Search clients by name or phone..." />
+                    <CommandList>
+                        <CommandEmpty>No client found.</CommandEmpty>
+                        <CommandGroup>
+                            {clients.map(client => (
                                 <CommandItem
                                     key={client.id}
-                                    value={client.id}
-                                    onSelect={() => handleSelect(client.id)}>
-                                    <Check className={cn("mr-2 h-4 w-4", selectedValue === client.id ? "opacity-100" : "opacity-0")}/>
-                                    <span>{client.name}</span>
+                                    value={`${client.id} ${client.name} ${getPhone(client.phone)}`}
+                                    onSelect={() => {
+                                        onSelect(client.id);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", value === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex-1 truncate">
+                                        <div className="truncate">{client.name}</div>
+                                        <div className="text-xs text-muted-foreground truncate">{getPhone(client.phone)}</div>
+                                    </div>
                                 </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </CommandList>
-                    </Command>
-                </PopoverContent>
-            </Popover>
-        </>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 }

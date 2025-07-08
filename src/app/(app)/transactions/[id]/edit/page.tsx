@@ -25,6 +25,16 @@ async function getClient(id: string): Promise<Client | null> {
     return null;
 }
 
+async function getClients(): Promise<Client[]> {
+    const clientsRef = ref(db, 'clients');
+    const snapshot = await get(clientsRef);
+    if (snapshot.exists()) {
+        const data = snapshot.val();
+        return Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    }
+    return [];
+}
+
 export default async function EditTransactionPage({ params }: { params: { id: string } }) {
     const transaction = await getTransaction(params.id);
 
@@ -33,6 +43,7 @@ export default async function EditTransactionPage({ params }: { params: { id: st
     }
     
     const client = transaction.clientId ? await getClient(transaction.clientId) : null;
+    const clients = await getClients();
 
     return (
         <>
@@ -41,7 +52,7 @@ export default async function EditTransactionPage({ params }: { params: { id: st
                 description="Update the details of an existing transaction."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <TransactionForm transaction={transaction} client={client} />
+                <TransactionForm transaction={transaction} client={client} clients={clients} />
             </Suspense>
         </>
     );
