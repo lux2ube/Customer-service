@@ -1257,6 +1257,28 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
     }
 }
 
+export async function matchSmsTransaction(smsId: string): Promise<{success: boolean, message?: string}> {
+    if (!smsId) {
+        return { success: false, message: 'Invalid SMS ID provided.' };
+    }
+    try {
+        const txRef = ref(db, `sms_transactions/${smsId}`);
+        const snapshot = await get(txRef);
+        if (!snapshot.exists()) {
+            return { success: false, message: 'SMS transaction not found.' };
+        }
+        const currentStatus = snapshot.val().status;
+        if (currentStatus !== 'pending') {
+            return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
+        }
+        await update(txRef, { status: 'matched' });
+        revalidatePath('/sms/transactions');
+        return { success: true };
+    } catch (error) {
+        return { success: false, message: 'Database error: Failed to update status.' };
+    }
+}
+
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;

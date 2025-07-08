@@ -9,7 +9,7 @@ import { Calendar as CalendarIcon, Save, Check, ChevronsUpDown, Download, Loader
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, matchSmsTransaction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -376,7 +376,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
     };
 
-    const handleSuggestionClick = (sms: SmsTransaction) => {
+    const handleSuggestionClick = async (sms: SmsTransaction) => {
+        // First, optimistically update the UI
         const newAmount = sms.amount || 0;
         const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
 
@@ -391,6 +392,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             }
         });
         setSuggestedSms([]);
+        
+        // Then, call the server action to update the status
+        const result = await matchSmsTransaction(sms.id);
+        if (result.success) {
+            toast({
+                title: 'SMS Matched',
+                description: 'The selected SMS has been marked as matched.',
+            });
+        } else {
+             toast({
+                variant: 'destructive',
+                title: 'Matching Failed',
+                description: result.message || 'Could not mark SMS as matched.',
+            });
+        }
     };
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {
