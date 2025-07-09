@@ -161,53 +161,54 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <span className="px-4 font-mono text-base">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
                 </div>
 
-                {/* Notification message */}
-                <div className="border-2 border-black rounded-lg p-2 text-center text-sm font-semibold">
-                    نود إشعاركم أننا قيدنا لحسابكم لدينا حسب التفاصيل التالية
-                </div>
+                {/* What you Sent / Received */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                    {/* What Client Sent */}
+                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[100px]">
+                        <h3 className="font-bold text-base underline mb-2">ما أرسلته</h3>
+                        <div className="text-center">
+                            <p className="font-mono font-bold text-2xl text-gray-700 tracking-wider">
+                                {isDeposit ? 
+                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` : 
+                                    `${formatCurrency(transaction.amount_usdt)} USDT`
+                                }
+                            </p>
+                            {isDeposit && (
+                                <p className="text-xs text-muted-foreground font-mono">
+                                    (يعادل ${formatCurrency(transaction.amount_usd)})
+                                </p>
+                            )}
+                        </div>
+                    </div>
 
-                {/* Financial details - Compact */}
-                <div className="border-2 border-black rounded-lg p-2 text-sm space-y-2">
-                    {/* First Row */}
-                    <div className="flex justify-around items-center">
-                        <div>
-                            <span className="font-semibold">المبلغ: </span>
-                            <span className="font-mono font-bold tracking-wider">{`${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}</span>
-                        </div>
-                        <div className="h-4 border-l border-gray-400 mx-2"></div>
-                         <div>
-                            <span className="font-semibold">يعادل بالدولار: </span>
-                            <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.amount_usd)}`}</span>
-                        </div>
-                    </div>
-                    {/* Separator */}
-                    <div className="border-b border-gray-300 my-1"></div>
-                     {/* Second Row */}
-                    <div className="flex justify-around items-center">
-                         {(transaction.fee_usd > 0) && (
-                            <>
-                                <div>
-                                    <span className="font-semibold">الرسوم: </span>
-                                    <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.fee_usd)}`}</span>
-                                </div>
-                                <div className="h-4 border-l border-gray-400 mx-2"></div>
-                            </>
-                         )}
-                         {(transaction.expense_usd && transaction.expense_usd > 0) && (
-                             <>
-                                <div>
-                                    <span className="font-semibold">مصروفات: </span>
-                                    <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.expense_usd)}`}</span>
-                                </div>
-                                <div className="h-4 border-l border-gray-400 mx-2"></div>
-                            </>
-                         )}
-                        <div>
-                            <span className="font-semibold text-base">النهائي USDT: </span>
-                            <span className="font-mono font-bold text-base tracking-wider">{`${formatCurrency(transaction.amount_usdt)}`}</span>
+                    {/* What Client Received */}
+                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[100px]">
+                        <h3 className="font-bold text-base underline mb-2">ما استلمته</h3>
+                        <div className="text-center">
+                            <p className="font-mono font-bold text-2xl text-green-600 tracking-wider">
+                                {isDeposit ? 
+                                    `${formatCurrency(transaction.amount_usdt)} USDT` : 
+                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`
+                                }
+                            </p>
+                            {!isDeposit && (
+                                <p className="text-xs text-muted-foreground font-mono">
+                                    (يعادل ${formatCurrency(transaction.amount_usd)})
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>
+                
+                 {/* Fee and Expense Details */}
+                {(transaction.fee_usd > 0 || (transaction.expense_usd && transaction.expense_usd > 0)) && (
+                    <div className="border-2 border-black rounded-lg p-1.5 text-xs text-center font-semibold">
+                        <span>تفاصيل العملية: </span>
+                        {transaction.fee_usd > 0 && <span>العمولة ${formatCurrency(transaction.fee_usd)}</span>}
+                        {(transaction.fee_usd > 0 && transaction.expense_usd && transaction.expense_usd > 0) && <span className="mx-2">|</span>}
+                        {(transaction.expense_usd && transaction.expense_usd > 0) && <span>مصروفات ${formatCurrency(transaction.expense_usd)}</span>}
+                    </div>
+                )}
 
                 {/* Amount in words */}
                 <div className="border-2 border-black rounded-lg p-2 text-center text-sm font-bold">
