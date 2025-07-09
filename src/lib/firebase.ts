@@ -8,12 +8,12 @@ import { getStorage } from "firebase/storage";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCeXpvJgcvOcp49c-jKX3hLBWvO9tzuYk0",
-  authDomain: "exchange-83a2f.firebaseapp.com",
-  projectId: "exchange-83a2f",
-  storageBucket: "exchange-83a2f.appspot.com",
+  authDomain: "crmp2p-86b24.firebaseapp.com",
+  projectId: "crmp2p-86b24",
+  storageBucket: "crmp2p-86b24.appspot.com",
   messagingSenderId: "818879362173",
   appId: "1:818879362173:android:5fb45ca7ec77d654ea2d14",
-  databaseURL: "https://exchange-83a2f-default-rtdb.firebaseio.com",
+  databaseURL: "https://crmp2p-86b24-default-rtdb.firebaseio.com",
 };
 
 // Initialize Firebase
