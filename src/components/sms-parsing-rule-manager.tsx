@@ -133,7 +133,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                         <div className="grid md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="name">Rule Name</Label>
-                                <Input id="name" name="name" placeholder="e.g., Al-Amal Bank Deposit V2" required value={ruleName} onChange={e => setRuleName(e.target.value)} />
+                                <Input id="name" name="name" placeholder="e.g., Al-Amal Bank Deposit V2" required value={ruleName} onChange={e => setRuleName(e.target.value)} dir="rtl" />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="type">Transaction Type</Label>
@@ -149,7 +149,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
 
                         <div className="space-y-2">
                             <Label htmlFor="sampleSms">Sample SMS</Label>
-                            <Textarea id="sampleSms" placeholder="Paste an example of the SMS message here..." value={sampleSms} onChange={e => setSampleSms(e.target.value)} />
+                            <Textarea id="sampleSms" placeholder="Paste an example of the SMS message here..." value={sampleSms} onChange={e => setSampleSms(e.target.value)} dir="rtl" />
                         </div>
                         
                         <div className="border p-4 rounded-md space-y-4 bg-muted/50">
@@ -157,11 +157,11 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                              <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="amountStartsAfter">Amount Starts After</Label>
-                                    <Input id="amountStartsAfter" name="amountStartsAfter" placeholder="e.g., تم تحويل" required value={amountStartsAfter} onChange={e => setAmountStartsAfter(e.target.value)} />
+                                    <Input id="amountStartsAfter" name="amountStartsAfter" placeholder="e.g., تم تحويل" required value={amountStartsAfter} onChange={e => setAmountStartsAfter(e.target.value)} dir="rtl" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="amountEndsBefore">Amount Ends Before</Label>
-                                    <Input id="amountEndsBefore" name="amountEndsBefore" placeholder="e.g., لحساب" required value={amountEndsBefore} onChange={e => setAmountEndsBefore(e.target.value)} />
+                                    <Input id="amountEndsBefore" name="amountEndsBefore" placeholder="e.g., لحساب" required value={amountEndsBefore} onChange={e => setAmountEndsBefore(e.target.value)} dir="rtl" />
                                 </div>
                             </div>
                         </div>
@@ -171,11 +171,11 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                              <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="personStartsAfter">Person Starts After</Label>
-                                    <Input id="personStartsAfter" name="personStartsAfter" placeholder="e.g., لحساب" required value={personStartsAfter} onChange={e => setPersonStartsAfter(e.target.value)} />
+                                    <Input id="personStartsAfter" name="personStartsAfter" placeholder="e.g., لحساب" required value={personStartsAfter} onChange={e => setPersonStartsAfter(e.target.value)} dir="rtl" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="personEndsBefore">Person Ends Before</Label>
-                                    <Input id="personEndsBefore" name="personEndsBefore" placeholder="e.g., رصيدك" required value={personEndsBefore} onChange={e => setPersonEndsBefore(e.target.value)} />
+                                    <Input id="personEndsBefore" name="personEndsBefore" placeholder="e.g., رصيدك" required value={personEndsBefore} onChange={e => setPersonEndsBefore(e.target.value)} dir="rtl" />
                                 </div>
                             </div>
                         </div>
@@ -263,4 +263,5 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
             </AlertDialog>
         </div>
     );
-}
+
+    
