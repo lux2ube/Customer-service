@@ -378,28 +378,26 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
             );
         });
 
-        // New Sorting Logic for prioritization
-        if (searchTerms.length === 1) {
-            filtered.sort((a, b) => {
-                const aName = normalizeArabic((a.name || '').toLowerCase());
-                const bName = normalizeArabic((b.name || '').toLowerCase());
-                const aFirstName = aName.split(' ')[0];
-                const bFirstName = bName.split(' ')[0];
+        // Sort results to prioritize better matches
+        filtered.sort((a, b) => {
+            const aName = normalizeArabic((a.name || '').toLowerCase());
+            const bName = normalizeArabic((b.name || '').toLowerCase());
 
-                const aIsFirstNameMatch = aFirstName.startsWith(normalizedSearch);
-                const bIsFirstNameMatch = bFirstName.startsWith(normalizedSearch);
-                
-                if (aIsFirstNameMatch && !bIsFirstNameMatch) {
-                    return -1; // a comes first
-                }
-                if (!aIsFirstNameMatch && bIsFirstNameMatch) {
-                    return 1; // b comes first
-                }
-                
-                // For ties, or if neither is a first name match, sort by full name alphabetically
-                return aName.localeCompare(bName);
-            });
-        }
+            // 1. Exact match = highest priority
+            const aIsExact = aName === normalizedSearch;
+            const bIsExact = bName === normalizedSearch;
+            if (aIsExact) return -1;
+            if (bIsExact) return 1;
+
+            // 2. Starts with the search term = second highest priority
+            const aStartsWith = aName.startsWith(normalizedSearch);
+            const bStartsWith = bName.startsWith(normalizedSearch);
+            if (aStartsWith && !bStartsWith) return -1;
+            if (!aStartsWith && bStartsWith) return 1;
+            
+            // 3. Fallback to alphabetical sort
+            return aName.localeCompare(bName);
+        });
 
         // Return a limited number of results for performance
         return filtered.slice(0, 20);
@@ -1671,7 +1669,7 @@ const SmsParsingRuleSchema = z.object({
     amountStartsAfter: z.string().min(1, { message: 'This marker is required.' }),
     amountEndsBefore: z.string().min(1, { message: 'This marker is required.' }),
     personStartsAfter: z.string().min(1, { message: 'This marker is required.' }),
-    personEndsBefore: z.string().min(1, { message: 'This marker is required.' }),
+    personEndsBefore: z.string().optional(),
 });
 
 export async function createSmsParsingRule(formData: FormData): Promise<ParsingRuleFormState> {
