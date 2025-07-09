@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
@@ -138,7 +137,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         <span className="text-sm">دمت - الجبوب - الشارع العام</span>
                         <MapPin size={16}/>
                     </div>
-                    <div className="bg-[#ffaa00] text-[#0033CC] font-bold px-3 py-1 rounded-full text-xs flex items-center gap-2">
+                    <div className="bg-[#ffaa00] text-[#0033CC] font-bold px-3 py-1 rounded-full text-xs flex items-center justify-center gap-2">
                          <Phone size={14} className="transform -scale-x-100"/>
                         <span>714254621 - 733465111 - 771195040</span>
                     </div>
@@ -163,9 +162,9 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
                 {/* Client Info */}
                 <div className="flex border-2 border-black rounded-lg p-1.5 items-center text-sm gap-2">
-                    <span className="bg-[#0033CC] text-white font-bold px-3 py-1 rounded">عميلنا</span>
+                    <div className="bg-[#0033CC] text-white font-bold px-3 h-8 rounded flex items-center justify-center">عميلنا</div>
                     <span className="flex-1 px-2 text-center font-semibold text-base">{client.name}</span>
-                    <span className="bg-[#0033CC] text-white font-bold px-3 py-1 rounded">رقم الحساب</span>
+                    <div className="bg-[#0033CC] text-white font-bold px-3 h-8 rounded flex items-center justify-center">رقم الحساب</div>
                     <span className="px-4 font-mono text-base">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
                 </div>
 
@@ -212,12 +211,12 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             {/* Footer */}
             <footer className="p-3 grid grid-cols-3 items-center text-xs">
                  <div className="text-left">
-                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm inline-block">
+                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm flex items-center justify-center">
                         {formattedTime} {formattedDate}
                     </div>
                  </div>
                  <div className="text-center">
-                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm inline-block">
+                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm flex items-center justify-center">
                         هذا الإشعار آلي ولا يحتاج ختم أو توقيع
                     </div>
                  </div>
