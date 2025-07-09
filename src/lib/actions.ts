@@ -1427,12 +1427,15 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             get(rulesRef),
         ]);
 
-        const incomingSnapshot = promiseResults[0];
-        const endpointsSnapshot = promiseResults[1];
-        const accountsSnapshot = promiseResults[2];
-        const settingsSnapshot = promiseResults[3];
-        const smsTransactionsSnapshot = promiseResults[4];
-        const rulesSnapshot = promiseResults[5];
+        const [
+            incomingSnapshot,
+            endpointsSnapshot,
+            accountsSnapshot,
+            settingsSnapshot,
+            smsTransactionsSnapshot,
+            rulesSnapshot,
+        ] = promiseResults;
+        
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
@@ -1448,7 +1451,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
             allSmsTransactions
-                .filter(tx => tx.parsed_at && new Date(tx.parsed_at).getTime() > twentyFourHoursAgo && tx.raw_sms)
+                .filter(tx => tx.raw_sms && tx.parsed_at && new Date(tx.parsed_at).getTime() > twentyFourHoursAgo)
                 .map(tx => tx.raw_sms.trim())
         );
         
@@ -1456,8 +1459,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let processedCount = 0;
         let duplicateCount = 0;
         let customSuccessCount = 0;
-        let regexSuccessCount = 0;
-        let aiSuccessCount = 0;
+        // let regexSuccessCount = 0;
+        // let aiSuccessCount = 0;
         let failedCount = 0;
 
         const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
@@ -1505,17 +1508,21 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 if (parsed) customSuccessCount++;
             }
 
-            // Stage 2: Static Regex Parser
+            // Stage 2: Static Regex Parser (Temporarily disabled)
+            /*
             if (!parsed) {
                 parsed = parseSms(trimmedSmsBody);
                 if (parsed) regexSuccessCount++;
             }
+            */
             
             // Stage 3: AI Parser (if everything else fails)
+            /*
             if (!parsed) {
                 parsed = await parseSmsWithAi(trimmedSmsBody, settings?.gemini_api_key || '');
                 if (parsed) aiSuccessCount++;
             }
+            */
             
             if (parsed) {
                 updates[`/sms_transactions/${newTxId}`] = {
@@ -1565,7 +1572,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Processed ${processedCount} message(s): ${customSuccessCount} by custom, ${regexSuccessCount} by regex, ${aiSuccessCount} by AI, ${failedCount} failed.`;
+        let message = `Processed ${processedCount} message(s): ${customSuccessCount} by custom rules, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;
         }
