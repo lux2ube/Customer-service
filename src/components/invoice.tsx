@@ -91,8 +91,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const isDeposit = transaction.type === 'Deposit';
     const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
     
-    const senderName = !isDeposit ? client.name : (transaction.notes || 'غير محدد');
-    const receiverName = isDeposit ? client.name : (transaction.notes || 'غير محدد');
+    const senderName = !isDeposit ? (transaction.client_wallet_address || 'غير محدد') : client.name;
+    const receiverName = isDeposit ? (transaction.client_wallet_address || 'غير محدد') : client.name;
 
     const formatCurrency = (value: number | undefined) => {
         if (value === undefined || value === null) return 'N/A';
@@ -142,23 +142,23 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 
                 {/* Title Bar */}
                 <div style={{ backgroundColor: '#0033CC' }} className="text-white p-2 rounded-lg flex justify-between items-center">
-                    <div className="border border-white rounded-md px-3 py-1 text-center">
+                    <div className="border border-white rounded-md px-3 py-1 text-center flex items-center justify-center">
                         <p className="text-sm font-semibold">التاريخ : {formattedDate}</p>
                     </div>
-                    <div className="flex-1 text-center">
+                    <div className="flex-1 text-center flex items-center justify-center">
                       <h2 className="text-2xl font-bold">{title}</h2>
                     </div>
-                    <div className="border border-white rounded-md px-3 py-1 text-center">
+                    <div className="border border-white rounded-md px-3 py-1 text-center flex items-center justify-center">
                         <p className="text-sm font-semibold">رقم المستند : {docNumber}</p>
                     </div>
                 </div>
 
                 {/* Client Info */}
-                <div className="flex border-2 border-black rounded-lg p-1.5 items-center text-sm gap-2">
-                    <div className="bg-[#0033CC] text-white font-bold px-3 h-8 rounded flex items-center justify-center">عميلنا</div>
-                    <span className="flex-1 px-2 text-center font-semibold text-base">{client.name}</span>
-                    <div className="bg-[#0033CC] text-white font-bold px-3 h-8 rounded flex items-center justify-center">رقم الحساب</div>
-                    <span className="px-4 font-mono text-base">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
+                <div className="flex border-2 border-black rounded-lg p-1.5 items-stretch text-sm gap-2">
+                    <div className="bg-[#0033CC] text-white font-bold px-3 h-auto rounded flex items-center justify-center">عميلنا</div>
+                    <span className="flex-1 px-2 text-center font-semibold text-base self-center">{client.name}</span>
+                    <div className="bg-[#0033CC] text-white font-bold px-3 h-auto rounded flex items-center justify-center">رقم الحساب</div>
+                    <span className="px-4 font-mono text-base self-center">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
                 </div>
 
                 {/* What you Sent / Received */}
@@ -219,18 +219,10 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="border-2 border-black rounded-lg p-2">
                     <div className="text-center font-bold text-sm underline mb-2">البيان</div>
                     <div className="grid grid-cols-2 gap-x-4 text-sm px-4">
-                        <div className="flex justify-between"><span>رقم الحوالة:</span> <span className="font-mono font-semibold">{transaction.remittance_number || 'N/A'}</span></div>
-                         <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">{sourceName}</span></div>
-                        <div className="flex justify-between"><span>المستلم:</span> <span className="font-semibold">{receiverName}</span></div>
-                        <div className="flex justify-between"><span>المرسل:</span> <span className="font-semibold">{senderName}</span></div>
-                         <div className="col-span-2 flex justify-between items-center">
-                            <span>Hash:</span> 
-                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span>
-                        </div>
-                        <div className="col-span-2 flex justify-between items-center">
-                            <span>Client Wallet:</span> 
-                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.client_wallet_address || 'N/A'}</span>
-                        </div>
+                        <div className="col-span-2 flex justify-between"><span>Hash:</span> <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">{sourceName}</span></div>
+                        <div className="flex justify-between"><span>المستلم:</span> <span className="font-semibold break-all">{receiverName}</span></div>
+                        <div className="flex justify-between"><span>المرسل:</span> <span className="font-semibold break-all">{senderName}</span></div>
                     </div>
                 </div>
             </main>
