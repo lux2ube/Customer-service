@@ -92,8 +92,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const isDeposit = transaction.type === 'Deposit';
     const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
     
-    // For a DEPOSIT (dائن), the SENDER is the external party, and the RECEIVER is our client.
-    // For a WITHDRAW (مدين), the SENDER is our client, and the RECEIVER is the external party.
     const senderName = !isDeposit ? client.name : (transaction.notes || 'غير محدد');
     const receiverName = isDeposit ? client.name : (transaction.notes || 'غير محدد');
 
@@ -116,6 +114,13 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const formattedDate = format(new Date(transaction.date), 'yyyy-MM-dd');
     const formattedTime = format(new Date(transaction.date), 'hh:mm a');
     const docNumber = transaction.id.slice(-6).toUpperCase();
+
+    const renderFinancialRow = (label: string, value: string, isMono = false) => (
+        <div className="flex justify-between border-b last:border-b-0 border-gray-200 py-1.5 px-2 text-sm">
+            <span className="font-semibold">{label}</span>
+            <span className={cn(isMono && 'font-mono tracking-wider', "font-bold")}>{value}</span>
+        </div>
+    );
 
     return (
         <div ref={ref} dir="rtl" className="w-[761px] bg-white shadow-lg font-cairo border-2 border-gray-300">
@@ -144,12 +149,14 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             <main className="p-3 space-y-2">
                 
                 {/* Title Bar */}
-                <div style={{ backgroundColor: '#0033CC' }} className="text-white p-2 rounded-lg flex justify-between items-center text-center">
-                    <div className="border border-white rounded-md px-3 py-1">
+                <div style={{ backgroundColor: '#0033CC' }} className="text-white p-2 rounded-lg flex justify-between items-center">
+                    <div className="border border-white rounded-md px-3 py-1 text-center">
                         <p className="text-sm font-semibold">التاريخ : {formattedDate}</p>
                     </div>
-                    <h2 className="text-2xl font-bold">{title}</h2>
-                    <div className="border border-white rounded-md px-3 py-1">
+                    <div className="flex-1 text-center">
+                      <h2 className="text-2xl font-bold">{title}</h2>
+                    </div>
+                    <div className="border border-white rounded-md px-3 py-1 text-center">
                         <p className="text-sm font-semibold">رقم المستند : {docNumber}</p>
                     </div>
                 </div>
@@ -167,16 +174,14 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     نود إشعاركم أننا قيدنا لحسابكم لدينا حسب التفاصيل التالية
                 </div>
 
-                {/* Amount details */}
-                <div className="grid grid-cols-2 gap-2 text-center text-sm">
-                    <div className="border-2 border-black rounded-lg overflow-hidden">
-                        <div className="bg-gray-200 p-1 font-bold">مبلغ الحساب</div>
-                        <div className="p-2 font-semibold font-mono text-base">{formatCurrency(transaction.amount)}</div>
-                    </div>
-                    <div className="border-2 border-black rounded-lg overflow-hidden">
-                        <div className="bg-gray-200 p-1 font-bold">عملة الحساب</div>
-                        <div className="p-2 font-semibold text-base">{getCurrencyName(transaction.currency)}</div>
-                    </div>
+                {/* Financial details */}
+                <div className="border-2 border-black rounded-lg p-2">
+                    {renderFinancialRow("العملة:", getCurrencyName(transaction.currency))}
+                    {renderFinancialRow("المبلغ:", `${formatCurrency(transaction.amount)}`, true)}
+                    {renderFinancialRow("المبلغ بالدولار:", `$${formatCurrency(transaction.amount_usd)}`, true)}
+                    {transaction.fee_usd > 0 && renderFinancialRow("الرسوم بالدولار:", `$${formatCurrency(transaction.fee_usd)}`, true)}
+                    {transaction.expense_usd && transaction.expense_usd > 0 && renderFinancialRow("مصروفات بالدولار:", `$${formatCurrency(transaction.expense_usd)}`, true)}
+                    {renderFinancialRow("المبلغ النهائي USDT:", `${formatCurrency(transaction.amount_usdt)}`, true)}
                 </div>
 
                 {/* Amount in words */}
@@ -192,30 +197,33 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                          <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">{sourceName}</span></div>
                         <div className="flex justify-between"><span>المستلم:</span> <span className="font-semibold">{receiverName}</span></div>
                         <div className="flex justify-between"><span>المرسل:</span> <span className="font-semibold">{senderName}</span></div>
-                         <div className="col-span-2 flex justify-between">
+                         <div className="col-span-2 flex justify-between items-center">
                             <span>Hash:</span> 
-                            <span className="font-mono text-xs break-all text-left" dir="ltr">{transaction.hash || 'N/A'}</span>
+                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span>
                         </div>
-                        <div className="col-span-2 flex justify-between">
+                        <div className="col-span-2 flex justify-between items-center">
                             <span>Client Wallet:</span> 
-                            <span className="font-mono text-xs break-all text-left" dir="ltr">{transaction.client_wallet_address || 'N/A'}</span>
+                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.client_wallet_address || 'N/A'}</span>
                         </div>
                     </div>
                 </div>
             </main>
             
             {/* Footer */}
-            <footer className="p-3 flex justify-between items-center text-xs">
-                <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm">
-                    {formattedTime} {formattedDate}
-                </div>
-                <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm">
-                    هذا الإشعار آلي ولا يحتاج ختم أو توقيع
-                </div>
+            <footer className="p-3 grid grid-cols-3 items-center text-xs">
+                 <div className="text-left">
+                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm inline-block">
+                        {formattedTime} {formattedDate}
+                    </div>
+                 </div>
+                 <div className="text-center">
+                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm inline-block">
+                        هذا الإشعار آلي ولا يحتاج ختم أو توقيع
+                    </div>
+                 </div>
+                 <div />
             </footer>
         </div>
     );
 });
 Invoice.displayName = 'Invoice';
-
-    
