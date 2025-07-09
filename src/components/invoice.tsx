@@ -51,7 +51,9 @@ const toArabicWords = (num: number): string => {
             const ten = Math.floor(num / 10);
             if (unit > 0) {
                 words.push(units[unit]);
-                words.push('و' + tens[ten]);
+                if (ten > 0) {
+                     words.push('و' + tens[ten]);
+                }
             } else {
                 words.push(tens[ten]);
             }
@@ -89,7 +91,10 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     
     const isDeposit = transaction.type === 'Deposit';
     const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
-    const senderName = isDeposit ? (transaction.notes || 'غير محدد') : client.name;
+    
+    // For a DEPOSIT (dائن), the SENDER is the external party, and the RECEIVER is our client.
+    // For a WITHDRAW (مدين), the SENDER is our client, and the RECEIVER is the external party.
+    const senderName = !isDeposit ? client.name : (transaction.notes || 'غير محدد');
     const receiverName = isDeposit ? client.name : (transaction.notes || 'غير محدد');
 
     const formatCurrency = (value: number | undefined) => {
@@ -97,14 +102,16 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         return new Intl.NumberFormat('en-US', {useGrouping: true}).format(value);
     }
     const getCurrencyName = (currencyCode: string) => {
-        switch(currencyCode.toUpperCase()) {
+        switch(currencyCode?.toUpperCase()) {
             case 'YER': return 'يمني';
             case 'SAR': return 'سعودي';
             case 'USD': return 'دولار';
             case 'USDT': return 'USDT';
-            default: return currencyCode;
+            default: return currencyCode || '';
         }
     }
+    
+    const sourceName = transaction.bankAccountName || transaction.cryptoWalletName || "المركز الرئيسي";
 
     const formattedDate = format(new Date(transaction.date), 'yyyy-MM-dd');
     const formattedTime = format(new Date(transaction.date), 'hh:mm a');
@@ -152,7 +159,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <span className="bg-[#0033CC] text-white font-bold px-3 py-1 rounded">عميلنا</span>
                     <span className="flex-1 px-2 text-center font-semibold text-base">{client.name}</span>
                     <span className="bg-[#0033CC] text-white font-bold px-3 py-1 rounded">رقم الحساب</span>
-                    <span className="px-4 font-mono text-base">{transaction.bankAccountId}</span>
+                    <span className="px-4 font-mono text-base">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
                 </div>
 
                 {/* Notification message */}
@@ -163,12 +170,12 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 {/* Amount details */}
                 <div className="grid grid-cols-2 gap-2 text-center text-sm">
                     <div className="border-2 border-black rounded-lg overflow-hidden">
-                        <div className="bg-gray-200 p-1 font-bold">عملة الحساب</div>
-                        <div className="p-2 font-semibold text-base">{getCurrencyName(transaction.currency)}</div>
-                    </div>
-                    <div className="border-2 border-black rounded-lg overflow-hidden">
                         <div className="bg-gray-200 p-1 font-bold">مبلغ الحساب</div>
                         <div className="p-2 font-semibold font-mono text-base">{formatCurrency(transaction.amount)}</div>
+                    </div>
+                    <div className="border-2 border-black rounded-lg overflow-hidden">
+                        <div className="bg-gray-200 p-1 font-bold">عملة الحساب</div>
+                        <div className="p-2 font-semibold text-base">{getCurrencyName(transaction.currency)}</div>
                     </div>
                 </div>
 
@@ -182,9 +189,17 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <div className="text-center font-bold text-sm underline mb-2">البيان</div>
                     <div className="grid grid-cols-2 gap-x-4 text-sm px-4">
                         <div className="flex justify-between"><span>رقم الحوالة:</span> <span className="font-mono font-semibold">{transaction.remittance_number || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">المركز الرئيسي</span></div>
+                         <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">{sourceName}</span></div>
                         <div className="flex justify-between"><span>المستلم:</span> <span className="font-semibold">{receiverName}</span></div>
                         <div className="flex justify-between"><span>المرسل:</span> <span className="font-semibold">{senderName}</span></div>
+                         <div className="col-span-2 flex justify-between">
+                            <span>Hash:</span> 
+                            <span className="font-mono text-xs break-all text-left" dir="ltr">{transaction.hash || 'N/A'}</span>
+                        </div>
+                        <div className="col-span-2 flex justify-between">
+                            <span>Client Wallet:</span> 
+                            <span className="font-mono text-xs break-all text-left" dir="ltr">{transaction.client_wallet_address || 'N/A'}</span>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -202,3 +217,5 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     );
 });
 Invoice.displayName = 'Invoice';
+
+    
