@@ -92,8 +92,11 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const isDeposit = transaction.type === 'Deposit';
     const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
     
-    const senderName = !isDeposit ? (transaction.client_wallet_address || 'غير محدد') : client.name;
-    const receiverName = isDeposit ? (transaction.client_wallet_address || 'غير محدد') : client.name;
+    // Deposit: Client sends local currency, gets USDT.
+    // Withdraw: Client sends USDT, gets local currency.
+    const senderName = isDeposit ? client.name : (transaction.client_wallet_address || 'N/A');
+    const receiverName = isDeposit ? (transaction.client_wallet_address || 'N/A') : client.name;
+    const sourceAccount = isDeposit ? transaction.bankAccountName : transaction.cryptoWalletName;
 
     const formatCurrency = (value: number | undefined) => {
         if (value === undefined || value === null) return 'N/A';
@@ -109,164 +112,130 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         }
     }
     
-    const sourceName = transaction.bankAccountName || transaction.cryptoWalletName || "المركز الرئيسي";
-
     const formattedDate = format(new Date(transaction.date), 'yyyy-MM-dd');
     const formattedTime = format(new Date(transaction.date), 'hh:mm a');
     const docNumber = transaction.id.slice(-6).toUpperCase();
 
     return (
-        <div ref={ref} dir="rtl" className="w-[761px] bg-white shadow-lg font-cairo border-2 border-gray-300">
+        <div ref={ref} dir="rtl" className="w-[761px] min-h-[1080px] h-auto bg-white shadow-xl font-cairo border-2 border-gray-200 mx-auto p-8 text-gray-800 flex flex-col">
             {/* Header */}
-            <header className="bg-[#0033CC] text-white p-3 flex justify-between items-center relative">
+            <header className="flex justify-between items-center pb-6 border-b-2 border-gray-200">
                 <div className="flex items-center gap-4">
                     <IbnJaberLogo/>
-                    <div className="pt-2">
-                        <h1 className="text-2xl font-bold">ابن جابر اكسبرس</h1>
-                        <p className="text-base">للصرافة والتحويلات</p>
+                    <div>
+                        <h1 className="text-2xl font-bold text-[#0033CC]">ابن جابر اكسبرس</h1>
+                        <p className="text-sm text-gray-600">للصرافة والتحويلات</p>
                     </div>
                 </div>
-                <div className="text-left flex flex-col items-end gap-2">
-                     <div className="flex items-center justify-center gap-2">
-                        <span className="text-sm">دمت - الجبوب - الشارع العام</span>
-                        <MapPin size={16}/>
-                    </div>
-                    <div className="bg-[#ffaa00] text-[#0033CC] font-bold px-3 py-1 rounded-full text-xs flex items-center justify-center gap-2">
-                         <Phone size={14} className="transform -scale-x-100"/>
-                        <span>714254621 - 733465111 - 771195040</span>
-                    </div>
+                <div className="text-left text-sm">
+                    <p className="flex items-center justify-end gap-2"><MapPin size={14} /> دمت - الجبوب - الشارع العام</p>
+                    <p className="flex items-center justify-end gap-2"><Phone size={14} /> 714254621 - 733465111</p>
                 </div>
             </header>
 
-            {/* Main Content */}
-            <main className="p-3 space-y-4">
-                
-                {/* Title Bar */}
-                <div style={{ backgroundColor: '#0033CC' }} className="text-white p-2 rounded-lg flex justify-between items-center">
-                    <div className="border border-white rounded-md px-3 py-1 text-center flex items-center justify-center">
-                        <p className="text-sm font-semibold">التاريخ : {formattedDate}</p>
-                    </div>
-                    <div className="flex-1 text-center flex items-center justify-center">
-                      <h2 className="text-2xl font-bold">{title}</h2>
-                    </div>
-                    <div className="border border-white rounded-md px-3 py-1 text-center flex items-center justify-center">
-                        <p className="text-sm font-semibold">رقم المستند : {docNumber}</p>
-                    </div>
+            {/* Title & Meta Info */}
+            <section className="mt-8 grid grid-cols-2 gap-4">
+                <div>
+                    <h2 className="text-3xl font-bold text-[#0033CC]">{title}</h2>
+                    <p className="text-lg text-gray-500">{isDeposit ? 'Credit Voucher' : 'Debit Voucher'}</p>
                 </div>
-
-                {/* Client Info */}
-                <div className="flex border-2 border-black rounded-lg p-1.5 items-stretch text-sm gap-2">
-                    <div className="bg-[#0033CC] text-white font-bold px-3 h-auto rounded flex items-center justify-center">عميلنا</div>
-                    <span className="flex-1 px-2 text-center font-semibold text-base self-center">{client.name}</span>
-                    <div className="bg-[#0033CC] text-white font-bold px-3 h-auto rounded flex items-center justify-center">رقم الحساب</div>
-                    <span className="px-4 font-mono text-base self-center">{transaction.bankAccountId || transaction.cryptoWalletId || 'N/A'}</span>
+                <div className="text-left border-l-4 border-[#0033CC] pl-4">
+                    <p><span className="font-bold">رقم المستند:</span> <span className="font-mono">{docNumber}</span></p>
+                    <p><span className="font-bold">التاريخ:</span> <span className="font-mono">{formattedDate}</span></p>
+                    <p><span className="font-bold">الوقت:</span> <span className="font-mono">{formattedTime}</span></p>
                 </div>
+            </section>
 
-                {/* What you Sent / Received */}
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                    {/* What Client Sent */}
-                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[120px]">
-                        <h3 className="font-bold text-base underline mb-2">ما أرسلته</h3>
-                        <div className="text-center">
-                            <p className="font-mono font-bold text-2xl text-gray-700 tracking-wider">
-                                {isDeposit ? 
-                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` :
-                                    (
-                                        <>
-                                            <span className="text-gray-500">USDT </span>
-                                            <span>{formatCurrency(transaction.amount_usdt)}</span>
-                                        </>
-                                    )
-                                }
-                            </p>
-                            {isDeposit && (
-                                <p className="text-xs text-muted-foreground font-mono mt-1">
-                                    (يعادل ${formatCurrency(transaction.amount_usd)})
-                                </p>
-                            )}
-                        </div>
-                    </div>
+            {/* Billed to */}
+            <section className="mt-8 rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-500 mb-2">فاتورة إلى / Billed To</h3>
+                <p className="text-lg font-bold">{client.name}</p>
+                <p className="text-sm text-gray-600 font-mono">Client ID: {client.id}</p>
+            </section>
 
-                    {/* What Client Received */}
-                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[120px]">
-                        <h3 className="font-bold text-base underline mb-2">ما استلمته</h3>
-                        <div className="text-center">
-                            <p className="font-mono font-bold text-2xl tracking-wider">
-                                {isDeposit ?
-                                    (
-                                        <>
-                                            <span className="text-gray-500">USDT </span>
-                                            <span className="text-green-600">{formatCurrency(transaction.amount_usdt)}</span>
-                                        </>
-                                    ) :
-                                    <span className="text-green-600">{`${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}</span>
-                                }
-                            </p>
-                            {!isDeposit && (
-                                <p className="text-xs text-muted-foreground font-mono mt-1">
-                                    (يعادل ${formatCurrency(transaction.amount_usd)})
-                                </p>
-                            )}
-                        </div>
+            {/* Financial Table */}
+            <section className="mt-8">
+                <table className="w-full text-sm text-right border-collapse">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-3 font-bold text-gray-600 border">البيان / Description</th>
+                            <th className="p-3 font-bold text-gray-600 text-left border">المبلغ / Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr className="border-b">
+                            <td className="p-3 border">
+                                {isDeposit ? `المبلغ المُرسل (${transaction.currency})` : `المبلغ المُرسل (USDT)`}
+                            </td>
+                            <td className="p-3 text-left font-mono text-lg border">
+                                {isDeposit ? `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` : `${formatCurrency(transaction.amount_usdt)} USDT`}
+                            </td>
+                        </tr>
+                        <tr className="border-b bg-green-50">
+                            <td className="p-3 font-bold border">
+                                {isDeposit ? `المبلغ المستلم (USDT)` : `المبلغ المستلم (${transaction.currency})`}
+                            </td>
+                            <td className="p-3 text-left font-mono text-xl text-green-700 font-bold border">
+                                {isDeposit ? `${formatCurrency(transaction.amount_usdt)} USDT` : `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}
+                            </td>
+                        </tr>
+                        {(transaction.fee_usd > 0 || (transaction.expense_usd && transaction.expense_usd > 0)) && (
+                            <tr className="border-b text-xs text-gray-500">
+                                <td className="p-3 border">الرسوم والمصاريف / Fees & Expenses (USD)</td>
+                                <td className="p-3 text-left font-mono border">
+                                    {transaction.fee_usd > 0 && `Fee: $${formatCurrency(transaction.fee_usd)}`}
+                                    {(transaction.expense_usd && transaction.expense_usd > 0) && ` Expense: $${formatCurrency(transaction.expense_usd)}`}
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </section>
+            
+            {/* Tafqeet */}
+            <section className="mt-4 rounded-lg bg-gray-100 p-4 text-center">
+                <p className="font-bold">{tafqeet(transaction.amount, transaction.currency)}</p>
+            </section>
+
+            {/* Transaction Details */}
+            <section className="mt-8">
+                <h3 className="text-lg font-bold text-[#0033CC] mb-4">تفاصيل العملية / Transaction Details</h3>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm p-4 border rounded-lg">
+                    <div className="col-span-2">
+                        <p className="font-bold">المرسل / Sender</p>
+                        <p className="text-gray-700 break-all">{senderName}</p>
                     </div>
+                    <div className="col-span-2">
+                        <p className="font-bold">المستلم / Receiver</p>
+                        <p className="text-gray-700 break-all">{receiverName}</p>
+                    </div>
+                    <div>
+                        <p className="font-bold">مصدر العملية / Source Account</p>
+                        <p className="text-gray-700">{sourceAccount || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p className="font-bold">رقم الحوالة / Remittance No.</p>
+                        <p className="text-gray-700 font-mono">{transaction.remittance_number || 'N/A'}</p>
+                    </div>
+                    <div className="col-span-2">
+                        <p className="font-bold">Transaction Hash</p>
+                        <p className="font-mono text-xs break-all text-left" dir="ltr">{transaction.hash || 'N/A'}</p>
+                    </div>
+                    {transaction.notes && (
+                        <div className="col-span-2">
+                            <p className="font-bold">ملاحظات / Notes</p>
+                            <p className="text-gray-700">{transaction.notes}</p>
+                        </div>
+                    )}
                 </div>
-                
-                 {/* Fee and Expense Details */}
-                {(transaction.fee_usd > 0 || (transaction.expense_usd && transaction.expense_usd > 0)) && (
-                    <div className="border-2 border-black rounded-lg p-1.5 text-xs text-center font-semibold">
-                        <span>تفاصيل العملية: </span>
-                        {transaction.fee_usd > 0 && <span>العمولة ${formatCurrency(transaction.fee_usd)}</span>}
-                        {(transaction.fee_usd > 0 && transaction.expense_usd && transaction.expense_usd > 0) && <span className="mx-2">|</span>}
-                        {(transaction.expense_usd && transaction.expense_usd > 0) && <span>مصروفات ${formatCurrency(transaction.expense_usd)}</span>}
-                    </div>
-                )}
-
-                {/* Amount in words */}
-                <div className="border-2 border-black rounded-lg p-2 text-center text-sm font-bold">
-                    {tafqeet(transaction.amount, transaction.currency)}
-                </div>
-
-                {/* البيان section */}
-                <div className="border-2 border-black rounded-lg p-2">
-                    <div className="text-center font-bold text-sm underline mb-2">البيان</div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm px-4">
-                        <div className="col-span-2 flex justify-between items-center">
-                            <span className="font-semibold">Hash:</span>
-                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="font-semibold">المصدر:</span>
-                            <span className="font-medium">{sourceName}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="font-semibold">المستلم:</span>
-                            <span className="font-medium break-all">{receiverName}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="font-semibold">المرسل:</span>
-                            <span className="font-medium break-all">{senderName}</span>
-                        </div>
-                    </div>
-                </div>
-            </main>
+            </section>
             
             {/* Footer */}
-            <footer className="p-3 grid grid-cols-3 items-center text-xs">
-                 <div className="text-left">
-                    <div className="bg-[#0033CC] text-white font-semibold px-3 py-1.5 rounded-lg text-sm flex items-center justify-center">
-                        {formattedTime} {formattedDate}
-                    </div>
-                 </div>
-                 <div className="text-center">
-                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm flex items-center justify-center">
-                        هذا الإشعار آلي ولا يحتاج ختم أو توقيع
-                    </div>
-                 </div>
-                 <div />
+            <footer className="mt-auto pt-8 text-center text-xs text-gray-500">
+                <p className="bg-[#0033CC] text-white p-2 rounded-md inline-block">هذا الإشعار آلي ولا يحتاج ختم أو توقيع</p>
+                <p className="mt-2">شكرًا لتعاملكم معنا</p>
             </footer>
         </div>
     );
 });
 Invoice.displayName = 'Invoice';
-
-
