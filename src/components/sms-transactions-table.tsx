@@ -124,7 +124,7 @@ export function SmsTransactionsTable() {
     };
 
     return (
-    <div dir="rtl">
+    <div>
       <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>

@@ -122,7 +122,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
     };
 
     return (
-        <div dir="rtl" className="space-y-4">
+        <div className="space-y-4">
             <Card>
                 <form action={handleAddSubmit} ref={formRef}>
                     <CardHeader>

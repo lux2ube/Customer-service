@@ -29,12 +29,12 @@ const parsers = [
     },
     {
         name: 'Credit (Idif) for Hawala exchange',
-        regex: /اضيف ([\d,٫.]+)р\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
+        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
         name: 'Credit (Idif) from person with optional phone',
-        regex: /اضيف ([\d,٫.]+)р\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?/,
+        regex: /اضيف ([\d,٫.]+)ر\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     // --- DEBIT (KHASM) ---
@@ -60,12 +60,12 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) from ATM - YKB',
-        regex: /خصم ([\d,٫.]+)р\.ي سحب من الصراف الآلي YKB رص:/,
+        regex: /خصم ([\d,٫.]+)ر\.ي سحب من الصراف الآلي YKB رص:/,
         map: { type: 'debit', amount: 1, person: 'YKB ATM' }
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR - no space',
-        regex: /خصم ([\d,٫.]+)р\.س سحب نقدي رص:/,
+        regex: /خصم ([\d,٫.]+)ر\.س سحب نقدي رص:/,
         map: { type: 'debit', amount: 1, person: 'Cash Withdrawal' }
     },
     {
