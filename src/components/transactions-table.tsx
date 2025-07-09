@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -14,7 +13,7 @@ import type { Transaction } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X } from 'lucide-react';
+import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -30,11 +29,14 @@ interface TransactionsTableProps {
     onFilteredDataChange: (data: Transaction[]) => void;
 }
 
+const ITEMS_PER_PAGE = 50;
+
 export function TransactionsTable({ transactions, loading, onFilteredDataChange }: TransactionsTableProps) {
   // Filter and sort state
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
+  const [currentPage, setCurrentPage] = React.useState(1);
 
   const handleSort = (key: SortableKeys) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -126,7 +128,17 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
 
   React.useEffect(() => {
     onFilteredDataChange(filteredAndSortedTransactions);
+    setCurrentPage(1);
   }, [filteredAndSortedTransactions, onFilteredDataChange]);
+
+  const totalPages = Math.ceil(filteredAndSortedTransactions.length / ITEMS_PER_PAGE);
+
+  const paginatedTransactions = React.useMemo(() => {
+    return filteredAndSortedTransactions.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+    );
+  }, [filteredAndSortedTransactions, currentPage]);
 
   const getStatusVariant = (status: Transaction['status']) => {
     switch(status) {
@@ -233,8 +245,8 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                     Loading transactions...
                   </TableCell>
                 </TableRow>
-              ) : filteredAndSortedTransactions.length > 0 ? (
-                filteredAndSortedTransactions.map(tx => (
+              ) : paginatedTransactions.length > 0 ? (
+                paginatedTransactions.map(tx => (
                   <TableRow key={tx.id}>
                     <TableCell>
                       {tx.date && !isNaN(new Date(tx.date).getTime())
@@ -277,6 +289,29 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
               )}
             </TableBody>
           </Table>
+        </div>
+        <div className="flex items-center justify-between py-4">
+            <div className="text-sm text-muted-foreground">
+                Page {totalPages > 0 ? currentPage : 0} of {totalPages}
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(1)} disabled={currentPage === 1 || totalPages === 0}>
+                    <span className="sr-only">Go to first page</span>
+                    <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || totalPages === 0}>
+                    <span className="sr-only">Go to previous page</span>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0}>
+                    <span className="sr-only">Go to next page</span>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0}>
+                    <span className="sr-only">Go to last page</span>
+                    <ChevronsRight className="h-4 w-4" />
+                </Button>
+            </div>
         </div>
     </>
   );

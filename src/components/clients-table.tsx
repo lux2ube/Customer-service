@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -15,7 +14,7 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import Link from 'next/link';
-import { Pencil } from 'lucide-react';
+import { Pencil, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { normalizeArabic } from '@/lib/utils';
 
@@ -25,8 +24,11 @@ interface ClientsTableProps {
     onFilteredDataChange: (data: Client[]) => void;
 }
 
+const ITEMS_PER_PAGE = 50;
+
 export function ClientsTable({ clients, loading, onFilteredDataChange }: ClientsTableProps) {
   const [search, setSearch] = React.useState('');
+  const [currentPage, setCurrentPage] = React.useState(1);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -62,7 +64,17 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
 
   React.useEffect(() => {
     onFilteredDataChange(filteredClients);
+    setCurrentPage(1);
   }, [filteredClients, onFilteredDataChange]);
+
+  const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
+
+  const paginatedClients = React.useMemo(() => {
+      return filteredClients.slice(
+          (currentPage - 1) * ITEMS_PER_PAGE,
+          currentPage * ITEMS_PER_PAGE
+      );
+  }, [filteredClients, currentPage]);
 
 
   const getStatusVariant = (status: Client['verification_status']) => {
@@ -103,8 +115,8 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
                     Loading clients...
                   </TableCell>
                 </TableRow>
-              ) : filteredClients.length > 0 ? (
-                filteredClients.map(client => (
+              ) : paginatedClients.length > 0 ? (
+                paginatedClients.map(client => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.name}</TableCell>
                     <TableCell>{Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}</TableCell>
@@ -141,6 +153,29 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
               )}
             </TableBody>
           </Table>
+        </div>
+        <div className="flex items-center justify-between py-4">
+            <div className="text-sm text-muted-foreground">
+                Page {totalPages > 0 ? currentPage : 0} of {totalPages}
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(1)} disabled={currentPage === 1 || totalPages === 0}>
+                    <span className="sr-only">Go to first page</span>
+                    <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || totalPages === 0}>
+                    <span className="sr-only">Go to previous page</span>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0}>
+                    <span className="sr-only">Go to next page</span>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0}>
+                    <span className="sr-only">Go to last page</span>
+                    <ChevronsRight className="h-4 w-4" />
+                </Button>
+            </div>
         </div>
       </>
   );
