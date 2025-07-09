@@ -50,9 +50,7 @@ const JournalEntrySchema = z.object({
     debit_account: z.string().min(1, { message: 'Please select a debit account.' }),
     credit_account: z.string().min(1, { message: 'Please select a credit account.' }),
     debit_amount: z.coerce.number().gt(0, { message: 'Debit amount must be positive.' }),
-    debit_currency: z.string(),
     credit_amount: z.coerce.number().gt(0, { message: 'Credit amount must be positive.' }),
-    credit_currency: z.string(),
     amount_usd: z.coerce.number().gt(0, { message: 'USD amount must be positive.' }),
 });
 
@@ -67,7 +65,7 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
         };
     }
 
-    const { date, description, debit_account, credit_account, debit_amount, debit_currency, credit_amount, credit_currency, amount_usd } = validatedFields.data;
+    const { date, description, debit_account, credit_account, debit_amount, credit_amount, amount_usd } = validatedFields.data;
 
     if (debit_account === credit_account) {
         return {
@@ -98,9 +96,7 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
             debit_account,
             credit_account,
             debit_amount,
-            debit_currency,
             credit_amount,
-            credit_currency,
             amount_usd,
             debit_account_name,
             credit_account_name,
@@ -386,8 +382,8 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
             // 1. Exact match = highest priority
             const aIsExact = aName === normalizedSearch;
             const bIsExact = bName === normalizedSearch;
-            if (aIsExact) return -1;
-            if (bIsExact) return 1;
+            if (aIsExact && !bIsExact) return -1;
+            if (!aIsExact && bIsExact) return 1;
 
             // 2. Starts with the search term = second highest priority
             const aStartsWith = aName.startsWith(normalizedSearch);
@@ -678,6 +674,7 @@ export async function createTransaction(transactionId: string | null, prevState:
             ]);
             
             if (!debitSnapshot.exists() || !creditSnapshot.exists() || !settingsSnapshot.exists()) {
+                console.error("Could not create journal entry: one or more accounts or settings not found.");
                 return;
             }
 
@@ -699,6 +696,7 @@ export async function createTransaction(transactionId: string | null, prevState:
             const creditRate = getRate(creditAccount.currency);
             
             if (debitRate === 0 || creditRate === 0) {
+                 console.error("Could not create journal entry: zero conversion rate.");
                  return;
             }
 
@@ -712,9 +710,7 @@ export async function createTransaction(transactionId: string | null, prevState:
                 debit_account: debitAccountId,
                 credit_account: creditAccountId,
                 debit_amount: debitAmount,
-                credit_currency: creditAccount.currency || 'USD',
                 credit_amount: creditAmount,
-                debit_currency: debitAccount.currency || 'USD',
                 amount_usd: amountUsd,
                 debit_account_name: debitAccount.name,
                 credit_account_name: creditAccount.name,
