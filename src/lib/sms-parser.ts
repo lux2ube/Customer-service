@@ -3,16 +3,15 @@ import type { ParsedSms } from '@/lib/types';
 
 // A list of parser configurations, ordered by priority.
 // Each parser has a regex and a map to extract data.
-// These have been made more flexible to handle RTL/LTR word reordering.
 const parsers = [
-    // --- CREDIT (IDIF/ADIFA) ---
-    // NEW: Handles "تم√√إضافة" format with unreliable word ordering due to RTL/LTR mixing.
-    // It uses lookaheads to find all parts, regardless of order, then captures them.
+    // This robust rule uses lookaheads to be order-independent, solving RTL/LTR jumbling issues.
     {
-        name: 'Credit (Tam Idafa) with checkmarks (Robust)',
-        regex: /^(?=.*تم\s*√{1,2}\s*إضافة\s*([\d,٫.]+))(?=.*من\s*(.*?)\s*رصيدك)/,
-        map: { type: 'credit', amount: 1, person: 2 }
+        name: 'Credit - Flexible RTL/LTR Mix',
+        // It finds a credit keyword & amount, and separately finds a sender after 'من' or 'المرسل'.
+        regex: /(?=.*(تم\s*(?:√{1,2})?\s*إضافة|أودعت|تم ايداع)\s*([\d,٫.]+))(?=.*(?:من|المرسل)\s+(.*?)\s*(?:رصيدك|الرسوم|الرصيد|بنجاح|لـ))/,
+        map: { type: 'credit', amount: 2, person: 3 }
     },
+    // --- CREDIT (IDIF/ADIFA) ---
     {
         name: 'Credit (Idif) conjoined currency from person',
         regex: /اضيف ([\d,٫.]+)ر\.[س|ي] تحويل مشترك رص:.*? من (.*)/,
@@ -36,11 +35,6 @@ const parsers = [
     {
         name: 'Credit (Idif) from person with optional phone',
         regex: /اضيف ([\d,٫.]+)р\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Tam Idaa) YER',
-        regex: /تم ايداع ([\d,٫.]+)\s*.*? لحسابكم المرسل (.*?) الرصيد/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     // --- DEBIT (KHASM) ---
@@ -130,11 +124,6 @@ const parsers = [
         regex: /[أا]ودع\/(.*?) لحسابك\s*([\d,٫.]+)/,
         map: { type: 'credit', person: 1, amount: 2 }
     },
-    {
-        name: 'Credit (Awdaat) from company',
-        regex: /أودعت ([\d,٫.]+) من (.*?) الرسوم .*? رصيدك/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
      {
         name: 'Credit (Tam Eidaa) YER via Agent',
         regex: /تم إيداع ([\d,٫.]+)ر\.ي عبر (.*?) رصيدك/,
@@ -178,12 +167,18 @@ export function parseSms(smsBody: string): ParsedSms | null {
 
                 // Amount must be a regex group
                 if (typeof parser.map.amount === 'number') {
-                    result.amount = cleanAndParseFloat(match[parser.map.amount]);
+                    const amountStr = match[parser.map.amount];
+                    if (amountStr) {
+                         result.amount = cleanAndParseFloat(amountStr);
+                    }
                 }
                 
                 // Person can be hardcoded or from regex
                 if (typeof parser.map.person === 'number') {
-                     result.person = match[parser.map.person].trim();
+                     const personStr = match[parser.map.person];
+                     if(personStr) {
+                         result.person = personStr.trim();
+                     }
                 } else {
                     result.person = parser.map.person;
                 }
