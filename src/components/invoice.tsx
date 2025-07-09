@@ -114,13 +114,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const formattedTime = format(new Date(transaction.date), 'hh:mm a');
     const docNumber = transaction.id.slice(-6).toUpperCase();
 
-    const renderFinancialRow = (label: string, value: string, isMono = false) => (
-        <div className="flex justify-between border-b last:border-b-0 border-gray-200 py-1.5 px-2 text-sm">
-            <span className="font-semibold">{label}</span>
-            <span className={cn(isMono && 'font-mono tracking-wider', "font-bold")}>{value}</span>
-        </div>
-    );
-
     return (
         <div ref={ref} dir="rtl" className="w-[761px] bg-white shadow-lg font-cairo border-2 border-gray-300">
             {/* Header */}
@@ -133,7 +126,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                 </div>
                 <div className="text-left flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-2">
+                     <div className="flex items-center justify-center gap-2">
                         <span className="text-sm">دمت - الجبوب - الشارع العام</span>
                         <MapPin size={16}/>
                     </div>
@@ -173,14 +166,47 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     نود إشعاركم أننا قيدنا لحسابكم لدينا حسب التفاصيل التالية
                 </div>
 
-                {/* Financial details */}
-                <div className="border-2 border-black rounded-lg p-2">
-                    {renderFinancialRow("العملة:", getCurrencyName(transaction.currency))}
-                    {renderFinancialRow("المبلغ:", `${formatCurrency(transaction.amount)}`, true)}
-                    {renderFinancialRow("المبلغ بالدولار:", `$${formatCurrency(transaction.amount_usd)}`, true)}
-                    {transaction.fee_usd > 0 && renderFinancialRow("الرسوم بالدولار:", `$${formatCurrency(transaction.fee_usd)}`, true)}
-                    {transaction.expense_usd && transaction.expense_usd > 0 && renderFinancialRow("مصروفات بالدولار:", `$${formatCurrency(transaction.expense_usd)}`, true)}
-                    {renderFinancialRow("المبلغ النهائي USDT:", `${formatCurrency(transaction.amount_usdt)}`, true)}
+                {/* Financial details - Compact */}
+                <div className="border-2 border-black rounded-lg p-2 text-sm space-y-2">
+                    {/* First Row */}
+                    <div className="flex justify-around items-center">
+                        <div>
+                            <span className="font-semibold">المبلغ: </span>
+                            <span className="font-mono font-bold tracking-wider">{`${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}</span>
+                        </div>
+                        <div className="h-4 border-l border-gray-400 mx-2"></div>
+                         <div>
+                            <span className="font-semibold">يعادل بالدولار: </span>
+                            <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.amount_usd)}`}</span>
+                        </div>
+                    </div>
+                    {/* Separator */}
+                    <div className="border-b border-gray-300 my-1"></div>
+                     {/* Second Row */}
+                    <div className="flex justify-around items-center">
+                         {(transaction.fee_usd > 0) && (
+                            <>
+                                <div>
+                                    <span className="font-semibold">الرسوم: </span>
+                                    <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.fee_usd)}`}</span>
+                                </div>
+                                <div className="h-4 border-l border-gray-400 mx-2"></div>
+                            </>
+                         )}
+                         {(transaction.expense_usd && transaction.expense_usd > 0) && (
+                             <>
+                                <div>
+                                    <span className="font-semibold">مصروفات: </span>
+                                    <span className="font-mono font-bold tracking-wider">{`$${formatCurrency(transaction.expense_usd)}`}</span>
+                                </div>
+                                <div className="h-4 border-l border-gray-400 mx-2"></div>
+                            </>
+                         )}
+                        <div>
+                            <span className="font-semibold text-base">النهائي USDT: </span>
+                            <span className="font-mono font-bold text-base tracking-wider">{`${formatCurrency(transaction.amount_usdt)}`}</span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Amount in words */}
