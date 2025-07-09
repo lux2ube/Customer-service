@@ -6,176 +6,96 @@ import { format } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
 import { CoinCashLogo } from "./coincash-logo";
-import { User, Wallet, Hash, CheckCircle, BrainCircuit, FileText, Landmark, Banknote, Calendar, Phone } from 'lucide-react';
+import { User, Wallet, Hash, CheckCircle, BrainCircuit, FileText, Landmark, Banknote, Calendar, Phone, ArrowLeftRight, Clock, Info, ShieldCheck } from 'lucide-react';
 import { ar } from 'date-fns/locale';
-
-// --- TAFQEET FUNCTION (Number to Arabic Words) ---
-const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
-const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
-const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
-
-function convertHundreds(n: number): string {
-    if (n === 0) return '';
-    if (n < 10) return ones[n];
-    if (n < 20) return teens[n - 10];
-    const unit = n % 10;
-    const ten = Math.floor(n / 10);
-    let result = tens[ten];
-    if (unit > 0) {
-        result = ones[unit] + ' و' + result;
-    }
-    return result;
-}
-
-function convertThousands(n: number): string {
-    if (n < 100) return convertHundreds(n);
-    if (n < 1000) {
-        const hundred = Math.floor(n / 100);
-        const remainder = n % 100;
-        let result = '';
-        if (hundred === 1) result = 'مئة';
-        else if (hundred === 2) result = 'مئتان';
-        else result = ones[hundred] + ' مئة';
-        
-        if (remainder > 0) {
-            result += ' و' + convertHundreds(remainder);
-        }
-        return result;
-    }
-    return '';
-}
-
-function tafqeet(num: number, currency: string): string {
-    if (num === null || num === undefined) return '';
-    const number = Math.floor(num);
-    if (number === 0) return 'صفر';
-
-    const currencies = {
-        YER: { single: 'ريال يمني', plural: 'ريالاً يمنياً' },
-        SAR: { single: 'ريال سعودي', plural: 'ريالاً سعودياً' },
-        USD: { single: 'دولار أمريكي', plural: 'دولاراً أمريكياً' },
-        USDT: { single: 'USDT', plural: 'USDT' }
-    };
-    const selectedCurrency = currencies[currency as keyof typeof currencies] || { single: currency, plural: currency };
-    
-    let words = [];
-    
-    const millions = Math.floor(number / 1_000_000);
-    if (millions > 0) {
-        words.push(convertThousands(millions) + ' مليون');
-    }
-    
-    const thousands = Math.floor((number % 1_000_000) / 1000);
-    if (thousands > 0) {
-        if (thousands === 1) words.push('ألف');
-        else if (thousands === 2) words.push('ألفان');
-        else if (thousands > 2 && thousands < 11) words.push(convertHundreds(thousands) + ' آلاف');
-        else words.push(convertHundreds(thousands) + ' ألف');
-    }
-    
-    const remainder = number % 1000;
-    if (remainder > 0) {
-        words.push(convertThousands(remainder));
-    }
-    
-    const joinedWords = words.join(' و');
-    if (!joinedWords) return '';
-
-    return `فقط ${joinedWords} ${selectedCurrency.plural} لا غير.`;
-}
-// --- END TAFQEET ---
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client }>(({ transaction, client }, ref) => {
     
     const isDeposit = transaction.type === 'Deposit';
     const transactionDate = new Date(transaction.date);
-    const hijriDate = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {day: 'numeric', month: 'long', year: 'numeric'}).format(transactionDate);
 
+    const formatAmount = (num: number) => {
+        return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+    }
+    
     return (
-        <div ref={ref} dir="rtl" className="w-[761px] h-[1080px] bg-white shadow-lg font-cairo border-2 border-gray-300 mx-auto flex flex-col p-4">
-
-            {/* Header */}
-            <header className="flex justify-between items-center pb-3 border-b-4 border-blue-800 bg-blue-700 text-white p-3">
-                <div className="text-right">
-                    <h2 className="text-2xl font-bold">كوين كاش للدفع الإلكتروني</h2>
-                    <p className="text-sm mt-1">صنعاء - شارع الخمسين</p>
-                </div>
-                <div className="text-left">
-                     <CoinCashLogo className="w-24 h-24" />
-                </div>
-            </header>
+        <div ref={ref} dir="rtl" className="w-[761px] h-[1080px] bg-gray-50 font-cairo p-6 flex flex-col justify-between">
+            <div>
+                {/* Header */}
+                <header className="flex justify-between items-center pb-4 border-b-2 border-gray-100">
+                    <div className="text-right">
+                        <h2 className="text-2xl font-bold text-blue-900">كوين كاش للدفع الإلكتروني</h2>
+                        <p className="text-sm mt-1 text-gray-600">صنعاء - شارع الخمسين</p>
+                    </div>
+                    <div className="text-left">
+                        <CoinCashLogo className="w-28 h-28" />
+                    </div>
+                </header>
             
-            {/* Title and Meta Info */}
-            <section className="my-5 px-2">
-                <h1 className="text-center text-3xl font-bold border-b-2 border-blue-800 pb-2 mb-4 text-blue-900">
-                    {isDeposit ? 'سند قبض' : 'سند صرف'}
-                </h1>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center justify-end gap-2">
-                        <span className="font-semibold">التاريخ الميلادي:</span>
-                        <span>{format(transactionDate, "yyyy / MM / dd")}</span>
-                    </div>
-                     <div className="flex items-center justify-start gap-2">
-                        <span className="font-semibold">التاريخ الهجري:</span>
-                        <span>{hijriDate}</span>
-                    </div>
-                </div>
-            </section>
-            
-            {/* Main Content */}
-            <main className="flex-grow space-y-4 border-2 border-blue-100 rounded-lg p-4 bg-gray-50/50">
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
-                    <span className="font-bold text-lg">استلمنا من المكرم:</span>
-                    <span className="border-b-2 border-dotted border-gray-400 py-1 text-lg font-semibold text-blue-800">{client.name}</span>
-                </div>
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
-                    <span className="font-bold text-lg">مبلغاً وقدره:</span>
-                    <span className="border-b-2 border-dotted border-gray-400 py-1">{tafqeet(transaction.amount, transaction.currency)}</span>
-                </div>
-                <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-3">
-                    <span className="font-bold text-lg">نقداً / بشيك رقم:</span>
-                    <span className="border-b-2 border-dotted border-gray-400 py-1 font-semibold">{transaction.remittance_number || 'نقد'}</span>
-                     <span className="font-bold text-lg">على بنك:</span>
-                    <span className="border-b-2 border-dotted border-gray-400 py-1 font-semibold">{transaction.bankAccountName || 'غير محدد'}</span>
-                </div>
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
-                    <span className="font-bold text-lg">وذلك مقابل:</span>
-                    <div className="border-b-2 border-dotted border-gray-400 py-1 font-semibold">
-                         {isDeposit 
-                            ? `إيداع مبلغ ${transaction.amount_usdt.toFixed(2)} USDT إلى محفظة العميل`
-                            : `سحب مبلغ ${transaction.amount_usdt.toFixed(2)} USDT من محفظة العميل`}
-                         <p className="font-mono text-xs text-left break-all text-gray-600" dir="ltr">{transaction.client_wallet_address}</p>
-                         <p className="font-mono text-xs text-left break-all text-gray-500 mt-1" dir="ltr">Hash: {transaction.hash}</p>
-                    </div>
-                </div>
+                <main className="py-5 space-y-3">
+                    {/* Success Message */}
+                    <h1 className="text-center text-2xl font-bold text-green-700 mb-4">
+                        🧾 تم إنجاز المعاملة بنجاح ✅
+                    </h1>
 
-                <div className="flex justify-center items-center h-24 mt-4 text-center border-4 border-blue-800 bg-white rounded-lg">
-                    <span className="font-bold text-2xl text-blue-900 px-2">{transaction.currency}</span>
-                    <span className="font-mono text-4xl font-black text-blue-900 bg-blue-100 px-4 py-2 rounded-md">
-                         {new Intl.NumberFormat('en-US').format(transaction.amount)}
-                    </span>
-                </div>
-            </main>
+                    {/* Greeting */}
+                    <p className="text-center text-lg text-gray-700">
+                        ✨ نوّرنا اليوم الأستاذ / {client.name}، وأجرينا له معاملة {isDeposit ? 'إيداع' : 'سحب'} مميزة.
+                    </p>
 
-            {/* Signatures */}
-            <section className="mt-auto pt-8 flex justify-around text-center">
-                 <div>
-                    <h4 className="font-bold">توقيع المستلم</h4>
-                    <p className="border-b-2 border-dotted border-gray-400 mt-8 w-48">&nbsp;</p>
-                </div>
-                <div>
-                    <h4 className="font-bold">توقيع المحاسب</h4>
-                    <p className="border-b-2 border-dotted border-gray-400 mt-8 w-48">&nbsp;</p>
-                </div>
-                 <div>
-                    <h4 className="font-bold">توقيع المدير</h4>
-                    <p className="border-b-2 border-dotted border-gray-400 mt-8 w-48">&nbsp;</p>
-                </div>
-            </section>
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                        {/* Payment Details */}
+                        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                            <p className="text-gray-800 text-base">
+                                📥 قام بدفع مبلغ <span className="font-bold text-lg text-blue-800">💴 {formatAmount(transaction.amount)} {transaction.currency}</span> عبر حسابه في <span className="font-bold">{transaction.bankAccountName || 'حساب بنكي'}</span>.
+                            </p>
+                        </div>
+                        
+                        {/* Transfer Details */}
+                        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                            <p className="text-gray-800 text-base">
+                                🔁 وبالمقابل، تم تحويل <span className="font-bold text-lg text-green-700">{formatAmount(transaction.amount_usdt)} USDT</span> إلى محفظته الرقمية <span className="font-bold">{transaction.cryptoWalletName || 'USDT TRC20'}</span>.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {/* Wallet Address */}
+                    <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                        <p className="text-gray-800 mb-1">التي تحمل العنوان التالي:</p>
+                        <p className="font-mono text-sm text-center bg-gray-100 p-2 rounded break-all" dir="ltr">{transaction.client_wallet_address}</p>
+                    </div>
+
+                    {/* Blockchain Info */}
+                     <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                        <p className="text-gray-800 mb-1">🔗 المعاملة تم تنفيذها عبر شبكة البلوك تشين، وصدرت برقم التوثيق (Hash):</p>
+                        <p className="font-mono text-xs text-center bg-gray-100 p-2 rounded break-all" dir="ltr">{transaction.hash}</p>
+                    </div>
+
+                    {/* Execution Time */}
+                    <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                        <p className="text-center text-gray-800">
+                            ⏱️ كل هذا تم خلال <span className="font-bold">90 ثانية فقط</span> من لحظة استلام المبلغ حتى وصوله للمحفظة.
+                        </p>
+                    </div>
+
+                     {/* System Notes */}
+                    <div className="text-center text-sm text-gray-500 pt-3">
+                         <p>---</p>
+                         <p>📌 العملية موثّقة بالكامل وتم إصدار هذا الإشعار تلقائيًا من نظامنا الذكي.</p>
+                         <p>📂 نسخة من التفاصيل محفوظة في حساب العميل، ومتاحة للمراجعة في أي وقت.</p>
+                    </div>
+
+                </main>
+            </div>
             
             {/* Footer */}
-            <footer className="text-center text-xs text-white mt-4 p-2 bg-blue-700 border-t-4 border-blue-800 rounded-b-md">
-                <p>للتواصل: 739032432 - 779331117</p>
+            <footer className="mt-auto pt-4 border-t-2 border-dashed border-gray-300 text-center bg-blue-50 p-3 rounded-lg">
+                <h3 className="font-bold text-blue-800 flex items-center justify-center gap-2">🧠 نصيحة ببلاش:</h3>
+                <div className="text-sm text-gray-700 mt-2 space-y-1">
+                    <p>بعد ما يوصل المبلغ لمحفظتك، صار تحت مسؤوليتك الكاملة.</p>
+                    <p>🚫 لا تصدق أي واحد يقول لك "استثمار مضمون" أو "ضاعف رصيدك"، هذي أول خطوات الخسارة.</p>
+                    <p>افهم قبل ما تدفع، وفكّر قبل ما تندفع.</p>
+                </div>
             </footer>
         </div>
     );
