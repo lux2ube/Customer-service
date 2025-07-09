@@ -4,229 +4,128 @@
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
-import { CoinCashLogo } from "./coincash-logo";
-import { Phone, MapPin } from 'lucide-react';
 import { cn } from "@/lib/utils";
-
-// --- Arabic Translation and Formatting Helpers ---
-
-const toArabicWords = (num: number): string => {
-    num = Math.floor(num);
-    if (num === 0) return 'صفر';
-
-    const units = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
-    const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
-    const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
-    const hundreds = ['', 'مائة', 'مئتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
-    
-    let words = [];
-    
-    if (num >= 1000000) {
-        words.push(toArabicWords(Math.floor(num / 1000000)) + ' مليون');
-        num %= 1000000;
-    }
-    
-    if (num >= 1000) {
-        const thousands = Math.floor(num / 1000);
-        if (thousands === 1) words.push('ألف');
-        else if (thousands === 2) words.push('ألفان');
-        else if (thousands > 2 && thousands < 11) words.push(toArabicWords(thousands) + ' آلاف');
-        else words.push(toArabicWords(thousands) + ' ألف');
-        num %= 1000;
-    }
-
-    if (num >= 100) {
-        words.push(hundreds[Math.floor(num / 100)]);
-        num %= 100;
-    }
-
-    if (num > 0) {
-        if (words.length > 0) words.push('و');
-        if (num < 10) {
-            words.push(units[num]);
-        } else if (num < 20) {
-            words.push(teens[num - 10]);
-        } else {
-            const unit = num % 10;
-            const ten = Math.floor(num / 10);
-            if (unit > 0) {
-                words.push(units[unit]);
-                if (ten > 0) {
-                     words.push('و' + tens[ten]);
-                }
-            } else {
-                words.push(tens[ten]);
-            }
-        }
-    }
-    
-    return words.join(' ');
-};
-
-const tafqeet = (value: number, currency: string) => {
-    let mainCurrency = '';
-    switch (currency.toUpperCase()) {
-        case 'YER':
-            mainCurrency = 'ريال يمني';
-            break;
-        case 'SAR':
-            mainCurrency = 'ريال سعودي';
-            break;
-        case 'USD':
-        case 'USDT':
-            mainCurrency = 'دولار';
-            break;
-        default:
-            mainCurrency = currency;
-    }
-
-    const integerPart = Math.floor(value);
-    const amountInWords = toArabicWords(integerPart);
-
-    return `فقط ${amountInWords || 'صفر'} ${mainCurrency} لا غير.`;
-};
-
+import { CheckCircle, Wallet, FileText, Hash, Clock, Landmark, AlertTriangle, Lightbulb } from 'lucide-react';
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client }>(({ transaction, client }, ref) => {
-    
+
     const isDeposit = transaction.type === 'Deposit';
-    const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
-    
-    const senderName = isDeposit ? client.name : (transaction.client_wallet_address || 'N/A');
-    const receiverName = isDeposit ? (transaction.client_wallet_address || 'N/A') : client.name;
-    
-    const formatCurrency = (value: number | undefined) => {
-        if (value === undefined || value === null) return 'N/A';
-        return new Intl.NumberFormat('en-US', {useGrouping: true}).format(value);
-    }
+
     const getCurrencyName = (currencyCode: string) => {
         switch(currencyCode?.toUpperCase()) {
-            case 'YER': return 'يمني';
-            case 'SAR': return 'سعودي';
-            case 'USD': return 'دولار';
+            case 'YER': return 'ريال يمني';
+            case 'SAR': return 'ريال سعودي';
+            case 'USD': return 'دولار أمريكي';
             case 'USDT': return 'USDT';
             default: return currencyCode || '';
         }
     }
-    
+
+    const formatNumber = (value: number | undefined) => {
+        if (value === undefined || value === null) return 'N/A';
+        return new Intl.NumberFormat('en-US', {useGrouping: true}).format(value);
+    }
+
     const formattedDate = format(new Date(transaction.date), 'yyyy-MM-dd');
     const formattedTime = format(new Date(transaction.date), 'hh:mm a');
-    const docNumber = transaction.id.slice(-6).toUpperCase();
+
+    // Deposit Message Logic
+    const depositMessage = (
+        <>
+            <p className="text-xl">
+                ✨ نوّرنا اليوم الأستاذ / {client.name}،
+                وأجرينا له معاملة إيداع مميزة.
+            </p>
+            <p className="mt-4 text-xl">
+                📥 قام بدفع مبلغ 💴 <span className="font-bold">{formatNumber(transaction.amount)} {getCurrencyName(transaction.currency)}</span>
+                <br/>
+                عبر حسابه في <span className="font-bold">{transaction.bankAccountName || 'حساب بنكي'}</span>.
+            </p>
+            <p className="mt-4 text-xl">
+                🔁 وبالمقابل، تم تحويل <span className="font-bold text-green-600">{formatNumber(transaction.amount_usdt)} USDT</span>
+                <br />
+                إلى محفظته الرقمية التي تحمل العنوان التالي:
+                <br />
+                <code className="text-sm font-mono bg-gray-100 p-2 rounded-md block text-center my-2 break-all" dir="ltr">{transaction.client_wallet_address || 'N/A'}</code>
+            </p>
+        </>
+    );
+
+    // Withdraw Message Logic
+    const withdrawMessage = (
+        <>
+            <p className="text-xl">
+                ✨ تشرفنا بخدمة الأستاذ / {client.name}،
+                وأجرينا له معاملة سحب مميزة.
+            </p>
+            <p className="mt-4 text-xl">
+                📥 قام بإرسال مبلغ <span className="font-bold">{formatNumber(transaction.amount_usdt)} USDT</span>
+                <br/>
+                من محفظته الرقمية التي تحمل العنوان:
+                <br/>
+                <code className="text-sm font-mono bg-gray-100 p-2 rounded-md block text-center my-2 break-all" dir="ltr">{transaction.client_wallet_address || 'N/A'}</code>
+            </p>
+            <p className="mt-4 text-xl">
+                🔁 وبالمقابل، تم إيداع 💴 <span className="font-bold text-green-600">{formatNumber(transaction.amount)} {getCurrencyName(transaction.currency)}</span>
+                <br />
+                في حسابه لدى <span className="font-bold">{transaction.bankAccountName || 'حساب بنكي'}</span>.
+            </p>
+        </>
+    );
 
     return (
         <div ref={ref} dir="rtl" className="w-[761px] h-[1080px] bg-white shadow-xl font-cairo border-2 border-gray-200 mx-auto p-8 text-gray-800 flex flex-col">
-            {/* Header */}
-            <header className="flex justify-between items-center pb-6 border-b-2 border-gray-200">
-                <div className="flex items-center gap-4">
-                    <CoinCashLogo/>
-                    <div>
-                        <h1 className="text-2xl font-bold text-[#0033CC]">كوين كاش للدفع الإلكتروني</h1>
-                    </div>
-                </div>
-                <div className="text-left text-sm">
-                    <p className="flex items-center justify-end gap-2"><MapPin size={14} /> صنعاء شارع الخمسين</p>
-                    <p className="flex items-center justify-end gap-2"><Phone size={14} /> 739032432 - 779331117</p>
-                </div>
+            <header className="text-center mb-8">
+                <h1 className="text-3xl font-bold flex items-center justify-center gap-3">
+                    <FileText className="text-green-500" size={32}/>
+                    تم إنجاز المعاملة بنجاح
+                    <CheckCircle className="text-green-500" size={32}/>
+                </h1>
             </header>
 
-            {/* Title & Meta Info */}
-            <section className="mt-8 grid grid-cols-2 gap-4">
-                <div>
-                    <h2 className="text-3xl font-bold text-[#0033CC]">{title}</h2>
-                    <p className="text-lg text-gray-500">{isDeposit ? 'Credit Voucher' : 'Debit Voucher'}</p>
-                </div>
-                <div className="text-left border-l-4 border-[#0033CC] pl-4">
-                    <p><span className="font-bold">رقم المستند:</span> <span className="font-mono">{docNumber}</span></p>
-                    <p><span className="font-bold">التاريخ:</span> <span className="font-mono">{formattedDate}</span></p>
-                    <p><span className="font-bold">الوقت:</span> <span className="font-mono">{formattedTime}</span></p>
-                </div>
-            </section>
+            <main className="flex-grow text-right leading-loose">
+                {isDeposit ? depositMessage : withdrawMessage}
 
-            {/* Billed to */}
-            <section className="mt-8 rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-500 mb-2">فاتورة إلى / Billed To</h3>
-                <p className="text-lg font-bold">{client.name}</p>
-                <p className="text-sm text-gray-600 font-mono">Client ID: {client.id}</p>
-            </section>
-
-            {/* Financial Table */}
-            <section className="mt-8">
-                <table className="w-full text-sm text-right border-collapse">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="p-3 font-bold text-gray-600 border">البيان / Description</th>
-                            <th className="p-3 font-bold text-gray-600 text-left border">المبلغ / Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr className="border-b">
-                            <td className="p-3 border">
-                                {isDeposit ? `المبلغ المُرسل (${transaction.currency})` : `المبلغ المُرسل (USDT)`}
-                            </td>
-                            <td className="p-3 text-left font-mono text-lg border">
-                                {isDeposit ? `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` : `${formatCurrency(transaction.amount_usdt)} USDT`}
-                            </td>
-                        </tr>
-                        <tr className="border-b bg-green-50">
-                            <td className="p-3 font-bold border">
-                                {isDeposit ? `المبلغ المستلم (USDT)` : `المبلغ المستلم (${transaction.currency})`}
-                            </td>
-                            <td className="p-3 text-left font-mono text-xl text-green-700 font-bold border">
-                                {isDeposit ? `${formatCurrency(transaction.amount_usdt)} USDT` : `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}
-                            </td>
-                        </tr>
-                        {((transaction.fee_usd ?? 0) > 0 || (transaction.expense_usd ?? 0) > 0) && (
-                            <tr className="border-b text-xs text-gray-500">
-                                <td className="p-3 border">الرسوم والمصاريف / Fees & Expenses (USD)</td>
-                                <td className="p-3 text-left font-mono border">
-                                    {(transaction.fee_usd ?? 0) > 0 && `Fee: $${formatCurrency(transaction.fee_usd)}`}
-                                    {(transaction.expense_usd ?? 0) > 0 && ` Expense: $${formatCurrency(transaction.expense_usd)}`}
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </section>
-            
-            {/* Tafqeet */}
-            <section className="mt-4 rounded-lg bg-gray-100 p-4 text-center">
-                <p className="font-bold">{tafqeet(transaction.amount, transaction.currency)}</p>
-            </section>
-
-            {/* Transaction Details */}
-            <section className="mt-8">
-                <h3 className="text-lg font-bold text-[#0033CC] mb-4">تفاصيل العملية / Transaction Details</h3>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm p-4 border rounded-lg">
-                    <div className="col-span-2">
-                        <p className="font-bold">المرسل / Sender</p>
-                        <p className="text-gray-700 break-all">{senderName}</p>
-                    </div>
-                    <div className="col-span-2">
-                        <p className="font-bold">المستلم / Receiver</p>
-                        <p className="text-gray-700 break-all">{receiverName}</p>
-                    </div>
-                    <div>
-                        <p className="font-bold">رقم الحوالة / Remittance No.</p>
-                        <p className="text-gray-700 font-mono">{transaction.remittance_number || 'N/A'}</p>
-                    </div>
-                    <div className="col-span-2">
-                        <p className="font-bold">Transaction Hash</p>
-                        <p className="font-mono text-xs break-all text-left" dir="ltr">{transaction.hash || 'N/A'}</p>
-                    </div>
-                    {transaction.notes && (
-                        <div className="col-span-2">
-                            <p className="font-bold">ملاحظات / Notes</p>
-                            <p className="text-gray-700">{transaction.notes}</p>
-                        </div>
-                    )}
+                <div className="mt-6 text-xl">
+                    <p className="flex items-center gap-2">
+                        <Hash size={20} className="text-blue-500"/>
+                        <span>رقم توثيق الشبكة (Hash):</span>
+                    </p>
+                    <code className="text-sm font-mono bg-gray-100 p-2 rounded-md block text-center my-2 break-all" dir="ltr">
+                        {transaction.hash || 'N/A'}
+                    </code>
                 </div>
-            </section>
-            
-            {/* Footer */}
-            <footer className="mt-auto pt-8 text-center text-xs text-gray-500">
-                <p className="bg-[#0033CC] text-white p-2 rounded-md inline-block">هذا الإشعار آلي ولا يحتاج ختم أو توقيع</p>
-                <p className="mt-2">شكرًا لتعاملكم معنا</p>
+
+                <div className="mt-2 text-xl flex items-center gap-2">
+                    <Clock size={20} className="text-blue-500"/>
+                    <span>تم التنفيذ بسرعة فائقة.</span>
+                </div>
+
+                <hr className="my-8 border-gray-300 border-dashed" />
+
+                <div className="text-lg">
+                    <p className="flex items-center gap-2 font-semibold"><Wallet size={20}/> العملية موثّقة بالكامل وتم إصدار هذا الإشعار تلقائيًا.</p>
+                    <p className="flex items-center gap-2 mt-2"><Landmark size={20}/> نسخة من التفاصيل محفوظة في حساب العميل للمراجعة.</p>
+                </div>
+
+                <div className="mt-8 p-4 bg-yellow-50 border-r-4 border-yellow-400">
+                    <h3 className="text-xl font-bold flex items-center gap-2"><Lightbulb className="text-yellow-500"/> نصيحة من القلب:</h3>
+                    <p className="mt-2 text-md">
+                        بعد وصول المبلغ لمحفظتك، يصبح تحت مسؤوليتك الكاملة.
+                        <br/>
+                        <span className="font-bold text-red-600">🚫 لا تصدق أي شخص</span> يعدك بـ "استثمار مضمون" أو "مضاعفة رصيدك"، فهذه هي أولى خطوات الخسارة.
+                        <br/>
+                        افهم قبل أن تدفع، وفكّر قبل أن تندفع.
+                    </p>
+                </div>
+
+            </main>
+
+            <footer className="text-center text-sm text-gray-500 mt-auto">
+                 <p>{formattedDate} - {formattedTime}</p>
+                 <p className="mt-1">كوين كاش للدفع الإلكتروني</p>
             </footer>
+
         </div>
     );
 });
