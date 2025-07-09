@@ -4,8 +4,8 @@
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
-import { IbnJaberLogo } from "./ibn-jaber-logo";
-import { Phone, MapPin, Hash, User, Building, Landmark, Wallet } from 'lucide-react';
+import { CoinCashLogo } from "./coincash-logo";
+import { Phone, MapPin } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 // --- Arabic Translation and Formatting Helpers ---
@@ -92,12 +92,9 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const isDeposit = transaction.type === 'Deposit';
     const title = isDeposit ? 'سند إشعار دائن' : 'سند إشعار مدين';
     
-    // Deposit: Client sends local currency, gets USDT.
-    // Withdraw: Client sends USDT, gets local currency.
     const senderName = isDeposit ? client.name : (transaction.client_wallet_address || 'N/A');
     const receiverName = isDeposit ? (transaction.client_wallet_address || 'N/A') : client.name;
-    const sourceAccount = isDeposit ? transaction.bankAccountName : transaction.cryptoWalletName;
-
+    
     const formatCurrency = (value: number | undefined) => {
         if (value === undefined || value === null) return 'N/A';
         return new Intl.NumberFormat('en-US', {useGrouping: true}).format(value);
@@ -121,15 +118,14 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             {/* Header */}
             <header className="flex justify-between items-center pb-6 border-b-2 border-gray-200">
                 <div className="flex items-center gap-4">
-                    <IbnJaberLogo/>
+                    <CoinCashLogo/>
                     <div>
-                        <h1 className="text-2xl font-bold text-[#0033CC]">ابن جابر اكسبرس</h1>
-                        <p className="text-sm text-gray-600">للصرافة والتحويلات</p>
+                        <h1 className="text-2xl font-bold text-[#0033CC]">كوين كاش للدفع الإلكتروني</h1>
                     </div>
                 </div>
                 <div className="text-left text-sm">
-                    <p className="flex items-center justify-end gap-2"><MapPin size={14} /> دمت - الجبوب - الشارع العام</p>
-                    <p className="flex items-center justify-end gap-2"><Phone size={14} /> 714254621 - 733465111</p>
+                    <p className="flex items-center justify-end gap-2"><MapPin size={14} /> صنعاء شارع الخمسين</p>
+                    <p className="flex items-center justify-end gap-2"><Phone size={14} /> 739032432 - 779331117</p>
                 </div>
             </header>
 
@@ -208,10 +204,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <div className="col-span-2">
                         <p className="font-bold">المستلم / Receiver</p>
                         <p className="text-gray-700 break-all">{receiverName}</p>
-                    </div>
-                    <div>
-                        <p className="font-bold">مصدر العملية / Source Account</p>
-                        <p className="text-gray-700">{sourceAccount || 'N/A'}</p>
                     </div>
                     <div>
                         <p className="font-bold">رقم الحوالة / Remittance No.</p>
