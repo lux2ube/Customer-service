@@ -2,7 +2,6 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState, useFormStatus } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -121,7 +120,7 @@ export default function SettingsPage() {
                             <CardHeader>
                                 <CardTitle><Skeleton className="h-7 w-48" /></CardTitle>
                                 <CardDescription><Skeleton className="h-4 w-full" /></CardDescription>
-                            </Header>
+                            </CardHeader>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
