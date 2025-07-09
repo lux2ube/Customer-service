@@ -740,7 +740,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     // Update input text when client is selected from parent (e.g. on initial load)
     React.useEffect(() => {
         if (selectedClient) {
-            setSearch(selectedClient.name);
+            setSearch(selectedClient.name || '');
         } else {
             setSearch("");
         }
