@@ -30,12 +30,23 @@ export function parseSmsWithCustomRules(smsBody: string, rules: SmsParsingRule[]
             const amount = cleanAndParseFloat(amountMatch[1]);
             
             // --- Extract Person Independently ---
-            const personPattern = new RegExp(
-                escapeRegex(rule.personStartsAfter) +
-                '\\s*(.*?)\\s*' + // Capture group 1: The person's name (non-greedy)
-                escapeRegex(rule.personEndsBefore),
-                'i' // Case-insensitive
-            );
+            let personPattern: RegExp;
+            if (rule.personEndsBefore && rule.personEndsBefore.trim() !== '') {
+                 personPattern = new RegExp(
+                    escapeRegex(rule.personStartsAfter) +
+                    '\\s*(.*?)\\s*' + // Capture group 1: The person's name (non-greedy)
+                    escapeRegex(rule.personEndsBefore),
+                    'i' // Case-insensitive
+                );
+            } else {
+                // If personEndsBefore is empty, capture everything until the end of the string.
+                 personPattern = new RegExp(
+                    escapeRegex(rule.personStartsAfter) +
+                    '\\s*(.*)', // Capture group 1: The rest of the string (greedy)
+                    'i' // Case-insensitive
+                );
+            }
+
             const personMatch = cleanedSms.match(personPattern);
             if (!personMatch || !personMatch[1]) {
                 continue; // Person not found, try next rule
