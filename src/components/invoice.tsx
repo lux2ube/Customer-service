@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
@@ -66,12 +67,13 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 {/* Financial Flow */}
                 <div className="space-y-4 text-center">
                     {/* Source */}
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="p-4 bg-gray-50 rounded-lg border">
                         <p className="text-md text-gray-500">{paymentText}</p>
                         <p className="text-4xl font-bold my-2 text-blue-900" dir="ltr">{localAmountText}</p>
                         <p className="text-sm text-gray-500">{bankText}</p>
                     </div>
 
+                    {/* Arrow */}
                     <div className="flex justify-center">
                         <ArrowDown className="h-8 w-8 text-gray-300"/>
                     </div>
