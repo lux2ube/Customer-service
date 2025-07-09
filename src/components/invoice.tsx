@@ -5,7 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
 import { IbnJaberLogo } from "./ibn-jaber-logo";
-import { Phone, MapPin } from 'lucide-react';
+import { Phone, MapPin, Hash, User, Building, Landmark, Wallet } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 // --- Arabic Translation and Formatting Helpers ---
@@ -117,7 +117,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const docNumber = transaction.id.slice(-6).toUpperCase();
 
     return (
-        <div ref={ref} dir="rtl" className="w-[761px] min-h-[1080px] h-auto bg-white shadow-xl font-cairo border-2 border-gray-200 mx-auto p-8 text-gray-800 flex flex-col">
+        <div ref={ref} dir="rtl" className="w-[761px] h-[1080px] bg-white shadow-xl font-cairo border-2 border-gray-200 mx-auto p-8 text-gray-800 flex flex-col">
             {/* Header */}
             <header className="flex justify-between items-center pb-6 border-b-2 border-gray-200">
                 <div className="flex items-center gap-4">
