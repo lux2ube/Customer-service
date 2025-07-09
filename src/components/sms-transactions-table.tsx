@@ -124,7 +124,7 @@ export function SmsTransactionsTable() {
     };
 
     return (
-    <>
+    <div dir="rtl">
       <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>
@@ -212,7 +212,7 @@ export function SmsTransactionsTable() {
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Raw SMS Content</AlertDialogTitle>
-                    <AlertDialogDescription className="font-mono bg-muted p-4 rounded-md text-foreground break-words">{rawSmsToShow}</AlertDialogDescription>
+                    <AlertDialogDescription dir="rtl" className="font-mono bg-muted p-4 rounded-md text-foreground break-words">{rawSmsToShow}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogAction onClick={() => setRawSmsToShow(null)}>Close</AlertDialogAction>
@@ -231,6 +231,6 @@ export function SmsTransactionsTable() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-    </>
+    </div>
   );
 }
