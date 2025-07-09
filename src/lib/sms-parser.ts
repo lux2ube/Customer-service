@@ -10,8 +10,8 @@ const parsers = [
     // It uses lookaheads to find all parts, regardless of order, then captures them.
     {
         name: 'Credit (Tam Idafa) with checkmarks (Robust)',
-        regex: /^(?=.*تم\s*√{1,2}\s*إضافة)(?=.*من\s*(.*?)\s*رصيدك).*?([\d,٫.]+)/,
-        map: { type: 'credit', person: 1, amount: 2 }
+        regex: /^(?=.*تم\s*√{1,2}\s*إضافة\s*([\d,٫.]+))(?=.*من\s*(.*?)\s*رصيدك)/,
+        map: { type: 'credit', amount: 1, person: 2 }
     },
     {
         name: 'Credit (Idif) conjoined currency from person',
@@ -25,12 +25,12 @@ const parsers = [
     },
     {
         name: 'Credit (Idif) from Mobile Money',
-        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)/,
+        regex: /اضيف ([\d,٫.]+)р\.ي مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
         name: 'Credit (Idif) for Hawala exchange',
-        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
+        regex: /اضيف ([\d,٫.]+)р\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
     {
@@ -56,7 +56,7 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) YER to Kash number',
-        regex: /خصم ([\d,٫.]+)ر\.ي مقابل تحويل لمحفظة\/بنك رص:.*? الى (كاش رقم \d+)/,
+        regex: /خصم ([\d,٫.]+)р\.ي مقابل تحويل لمحفظة\/بنك رص:.*? الى (كاش رقم \d+)/,
         map: { type: 'debit', amount: 1, person: 2 }
     },
     {
@@ -66,17 +66,17 @@ const parsers = [
     },
     {
         name: 'Debit (Khasm) from ATM - YKB',
-        regex: /خصم ([\d,٫.]+)ر\.ي سحب من الصراف الآلي YKB رص:/,
+        regex: /خصم ([\d,٫.]+)р\.ي سحب من الصراف الآلي YKB رص:/,
         map: { type: 'debit', amount: 1, person: 'YKB ATM' }
     },
     {
         name: 'Debit (Khasm) cash withdrawal SAR - no space',
-        regex: /خصم ([\d,٫.]+)ر\.س سحب نقدي رص:/,
+        regex: /خصم ([\d,٫.]+)р\.س سحب نقدي رص:/,
         map: { type: 'debit', amount: 1, person: 'Cash Withdrawal' }
     },
     {
         name: 'Debit (Khasm) from ATM',
-        regex: /خصم ([\d,٫.]+)ر\.ي سحب من (.*?) رص:/,
+        regex: /خصم ([\d,٫.]+)р\.ي سحب من (.*?) رص:/,
         map: { type: 'debit', amount: 1, person: 2 }
     },
     {
