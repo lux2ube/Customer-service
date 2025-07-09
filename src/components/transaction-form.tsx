@@ -27,7 +27,8 @@ function SubmitButton() {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending} size="sm" className="w-full">
-            {pending ? 'Recording...' : <><Save className="mr-2 h-4 w-4" />Record Transaction</>}
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {pending ? 'Recording...' : 'Record Transaction'}
         </Button>
     );
 }
@@ -124,6 +125,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     // Suggestion State
     const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
+
+    // Attachment State
+    const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
+    const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
     
     // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -270,6 +275,33 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         fetchSuggestions();
     }, [formData.clientId, formData.bankAccountId, formData.type]);
+    
+    // Effect to handle attachment preview cleanup
+    React.useEffect(() => {
+        return () => {
+            if (attachmentPreview) {
+                URL.revokeObjectURL(attachmentPreview);
+            }
+        };
+    }, [attachmentPreview]);
+
+    const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setAttachmentToUpload(file);
+            if (attachmentPreview) {
+                URL.revokeObjectURL(attachmentPreview);
+            }
+            if (file.type.startsWith('image/')) {
+                setAttachmentPreview(URL.createObjectURL(file));
+            } else {
+                setAttachmentPreview(null);
+            }
+        } else {
+            setAttachmentToUpload(null);
+            setAttachmentPreview(null);
+        }
+    };
     
     const getNumberValue = (value: string | number) => {
         const num = parseFloat(String(value));
@@ -639,7 +671,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                  <Button onClick={handleDownloadInvoice} disabled={isDownloading || isSharing} size="sm" className="w-full">
                                     {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                                     {isDownloading ? 'Downloading...' : 'Download Invoice'}
-                                </Button>
+                                 </Button>
                                 <Button onClick={handleShareInvoice} disabled={isSharing || isDownloading} size="sm" className="w-full">
                                     {isSharing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
                                     {isSharing ? 'Preparing...' : 'Share Invoice'}
@@ -658,8 +690,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="attachment_url">Upload Transaction Image</Label>
-                                <Input id="attachment_url" name="attachment_url" type="file" size="sm" />
-                                {transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
+                                <Input id="attachment_url" name="attachment_url" type="file" size="sm" onChange={handleAttachmentChange} />
+                                {attachmentPreview && (
+                                    <div className="mt-2">
+                                        <img src={attachmentPreview} alt="Preview" className="rounded-md max-h-48 w-auto" />
+                                    </div>
+                                )}
+                                {!attachmentPreview && transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="space-y-2">

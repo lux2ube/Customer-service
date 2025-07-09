@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2 } from 'lucide-react';
+import { Save, Trash2, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -34,7 +34,8 @@ function SubmitButton() {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending} name="intent" value="save_client">
-            {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Client</>}
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {pending ? 'Saving...' : 'Save Client'}
         </Button>
     );
 }
@@ -53,6 +54,9 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
     });
+    
+    const [filesToUpload, setFilesToUpload] = React.useState<File[]>([]);
+    const [previews, setPreviews] = React.useState<string[]>([]);
 
     const [kycDocuments, setKycDocuments] = React.useState(client?.kyc_documents || []);
     const [bep20Addresses, setBep20Addresses] = React.useState(client?.bep20_addresses || []);
@@ -119,6 +123,25 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
             }
         }
     }, [state, toast]);
+
+    React.useEffect(() => {
+        // Revoke the data uris to avoid memory leaks
+        return () => previews.forEach(url => URL.revokeObjectURL(url));
+    }, [previews]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const selectedFiles = Array.from(e.target.files);
+            setFilesToUpload(selectedFiles);
+
+            // Clean up old previews
+            previews.forEach(url => URL.revokeObjectURL(url));
+
+            // Create new previews
+            const newPreviews = selectedFiles.map(file => URL.createObjectURL(file));
+            setPreviews(newPreviews);
+        }
+    };
 
     const handleFlagChange = (flag: ReviewFlag, checked: boolean) => {
         setFormData(prev => {
@@ -371,9 +394,27 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                         )}
                          <div className="space-y-2">
                             <Label htmlFor="kyc_files">Upload New Document(s)</Label>
-                            <Input id="kyc_files" name="kyc_files" type="file" multiple />
+                            <Input id="kyc_files" name="kyc_files" type="file" multiple onChange={handleFileChange} />
                             <p className="text-sm text-muted-foreground">You can select multiple files at once.</p>
                         </div>
+                        {filesToUpload.length > 0 && (
+                            <div className="space-y-2">
+                                <Label>File Previews</Label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {filesToUpload.map((file, index) => (
+                                        <div key={index} className="relative group border rounded-md p-1 bg-muted/50">
+                                            {previews[index] && file.type.startsWith('image/') ? (
+                                                <img src={previews[index]} alt={file.name} className="rounded-md aspect-square object-cover" />
+                                            ) : (
+                                                <div className="aspect-square flex items-center justify-center">
+                                                    <p className="text-xs text-muted-foreground p-1 text-center">{file.name}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
