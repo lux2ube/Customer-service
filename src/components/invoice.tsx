@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
@@ -138,7 +139,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             </header>
 
             {/* Main Content */}
-            <main className="p-3 space-y-2">
+            <main className="p-3 space-y-4">
                 
                 {/* Title Bar */}
                 <div style={{ backgroundColor: '#0033CC' }} className="text-white p-2 rounded-lg flex justify-between items-center">
@@ -164,17 +165,22 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 {/* What you Sent / Received */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
                     {/* What Client Sent */}
-                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[100px]">
+                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[120px]">
                         <h3 className="font-bold text-base underline mb-2">ما أرسلته</h3>
                         <div className="text-center">
                             <p className="font-mono font-bold text-2xl text-gray-700 tracking-wider">
                                 {isDeposit ? 
-                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` : 
-                                    `${formatCurrency(transaction.amount_usdt)} USDT`
+                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}` :
+                                    (
+                                        <>
+                                            <span className="text-gray-500">USDT </span>
+                                            <span>{formatCurrency(transaction.amount_usdt)}</span>
+                                        </>
+                                    )
                                 }
                             </p>
                             {isDeposit && (
-                                <p className="text-xs text-muted-foreground font-mono">
+                                <p className="text-xs text-muted-foreground font-mono mt-1">
                                     (يعادل ${formatCurrency(transaction.amount_usd)})
                                 </p>
                             )}
@@ -182,17 +188,22 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
 
                     {/* What Client Received */}
-                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[100px]">
+                    <div className="border-2 border-black rounded-lg p-2 flex flex-col items-center justify-center min-h-[120px]">
                         <h3 className="font-bold text-base underline mb-2">ما استلمته</h3>
                         <div className="text-center">
-                            <p className="font-mono font-bold text-2xl text-green-600 tracking-wider">
-                                {isDeposit ? 
-                                    `${formatCurrency(transaction.amount_usdt)} USDT` : 
-                                    `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`
+                            <p className="font-mono font-bold text-2xl tracking-wider">
+                                {isDeposit ?
+                                    (
+                                        <>
+                                            <span className="text-gray-500">USDT </span>
+                                            <span className="text-green-600">{formatCurrency(transaction.amount_usdt)}</span>
+                                        </>
+                                    ) :
+                                    <span className="text-green-600">{`${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}</span>
                                 }
                             </p>
                             {!isDeposit && (
-                                <p className="text-xs text-muted-foreground font-mono">
+                                <p className="text-xs text-muted-foreground font-mono mt-1">
                                     (يعادل ${formatCurrency(transaction.amount_usd)})
                                 </p>
                             )}
@@ -218,11 +229,23 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 {/* البيان section */}
                 <div className="border-2 border-black rounded-lg p-2">
                     <div className="text-center font-bold text-sm underline mb-2">البيان</div>
-                    <div className="grid grid-cols-2 gap-x-4 text-sm px-4">
-                        <div className="col-span-2 flex justify-between"><span>Hash:</span> <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span>المصدر:</span> <span className="font-semibold">{sourceName}</span></div>
-                        <div className="flex justify-between"><span>المستلم:</span> <span className="font-semibold break-all">{receiverName}</span></div>
-                        <div className="flex justify-between"><span>المرسل:</span> <span className="font-semibold break-all">{senderName}</span></div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm px-4">
+                        <div className="col-span-2 flex justify-between items-center">
+                            <span className="font-semibold">Hash:</span>
+                            <span className="font-mono text-xs break-all text-left flex-1 ml-2" dir="ltr">{transaction.hash || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="font-semibold">المصدر:</span>
+                            <span className="font-medium">{sourceName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="font-semibold">المستلم:</span>
+                            <span className="font-medium break-all">{receiverName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="font-semibold">المرسل:</span>
+                            <span className="font-medium break-all">{senderName}</span>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -230,7 +253,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             {/* Footer */}
             <footer className="p-3 grid grid-cols-3 items-center text-xs">
                  <div className="text-left">
-                    <div className="bg-[#0033CC] text-white font-semibold px-4 py-1.5 rounded-lg text-sm flex items-center justify-center">
+                    <div className="bg-[#0033CC] text-white font-semibold px-3 py-1.5 rounded-lg text-sm flex items-center justify-center">
                         {formattedTime} {formattedDate}
                     </div>
                  </div>
@@ -245,3 +268,5 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     );
 });
 Invoice.displayName = 'Invoice';
+
+
