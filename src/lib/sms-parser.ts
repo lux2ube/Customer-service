@@ -5,6 +5,44 @@ import type { ParsedSms } from '@/lib/types';
 // Each parser has a regex and a map to extract data.
 // These have been made more flexible to handle RTL/LTR word reordering.
 const parsers = [
+    // --- CREDIT (IDIF/ADIFA) ---
+    // NEW: Handles "تم√√إضافة" format with unreliable word ordering due to RTL/LTR mixing.
+    // It uses lookaheads to find all parts, regardless of order, then captures them.
+    {
+        name: 'Credit (Tam Idafa) with checkmarks (Robust)',
+        regex: /^(?=.*تم\s*√{1,2}\s*إضافة)(?=.*من\s*(.*?)\s*رصيدك).*?([\d,٫.]+)/,
+        map: { type: 'credit', person: 1, amount: 2 }
+    },
+    {
+        name: 'Credit (Idif) conjoined currency from person',
+        regex: /اضيف ([\d,٫.]+)ر\.[س|ي] تحويل مشترك رص:.*? من (.*)/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
+    {
+        name: 'Credit (Idif) from person with "mogabel"',
+        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل تحويل مشترك رص:.*? من (.*)/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
+    {
+        name: 'Credit (Idif) from Mobile Money',
+        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
+    {
+        name: 'Credit (Idif) for Hawala exchange',
+        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
+    {
+        name: 'Credit (Idif) from person with optional phone',
+        regex: /اضيف ([\d,٫.]+)р\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
+    {
+        name: 'Credit (Tam Idaa) YER',
+        regex: /تم ايداع ([\d,٫.]+)\s*.*? لحسابكم المرسل (.*?) الرصيد/,
+        map: { type: 'credit', amount: 1, person: 2 }
+    },
     // --- DEBIT (KHASM) ---
     {
         name: 'Debit (Khasm) Hazmi Transfer',
@@ -102,45 +140,6 @@ const parsers = [
         regex: /تم إيداع ([\d,٫.]+)ر\.ي عبر (.*?) رصيدك/,
         map: { type: 'credit', amount: 1, person: 2 }
     },
-
-
-    // --- CREDIT (IDIF/ADIFA) ---
-    {
-        name: 'Credit (Idif) conjoined currency from person',
-        regex: /اضيف ([\d,٫.]+)ر\.[س|ي] تحويل مشترك رص:.*? من (.*)/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Idif) from person with "mogabel"',
-        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل تحويل مشترك رص:.*? من (.*)/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Idif) from Mobile Money',
-        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل تحويل من محفظة\/بنك رص:.*? من (موبايل موني رقم \d+)/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Idif) for Hawala exchange',
-        regex: /اضيف ([\d,٫.]+)ر\.ي مقابل صرف حوالة الى المحفظة رص:.*? من (.*)/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Idif) from person with optional phone',
-        regex: /اضيف ([\d,٫.]+)р\.ي تحويل مشترك رص:.*? من (.*?)(?:-\d+)?/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Idafa) with checkmarks (Robust)',
-        regex: /تم\s*√{1,2}\s*إضافة\s*([\d,٫.]+)\s*.*?من\s*(.*?)\s*رصيدك/i,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-    {
-        name: 'Credit (Tam Idaa) YER',
-        regex: /تم ايداع ([\d,٫.]+)\s*.*? لحسابكم المرسل (.*?) الرصيد/,
-        map: { type: 'credit', amount: 1, person: 2 }
-    },
-
     // --- CREDIT (ISTALAMT/ASTALAMT) ---
     {
         name: 'Credit (Istalamt) amount YER from phone number',
