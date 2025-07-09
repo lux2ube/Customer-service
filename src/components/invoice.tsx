@@ -179,12 +179,12 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                                 {isDeposit ? `${formatCurrency(transaction.amount_usdt)} USDT` : `${formatCurrency(transaction.amount)} ${getCurrencyName(transaction.currency)}`}
                             </td>
                         </tr>
-                        {(transaction.fee_usd > 0 || (transaction.expense_usd && transaction.expense_usd > 0)) && (
+                        {((transaction.fee_usd ?? 0) > 0 || (transaction.expense_usd ?? 0) > 0) && (
                             <tr className="border-b text-xs text-gray-500">
                                 <td className="p-3 border">الرسوم والمصاريف / Fees & Expenses (USD)</td>
                                 <td className="p-3 text-left font-mono border">
-                                    {transaction.fee_usd > 0 && `Fee: $${formatCurrency(transaction.fee_usd)}`}
-                                    {(transaction.expense_usd && transaction.expense_usd > 0) && ` Expense: $${formatCurrency(transaction.expense_usd)}`}
+                                    {(transaction.fee_usd ?? 0) > 0 && `Fee: $${formatCurrency(transaction.fee_usd)}`}
+                                    {(transaction.expense_usd ?? 0) > 0 && ` Expense: $${formatCurrency(transaction.expense_usd)}`}
                                 </td>
                             </tr>
                         )}
