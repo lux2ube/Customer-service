@@ -55,7 +55,8 @@ export default function SettingsPage() {
 
         const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
             if (snapshot.exists()) {
-                const allAccounts: Account[] = Object.values(snapshot.val());
+                const data = snapshot.val();
+                const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
                 setUsdtWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
             }
         });
