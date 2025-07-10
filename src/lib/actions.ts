@@ -1618,12 +1618,15 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         ]);
 
         if (!smsSnapshot.exists() || !clientsSnapshot.exists() || !endpointsSnapshot.exists()) {
-            return { message: "No recent SMS or clients to match.", error: false };
+            return { message: "No recent SMS, clients, or endpoints to match.", error: false };
         }
 
         const allSmsTransactions: Record<string, SmsTransaction> = smsSnapshot.val() || {};
-        const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+        const clients: Record<string, Client> = clientsSnapshot.val();
+        const endpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
+        const clientsArray: Client[] = Object.values(clients).map(c => ({ id: Object.keys(clients).find(key => clients[key] === c)!, ...c }));
 
+        const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
         const smsToMatch = Object.entries(allSmsTransactions)
             .map(([id, sms]) => ({ id, ...sms }))
             .filter(sms => {
@@ -1635,20 +1638,16 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         if (smsToMatch.length === 0) {
             return { message: "No SMS messages with 'parsed' status in the last 48 hours.", error: false };
         }
-
-        const clients: Record<string, Client> = clientsSnapshot.val();
-        const endpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
-        const clientsArray: Client[] = Object.values(clients).map(c => ({ id: Object.keys(clients).find(key => clients[key] === c)!, ...c }));
-
+        
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
 
         for (const sms of smsToMatch) {
-            const endpoint = allEndpoints[sms.account_id];
+            const endpoint = endpoints[sms.account_id];
             if (!endpoint || !sms.client_name) continue;
 
             const nameRules = endpoint.nameMatchingRules || [];
-            if (nameRules.length === 0) continue; // Skip if no rules are set for the endpoint
+            if (nameRules.length === 0) continue; 
 
             const parsedName = normalizeArabic(sms.client_name.toLowerCase());
             
@@ -1662,7 +1661,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 let isMatch = false;
 
                 for (const rule of nameRules) {
-                    if (isMatch) break; // Already found a match for this client for this SMS, move to next client
+                    if (isMatch) break;
 
                     switch (rule) {
                         case 'phone_number':
@@ -1682,7 +1681,6 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                             }
                             break;
                         case 'part_of_full_name':
-                             // Check if all parts of the parsed name are present in the client's full name
                             if (parsedNameParts.every(part => clientName.includes(part))) {
                                 isMatch = true;
                             }
@@ -1699,16 +1697,14 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 }
             }
             
-            // Deduplicate potential matches
             const uniqueMatches = [...new Map(potentialMatches.map(item => [item['id'], item])).values()];
 
             let finalMatch: Client | null = null;
             if (uniqueMatches.length === 1) {
                 finalMatch = uniqueMatches[0];
             } else if (uniqueMatches.length > 1) {
-                // Tie-breaker logic: check for a prioritized client
                 const prioritizedClient = uniqueMatches.find(c => c.prioritize_sms_matching);
-                finalMatch = prioritizedClient || null; // If no priority client, we don't match to avoid errors
+                finalMatch = prioritizedClient || null;
             }
 
             if (finalMatch) {
