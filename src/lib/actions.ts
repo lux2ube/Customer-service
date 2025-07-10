@@ -9,7 +9,6 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule } from './types';
 import { parseSms } from '@/lib/sms-parser';
-import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
 
@@ -1191,7 +1190,8 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
             
             // Check against phone blacklist
             for (const item of phoneBlacklist) {
-                if (client.phone?.includes(item.value)) {
+                const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
+                if (clientPhones.includes(item.value)) {
                     if (!currentFlags.includes('Blacklisted')) {
                         currentFlags.push('Blacklisted');
                         needsUpdate = true;
@@ -1460,7 +1460,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
     const transactionsRef = ref(db, 'sms_transactions');
-    const settingsRef = ref(db, 'settings');
     const rulesRef = ref(db, 'sms_parsing_rules');
 
     try {
@@ -1468,7 +1467,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
-            get(settingsRef),
             get(transactionsRef),
             get(rulesRef),
         ]);
@@ -1477,7 +1475,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             incomingSnapshot,
             endpointsSnapshot,
             accountsSnapshot,
-            settingsSnapshot,
             smsTransactionsSnapshot,
             rulesSnapshot,
         ] = promiseResults;
@@ -1490,7 +1487,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allIncoming = incomingSnapshot.val();
         const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
-        const settings: Settings | null = settingsSnapshot.val();
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
         
         const allSmsTransactions: SmsTransaction[] = smsTransactionsSnapshot.exists() ? Object.values(smsTransactionsSnapshot.val()) : [];
@@ -1548,8 +1544,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
             }
             
-            if (!parsed && settings?.gemini_api_key) {
-                parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
+            if (!parsed) {
+                // Fallback to original parser if custom rules fail
+                parsed = parseSms(trimmedSmsBody);
             }
             
             if (parsed) {
@@ -1561,7 +1558,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     amount: parsed.amount,
                     currency: account.currency,
                     type: parsed.type,
-                    status: 'parsed', // New status
+                    status: 'parsed',
                     parsed_at: new Date().toISOString(),
                     raw_sms: trimmedSmsBody,
                 };
@@ -1614,8 +1611,10 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
      try {
+        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('status'), startAt('parsed'), endAt('parsed'));
+        
         const [smsSnapshot, clientsSnapshot, endpointsSnapshot] = await Promise.all([
-            get(query(ref(db, 'sms_transactions'), orderByChild('status'), startAt('parsed').endAt('parsed'))),
+            get(smsQuery),
             get(ref(db, 'clients')),
             get(ref(db, 'sms_endpoints')),
         ]);
@@ -1643,7 +1642,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
             if (nameRules.includes('phone_number')) {
                  const phoneMatches = clientsArray.filter(c => 
-                    (c.phone || []).some(p => p && parsedName.includes(p.replace(/[^0-9]/g, '')))
+                    (Array.isArray(c.phone) ? c.phone : [c.phone]).some(p => p && parsedName.includes(p.replace(/[^0-9]/g, '')))
                 );
                 potentialMatches.push(...phoneMatches);
             }
