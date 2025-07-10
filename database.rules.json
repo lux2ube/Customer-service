@@ -4,7 +4,9 @@
     ".read": "true",
     ".write": "true",
     "sms_transactions": {
-      ".indexOn": "status"
+      ".indexOn": "parsed_at"
     }
   }
 }
+
+    

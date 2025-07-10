@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from './firebase';
-import { push, ref, set, update, get, remove, query, orderByChild, equalTo } from 'firebase/database';
+import { push, ref, set, update, get, remove, query, orderByChild, equalTo, startAt } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -1611,7 +1611,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
      try {
-        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('status'), equalTo('parsed'));
+        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('parsed_at'), startAt(fortyEightHoursAgo));
         
         const [smsSnapshot, clientsSnapshot, endpointsSnapshot] = await Promise.all([
             get(smsQuery),
@@ -1620,10 +1621,22 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         ]);
 
         if (!smsSnapshot.exists() || !clientsSnapshot.exists() || !endpointsSnapshot.exists()) {
-            return { message: "No parsed SMS or clients to match.", error: false };
+            return { message: "No recent SMS or clients to match.", error: false };
         }
 
-        const smsToMatch: Record<string, SmsTransaction> = smsSnapshot.val();
+        const allSmsFromLast48Hours: Record<string, SmsTransaction> = smsSnapshot.val();
+        const smsToMatch: Record<string, SmsTransaction> = {};
+
+        for (const smsId in allSmsFromLast48Hours) {
+            if (allSmsFromLast48Hours[smsId].status === 'parsed') {
+                smsToMatch[smsId] = allSmsFromLast48Hours[smsId];
+            }
+        }
+        
+        if (Object.keys(smsToMatch).length === 0) {
+             return { message: "No SMS messages with 'parsed' status in the last 48 hours.", error: false };
+        }
+
         const clients: Record<string, Client> = clientsSnapshot.val();
         const endpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
         const clientsArray: Client[] = Object.keys(clients).map(id => ({ id, ...clients[id] }));
@@ -1633,7 +1646,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
         for (const smsId in smsToMatch) {
             const sms = { id: smsId, ...smsToMatch[smsId] };
-            const endpoint = endpoints[sms.account_id];
+            const endpoint = allEndpoints[sms.account_id];
             if (!endpoint || !sms.client_name) continue;
 
             const nameRules = endpoint.nameMatchingRules || [];
@@ -1927,3 +1940,5 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
     revalidatePath('/transactions');
     redirect('/mexc-deposits');
 }
+
+    
