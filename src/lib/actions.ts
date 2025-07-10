@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from './firebase';
-import { push, ref, set, update, get, remove, query, orderByChild, startAt, endAt } from 'firebase/database';
+import { push, ref, set, update, get, remove, query, orderByChild, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -1611,7 +1611,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
      try {
-        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('status'), startAt('parsed'), endAt('parsed'));
+        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('status'), equalTo('parsed'));
         
         const [smsSnapshot, clientsSnapshot, endpointsSnapshot] = await Promise.all([
             get(smsQuery),
@@ -1642,7 +1642,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
             if (nameRules.includes('phone_number')) {
                  const phoneMatches = clientsArray.filter(c => 
-                    (Array.isArray(c.phone) ? c.phone : [c.phone]).some(p => p && parsedName.includes(p.replace(/[^0-9]/g, '')))
+                    (Array.isArray(c.phone) ? c.phone : [c.phone]).some(p => p && sms.client_name!.replace(/[^0-9]/g, '').includes(p.replace(/[^0-9]/g, '')))
                 );
                 potentialMatches.push(...phoneMatches);
             }
@@ -1752,11 +1752,13 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
             if (group.length > 1) {
                 mergedGroups++;
 
+                // The primary client is the one created first
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 
                 const primaryClient = group[0];
                 const duplicates = group.slice(1);
                 
+                // Aggregate data from duplicates into the primary client
                 const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
                 const allBep20 = new Set(primaryClient.bep20_addresses || []);
@@ -1771,9 +1773,11 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
                         }
                     });
                     
+                    // Mark the duplicate for deletion
                     updates[`/clients/${dup.id}`] = null;
                 };
-
+                
+                // Prepare updates for the primary client
                 updates[`/clients/${primaryClient.id}/phone`] = Array.from(allPhones);
                 updates[`/clients/${primaryClient.id}/bep20_addresses`] = Array.from(allBep20);
                 updates[`/clients/${primaryClient.id}/kyc_documents`] = Array.from(allKycDocs.values());
