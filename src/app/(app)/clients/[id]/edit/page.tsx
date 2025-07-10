@@ -39,6 +39,31 @@ async function getBankAccounts(): Promise<Account[]> {
     return [];
 }
 
+async function getOtherClientsWithSameName(client: Client): Promise<Client[]> {
+    if (!client.name) return [];
+    
+    const nameParts = client.name.trim().split(/\s+/);
+    if (nameParts.length < 2) return [];
+
+    const firstTwoNames = `${nameParts[0]} ${nameParts[1]}`.toLowerCase();
+
+    const clientsRef = ref(db, 'clients');
+    const snapshot = await get(clientsRef);
+    if (!snapshot.exists()) {
+        return [];
+    }
+    
+    const allClients: Client[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
+    
+    return allClients.filter(c => {
+        if (c.id === client.id || !c.name) return false;
+        const otherNameParts = c.name.trim().split(/\s+/);
+        if (otherNameParts.length < 2) return false;
+        const otherFirstTwo = `${otherNameParts[0]} ${otherNameParts[1]}`.toLowerCase();
+        return otherFirstTwo === firstTwoNames;
+    });
+}
+
 
 export default async function EditClientPage({ params }: { params: { id: string } }) {
     const client = await getClient(params.id);
@@ -49,6 +74,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
 
     const bankAccounts = await getBankAccounts();
     const transactions = await getClientTransactions(params.id);
+    const otherClientsWithSameName = await getOtherClientsWithSameName(client);
 
     return (
         <>
@@ -57,7 +83,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
                 description="Update the client's profile details."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} />
+                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} otherClientsWithSameName={otherClientsWithSameName} />
             </Suspense>
         </>
     );

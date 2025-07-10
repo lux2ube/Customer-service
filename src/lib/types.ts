@@ -17,6 +17,7 @@ export interface Client {
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];
+    prioritize_sms_matching?: boolean;
     createdAt: string;
     bep20_addresses?: string[];
     favoriteBankAccountId?: string;
@@ -125,16 +126,18 @@ export interface IncomingSms {
 
 export interface SmsTransaction {
     id: string;
-    client_name: string;
+    client_name: string; // Name parsed from the SMS
     account_id: string;
     account_name?: string; // for display
     amount: number | null;
     currency: string | null;
     type: 'credit' | 'debit' | null;
-    status: 'pending' | 'matched' | 'used' | 'rejected';
+    status: 'pending' | 'parsed' | 'matched' | 'used' | 'rejected';
     parsed_at: string;
     raw_sms: string;
     transaction_id?: string; // To store the linked transaction ID
+    matched_client_id?: string;
+    matched_client_name?: string;
 }
 
 export interface ParsedSms {
@@ -144,11 +147,14 @@ export interface ParsedSms {
   person?: string;
 }
 
+export type NameMatchingRule = 'phone_number' | 'first_and_second' | 'first_and_last' | 'full_name' | 'part_of_full_name';
+
 export interface SmsEndpoint {
     id: string;
     accountId: string;
     accountName: string;
     createdAt: string;
+    nameMatchingRules?: NameMatchingRule[];
 }
 
 export interface SmsParsingRule {

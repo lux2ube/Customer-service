@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2, Loader2 } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 
 const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
@@ -40,7 +41,7 @@ function SubmitButton() {
     );
 }
 
-export function ClientForm({ client, bankAccounts, transactions }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[] }) {
+export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
     const { toast } = useToast();
     
     const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
@@ -53,6 +54,7 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
         phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
         verification_status: client?.verification_status || 'Pending',
         review_flags: client?.review_flags || [],
+        prioritize_sms_matching: client?.prioritize_sms_matching || false,
     });
     
     const [filesToUpload, setFilesToUpload] = React.useState<File[]>([]);
@@ -186,6 +188,8 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
         setDialogState(null);
     };
 
+    const showPriorityWarning = formData.prioritize_sms_matching && otherClientsWithSameName && otherClientsWithSameName.length > 0;
+
     return (
         <>
         <form action={formAction} ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -283,6 +287,29 @@ export function ClientForm({ client, bankAccounts, transactions }: { client?: Cl
                                 </div>
                                 ))}
                             </div>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id="prioritize_sms_matching"
+                                    name="prioritize_sms_matching"
+                                    checked={formData.prioritize_sms_matching}
+                                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, prioritize_sms_matching: !!checked }))}
+                                />
+                                <Label htmlFor="prioritize_sms_matching" className="font-normal">Prioritize for SMS Auto-Matching</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">If multiple clients share a name, enabling this makes this client the default match.</p>
+                             {showPriorityWarning && (
+                                <Alert variant="destructive" className="mt-2">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                        Warning: The following clients share a similar name. Enabling this option will prevent them from being auto-matched:
+                                        <ul className="list-disc pl-5 mt-1">
+                                            {otherClientsWithSameName?.map(c => <li key={c.id}>{c.name}</li>)}
+                                        </ul>
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

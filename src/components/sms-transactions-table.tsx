@@ -26,27 +26,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { SmsTransaction, Account } from '@/lib/types';
+import type { SmsTransaction, Account, Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, X } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, X, Check, ChevronsUpDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
-import { updateSmsTransactionStatus } from '@/lib/actions';
+import { updateSmsTransactionStatus, linkSmsToClient } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
-const statuses: SmsTransaction['status'][] = ['pending', 'matched', 'used', 'rejected'];
-const types: ('deposit' | 'withdraw')[] = ['deposit', 'withdraw'];
+const statuses: SmsTransaction['status'][] = ['pending', 'parsed', 'matched', 'used', 'rejected'];
+const types: ('credit' | 'debit')[] = ['credit', 'debit'];
 
 export function SmsTransactionsTable() {
     const [transactions, setTransactions] = React.useState<SmsTransaction[]>([]);
     const [accounts, setAccounts] = React.useState<Account[]>([]);
+    const [clients, setClients] = React.useState<Client[]>([]);
     const [loading, setLoading] = React.useState(true);
 
     const [statusFilter, setStatusFilter] = React.useState('all');
@@ -55,13 +58,14 @@ export function SmsTransactionsTable() {
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
     
     const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
-    const [linkTxId, setLinkTxId] = React.useState<string | null>(null);
+    const [manualLinkSms, setManualLinkSms] = React.useState<SmsTransaction | null>(null);
 
     const { toast } = useToast();
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'sms_transactions/');
         const accountsRef = ref(db, 'accounts');
+        const clientsRef = ref(db, 'clients');
 
         const unsubscribeTransactions = onValue(transactionsRef, (snapshot) => {
             const data = snapshot.val();
@@ -76,10 +80,17 @@ export function SmsTransactionsTable() {
             const list: Account[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
             setAccounts(list.filter(acc => !acc.isGroup));
         });
+        
+        const unsubscribeClients = onValue(clientsRef, (snapshot) => {
+            const data = snapshot.val();
+            const list: Client[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            setClients(list);
+        });
 
         return () => {
             unsubscribeTransactions();
             unsubscribeAccounts();
+            unsubscribeClients();
         };
     }, []);
 
@@ -107,6 +118,7 @@ export function SmsTransactionsTable() {
     const getStatusVariant = (status: SmsTransaction['status']) => {
         switch(status) {
             case 'pending': return 'secondary';
+            case 'parsed': return 'secondary';
             case 'matched': return 'default';
             case 'used': return 'outline';
             case 'rejected': return 'destructive';
@@ -122,6 +134,17 @@ export function SmsTransactionsTable() {
             toast({ variant: "destructive", title: "Error", description: result.message });
         }
     };
+    
+    const handleManualLink = async (clientId: string) => {
+        if (!manualLinkSms) return;
+        const result = await linkSmsToClient(manualLinkSms.id, clientId);
+         if (result?.success) {
+            toast({ title: "Client Linked", description: `SMS successfully linked to client.`});
+        } else {
+            toast({ variant: "destructive", title: "Error", description: result.message });
+        }
+        setManualLinkSms(null);
+    }
 
     return (
     <div>
@@ -166,7 +189,8 @@ export function SmsTransactionsTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Client</TableHead>
+                <TableHead>Parsed Name</TableHead>
+                <TableHead>Matched Client</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Amount</TableHead>
@@ -177,11 +201,12 @@ export function SmsTransactionsTable() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : filteredTransactions.length > 0 ? (
                 filteredTransactions.map(tx => (
                   <TableRow key={tx.id}>
                     <TableCell className="font-medium">{tx.client_name}</TableCell>
+                    <TableCell className="font-medium text-primary">{tx.matched_client_name || 'N/A'}</TableCell>
                     <TableCell>{tx.account_name || tx.account_id}</TableCell>
                     <TableCell><Badge variant={!tx.type ? 'destructive' : tx.type === 'deposit' ? 'outline' : 'secondary'} className="capitalize">{tx.type || 'Unknown'}</Badge></TableCell>
                     <TableCell className="font-mono">{tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}</TableCell>
@@ -191,18 +216,17 @@ export function SmsTransactionsTable() {
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setManualLinkSms(tx)}>Manually Link Client</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleStatusUpdate(tx.id, 'used')}>Mark as Used</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusUpdate(tx.id, 'matched')}>Mark as Matched</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleStatusUpdate(tx.id, 'rejected')}>Mark as Rejected</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setRawSmsToShow(tx.raw_sms)}>View Raw SMS</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setLinkTxId(tx.id)}>Link to Transaction</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">No SMS transactions found for the selected criteria.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">No SMS transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -220,17 +244,75 @@ export function SmsTransactionsTable() {
             </AlertDialogContent>
         </AlertDialog>
 
-        <AlertDialog open={!!linkTxId} onOpenChange={(open) => !open && setLinkTxId(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Link to Crypto Transaction</AlertDialogTitle>
-                    <AlertDialogDescription>This functionality is coming soon. It will allow you to manually associate this SMS with a formal transaction record.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                     <AlertDialogAction onClick={() => setLinkTxId(null)}>Close</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <Dialog open={!!manualLinkSms} onOpenChange={(open) => !open && setManualLinkSms(null)}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Manually Link SMS to Client</DialogTitle>
+                </DialogHeader>
+                 <ClientSelector clients={clients} onClientSelect={handleManualLink} />
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="secondary">Cancel</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
+}
+
+
+function ClientSelector({ clients, onClientSelect }: { clients: Client[], onClientSelect: (clientId: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [value, setValue] = React.useState("");
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {value
+            ? clients.find((client) => client.id === value)?.name
+            : "Select client..."}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder="Search clients..." />
+          <CommandList>
+            <CommandEmpty>No client found.</CommandEmpty>
+            <CommandGroup>
+                {clients.map((client) => (
+                <CommandItem
+                    key={client.id}
+                    value={`${client.id} ${client.name} ${client.phone.join(' ')}`}
+                    onSelect={() => {
+                        setValue(client.id)
+                        setOpen(false)
+                        onClientSelect(client.id)
+                    }}
+                >
+                    <Check
+                    className={cn(
+                        "mr-2 h-4 w-4",
+                        value === client.id ? "opacity-100" : "opacity-0"
+                    )}
+                    />
+                    <div className="flex justify-between w-full">
+                        <span>{client.name}</span>
+                        <span className="text-muted-foreground">{client.phone[0]}</span>
+                    </div>
+                </CommandItem>
+                ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
 }

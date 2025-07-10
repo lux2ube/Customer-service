@@ -7,7 +7,7 @@ import { push, ref, set, update, get, remove, query, orderByChild, startAt, endA
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule } from './types';
 import { parseSms } from '@/lib/sms-parser';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
@@ -133,6 +133,7 @@ const ClientSchema = z.object({
     phone: z.array(z.string().min(1, { message: 'Phone number cannot be empty.' })).min(1, { message: 'At least one phone number is required.' }),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
     review_flags: z.array(z.string()).optional(),
+    prioritize_sms_matching: z.boolean().default(false),
 });
 
 
@@ -174,6 +175,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
         phone: formData.getAll('phone'),
         verification_status: formData.get('verification_status'),
         review_flags: formData.getAll('review_flags'),
+        prioritize_sms_matching: formData.get('prioritize_sms_matching') === 'on',
     };
 
     const validatedFields = ClientSchema.safeParse(dataToValidate);
@@ -1334,6 +1336,34 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
     }
 }
 
+export async function linkSmsToClient(smsId: string, clientId: string): Promise<{ success: boolean, message?: string }> {
+    if (!smsId || !clientId) {
+        return { success: false, message: 'Invalid SMS ID or Client ID.' };
+    }
+    try {
+        const clientRef = ref(db, `clients/${clientId}`);
+        const clientSnapshot = await get(clientRef);
+        if (!clientSnapshot.exists()) {
+            return { success: false, message: 'Client not found.' };
+        }
+        const clientName = (clientSnapshot.val() as Client).name;
+
+        const smsTxRef = ref(db, `sms_transactions/${smsId}`);
+        const updateData = {
+            status: 'matched',
+            matched_client_id: clientId,
+            matched_client_name: clientName,
+        };
+        await update(smsTxRef, updateData);
+        revalidatePath('/sms/transactions');
+        return { success: true, message: 'SMS linked to client successfully.' };
+    } catch (error) {
+        console.error('Error linking SMS to client:', error);
+        return { success: false, message: 'Database error while linking.' };
+    }
+}
+
+
 export async function matchSmsTransaction(smsId: string): Promise<{success: boolean, message?: string}> {
     if (!smsId) {
         return { success: false, message: 'Invalid SMS ID provided.' };
@@ -1357,14 +1387,27 @@ export async function matchSmsTransaction(smsId: string): Promise<{success: bool
 }
 
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
+export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
+
+const SmsEndpointSchema = z.object({
+  accountId: z.string().min(1, 'Account selection is required.'),
+  nameMatchingRules: z.array(z.string()).optional(),
+});
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
-export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
-    const accountId = formData.get('accountId') as string;
-    if (!accountId) {
-        return { message: 'Account selection is required.', error: true };
+export async function createSmsEndpoint(endpointId: string | null, prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+    const dataToValidate = {
+        accountId: formData.get('accountId'),
+        nameMatchingRules: formData.getAll('nameMatchingRules'),
+    };
+
+    const validatedFields = SmsEndpointSchema.safeParse(dataToValidate);
+    if (!validatedFields.success) {
+        return { message: 'Invalid data provided.', error: true };
     }
+
+    const { accountId, nameMatchingRules } = validatedFields.data;
 
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -1372,20 +1415,29 @@ export async function createSmsEndpoint(prevState: SmsEndpointState, formData: F
             return { message: 'Selected account not found.', error: true };
         }
         const accountName = (accountSnapshot.val() as Account).name;
-
-        const newEndpointRef = push(ref(db, 'sms_endpoints'));
-        await set(newEndpointRef, {
+        
+        const endpointData = {
             accountId,
             accountName,
-            createdAt: new Date().toISOString(),
-        });
+            nameMatchingRules,
+        };
+
+        if (endpointId) {
+            await update(ref(db, `sms_endpoints/${endpointId}`), endpointData);
+        } else {
+            const newEndpointRef = push(ref(db, 'sms_endpoints'));
+            await set(newEndpointRef, {
+                ...endpointData,
+                createdAt: new Date().toISOString(),
+            });
+        }
 
         revalidatePath('/sms/settings');
-        return { message: 'Endpoint created successfully.' };
+        return { message: endpointId ? 'Endpoint updated successfully.' : 'Endpoint created successfully.' };
 
     } catch (error) {
-        console.error('Create SMS Endpoint Error:', error);
-        return { message: 'Database Error: Failed to create endpoint.', error: true };
+        console.error('Create/Update SMS Endpoint Error:', error);
+        return { message: 'Database Error: Failed to save endpoint.', error: true };
     }
 }
 
@@ -1436,7 +1488,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         const allIncoming = incomingSnapshot.val();
-        const allEndpoints: Record<string, { accountId: string, accountName: string }> = endpointsSnapshot.val() || {};
+        const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const settings: Settings | null = settingsSnapshot.val();
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
@@ -1452,15 +1504,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
         let duplicateCount = 0;
-        let customSuccessCount = 0;
-        // let regexSuccessCount = 0;
-        // let aiSuccessCount = 0;
+        let successCount = 0;
         let failedCount = 0;
 
         const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
             const endpointMapping = allEndpoints[endpointId];
             
-            // Always remove the message from the incoming queue
             if (messageId) {
                 updates[`/incoming/${endpointId}/${messageId}`] = null;
             } else {
@@ -1472,7 +1521,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const accountId = endpointMapping.accountId;
             const account = allChartOfAccounts[accountId];
             
-            if (!account || !account.currency) return; // Skip if account or its currency isn't defined
+            if (!account || !account.currency) return;
 
             let smsBody: string;
             if (typeof payload === 'object' && payload !== null) {
@@ -1484,10 +1533,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             const trimmedSmsBody = smsBody.trim();
             if (trimmedSmsBody === '') return;
             
-            // Check for duplicates based on the entire message body within the last 24 hours
             if (recentSmsBodies.has(trimmedSmsBody)) {
                 duplicateCount++;
-                return; // Skip processing
+                return;
             }
 
             processedCount++;
@@ -1496,41 +1544,27 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
             let parsed: ParsedSms | null = null;
             
-            // Stage 1: Custom Rules
             if (customRules.length > 0) {
                 parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
-                if (parsed) customSuccessCount++;
             }
-
-            // Stage 2: Static Regex Parser (Temporarily disabled)
-            /*
-            if (!parsed) {
-                parsed = parseSms(trimmedSmsBody);
-                if (parsed) regexSuccessCount++;
-            }
-            */
             
-            // Stage 3: AI Parser (if everything else fails)
-            /*
-            if (!parsed) {
-                parsed = await parseSmsWithAi(trimmedSmsBody, settings?.gemini_api_key || '');
-                if (parsed) aiSuccessCount++;
+            if (!parsed && settings?.gemini_api_key) {
+                parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
             }
-            */
             
             if (parsed) {
+                successCount++;
                 updates[`/sms_transactions/${newTxId}`] = {
                     client_name: parsed.person,
                     account_id: accountId,
                     account_name: account.name,
                     amount: parsed.amount,
-                    currency: account.currency, // Use currency from the account
+                    currency: account.currency,
                     type: parsed.type,
-                    status: 'pending',
+                    status: 'parsed', // New status
                     parsed_at: new Date().toISOString(),
-                    raw_sms: trimmedSmsBody, // Store the trimmed version
+                    raw_sms: trimmedSmsBody,
                 };
-                // Add to set to prevent processing duplicates in the same run
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
@@ -1566,7 +1600,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
-        let message = `Processed ${processedCount} message(s): ${customSuccessCount} by custom rules, ${failedCount} failed.`;
+        let message = `Processed ${processedCount} message(s): ${successCount} successfully parsed, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;
         }
@@ -1577,6 +1611,89 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         return { message: error.message || "An unknown error occurred during SMS processing.", error: true };
     }
 }
+
+export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
+     try {
+        const [smsSnapshot, clientsSnapshot, endpointsSnapshot] = await Promise.all([
+            get(query(ref(db, 'sms_transactions'), orderByChild('status'), startAt('parsed').endAt('parsed'))),
+            get(ref(db, 'clients')),
+            get(ref(db, 'sms_endpoints')),
+        ]);
+
+        if (!smsSnapshot.exists() || !clientsSnapshot.exists() || !endpointsSnapshot.exists()) {
+            return { message: "No parsed SMS or clients to match.", error: false };
+        }
+
+        const smsToMatch: Record<string, SmsTransaction> = smsSnapshot.val();
+        const clients: Record<string, Client> = clientsSnapshot.val();
+        const endpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
+        const clientsArray: Client[] = Object.keys(clients).map(id => ({ id, ...clients[id] }));
+
+        let matchedCount = 0;
+        const updates: { [key: string]: any } = {};
+
+        for (const smsId in smsToMatch) {
+            const sms = { id: smsId, ...smsToMatch[smsId] };
+            const endpoint = endpoints[sms.account_id];
+            if (!endpoint || !sms.client_name) continue;
+
+            const nameRules = endpoint.nameMatchingRules || [];
+            let potentialMatches: Client[] = [];
+            const parsedName = normalizeArabic(sms.client_name.toLowerCase());
+
+            if (nameRules.includes('phone_number')) {
+                const phoneMatches = clientsArray.filter(c => c.phone.some(p => parsedName.includes(p)));
+                potentialMatches.push(...phoneMatches);
+            }
+            if (nameRules.includes('full_name')) {
+                 const exactMatches = clientsArray.filter(c => normalizeArabic(c.name.toLowerCase()) === parsedName);
+                 potentialMatches.push(...exactMatches);
+            }
+            if (nameRules.includes('first_and_second')) {
+                const smsNameParts = parsedName.split(/\s+/);
+                if (smsNameParts.length >= 2) {
+                    const firstTwoSms = `${smsNameParts[0]} ${smsNameParts[1]}`;
+                    const firstTwoMatches = clientsArray.filter(c => {
+                        const clientNameParts = normalizeArabic(c.name.toLowerCase()).split(/\s+/);
+                        return clientNameParts.length >= 2 && `${clientNameParts[0]} ${clientNameParts[1]}` === firstTwoSms;
+                    });
+                    potentialMatches.push(...firstTwoMatches);
+                }
+            }
+            
+            // Deduplicate potential matches
+            const uniqueMatches = [...new Map(potentialMatches.map(item => [item['id'], item])).values()];
+
+            let finalMatch: Client | null = null;
+            if (uniqueMatches.length === 1) {
+                finalMatch = uniqueMatches[0];
+            } else if (uniqueMatches.length > 1) {
+                // Tie-breaker logic
+                const prioritizedClient = uniqueMatches.find(c => c.prioritize_sms_matching);
+                finalMatch = prioritizedClient || null; // For now, if no priority client, we don't match to avoid errors
+            }
+
+            if (finalMatch) {
+                updates[`/sms_transactions/${smsId}/status`] = 'matched';
+                updates[`/sms_transactions/${smsId}/matched_client_id`] = finalMatch.id;
+                updates[`/sms_transactions/${smsId}/matched_client_name`] = finalMatch.name;
+                matchedCount++;
+            }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/sms/transactions');
+        return { message: `Matching complete. Successfully matched ${matchedCount} SMS records.`, error: false };
+
+     } catch(error: any) {
+        console.error("SMS Matching Error:", error);
+        return { message: error.message || "An unknown error occurred during matching.", error: true };
+    }
+}
+
 
 // --- Client Merge Action ---
 export type MergeState = { message?: string; error?: boolean; } | undefined;
