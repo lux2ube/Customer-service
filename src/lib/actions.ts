@@ -1611,11 +1611,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
     try {
-        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-        const smsQuery = query(ref(db, 'sms_transactions'), orderByChild('parsed_at'), startAt(fortyEightHoursAgo));
-
         const [smsSnapshot, clientsSnapshot, endpointsSnapshot] = await Promise.all([
-            get(smsQuery),
+            get(ref(db, 'sms_transactions')),
             get(ref(db, 'clients')),
             get(ref(db, 'sms_endpoints')),
         ]);
@@ -1624,10 +1621,16 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             return { message: "No recent SMS or clients to match.", error: false };
         }
 
-        const allSmsFromLast48Hours: Record<string, SmsTransaction> = smsSnapshot.val() || {};
-        const smsToMatch = Object.entries(allSmsFromLast48Hours)
+        const allSmsTransactions: Record<string, SmsTransaction> = smsSnapshot.val() || {};
+        const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+
+        const smsToMatch = Object.entries(allSmsTransactions)
             .map(([id, sms]) => ({ id, ...sms }))
-            .filter(sms => sms.status === 'parsed');
+            .filter(sms => {
+                if (sms.status !== 'parsed') return false;
+                const parsedDate = new Date(sms.parsed_at).getTime();
+                return parsedDate >= fortyEightHoursAgo;
+            });
 
         if (smsToMatch.length === 0) {
             return { message: "No SMS messages with 'parsed' status in the last 48 hours.", error: false };
@@ -1641,21 +1644,25 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const updates: { [key: string]: any } = {};
 
         for (const sms of smsToMatch) {
-            const endpoint = endpoints[sms.account_id];
+            const endpoint = allEndpoints[sms.account_id];
             if (!endpoint || !sms.client_name) continue;
 
             const nameRules = endpoint.nameMatchingRules || [];
-            let potentialMatches: Client[] = [];
+            if (nameRules.length === 0) continue; // Skip if no rules are set for the endpoint
+
             const parsedName = normalizeArabic(sms.client_name.toLowerCase());
-            const parsedNameParts = parsedName.split(/\s+/);
+            
+            let potentialMatches: Client[] = [];
 
             for (const client of clientsArray) {
                 const clientName = normalizeArabic(client.name.toLowerCase());
                 const clientNameParts = clientName.split(/\s+/);
+                const parsedNameParts = parsedName.split(/\s+/);
+
                 let isMatch = false;
 
                 for (const rule of nameRules) {
-                    if (isMatch) break; // Already found a match for this client, move to next client
+                    if (isMatch) break; // Already found a match for this client for this SMS, move to next client
 
                     switch (rule) {
                         case 'phone_number':
@@ -1675,6 +1682,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                             }
                             break;
                         case 'part_of_full_name':
+                             // Check if all parts of the parsed name are present in the client's full name
                             if (parsedNameParts.every(part => clientName.includes(part))) {
                                 isMatch = true;
                             }
@@ -1690,7 +1698,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                     potentialMatches.push(client);
                 }
             }
-
+            
             // Deduplicate potential matches
             const uniqueMatches = [...new Map(potentialMatches.map(item => [item['id'], item])).values()];
 
@@ -1698,7 +1706,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             if (uniqueMatches.length === 1) {
                 finalMatch = uniqueMatches[0];
             } else if (uniqueMatches.length > 1) {
-                // Tie-breaker logic
+                // Tie-breaker logic: check for a prioritized client
                 const prioritizedClient = uniqueMatches.find(c => c.prioritize_sms_matching);
                 finalMatch = prioritizedClient || null; // If no priority client, we don't match to avoid errors
             }
