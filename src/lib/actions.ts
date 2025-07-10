@@ -1646,16 +1646,18 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
         for (const smsId in smsToMatch) {
             const sms = { id: smsId, ...smsToMatch[smsId] };
-            const endpoint = allEndpoints[sms.account_id];
+            const endpoint = endpoints[sms.account_id];
             if (!endpoint || !sms.client_name) continue;
 
             const nameRules = endpoint.nameMatchingRules || [];
             let potentialMatches: Client[] = [];
             const parsedName = normalizeArabic(sms.client_name.toLowerCase());
+            
+            const clientPhones = (Array.isArray(sms.client_name) ? sms.client_name : [sms.client_name]).map(p => p ? p.replace(/[^0-9]/g, '') : '');
 
             if (nameRules.includes('phone_number')) {
                  const phoneMatches = clientsArray.filter(c => 
-                    (Array.isArray(c.phone) ? c.phone : [c.phone]).some(p => p && sms.client_name!.replace(/[^0-9]/g, '').includes(p.replace(/[^0-9]/g, '')))
+                    (Array.isArray(c.phone) ? c.phone : [c.phone]).some(p => p && clientPhones.some(cp => cp.includes(p.replace(/[^0-9]/g,''))))
                 );
                 potentialMatches.push(...phoneMatches);
             }
@@ -1940,5 +1942,3 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
     revalidatePath('/transactions');
     redirect('/mexc-deposits');
 }
-
-    
