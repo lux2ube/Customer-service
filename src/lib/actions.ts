@@ -1624,17 +1624,16 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const allSmsData: Record<string, SmsTransaction> = smsSnapshot.val() || {};
         const allClients: Record<string, Client> = clientsSnapshot.val() || {};
         const clientsArray: (Client & { id: string })[] = Object.entries(allClients).map(([id, client]) => ({ id, ...client }));
-        
+
         const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
-        
-        const smsToMatch = Object.values(allSmsData)
-            .map((sms, index) => ({ ...sms, id: Object.keys(allSmsData)[index] }))
+        const smsToMatch = Object.entries(allSmsData)
+            .map(([id, sms]) => ({ ...sms, id }))
             .filter(sms => sms.status === 'parsed' && new Date(sms.parsed_at).getTime() >= fortyEightHoursAgo);
 
         if (smsToMatch.length === 0) {
             return { message: "No new SMS messages to match.", error: false };
         }
-        
+
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
 
@@ -1642,16 +1641,15 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             if (!sms.client_name) continue;
 
             const smsParsedName = normalizeArabic(sms.client_name.toLowerCase());
-            const smsParsedNameParts = smsParsedName.split(/\s+/).filter(Boolean);
+            let potentialMatches: (Client & { id: string })[] = [];
 
-            // --- Pass 1: Match by Phone Number ---
-            const phoneMatches = clientsArray.filter(client => 
+            // --- Pass 1: Phone Number Match ---
+            potentialMatches = clientsArray.filter(client =>
                 (Array.isArray(client.phone) ? client.phone : [client.phone])
                 .some(phone => phone && smsParsedName.includes(phone.replace(/\D/g, '')))
             );
-
-            if (phoneMatches.length === 1) {
-                const finalMatch = phoneMatches[0];
+            if (potentialMatches.length === 1) {
+                const finalMatch = potentialMatches[0];
                 updates[`/sms_transactions/${sms.id}/status`] = 'matched';
                 updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
                 updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
@@ -1659,46 +1657,50 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 continue;
             }
 
-            // --- Pass 2: Match by Exact Full Name ---
-            const exactNameMatches = clientsArray.filter(client => 
-                normalizeArabic(client.name.toLowerCase()) === smsParsedName
-            );
-
-            if (exactNameMatches.length === 1) {
-                const finalMatch = exactNameMatches[0];
-                updates[`/sms_transactions/${sms.id}/status`] = 'matched';
-                updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
-                updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
-                matchedCount++;
-                continue;
-            }
-
-            // --- Pass 3: Match by First & Second Name with Tie-Breaker ---
-            if (smsParsedNameParts.length >= 2) {
-                const partialNameMatches = clientsArray.filter(client => {
-                    const clientNameParts = normalizeArabic(client.name.toLowerCase()).split(/\s+/);
-                    return clientNameParts.length >= 2 && 
-                           clientNameParts[0] === smsParsedNameParts[0] &&
-                           clientNameParts[1] === smsParsedNameParts[1];
+            // --- Pass 2: Exact Full Name Match ---
+            if (potentialMatches.length === 0) {
+                potentialMatches = clientsArray.filter(client => {
+                    if (!client.name) return false; // Guard against missing name
+                    return normalizeArabic(client.name.toLowerCase()) === smsParsedName
                 });
+            }
+            if (potentialMatches.length === 1) {
+                const finalMatch = potentialMatches[0];
+                updates[`/sms_transactions/${sms.id}/status`] = 'matched';
+                updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
+                updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
+                matchedCount++;
+                continue;
+            }
+            
+            // --- Pass 3: First & Second Name Match ---
+            if (potentialMatches.length === 0) {
+                const smsParsedNameParts = smsParsedName.split(/\s+/).filter(Boolean);
+                if (smsParsedNameParts.length >= 2) {
+                    potentialMatches = clientsArray.filter(client => {
+                         if (!client.name) return false; // Guard against missing name
+                        const clientNameParts = normalizeArabic(client.name.toLowerCase()).split(/\s+/);
+                        return clientNameParts.length >= 2 &&
+                            clientNameParts[0] === smsParsedNameParts[0] &&
+                            clientNameParts[1] === smsParsedNameParts[1];
+                    });
+                }
+            }
 
-                if (partialNameMatches.length === 1) {
-                    const finalMatch = partialNameMatches[0];
+            // --- Conflict Resolution ---
+            if (potentialMatches.length === 1) {
+                const finalMatch = potentialMatches[0];
+                updates[`/sms_transactions/${sms.id}/status`] = 'matched';
+                updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
+                updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
+                matchedCount++;
+            } else if (potentialMatches.length > 1) {
+                const prioritizedMatch = potentialMatches.find(c => c.prioritize_sms_matching);
+                if (prioritizedMatch) {
                     updates[`/sms_transactions/${sms.id}/status`] = 'matched';
-                    updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
-                    updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
+                    updates[`/sms_transactions/${sms.id}/matched_client_id`] = prioritizedMatch.id;
+                    updates[`/sms_transactions/${sms.id}/matched_client_name`] = prioritizedMatch.name;
                     matchedCount++;
-                    continue;
-                } else if (partialNameMatches.length > 1) {
-                    // Tie-breaker logic
-                    const prioritizedMatch = partialNameMatches.find(c => c.prioritize_sms_matching);
-                    if (prioritizedMatch) {
-                        updates[`/sms_transactions/${sms.id}/status`] = 'matched';
-                        updates[`/sms_transactions/${sms.id}/matched_client_id`] = prioritizedMatch.id;
-                        updates[`/sms_transactions/${sms.id}/matched_client_name`] = prioritizedMatch.name;
-                        matchedCount++;
-                        continue;
-                    }
                 }
             }
         }
