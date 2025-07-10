@@ -208,7 +208,7 @@ export function SmsTransactionsTable() {
                     <TableCell className="font-medium">{tx.client_name}</TableCell>
                     <TableCell className="font-medium text-primary">{tx.matched_client_name || 'N/A'}</TableCell>
                     <TableCell>{tx.account_name || tx.account_id}</TableCell>
-                    <TableCell><Badge variant={!tx.type ? 'destructive' : tx.type === 'deposit' ? 'outline' : 'secondary'} className="capitalize">{tx.type || 'Unknown'}</Badge></TableCell>
+                    <TableCell><Badge variant={!tx.type ? 'destructive' : tx.type === 'credit' ? 'default' : 'secondary'} className="capitalize">{tx.type || 'Unknown'}</Badge></TableCell>
                     <TableCell className="font-mono">{tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}</TableCell>
                     <TableCell><Badge variant={getStatusVariant(tx.status)} className="capitalize">{tx.status}</Badge></TableCell>
                     <TableCell>{tx.parsed_at && !isNaN(new Date(tx.parsed_at).getTime()) ? format(new Date(tx.parsed_at), 'Pp') : 'N/A'}</TableCell>
@@ -252,7 +252,7 @@ export function SmsTransactionsTable() {
                  <ClientSelector clients={clients} onClientSelect={handleManualLink} />
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button variant="secondary">Cancel</Button>
+                        <Button variant="secondary" type="button">Cancel</Button>
                     </DialogClose>
                 </DialogFooter>
             </DialogContent>
@@ -290,7 +290,7 @@ function ClientSelector({ clients, onClientSelect }: { clients: Client[], onClie
                 {clients.map((client) => (
                 <CommandItem
                     key={client.id}
-                    value={`${client.id} ${client.name} ${client.phone.join(' ')}`}
+                    value={`${client.id} ${client.name} ${(Array.isArray(client.phone) ? client.phone.join(' ') : client.phone || '')}`}
                     onSelect={() => {
                         setValue(client.id)
                         setOpen(false)
@@ -305,7 +305,7 @@ function ClientSelector({ clients, onClientSelect }: { clients: Client[], onClie
                     />
                     <div className="flex justify-between w-full">
                         <span>{client.name}</span>
-                        <span className="text-muted-foreground">{client.phone[0]}</span>
+                        <span className="text-muted-foreground">{Array.isArray(client.phone) ? client.phone[0] : client.phone}</span>
                     </div>
                 </CommandItem>
                 ))}

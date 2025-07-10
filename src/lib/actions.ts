@@ -1350,7 +1350,7 @@ export async function linkSmsToClient(smsId: string, clientId: string): Promise<
 
         const smsTxRef = ref(db, `sms_transactions/${smsId}`);
         const updateData = {
-            status: 'matched',
+            status: 'matched' as const,
             matched_client_id: clientId,
             matched_client_name: clientName,
         };
@@ -1642,7 +1642,9 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             const parsedName = normalizeArabic(sms.client_name.toLowerCase());
 
             if (nameRules.includes('phone_number')) {
-                const phoneMatches = clientsArray.filter(c => c.phone.some(p => parsedName.includes(p)));
+                 const phoneMatches = clientsArray.filter(c => 
+                    (c.phone || []).some(p => p && parsedName.includes(p.replace(/[^0-9]/g, '')))
+                );
                 potentialMatches.push(...phoneMatches);
             }
             if (nameRules.includes('full_name')) {
@@ -1658,6 +1660,26 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                         return clientNameParts.length >= 2 && `${clientNameParts[0]} ${clientNameParts[1]}` === firstTwoSms;
                     });
                     potentialMatches.push(...firstTwoMatches);
+                }
+            }
+             if (nameRules.includes('part_of_full_name')) {
+                const smsNameParts = new Set(parsedName.split(/\s+/));
+                const partialMatches = clientsArray.filter(c => {
+                    const clientNameParts = normalizeArabic(c.name.toLowerCase()).split(/\s+/);
+                    return clientNameParts.some(part => smsNameParts.has(part));
+                });
+                potentialMatches.push(...partialMatches);
+            }
+            if (nameRules.includes('first_and_last')) {
+                const smsNameParts = parsedName.split(/\s+/);
+                if (smsNameParts.length >= 2) {
+                    const firstSms = smsNameParts[0];
+                    const lastSms = smsNameParts[smsNameParts.length - 1];
+                    const firstLastMatches = clientsArray.filter(c => {
+                        const clientNameParts = normalizeArabic(c.name.toLowerCase()).split(/\s+/);
+                        return clientNameParts.length >= 2 && clientNameParts[0] === firstSms && clientNameParts[clientNameParts.length - 1] === lastSms;
+                    });
+                    potentialMatches.push(...firstLastMatches);
                 }
             }
             
@@ -1816,4 +1838,89 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
     }
 }
 
+
+export type MexcDepositState = { message?: string, error?: boolean, errors?: { finalUsdtAmount?: string[] } } | undefined;
+
+
+export async function executeMexcDeposit(prevState: MexcDepositState, formData: FormData): Promise<MexcDepositState> {
+    // This is a placeholder for the actual MEXC API call.
+    // In a real application, you would use the 'mexc-api' library or fetch to call their API.
     
+    const depositId = formData.get('depositId') as string;
+    const finalUsdtAmountStr = formData.get('finalUsdtAmount') as string;
+    
+    const finalUsdtAmount = parseFloat(finalUsdtAmountStr);
+    if (!depositId || isNaN(finalUsdtAmount) || finalUsdtAmount <= 0) {
+        return { error: true, message: "Invalid deposit data provided.", errors: { finalUsdtAmount: ["Please enter a valid positive amount."] } };
+    }
+
+    try {
+        const depositRef = ref(db, `mexc_pending_deposits/${depositId}`);
+        const depositSnapshot = await get(depositRef);
+
+        if (!depositSnapshot.exists()) {
+            return { error: true, message: "Pending deposit not found." };
+        }
+
+        const deposit = depositSnapshot.val() as MexcPendingDeposit;
+
+        // ***
+        // *** TODO: Implement actual MEXC API call here ***
+        // ***
+        console.log(`Executing MEXC withdrawal of ${finalUsdtAmount} USDT to ${deposit.clientWalletAddress}`);
+        const fakeHash = `0x${[...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+        // On success, proceed...
+
+        // 1. Create the final transaction record
+        const newTxId = push(ref(db, 'transactions')).key;
+        if (!newTxId) { throw new Error("Could not generate transaction ID"); }
+        
+        const settings = (await get(ref(db, 'settings'))).val() as Settings;
+        const rate = settings.yer_usd || 1; // Assuming YER for now
+        const amountUSD = deposit.smsAmount * rate;
+        const fee = amountUSD - finalUsdtAmount;
+        
+        const newTxData: Omit<Transaction, 'id' | 'createdAt'> = {
+            date: new Date().toISOString(),
+            type: 'Deposit',
+            clientId: deposit.clientId,
+            clientName: deposit.clientName,
+            bankAccountId: deposit.smsBankAccountId,
+            bankAccountName: deposit.smsBankAccountName,
+            cryptoWalletId: settings.mexc_usdt_wallet_account_id,
+            amount: deposit.smsAmount,
+            currency: 'YER',
+            amount_usd: amountUSD,
+            fee_usd: fee > 0 ? fee : 0,
+            expense_usd: fee < 0 ? -fee : 0,
+            amount_usdt: finalUsdtAmount,
+            hash: fakeHash,
+            client_wallet_address: deposit.clientWalletAddress,
+            status: 'Confirmed',
+            notes: `Auto-deposit via MEXC from SMS ID: ${deposit.smsId}`,
+            flags: [],
+        };
+        await set(ref(db, `transactions/${newTxId}`), { ...newTxData, createdAt: new Date().toISOString() });
+        
+        // 2. Update the pending deposit status
+        await update(depositRef, {
+            status: 'confirmed',
+            finalUsdtAmount: finalUsdtAmount,
+            transactionId: newTxId,
+        });
+
+        // 3. Mark the original SMS as used
+        await update(ref(db, `sms_transactions/${deposit.smsId}`), {
+            status: 'used',
+            transaction_id: newTxId,
+        });
+
+    } catch (error: any) {
+        console.error("MEXC Deposit Execution Error:", error);
+        return { error: true, message: error.message || "An unknown error occurred." };
+    }
+
+    revalidatePath('/mexc-deposits');
+    revalidatePath('/transactions');
+    redirect('/mexc-deposits');
+}
