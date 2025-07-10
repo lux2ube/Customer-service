@@ -7,8 +7,7 @@ import { push, ref, set, update, get, remove, query, orderByChild, equalTo, star
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule } from './types';
-import { parseSms } from '@/lib/sms-parser';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
 
@@ -1546,8 +1545,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
             
             if (!parsed) {
-                // Fallback to original parser if custom rules fail
-                parsed = parseSms(trimmedSmsBody);
+                // Fallback to AI parser if custom rules fail
+                const settings = (await get(ref(db, 'settings'))).val() as Settings;
+                if (settings?.gemini_api_key) {
+                    const { parseSmsWithAi } = await import('@/ai/flows/parse-sms-flow');
+                    parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
+                }
             }
             
             if (parsed) {
@@ -1625,13 +1628,13 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const allSmsData: Record<string, SmsTransaction> = smsSnapshot.val() || {};
         const allClients: Record<string, Client> = clientsSnapshot.val() || {};
         const allTransactions: Record<string, Transaction> = transactionsSnapshot.val() || {};
-
+        
         const clientsArray: (Client & { id: string })[] = Object.entries(allClients).map(([id, client]) => ({ id, ...client }));
         const transactionsArray: (Transaction & { id: string })[] = Object.entries(allTransactions).map(([id, tx]) => ({ id, ...tx }));
 
         const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
-        const smsToMatch = Object.values(allSmsData)
-            .map((sms, index) => ({ ...sms, id: Object.keys(allSmsData)[index] }))
+        const smsToMatch = Object.entries(allSmsData)
+            .map(([id, sms]) => ({ id, ...sms }))
             .filter(sms => sms.status === 'parsed' && new Date(sms.parsed_at).getTime() >= fortyEightHoursAgo);
         
         if (smsToMatch.length === 0) {
@@ -1644,14 +1647,14 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         for (const sms of smsToMatch) {
             if (!sms.client_name) continue;
             const smsParsedName = normalizeArabic(sms.client_name.toLowerCase());
-
-            // --- Pass 1: Phone Number Match ---
+            
+            // --- PASS 1: Phone Number Match ---
             let potentialMatches = clientsArray.filter(client => {
                 const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
                 return clientPhones.some(phone => phone && smsParsedName.includes(phone.replace(/\D/g, '')));
             });
 
-            // --- Pass 2: Exact Full Name Match ---
+            // --- PASS 2: Exact Full Name Match ---
             if (potentialMatches.length === 0) {
                 potentialMatches = clientsArray.filter(client => {
                     if (!client.name) return false;
@@ -1659,7 +1662,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 });
             }
 
-            // --- Pass 3: First & Second Name Match ---
+            // --- PASS 3: First & Second Name Match ---
             if (potentialMatches.length === 0) {
                 const smsParsedNameParts = smsParsedName.split(/\s+/).filter(Boolean);
                 if (smsParsedNameParts.length >= 2) {
@@ -1673,7 +1676,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 }
             }
 
-            // --- Conflict Resolution ---
+            // --- Conflict Resolution & Tie-Breaking ---
             let finalMatch: (Client & { id: string }) | null = null;
             if (potentialMatches.length === 1) {
                 finalMatch = potentialMatches[0];
@@ -1848,6 +1851,7 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
 
 
 export type MexcDepositState = { message?: string, error?: boolean, errors?: { finalUsdtAmount?: string[] } } | undefined;
+export type MexcTestDepositState = { message?: string, error?: boolean, errors?: { clientId?: string[], bankAccountId?: string[], amount?: string[], clientWalletAddress?: string[] } } | undefined;
 
 
 export async function executeMexcDeposit(prevState: MexcDepositState, formData: FormData): Promise<MexcDepositState> {
@@ -1930,5 +1934,78 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
 
     revalidatePath('/mexc-deposits');
     revalidatePath('/transactions');
+    redirect('/mexc-deposits');
+}
+
+const MexcTestDepositSchema = z.object({
+    clientId: z.string().min(1, 'Please select a client.'),
+    bankAccountId: z.string().min(1, 'Please select a bank account.'),
+    amount: z.coerce.number().gt(0, 'Amount must be a positive number.'),
+    clientWalletAddress: z.string().startsWith('0x', 'Wallet address must start with 0x.').min(42, 'Invalid wallet address length.'),
+});
+
+export async function createMexcTestDeposit(prevState: MexcTestDepositState, formData: FormData): Promise<MexcTestDepositState> {
+    const validatedFields = MexcTestDepositSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            error: true,
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Please correct the errors and try again.',
+        };
+    }
+
+    const { clientId, bankAccountId, amount, clientWalletAddress } = validatedFields.data;
+
+    try {
+        const [clientSnapshot, bankAccountSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, `clients/${clientId}`)),
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, 'settings'))
+        ]);
+
+        if (!clientSnapshot.exists() || !bankAccountSnapshot.exists() || !settingsSnapshot.exists()) {
+            return { error: true, message: "Client, Bank Account, or Settings not found in database." };
+        }
+
+        const client = clientSnapshot.val() as Client;
+        const bankAccount = bankAccountSnapshot.val() as Account;
+        const settings = settingsSnapshot.val() as Settings;
+
+        if (!bankAccount.currency || bankAccount.currency === 'USDT') {
+            return { error: true, message: "Invalid bank account currency." };
+        }
+
+        const rate = bankAccount.currency === 'YER' ? settings.yer_usd : settings.sar_usd;
+        if (!rate || rate <= 0) {
+            return { error: true, message: "Exchange rate for the selected currency is not set or invalid." };
+        }
+        
+        const calculatedUsdtAmount = (amount * rate) * (1 - (settings.deposit_fee_percent || 0) / 100);
+
+        const newDepositRef = push(ref(db, 'mexc_pending_deposits'));
+
+        const newDeposit: Omit<MexcPendingDeposit, 'id'> = {
+            createdAt: new Date().toISOString(),
+            status: 'pending-review',
+            clientId,
+            clientName: client.name,
+            clientWalletAddress,
+            smsId: `test-deposit-${newDepositRef.key}`,
+            smsBankAccountId: bankAccountId,
+            smsBankAccountName: bankAccount.name,
+            smsAmount: amount,
+            smsCurrency: bankAccount.currency,
+            calculatedUsdtAmount: parseFloat(calculatedUsdtAmount.toFixed(2)),
+        };
+
+        await set(newDepositRef, newDeposit);
+
+    } catch (error: any) {
+        console.error("Create Test Deposit Error:", error);
+        return { error: true, message: "An unexpected error occurred while creating the test deposit." };
+    }
+
+    revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
