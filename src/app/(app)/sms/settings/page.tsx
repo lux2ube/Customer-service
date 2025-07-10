@@ -1,7 +1,8 @@
+
 'use client';
 
 import * as React from 'react';
-import { useActionState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -88,7 +89,7 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
     };
     
     const actionWithId = createSmsEndpoint.bind(null, endpointToEdit?.id || null);
-    const [state, formAction] = useActionState<SmsEndpointState, FormData>(actionWithId, undefined);
+    const [state, formAction] = React.useActionState<SmsEndpointState, FormData>(actionWithId, undefined);
 
     React.useEffect(() => {
         if (!state) return;
