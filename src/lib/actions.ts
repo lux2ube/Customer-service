@@ -1622,13 +1622,15 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         }
 
         const allSmsTransactions: Record<string, SmsTransaction> = smsSnapshot.val() || {};
-        const clients: Record<string, Client> = clientsSnapshot.val();
-        const endpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
-        const clientsArray: Client[] = Object.values(clients).map(c => ({ id: Object.keys(clients).find(key => clients[key] === c)!, ...c }));
+        const allClients: Record<string, Client> = clientsSnapshot.val();
+        const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
+        
+        const clientsArray: (Client & { id: string })[] = Object.entries(allClients).map(([id, client]) => ({ id, ...client }));
 
         const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+
         const smsToMatch = Object.entries(allSmsTransactions)
-            .map(([id, sms]) => ({ id, ...sms }))
+            .map(([id, sms]) => ({ ...sms, id }))
             .filter(sms => {
                 if (sms.status !== 'parsed') return false;
                 const parsedDate = new Date(sms.parsed_at).getTime();
@@ -1643,7 +1645,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const updates: { [key: string]: any } = {};
 
         for (const sms of smsToMatch) {
-            const endpoint = endpoints[sms.account_id];
+            const endpoint = allEndpoints[sms.account_id];
             if (!endpoint || !sms.client_name) continue;
 
             const nameRules = endpoint.nameMatchingRules || [];
@@ -1655,44 +1657,47 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
             for (const client of clientsArray) {
                 const clientName = normalizeArabic(client.name.toLowerCase());
-                const clientNameParts = clientName.split(/\s+/);
-                const parsedNameParts = parsedName.split(/\s+/);
+                
+                // This function checks if a client is a match based on ANY of the endpoint's rules
+                const isMatch = (client: Client, parsedName: string, rules: NameMatchingRule[]): boolean => {
+                    const clientName = normalizeArabic(client.name.toLowerCase());
+                    const clientNameParts = clientName.split(/\s+/);
+                    const parsedNameParts = parsedName.split(/\s+/);
 
-                let isMatch = false;
-
-                for (const rule of nameRules) {
-                    if (isMatch) break;
-
-                    switch (rule) {
-                        case 'phone_number':
-                            const clientPhones = (Array.isArray(client.phone) ? client.phone : [client.phone]).filter(Boolean).map(p => p.replace(/[^0-9]/g, ''));
-                            if (clientPhones.some(p => parsedName.includes(p))) {
-                                isMatch = true;
-                            }
-                            break;
-                        case 'full_name':
-                            if (clientName === parsedName) {
-                                isMatch = true;
-                            }
-                            break;
-                        case 'first_and_second':
-                            if (clientNameParts.length >= 2 && parsedNameParts.length >= 2 && clientNameParts[0] === parsedNameParts[0] && clientNameParts[1] === parsedNameParts[1]) {
-                                isMatch = true;
-                            }
-                            break;
-                        case 'part_of_full_name':
-                            if (parsedNameParts.every(part => clientName.includes(part))) {
-                                isMatch = true;
-                            }
-                            break;
-                        case 'first_and_last':
-                            if (clientNameParts.length >= 2 && parsedNameParts.length >= 2 && clientNameParts[0] === parsedNameParts[0] && clientNameParts[clientNameParts.length - 1] === parsedNameParts[parsedNameParts.length - 1]) {
-                                isMatch = true;
-                            }
-                            break;
+                    for (const rule of rules) {
+                        switch (rule) {
+                            case 'phone_number':
+                                const clientPhones = (Array.isArray(client.phone) ? client.phone : [client.phone]).filter(Boolean).map(p => p.replace(/[^0-9]/g, ''));
+                                if (clientPhones.some(p => parsedName.includes(p) && p.length > 5)) {
+                                    return true;
+                                }
+                                break;
+                            case 'full_name':
+                                if (clientName === parsedName) {
+                                    return true;
+                                }
+                                break;
+                            case 'first_and_second':
+                                if (clientNameParts.length >= 2 && parsedNameParts.length >= 2 && clientNameParts[0] === parsedNameParts[0] && clientNameParts[1] === parsedNameParts[1]) {
+                                    return true;
+                                }
+                                break;
+                            case 'part_of_full_name':
+                                if (parsedNameParts.every(part => clientName.includes(part))) {
+                                    return true;
+                                }
+                                break;
+                            case 'first_and_last':
+                                if (clientNameParts.length >= 2 && parsedNameParts.length >= 2 && clientNameParts[0] === parsedNameParts[0] && clientNameParts[clientNameParts.length - 1] === parsedNameParts[parsedNameParts.length - 1]) {
+                                    return true;
+                                }
+                                break;
+                        }
                     }
+                    return false;
                 }
-                if (isMatch) {
+
+                if (isMatch(client, parsedName, nameRules)) {
                     potentialMatches.push(client);
                 }
             }
