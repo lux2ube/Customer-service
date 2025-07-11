@@ -9,6 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
 const ExtractIdInfoInputSchema = z.object({
@@ -35,6 +36,7 @@ export type ExtractedIdInfo = z.infer<typeof ExtractedIdInfoSchema>;
 
 const prompt = ai.definePrompt({
     name: 'extractIdInfoPrompt',
+    model: googleAI.model('gemini-1.5-flash-preview'),
     input: { schema: ExtractIdInfoInputSchema },
     output: { schema: ExtractedIdInfoSchema },
     prompt: `You are an expert in parsing Arabic identity documents, specifically from Yemen, directly from an image. Your task is to perform OCR on the image and then extract structured information from the recognized text.
