@@ -1996,7 +1996,7 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     try {
         const [clientSnapshot, bankAccountSnapshot, settingsSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
-            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `bank_accounts/${bankAccountId}`)),
             get(ref(db, 'settings'))
         ]);
 
@@ -2005,7 +2005,7 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
         }
 
         const client = clientSnapshot.val() as Client;
-        const bankAccount = bankAccountSnapshot.val() as Account;
+        const bankAccount = bankAccountSnapshot.val() as BankAccount;
         const settings = settingsSnapshot.val() as Settings;
 
         if (!bankAccount.currency || bankAccount.currency === 'USDT') {
@@ -2031,7 +2031,7 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
             smsBankAccountId: bankAccountId,
             smsBankAccountName: bankAccount.name,
             smsAmount: amount,
-            smsCurrency: bankAccount.currency as 'YER' | 'SAR',
+            smsCurrency: bankAccount.currency,
             calculatedUsdtAmount: parseFloat(calculatedUsdtAmount.toFixed(2)),
         };
 
@@ -2045,5 +2045,3 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
-
-    
