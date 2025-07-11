@@ -30,6 +30,7 @@ const initialSettings: Settings = {
     mexc_usdt_wallet_account_id: '',
     mexc_min_deposit_usdt: 10,
     mexc_max_deposit_usdt: 1000,
+    telegram_bot_token: '',
 };
 
 export default function SettingsPage() {
@@ -192,6 +193,13 @@ export default function SettingsPage() {
                         <CardDescription>Manage API keys for external services.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                         <div className="space-y-2">
+                            <Label htmlFor="telegram_bot_token">Telegram Bot Token</Label>
+                            <Input id="telegram_bot_token" type="password" placeholder="Your Telegram Bot Token" value={settings.telegram_bot_token || ''} onChange={handleInputChange} />
+                             <p className="text-xs text-muted-foreground">
+                                Required for client interaction via Telegram.
+                            </p>
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="gemini_api_key">Gemini API Key</Label>
                             <Input id="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" value={settings.gemini_api_key || ''} onChange={handleInputChange} />

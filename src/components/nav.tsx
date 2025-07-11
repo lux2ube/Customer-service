@@ -23,6 +23,7 @@ import {
   Pilcrow,
   Send,
   Contact,
+  Bot,
 } from 'lucide-react';
 
 const menuItems = [
@@ -39,6 +40,7 @@ const menuItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { type: 'divider' },
+  { href: '/telegram', label: 'Telegram Bot', icon: Bot },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },

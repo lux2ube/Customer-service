@@ -110,6 +110,7 @@ export interface Settings {
     mexc_usdt_wallet_account_id?: string;
     mexc_min_deposit_usdt?: number;
     mexc_max_deposit_usdt?: number;
+    telegram_bot_token?: string;
 }
 
 export interface BlacklistItem {
