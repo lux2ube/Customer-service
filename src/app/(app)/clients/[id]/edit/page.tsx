@@ -66,14 +66,15 @@ async function getOtherClientsWithSameName(client: Client): Promise<Client[]> {
 
 
 export default async function EditClientPage({ params }: { params: { id: string } }) {
-    const client = await getClient(params.id);
+    const { id } = await params;
+    const client = await getClient(id);
 
     if (!client) {
         notFound();
     }
 
     const bankAccounts = await getBankAccounts();
-    const transactions = await getClientTransactions(params.id);
+    const transactions = await getClientTransactions(id);
     const otherClientsWithSameName = await getOtherClientsWithSameName(client);
 
     return (
