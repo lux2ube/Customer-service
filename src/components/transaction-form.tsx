@@ -6,9 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown } from 'lucide-react';
-import React from 'react';
-import { useActionState } from 'react-dom';
-import { useFormStatus } from 'react-dom';
+import React, { useActionState, useFormStatus } from 'react';
 import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -776,4 +774,6 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+    
+
     
