@@ -1,9 +1,7 @@
-
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -59,7 +57,7 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                         <Label>Client</Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                         <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
-                        {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                        {state && state.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
@@ -73,13 +71,13 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+                            {state && state.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
                         </div>
 
                         <div className="space-y-2">
                             <Label htmlFor="amount">Amount Received</Label>
                             <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g. 50000" />
-                            {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                            {state && state.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                     </div>
 
@@ -92,7 +90,7 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                             placeholder="0x..."
                             defaultValue={selectedClient?.bep20_addresses?.[0] || ''}
                         />
-                        {state?.errors?.clientWalletAddress && <p className="text-sm text-destructive">{state.errors.clientWalletAddress[0]}</p>}
+                        {state && state.errors?.clientWalletAddress && <p className="text-sm text-destructive">{state.errors.clientWalletAddress[0]}</p>}
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
