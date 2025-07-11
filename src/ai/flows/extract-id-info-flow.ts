@@ -1,9 +1,9 @@
 
 'use server';
 /**
- * @fileOverview An AI agent for extracting structured information from OCR text of identity documents.
+ * @fileOverview An AI agent for extracting structured information from an image of an identity document.
  * 
- * - extractIdInfo - A function that takes raw text and returns structured data.
+ * - extractIdInfo - A function that takes an image data URI and returns structured data.
  * - ExtractIdInfoInput - The input type for the extractIdInfo function.
  * - ExtractedIdInfo - The return type for the extractIdInfo function.
  */
@@ -12,7 +12,11 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 const ExtractIdInfoInputSchema = z.object({
-  rawOcrText: z.string().describe('The raw, unstructured text extracted from an ID document using OCR.'),
+  imageDataUri: z
+    .string()
+    .describe(
+      "A photo of an identity document, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+    ),
 });
 export type ExtractIdInfoInput = z.infer<typeof ExtractIdInfoInputSchema>;
 
@@ -33,18 +37,20 @@ const prompt = ai.definePrompt({
     name: 'extractIdInfoPrompt',
     input: { schema: ExtractIdInfoInputSchema },
     output: { schema: ExtractedIdInfoSchema },
-    prompt: `You are an expert in parsing Arabic identity documents, specifically from Yemen. Your task is to extract structured information from the provided raw OCR text. The text may be messy and contain errors.
+    prompt: `You are an expert in parsing Arabic identity documents, specifically from Yemen, directly from an image. Your task is to perform OCR on the image and then extract structured information from the recognized text.
 
-Analyze the following text and extract the required fields. Be resilient to OCR mistakes, such as swapped characters or misread words. If a field is not present, omit it.
+Analyze the following image and extract the required fields. Be resilient to OCR mistakes, image quality issues, and variations in document layout.
 
-Raw Text:
-{{{rawOcrText}}}
+Image:
+{{media url=imageDataUri}}
 
 Instructions:
-- Look for keywords like 'الاسم' for the name, 'الرقم الوطني' for the ID number, 'تاريخ الميلاد' for date of birth, etc.
-- Dates might be in different formats; normalize them to YYYY-MM-DD.
-- If the text does not seem to be from an ID card or passport at all, set 'isIdDocument' to false and provide a reason in the 'error' field.
-- Do your best to find all the data points.
+- First, perform OCR on the image to get all the Arabic text.
+- Then, analyze the extracted text. Look for keywords like 'الاسم' for the name, 'الرقم الوطني' for the ID number, 'تاريخ الميلاد' for date of birth, etc.
+- Dates might be in Hijri or Gregorian format; normalize them to YYYY-MM-DD.
+- If the image does not seem to contain an ID card or passport at all, set 'isIdDocument' to false and provide a reason in the 'error' field.
+- Do your best to find all the data points even if the text is messy.
+- Only return the structured JSON data.
 `
 });
 
