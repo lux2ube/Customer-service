@@ -7,9 +7,9 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
-import { useActionState } from 'react';
+import { useActionState } from 'react-dom';
 import { useFormStatus } from 'react-dom';
-import { createTransaction, type TransactionFormState, matchSmsTransaction, searchClients } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -216,56 +216,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
             setIsLoadingSuggestions(true);
             try {
-                const [smsSnapshot, clientSnapshot] = await Promise.all([
-                    get(ref(db, 'sms_transactions')),
-                    get(ref(db, `clients/${formData.clientId}`)),
-                ]);
-
-                if (!smsSnapshot.exists() || !clientSnapshot.exists()) {
-                    setSuggestedSms([]);
-                    setIsLoadingSuggestions(false);
-                    return;
-                }
-
-                const smsData = smsSnapshot.val() || {};
-                const allSmsTxs: SmsTransaction[] = Object.keys(smsData).map(key => ({ id: key, ...smsData[key] }));
-                const client = clientSnapshot.val() as Client;
-                
-                if (!client) {
-                    setSuggestedSms([]);
-                    setIsLoadingSuggestions(false);
-                    return;
-                }
-
-                const clientNameSet = client.name ? new Set(client.name.toLowerCase().split(/\s+/).filter(p => p.length > 1)) : new Set<string>();
-                const clientPhones = (client.phone ? (Array.isArray(client.phone) ? client.phone : [client.phone]) : []).map(p => p.replace(/[^0-9]/g, ''));
-
-                const matches = allSmsTxs.filter(sms => {
-                    if (sms.status !== 'pending' || sms.account_id !== formData.bankAccountId) return false;
-                    
-                    const formTxType = formData.type.toLowerCase();
-                    const smsTxType = sms.type === 'credit' ? 'deposit' : 'withdraw';
-                    if (formTxType !== smsTxType) return false;
-
-                    const smsPerson = sms.client_name?.toLowerCase();
-                    if (!smsPerson) return false;
-                    
-                    if (clientPhones.some(p => p && smsPerson.includes(p))) return true;
-                    
-                    const smsNameParts = smsPerson.split(/\s+/).filter(p => p.length > 1);
-                    if (smsNameParts.length === 0) return false;
-
-                    let commonWords = 0;
-                    for (const part of smsNameParts) {
-                        if (clientNameSet.has(part)) {
-                            commonWords++;
-                        }
-                    }
-                    
-                    return commonWords >= 2;
-                });
-                
-                setSuggestedSms(matches);
+                const suggestions = await getSmsSuggestions(formData.clientId, formData.bankAccountId);
+                setSuggestedSms(suggestions);
             } catch (error) {
                 console.error("Failed to fetch SMS suggestions:", error);
                 setSuggestedSms([]);
@@ -275,7 +227,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         };
 
         fetchSuggestions();
-    }, [formData.clientId, formData.bankAccountId, formData.type]);
+    }, [formData.clientId, formData.bankAccountId]);
     
     // Effect to handle attachment preview cleanup
     React.useEffect(() => {
@@ -415,7 +367,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const handleSuggestionClick = async (sms: SmsTransaction) => {
-        // First, optimistically update the UI
         const newAmount = sms.amount || 0;
         const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
 
@@ -431,20 +382,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
         setSuggestedSms([]);
         
-        // Then, call the server action to update the status
-        const result = await matchSmsTransaction(sms.id);
-        if (result.success) {
-            toast({
-                title: 'SMS Matched',
-                description: 'The selected SMS has been marked as matched.',
-            });
-        } else {
-             toast({
-                variant: 'destructive',
-                title: 'Matching Failed',
-                description: result.message || 'Could not mark SMS as matched.',
-            });
-        }
+        toast({
+            title: 'SMS Applied',
+            description: 'The selected SMS has been applied to the form. It will be marked as used upon saving.',
+        });
     };
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {

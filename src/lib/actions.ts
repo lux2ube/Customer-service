@@ -647,11 +647,14 @@ export async function createTransaction(transactionId: string | null, prevState:
     if (linkedSmsId) {
         try {
             const smsTxRef = ref(db, `sms_transactions/${linkedSmsId}`);
-            const smsUpdateData = {
-                status: 'used' as const,
-                transaction_id: newId,
-            };
-            await update(smsTxRef, smsUpdateData);
+             const smsSnapshot = await get(smsTxRef);
+            if (smsSnapshot.exists()) {
+                const smsUpdateData = {
+                    status: 'used' as const,
+                    transaction_id: newId,
+                };
+                await update(smsTxRef, smsUpdateData);
+            }
         } catch (e) {
             // Log this but don't fail the whole transaction
             console.error(`Failed to update linked SMS transaction ${linkedSmsId}:`, e);
@@ -743,6 +746,35 @@ export async function createTransaction(transactionId: string | null, prevState:
     revalidatePath('/accounting/journal');
     revalidatePath(`/transactions/${newId}/edit`);
     redirect(`/transactions/${newId}/edit`);
+}
+
+export async function getSmsSuggestions(clientId: string, bankAccountId: string): Promise<SmsTransaction[]> {
+    if (!clientId || !bankAccountId) {
+        return [];
+    }
+
+    try {
+        const smsSnapshot = await get(ref(db, 'sms_transactions'));
+        if (!smsSnapshot.exists()) {
+            return [];
+        }
+
+        const allSmsTxs: SmsTransaction[] = Object.keys(smsSnapshot.val()).map(key => ({ id: key, ...smsSnapshot.val()[key] }));
+        
+        const suggestions = allSmsTxs.filter(sms => {
+            if (sms.account_id !== bankAccountId) return false;
+            if (sms.status === 'parsed' || (sms.status === 'matched' && sms.matched_client_id === clientId)) {
+                return true;
+            }
+            return false;
+        });
+
+        return suggestions.sort((a,b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime());
+
+    } catch (error) {
+        console.error("Error fetching SMS suggestions:", error);
+        return [];
+    }
 }
 
 // --- Chart of Accounts Actions ---
@@ -1364,28 +1396,6 @@ export async function linkSmsToClient(smsId: string, clientId: string): Promise<
 }
 
 
-export async function matchSmsTransaction(smsId: string): Promise<{success: boolean, message?: string}> {
-    if (!smsId) {
-        return { success: false, message: 'Invalid SMS ID provided.' };
-    }
-    try {
-        const txRef = ref(db, `sms_transactions/${smsId}`);
-        const snapshot = await get(txRef);
-        if (!snapshot.exists()) {
-            return { success: false, message: 'SMS transaction not found.' };
-        }
-        const currentStatus = snapshot.val().status;
-        if (currentStatus !== 'pending') {
-            return { success: false, message: `Cannot match SMS. Status is already '${currentStatus}'.` };
-        }
-        await update(txRef, { status: 'matched' });
-        // No revalidate here to prevent form reload
-        return { success: true };
-    } catch (error) {
-        return { success: false, message: 'Database error: Failed to update status.' };
-    }
-}
-
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
 
@@ -1667,7 +1677,6 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 }
             }
             
-            // Require at least two words to match to reduce false positives
             return commonWords >= 2;
         };
 
