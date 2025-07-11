@@ -7,8 +7,6 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Save, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
 import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
@@ -27,28 +25,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useRouter } from 'next/navigation';
 
-
-const reviewFlags: ReviewFlag[] = ['AML', 'Volume', 'Scam', 'Blacklisted', 'Other'];
-
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending} name="intent" value="save_client">
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {pending ? 'Saving...' : 'Save Client'}
-        </Button>
-    );
-}
 
 export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
     const { toast } = useToast();
-    
-    const action = client ? manageClient.bind(null, client.id) : createClient.bind(null, null);
-    const [state, formAction] = useActionState<ClientFormState, FormData>(action, undefined);
-
+    const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
 
+    const [state, setState] = React.useState<ClientFormState>();
+    const [isSaving, setIsSaving] = React.useState(false);
+    
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
         phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
@@ -106,25 +93,47 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         return lastUsedMap;
     }, [transactions]);
 
-    React.useEffect(() => {
-        if (state?.message && !state.success) {
-            toast({ variant: 'destructive', title: 'Error', description: state.message });
-        }
-        if (state?.success) {
-            toast({ title: 'Success', description: state.message });
-
-            // Update local state to reflect successful deletions
-            if (state.intent?.startsWith('delete:')) {
-                const docName = state.intent.split(':')[1];
+    const processFormResult = (result: ClientFormState) => {
+        if (result?.success) {
+            toast({ title: 'Success', description: result.message });
+            if (result.intent?.startsWith('delete:')) {
+                const docName = result.intent.split(':')[1];
                 setKycDocuments(prev => prev.filter(doc => doc.name !== docName));
-            } else if (state.intent?.startsWith('delete_address:')) {
-                const address = state.intent.split(':')[1];
+            } else if (result.intent?.startsWith('delete_address:')) {
+                const address = result.intent.split(':')[1];
                 setBep20Addresses(prev => prev.filter(a => a !== address));
-            } else if (state.intent?.startsWith('unfavorite_bank_account:')) {
+            } else if (result.intent?.startsWith('unfavorite_bank_account:')) {
                 setFavoriteBankAccount({ id: undefined, name: undefined });
+            } else if (result.clientId) {
+                router.push(`/clients/${result.clientId}/edit`);
+            } else if (!client) {
+                router.push('/clients');
             }
+        } else if (result?.message) {
+            toast({ variant: 'destructive', title: 'Error', description: result.message });
         }
-    }, [state, toast]);
+        setState(result);
+    };
+
+    const handleSubmit = async (intent: string) => {
+        if (!formRef.current) return;
+        setIsSaving(true);
+        const actionFormData = new FormData(formRef.current);
+        actionFormData.set('intent', intent);
+
+        try {
+            const result = client
+                ? await manageClient(client.id, actionFormData)
+                : await createClient(null, actionFormData);
+            processFormResult(result);
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected error occurred.' });
+        } finally {
+            setIsSaving(false);
+            if (dialogState) setDialogState(null);
+        }
+    };
 
     React.useEffect(() => {
         // Revoke the data uris to avoid memory leaks
@@ -135,11 +144,7 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         if (e.target.files) {
             const selectedFiles = Array.from(e.target.files);
             setFilesToUpload(selectedFiles);
-
-            // Clean up old previews
             previews.forEach(url => URL.revokeObjectURL(url));
-
-            // Create new previews
             const newPreviews = selectedFiles.map(file => URL.createObjectURL(file));
             setPreviews(newPreviews);
         }
@@ -174,15 +179,6 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
     const handleDeleteClick = (intent: string, title: string, description: string) => {
         setDialogState({ open: true, intent, title, description });
     };
-
-    const handleDialogConfirm = () => {
-        if (dialogState && formRef.current) {
-            const formData = new FormData(formRef.current);
-            formData.set('intent', dialogState.intent);
-            formAction(formData);
-            setDialogState(null); // Close dialog
-        }
-    };
     
     const handleDialogCancel = () => {
         setDialogState(null);
@@ -192,7 +188,7 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
 
     return (
         <>
-        <form action={formAction} ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form ref={formRef} onSubmit={(e) => { e.preventDefault(); handleSubmit('save_client'); }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-1 space-y-4">
                 <Card>
                     <CardHeader>
@@ -446,7 +442,10 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                 </Card>
             </div>
              <div className="md:col-span-2 flex justify-end">
-                <SubmitButton />
+                <Button type="submit" disabled={isSaving}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {isSaving ? 'Saving...' : 'Save Client'}
+                </Button>
             </div>
         </form>
 
@@ -458,7 +457,7 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={handleDialogCancel}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDialogConfirm}>Continue</AlertDialogAction>
+                    <AlertDialogAction onClick={() => handleSubmit(dialogState!.intent)}>Continue</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
