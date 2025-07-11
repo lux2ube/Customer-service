@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -22,6 +22,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -751,7 +752,6 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
-    const wrapperRef = React.useRef<HTMLDivElement>(null);
 
     // Debounce search input
     React.useEffect(() => {
@@ -783,20 +783,6 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         }
     }, [selectedClient]);
 
-    // Handle clicking outside to close
-    React.useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-                // If user clicks away without selecting, restore the selected client's name
-                setSearch(selectedClient?.name || "");
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [wrapperRef, selectedClient]);
-
-
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
     const handleSelect = (client: Client) => {
@@ -806,41 +792,47 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     };
 
     return (
-        <div className="relative" ref={wrapperRef}>
-            <Input
-                placeholder="Search by name or phone..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => setIsOpen(true)}
-                autoComplete="off"
-            />
-            {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-popover text-popover-foreground rounded-md border shadow-lg max-h-60 overflow-y-auto">
-                     <ul className="p-1">
-                        {isLoading && <li className="px-2 py-1.5 text-sm text-muted-foreground">Searching...</li>}
-                        {!isLoading && search.length > 1 && searchResults.length === 0 && (
-                            <li className="px-2 py-1.5 text-sm text-muted-foreground">No client found.</li>
-                        )}
-                        {!isLoading && search.length < 2 && (
-                            <li className="px-2 py-1.5 text-sm text-muted-foreground">Keep typing to search...</li>
-                        )}
-                        {searchResults.map(client => (
-                            <li 
-                                key={client.id}
-                                className="flex flex-col px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
-                                onMouseDown={(e) => {
-                                    e.preventDefault(); // Prevent input from losing focus before click is registered
-                                    handleSelect(client)
-                                }}
-                            >
-                                <span className="font-medium">{client.name}</span>
-                                <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isOpen}
+                    className="w-full justify-between font-normal"
+                >
+                    {selectedClient ? selectedClient.name : "Select client..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                    <CommandInput 
+                        placeholder="Search by name or phone..."
+                        value={search}
+                        onValueChange={setSearch}
+                    />
+                    <CommandList>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && search.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        <CommandGroup>
+                            {searchResults.map(client => (
+                                <CommandItem
+                                    key={client.id}
+                                    value={`${client.name} ${getPhone(client.phone)}`}
+                                    onSelect={() => handleSelect(client)}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 }
     
