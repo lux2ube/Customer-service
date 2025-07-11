@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
+import { createWorker } from 'tesseract.js';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -2075,4 +2076,82 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
 }
 
 
+// --- ID Scanner Actions ---
 
+export type ExtractedDataState = {
+  data?: {
+    name?: string;
+    nationalId?: string;
+    dob?: string;
+    pob?: string;
+    issueDate?: string;
+    expiryDate?: string;
+  };
+  error?: string;
+} | null;
+
+
+export async function processIdDocumentWithTesseract(
+  prevState: ExtractedDataState,
+  formData: FormData
+): Promise<ExtractedDataState> {
+  const imageFile = formData.get("idImage") as File | null;
+
+  if (!imageFile || imageFile.size === 0) {
+    return { error: "Please upload an image file." };
+  }
+
+  try {
+    const worker = await createWorker('ara');
+    const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
+    const { data: { text } } = await worker.recognize(imageBuffer);
+    await worker.terminate();
+
+    const lines = text.split('\n').filter(line => line.trim() !== '');
+    const extracted: Record<string, string> = {};
+
+    const keyMap: Record<string, string> = {
+      'الاسم': 'name',
+      'الرقم الوطني': 'nationalId',
+      'تاريخ الميلاد': 'dob',
+      'مكان الميلاد': 'pob',
+      'تاريخ الاصدار': 'issueDate',
+      'تاريخ الإنتهاء': 'expiryDate',
+    };
+
+    lines.forEach(line => {
+        for (const key in keyMap) {
+            if (line.includes(key)) {
+                let value = line.replace(key, '').replace(/[:\-_]/g, '').trim();
+                // Special handling for name which can be on the next line
+                if (key === 'الاسم' && value.length < 3) {
+                    const nameLineIndex = lines.indexOf(line) + 1;
+                    if (nameLineIndex < lines.length) {
+                         const potentialName = lines[nameLineIndex];
+                         // A simple check to see if the next line looks like a name (contains Arabic letters)
+                         if (/[\u0600-\u06FF]/.test(potentialName)) {
+                            value = potentialName.trim();
+                         }
+                    }
+                }
+                extracted[keyMap[key]] = value;
+                break; 
+            }
+        }
+        
+        // Fallback for ID number if not found with a key
+        if (!extracted.nationalId) {
+            const match = line.match(/\b\d{12}\b/);
+            if (match) {
+                extracted.nationalId = match[0];
+            }
+        }
+    });
+
+    return { data: extracted };
+
+  } catch (error) {
+    console.error("OCR Processing Error:", error);
+    return { error: "Failed to process the document. The image may be unclear or in an unsupported format." };
+  }
+}
