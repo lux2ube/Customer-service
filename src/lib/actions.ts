@@ -12,6 +12,7 @@ import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
 import { createWorker } from 'tesseract.js';
 import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -750,7 +751,6 @@ export async function createTransaction(transactionId: string | null, formData: 
     
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
-    revalidatePath(`/transactions/${newId}/edit`);
     
     return { success: true, transactionId: newId };
 }
@@ -1689,6 +1689,8 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
         
+        const commonNamesToIgnore = new Set(['محمد']);
+
         const isMatch = (client: Client, smsParsedName: string): boolean => {
             if (!client.name) return false;
             
@@ -1701,12 +1703,16 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
             // Flexible name match logic
             const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-            const clientNameSet = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1));
+            const clientNameParts = normalizedClientName.split(/\s+/).filter(p => p.length > 1);
+            const clientNameSet = new Set(clientNameParts);
+
             const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
             if (smsNameParts.length === 0) return false;
             
-            // Check for a significant overlap (at least 2 words)
-            const commonWords = smsNameParts.filter(part => clientNameSet.has(part));
+            // Check for a significant overlap (at least 2 words), ignoring very common names
+            const commonWords = smsNameParts.filter(part => 
+                clientNameSet.has(part) && !commonNamesToIgnore.has(part)
+            );
             return commonWords.length >= 2;
         };
 
