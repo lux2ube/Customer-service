@@ -6,8 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown } from 'lucide-react';
-import React, { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import React from 'react';
 import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -22,16 +21,8 @@ import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { useRouter } from 'next/navigation';
 
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending} size="sm" className="w-full">
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {pending ? 'Recording...' : 'Record Transaction'}
-        </Button>
-    );
-}
 
 const initialFormData: Transaction = {
     id: '',
@@ -113,14 +104,17 @@ function BankAccountSelector({
 
 export function TransactionForm({ transaction, client }: { transaction?: Transaction, client?: Client | null }) {
     const { toast } = useToast();
-    const action = transaction ? createTransaction.bind(null, transaction.id) : createTransaction.bind(null, null);
-    const [state, formAction] = useActionState<TransactionFormState, FormData>(action, undefined);
+    const router = useRouter();
 
     // Data state
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
+    
+    // Form State
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
     
     // Suggestion State
     const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
@@ -197,13 +191,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
              }
         }
     }, [formData.hash, transaction, isDataLoading]);
-    
-    // Server action response handler
-    React.useEffect(() => {
-        if (state?.message) {
-            toast({ variant: 'destructive', title: 'Error Recording Transaction', description: state.message });
-        }
-    }, [state, toast]);
     
     // Effect to fetch SMS suggestions
     React.useEffect(() => {
@@ -418,6 +405,43 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setIsSaving(true);
+        setFormErrors(undefined);
+
+        const formElement = e.target as HTMLFormElement;
+        const actionFormData = new FormData(formElement);
+        
+        // Append dynamic/state data to FormData
+        actionFormData.set('date', formData.date ? new Date(formData.date).toISOString() : new Date().toISOString());
+        actionFormData.set('clientId', formData.clientId || '');
+        actionFormData.set('bankAccountId', formData.bankAccountId || '');
+        actionFormData.set('cryptoWalletId', formData.cryptoWalletId || '');
+        actionFormData.set('currency', formData.currency);
+        actionFormData.set('amount_usd', String(formData.amount_usd));
+        actionFormData.set('fee_usd', String(formData.fee_usd));
+        actionFormData.set('expense_usd', String(formData.expense_usd || 0));
+        actionFormData.set('amount_usdt', String(formData.amount_usdt));
+        actionFormData.set('linkedSmsId', formData.linkedSmsId || '');
+        
+        if(attachmentToUpload) {
+            actionFormData.set('attachment_url', attachmentToUpload);
+        }
+
+        const result = await createTransaction(transaction?.id || null, actionFormData);
+        
+        if (result?.errors) {
+            setFormErrors(result.errors);
+            toast({ variant: 'destructive', title: 'Error Recording Transaction', description: result.message });
+        } else if (result?.message) {
+            toast({ variant: 'destructive', title: 'Error', description: result.message });
+        } else {
+             // Success handled by redirect in server action
+        }
+        setIsSaving(false);
+    };
+
     const handleDownloadInvoice = async () => {
         if (!invoiceRef.current || !transaction) return;
         setIsDownloading(true);
@@ -475,7 +499,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </div>
             )}
 
-            <form action={formAction} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 space-y-3">
                     <Card>
                         <CardHeader>
@@ -494,7 +518,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={new Date(formData.date)} onSelect={(d) => handleFieldChange('date', d?.toISOString())} initialFocus /></PopoverContent>
                                     </Popover>
-                                    <input type="hidden" name="date" value={formData.date ? new Date(formData.date).toISOString() : new Date().toISOString()} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
@@ -513,7 +536,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     selectedClient={selectedClient}
                                     onSelect={handleClientSelect}
                                 />
-                                <input type="hidden" name="clientId" value={formData.clientId || ""} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Bank Account</Label>
@@ -522,7 +544,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     value={formData.bankAccountId}
                                     onSelect={handleBankAccountSelect}
                                 />
-                                <input type="hidden" name="bankAccountId" value={formData.bankAccountId || ''} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Crypto Wallet</Label>
@@ -531,7 +552,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     value={formData.cryptoWalletId}
                                     onSelect={(v) => handleFieldChange('cryptoWalletId', v)}
                                 />
-                                <input type="hidden" name="cryptoWalletId" value={formData.cryptoWalletId || ''} />
                             </div>
                         </CardContent>
                     </Card>
@@ -567,7 +587,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                              <div className="flex items-center gap-2">
                                 <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
-                                <input type="hidden" name="currency" value={formData.currency} />
                             </div>
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usd" className="w-1/3 shrink-0 text-right text-xs">Amount (USD)</Label>
@@ -596,8 +615,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </div>
                         </CardContent>
                         <CardFooter>
-                            <input type="hidden" name="linkedSmsId" value={formData.linkedSmsId || ''} />
-                            <SubmitButton />
+                            <Button type="submit" disabled={isSaving} size="sm" className="w-full">
+                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                {isSaving ? 'Recording...' : 'Record Transaction'}
+                            </Button>
                         </CardFooter>
                     </Card>
                 </div>
@@ -630,8 +651,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2}/>
                             </div>
                              <div className="space-y-2">
-                                <Label htmlFor="attachment_url">Upload Transaction Image</Label>
-                                <Input id="attachment_url" name="attachment_url" type="file" size="sm" onChange={handleAttachmentChange} />
+                                <Label htmlFor="attachment_url_input">Upload Transaction Image</Label>
+                                <Input id="attachment_url_input" name="attachment_url_input" type="file" size="sm" onChange={handleAttachmentChange} />
                                 {attachmentPreview && (
                                     <div className="mt-2">
                                         <img src={attachmentPreview} alt="Preview" className="rounded-md max-h-48 w-auto" />
@@ -775,6 +796,3 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
-    
-
-    

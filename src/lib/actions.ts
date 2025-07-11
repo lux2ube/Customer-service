@@ -135,7 +135,7 @@ const ClientSchema = z.object({
 });
 
 
-export async function createClient(clientId: string | null, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+export async function createClient(clientId: string | null, formData: FormData): Promise<ClientFormState> {
     const newId = clientId || push(ref(db, 'clients')).key;
     if (!newId) {
         const errorMsg = "Could not generate a client ID.";
@@ -254,7 +254,7 @@ export async function createClient(clientId: string | null, prevState: ClientFor
     redirect('/clients');
 }
 
-export async function manageClient(clientId: string, prevState: ClientFormState, formData: FormData): Promise<ClientFormState> {
+export async function manageClient(clientId: string, formData: FormData): Promise<ClientFormState> {
     const intent = formData.get('intent') as string | null;
 
     if (intent?.startsWith('delete:')) {
@@ -334,7 +334,7 @@ export async function manageClient(clientId: string, prevState: ClientFormState,
     }
 
     // Default action is to update/create the client
-    return createClient(clientId, prevState, formData);
+    return createClient(clientId, formData);
 }
 
 export async function searchClients(searchTerm: string): Promise<Client[]> {
@@ -442,11 +442,11 @@ const TransactionSchema = z.object({
 });
 
 
-export async function createTransaction(transactionId: string | null, prevState: TransactionFormState, formData: FormData) {
+export async function createTransaction(transactionId: string | null, formData: FormData) {
     const newId = transactionId || push(ref(db, 'transactions')).key;
     if (!newId) throw new Error("Could not generate a transaction ID.");
 
-    const attachmentFile = formData.get('attachment_url') as File | null;
+    const attachmentFile = formData.get('attachment_url_input') as File | null;
     let attachmentUrlString: string | undefined = undefined;
     
     if (attachmentFile && attachmentFile.size > 0) {
@@ -763,6 +763,7 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
         
         const suggestions = allSmsTxs.filter(sms => {
             if (sms.account_id !== bankAccountId) return false;
+            // A suggestion is valid if it's parsed, or if it's matched to the current client
             if (sms.status === 'parsed' || (sms.status === 'matched' && sms.matched_client_id === clientId)) {
                 return true;
             }
@@ -800,7 +801,7 @@ const AccountSchema = z.object({
   currency: z.enum(['USD', 'YER', 'SAR', 'USDT', 'none']).optional().nullable(),
 });
 
-export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData) {
+export async function createAccount(accountId: string | null, formData: FormData) {
     const parentIdValue = formData.get('parentId');
     const currencyValue = formData.get('currency');
 
@@ -1271,7 +1272,7 @@ const BankAccountSchema = z.object({
     status: z.enum(['Active', 'Inactive']),
 });
 
-export async function createBankAccount(accountId: string | null, prevState: BankAccountFormState, formData: FormData) {
+export async function createBankAccount(accountId: string | null, formData: FormData) {
     const validatedFields = BankAccountSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
@@ -1406,7 +1407,7 @@ const SmsEndpointSchema = z.object({
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
-export async function createSmsEndpoint(endpointId: string | null, prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+export async function createSmsEndpoint(endpointId: string | null, formData: FormData): Promise<SmsEndpointState> {
     const dataToValidate = {
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
@@ -2049,3 +2050,4 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
+
