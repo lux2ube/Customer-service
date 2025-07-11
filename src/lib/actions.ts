@@ -10,7 +10,6 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
-import { Spot } from 'mexc-api-sdk';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1892,6 +1891,9 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
             return { error: true, message: "Pending deposit not found." };
         }
         const deposit = depositSnapshot.val() as MexcPendingDeposit;
+        
+        // Dynamically import the SDK to avoid server start issues
+        const { Spot } = await import('mexc-api-sdk');
         
         // Initialize MEXC SDK Client
         const client = new Spot(mexc_api_key, mexc_secret_key);
