@@ -1646,19 +1646,27 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
         const isMatch = (client: Client, smsParsedName: string): boolean => {
             if (!client.name) return false;
-            const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-            const clientNameSet = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1));
             
             // Phone number match is high confidence
             const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
-            if (clientPhones.some(p => p && smsParsedName.includes(p))) return true;
+            const cleanSmsName = smsParsedName.replace(/[^a-zA-Z0-9\u0600-\u06FF\s]/g, '');
+            if (clientPhones.some(p => p && cleanSmsName.includes(p))) return true;
 
             // Name match logic
-            const smsNameParts = smsParsedName.split(/\s+/).filter(p => p.length > 1);
+            const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+            const clientNameSet = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1));
+            const smsNameParts = normalizeArabic(smsParsedName).split(/\s+/).filter(p => p.length > 1);
             if (smsNameParts.length === 0) return false;
             
-            // Check if all parts of the SMS name exist in the client's name parts
-            return smsNameParts.every(part => clientNameSet.has(part));
+            let commonWords = 0;
+            for (const part of smsNameParts) {
+                if (clientNameSet.has(part)) {
+                    commonWords++;
+                }
+            }
+            
+            // Require at least two words to match to reduce false positives
+            return commonWords >= 2;
         };
 
         for (const sms of smsToMatch) {
@@ -1843,7 +1851,7 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
 
 
 export type MexcDepositState = { message?: string, error?: boolean, errors?: { finalUsdtAmount?: string[] } } | undefined;
-export type MexcTestDepositState = { message?: string, error?: boolean, errors?: { clientId?: string[], bankAccountId?: string[], amount?: string[], clientWalletAddress?: string[] } } | undefined;
+export type MexcTestDepositState = { success?: boolean, message?: string, error?: boolean, errors?: { clientId?: string[], bankAccountId?: string[], amount?: string[], clientWalletAddress?: string[] } } | undefined;
 
 
 export async function executeMexcDeposit(prevState: MexcDepositState, formData: FormData): Promise<MexcDepositState> {
@@ -1982,8 +1990,14 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
             get(ref(db, 'settings'))
         ]);
 
-        if (!clientSnapshot.exists() || !bankAccountSnapshot.exists() || !settingsSnapshot.exists()) {
-            return { error: true, message: "Client, Bank Account, or Settings not found in database." };
+        if (!clientSnapshot.exists()) {
+             return { error: true, message: "Selected client not found.", errors: { clientId: ['Client does not exist.'] } };
+        }
+        if (!bankAccountSnapshot.exists()) {
+             return { error: true, message: "Selected bank account not found." };
+        }
+        if (!settingsSnapshot.exists()) {
+            return { error: true, message: "System settings not found." };
         }
 
         const client = clientSnapshot.val() as Client;
