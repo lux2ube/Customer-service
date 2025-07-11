@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
+import { Spot } from 'mexc-api-sdk';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1865,9 +1866,6 @@ export type MexcTestDepositState = { message?: string, error?: boolean, errors?:
 
 
 export async function executeMexcDeposit(prevState: MexcDepositState, formData: FormData): Promise<MexcDepositState> {
-    // This is a placeholder for the actual MEXC API call.
-    // In a real application, you would use the 'mexc-api' library or fetch to call their API.
-    
     const depositId = formData.get('depositId') as string;
     const finalUsdtAmountStr = formData.get('finalUsdtAmount') as string;
     
@@ -1877,28 +1875,47 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
     }
 
     try {
+        const settingsSnapshot = await get(ref(db, 'settings'));
+        if (!settingsSnapshot.exists()) {
+            return { error: true, message: 'API settings are not configured.' };
+        }
+        const settings: Settings = settingsSnapshot.val();
+        const { mexc_api_key, mexc_secret_key } = settings;
+
+        if (!mexc_api_key || !mexc_secret_key) {
+            return { error: true, message: 'MEXC API Key or Secret Key is not set in Settings.' };
+        }
+
         const depositRef = ref(db, `mexc_pending_deposits/${depositId}`);
         const depositSnapshot = await get(depositRef);
-
         if (!depositSnapshot.exists()) {
             return { error: true, message: "Pending deposit not found." };
         }
-
         const deposit = depositSnapshot.val() as MexcPendingDeposit;
+        
+        // Initialize MEXC SDK Client
+        const client = new Spot(mexc_api_key, mexc_secret_key);
 
-        // ***
-        // *** TODO: Implement actual MEXC API call here ***
-        // ***
-        console.log(`Executing MEXC withdrawal of ${finalUsdtAmount} USDT to ${deposit.clientWalletAddress}`);
-        const fakeHash = `0x${[...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-        // On success, proceed...
+        // Execute the withdrawal via MEXC API
+        const withdrawResult = await client.withdraw(
+            'USDT',                       // coin
+            deposit.clientWalletAddress,  // address
+            finalUsdtAmount,              // amount
+            'BSC'                         // network (BEP20)
+        );
+
+        // The SDK throws an error on failure, so if we're here, it's likely successful.
+        // We'll use the withdrawal ID from the response as the "hash".
+        const withdrawalId = withdrawResult.id;
+        if (!withdrawalId) {
+            throw new Error('MEXC API did not return a withdrawal ID.');
+        }
 
         // 1. Create the final transaction record
         const newTxId = push(ref(db, 'transactions')).key;
         if (!newTxId) { throw new Error("Could not generate transaction ID"); }
         
-        const settings = (await get(ref(db, 'settings'))).val() as Settings;
-        const rate = settings.yer_usd || 1; // Assuming YER for now
+        const rate = deposit.smsCurrency === 'YER' ? (settings.yer_usd || 1) : (settings.sar_usd || 1);
         const amountUSD = deposit.smsAmount * rate;
         const fee = amountUSD - finalUsdtAmount;
         
@@ -1911,12 +1928,12 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
             bankAccountName: deposit.smsBankAccountName,
             cryptoWalletId: settings.mexc_usdt_wallet_account_id,
             amount: deposit.smsAmount,
-            currency: 'YER',
+            currency: deposit.smsCurrency,
             amount_usd: amountUSD,
             fee_usd: fee > 0 ? fee : 0,
             expense_usd: fee < 0 ? -fee : 0,
             amount_usdt: finalUsdtAmount,
-            hash: fakeHash,
+            hash: withdrawalId,
             client_wallet_address: deposit.clientWalletAddress,
             status: 'Confirmed',
             notes: `Auto-deposit via MEXC from SMS ID: ${deposit.smsId}`,
@@ -1932,14 +1949,21 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
         });
 
         // 3. Mark the original SMS as used
-        await update(ref(db, `sms_transactions/${deposit.smsId}`), {
-            status: 'used',
-            transaction_id: newTxId,
-        });
+        if (deposit.smsId.startsWith('test-deposit-')) {
+             // This is a test deposit, no real SMS to update.
+        } else {
+            await update(ref(db, `sms_transactions/${deposit.smsId}`), {
+                status: 'used',
+                transaction_id: newTxId,
+            });
+        }
+        
 
     } catch (error: any) {
         console.error("MEXC Deposit Execution Error:", error);
-        return { error: true, message: error.message || "An unknown error occurred." };
+        // The SDK might return structured errors.
+        const errorMessage = error.response?.data?.msg || error.message || "An unknown error occurred during API execution.";
+        return { error: true, message: errorMessage };
     }
 
     revalidatePath('/mexc-deposits');
@@ -2005,7 +2029,7 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
             smsBankAccountId: bankAccountId,
             smsBankAccountName: bankAccount.name,
             smsAmount: amount,
-            smsCurrency: bankAccount.currency,
+            smsCurrency: bankAccount.currency as 'YER' | 'SAR',
             calculatedUsdtAmount: parseFloat(calculatedUsdtAmount.toFixed(2)),
         };
 
