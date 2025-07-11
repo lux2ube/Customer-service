@@ -14,6 +14,7 @@ export interface Client {
     id: string;
     name: string; // The full name of the client
     phone: string[];
+    telegramChatId?: number; // Added for Telegram integration
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
     review_flags: ReviewFlag[];

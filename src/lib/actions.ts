@@ -1643,19 +1643,21 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
-
+        
         const isMatch = (client: Client, smsParsedName: string): boolean => {
             if (!client.name) return false;
             
-            // Phone number match is high confidence
+            // High confidence match: phone number
             const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
             const cleanSmsName = smsParsedName.replace(/[^a-zA-Z0-9\u0600-\u06FF\s]/g, '');
-            if (clientPhones.some(p => p && cleanSmsName.includes(p))) return true;
+            if (clientPhones.some(p => p && cleanSmsName.includes(p))) {
+                return true;
+            }
 
-            // Name match logic
+            // Flexible name match logic
             const normalizedClientName = normalizeArabic(client.name.toLowerCase());
             const clientNameSet = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1));
-            const smsNameParts = normalizeArabic(smsParsedName).split(/\s+/).filter(p => p.length > 1);
+            const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
             if (smsNameParts.length === 0) return false;
             
             let commonWords = 0;
@@ -1669,24 +1671,21 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             return commonWords >= 2;
         };
 
+
         for (const sms of smsToMatch) {
             if (!sms.client_name) continue;
             
-            const smsParsedName = normalizeArabic(sms.client_name.toLowerCase());
-            
-            const potentialMatches = clientsArray.filter(client => isMatch(client, smsParsedName));
+            const potentialMatches = clientsArray.filter(client => isMatch(client, sms.client_name!));
             
             let finalMatch: (Client & { id: string }) | null = null;
 
             if (potentialMatches.length === 1) {
                 finalMatch = potentialMatches[0];
             } else if (potentialMatches.length > 1) {
-                // If multiple matches, prefer the one with highest priority flag
                 const prioritizedMatch = potentialMatches.find(c => c.prioritize_sms_matching);
                 if (prioritizedMatch) {
                     finalMatch = prioritizedMatch;
                 } else {
-                    // Tie-breaker: prefer client with most recent confirmed transaction
                     const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
                     const recentClients = potentialMatches.filter(client => 
                         transactionsArray.some(tx => 
