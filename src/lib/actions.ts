@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -416,6 +417,8 @@ export type TransactionFormState =
         attachment_url?: string[];
       };
       message?: string;
+      success?: boolean;
+      transactionId?: string;
     }
   | undefined;
 
@@ -442,7 +445,7 @@ const TransactionSchema = z.object({
 });
 
 
-export async function createTransaction(transactionId: string | null, formData: FormData) {
+export async function createTransaction(transactionId: string | null, formData: FormData): Promise<TransactionFormState> {
     const newId = transactionId || push(ref(db, 'transactions')).key;
     if (!newId) throw new Error("Could not generate a transaction ID.");
 
@@ -745,7 +748,8 @@ export async function createTransaction(transactionId: string | null, formData: 
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
     revalidatePath(`/transactions/${newId}/edit`);
-    redirect(`/transactions/${newId}/edit`);
+    
+    return { success: true, transactionId: newId };
 }
 
 export async function getSmsSuggestions(clientId: string, bankAccountId: string): Promise<SmsTransaction[]> {
@@ -770,19 +774,25 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
 
         const suggestions = allSmsTxs.filter(sms => {
             if (sms.account_id !== bankAccountId) return false;
-
-            // Condition 1: SMS is already matched to this client
-            if (sms.status === 'matched' && sms.matched_client_id === clientId) {
-                return true;
+            
+            // Suggest only if parsed or matched, but not yet used
+            if (sms.status !== 'parsed' && sms.status !== 'matched') {
+                return false;
             }
 
-            // Condition 2: SMS is parsed and the parsed name is a reasonable match
+            // If it's matched, it must be matched to the current client
+            if (sms.status === 'matched') {
+                return sms.matched_client_id === clientId;
+            }
+
+            // If it's just parsed, check if the name is a reasonable match
             if (sms.status === 'parsed' && sms.client_name) {
                 const normalizedSmsName = normalizeArabic(sms.client_name.toLowerCase());
                 const smsNameParts = normalizedSmsName.split(/\s+/);
                 
-                // Check if at least one part of the SMS name exists in the client's name parts
-                return smsNameParts.some(part => clientNameParts.has(part));
+                // Check if at least two parts of the SMS name exist in the client's name parts for better accuracy
+                const commonWords = smsNameParts.filter(part => clientNameParts.has(part));
+                return commonWords.length >= 2;
             }
 
             return false;
@@ -1689,14 +1699,9 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
             if (smsNameParts.length === 0) return false;
             
-            let commonWords = 0;
-            for (const part of smsNameParts) {
-                if (clientNameSet.has(part)) {
-                    commonWords++;
-                }
-            }
-            
-            return commonWords >= 2;
+            // Check for a significant overlap (at least 2 words)
+            const commonWords = smsNameParts.filter(part => clientNameSet.has(part));
+            return commonWords.length >= 2;
         };
 
 
@@ -2068,5 +2073,6 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
+
 
 

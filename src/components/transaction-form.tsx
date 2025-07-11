@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -431,13 +432,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         const result = await createTransaction(transaction?.id || null, actionFormData);
         
-        if (result?.errors) {
+        if (result?.success && result.transactionId) {
+            router.push(`/transactions/${result.transactionId}/edit`);
+        } else if (result?.errors) {
             setFormErrors(result.errors);
             toast({ variant: 'destructive', title: 'Error Recording Transaction', description: result.message });
         } else if (result?.message) {
             toast({ variant: 'destructive', title: 'Error', description: result.message });
-        } else {
-             // Success handled by redirect in server action
         }
         setIsSaving(false);
     };
