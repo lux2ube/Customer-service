@@ -2,8 +2,6 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -18,37 +16,35 @@ import { Check, ChevronsUpDown, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { searchClients } from '@/lib/actions';
 
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending}>
-            {pending ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating Test Deposit...</>
-            ) : (
-                <><Save className="mr-2 h-4 w-4" />Create Test Deposit</>
-            )}
-        </Button>
-    );
-}
-
 export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client[], bankAccounts: Account[] }) {
     const { toast } = useToast();
-    const [state, formAction] = useActionState<MexcTestDepositState, FormData>(createMexcTestDeposit, undefined);
     const formRef = React.useRef<HTMLFormElement>(null);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [errors, setErrors] = React.useState<MexcTestDepositState['errors']>(undefined);
 
-    React.useEffect(() => {
-        if (state?.message && state?.error) {
-            toast({ variant: 'destructive', title: 'Error', description: state.message });
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsLoading(true);
+        setErrors(undefined);
+
+        const formData = new FormData(event.currentTarget);
+        const result = await createMexcTestDeposit(undefined, formData);
+
+        if (result?.error) {
+            toast({ variant: 'destructive', title: 'Error', description: result.message });
+            setErrors(result.errors);
         }
-    }, [state, toast]);
+
+        setIsLoading(false);
+    };
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
     };
 
     return (
-        <form action={formAction} ref={formRef}>
+        <form onSubmit={handleSubmit} ref={formRef}>
             <Card>
                 <CardHeader>
                     <CardTitle>Test Deposit Details</CardTitle>
@@ -59,7 +55,7 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                         <Label>Client</Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                         <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
-                        {state && state.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                        {errors?.clientId && <p className="text-sm text-destructive">{errors.clientId[0]}</p>}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
@@ -73,13 +69,13 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {state && state.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+                            {errors?.bankAccountId && <p className="text-sm text-destructive">{errors.bankAccountId[0]}</p>}
                         </div>
 
                         <div className="space-y-2">
                             <Label htmlFor="amount">Amount Received</Label>
                             <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g. 50000" />
-                            {state && state.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                            {errors?.amount && <p className="text-sm text-destructive">{errors.amount[0]}</p>}
                         </div>
                     </div>
 
@@ -92,11 +88,17 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                             placeholder="0x..."
                             defaultValue={selectedClient?.bep20_addresses?.[0] || ''}
                         />
-                        {state && state.errors?.clientWalletAddress && <p className="text-sm text-destructive">{state.errors.clientWalletAddress[0]}</p>}
+                        {errors?.clientWalletAddress && <p className="text-sm text-destructive">{errors.clientWalletAddress[0]}</p>}
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <SubmitButton />
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating Test Deposit...</>
+                        ) : (
+                            <><Save className="mr-2 h-4 w-4" />Create Test Deposit</>
+                        )}
+                    </Button>
                 </CardFooter>
             </Card>
         </form>
