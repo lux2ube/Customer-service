@@ -61,19 +61,19 @@ export function IdScanner() {
         setRawText('');
         setStructuredData(null);
 
-        const worker = await createWorker();
+        const worker = await createWorker({
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    setOcrProgress(Math.round(m.progress * 100));
+                }
+                setOcrStatus(m.status);
+            },
+        });
 
         try {
             await worker.loadLanguage('ara');
             await worker.initialize('ara');
-            const { data: { text } } = await worker.recognize(selectedFile, {}, {
-                logger: (m) => {
-                    if (m.status === 'recognizing text') {
-                        setOcrProgress(Math.round(m.progress * 100));
-                    }
-                    setOcrStatus(m.status);
-                }
-            });
+            const { data: { text } } = await worker.recognize(selectedFile);
             setRawText(text);
         } catch (error) {
             console.error(error);
@@ -81,6 +81,7 @@ export function IdScanner() {
         } finally {
             await worker.terminate();
             setIsProcessingOcr(false);
+            setOcrStatus('Done');
         }
     };
 
