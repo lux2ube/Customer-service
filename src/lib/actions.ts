@@ -1615,21 +1615,19 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
     try {
-        const [smsSnapshot, clientsSnapshot, transactionsSnapshot, endpointsSnapshot] = await Promise.all([
+        const [smsSnapshot, clientsSnapshot, transactionsSnapshot] = await Promise.all([
             get(ref(db, 'sms_transactions')),
             get(ref(db, 'clients')),
-            get(ref(db, 'transactions')),
-            get(ref(db, 'sms_endpoints')),
+            get(ref(db, 'transactions'))
         ]);
 
-        if (!smsSnapshot.exists() || !clientsSnapshot.exists() || !endpointsSnapshot.exists()) {
-            return { message: "No SMS, clients, or endpoints to match.", error: false };
+        if (!smsSnapshot.exists() || !clientsSnapshot.exists()) {
+            return { message: "No SMS or clients to match.", error: false };
         }
 
         const allSmsData: Record<string, SmsTransaction> = smsSnapshot.val();
         const allClients: Record<string, Client> = clientsSnapshot.val();
         const allTransactions: Record<string, Transaction> = transactionsSnapshot.val() || {};
-        const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val();
         
         const clientsArray: (Client & { id: string })[] = Object.entries(allClients).map(([id, client]) => ({ id, ...client }));
         const transactionsArray: (Transaction & { id: string })[] = Object.entries(allTransactions).map(([id, tx]) => ({ id, ...tx }));
@@ -1646,57 +1644,41 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
 
-        const isMatch = (client: Client, smsParsedName: string, rules: NameMatchingRule[]): boolean => {
+        const isMatch = (client: Client, smsParsedName: string): boolean => {
             if (!client.name) return false;
             const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-            const clientNameParts = normalizedClientName.split(/\s+/);
-            const smsNameParts = smsParsedName.split(/\s+/);
+            const clientNameSet = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1));
+            
+            // Phone number match is high confidence
+            const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
+            if (clientPhones.some(p => p && smsParsedName.includes(p))) return true;
 
-            for (const rule of rules) {
-                switch (rule) {
-                    case 'phone_number':
-                        const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
-                        if (clientPhones.some(p => p && smsParsedName.includes(p))) return true;
-                        break;
-                    case 'full_name':
-                        if (normalizedClientName === smsParsedName) return true;
-                        break;
-                    case 'first_and_second':
-                        if (clientNameParts.length >= 2 && smsNameParts.length >= 2 && clientNameParts[0] === smsNameParts[0] && clientNameParts[1] === smsNameParts[1]) return true;
-                        break;
-                    case 'first_and_last':
-                         if (clientNameParts.length >= 2 && smsNameParts.length >= 2 && clientNameParts[0] === smsNameParts[0] && clientNameParts[clientNameParts.length - 1] === smsNameParts[smsNameParts.length - 1]) return true;
-                        break;
-                    case 'part_of_full_name':
-                        if (smsNameParts.every(part => normalizedClientName.includes(part))) return true;
-                        break;
-                }
-            }
-            return false;
+            // Name match logic
+            const smsNameParts = smsParsedName.split(/\s+/).filter(p => p.length > 1);
+            if (smsNameParts.length === 0) return false;
+            
+            // Check if all parts of the SMS name exist in the client's name parts
+            return smsNameParts.every(part => clientNameSet.has(part));
         };
-
 
         for (const sms of smsToMatch) {
             if (!sms.client_name) continue;
             
-            const endpoint = allEndpoints[sms.account_id];
-            if (!endpoint || !endpoint.nameMatchingRules || endpoint.nameMatchingRules.length === 0) {
-                continue;
-            }
-
             const smsParsedName = normalizeArabic(sms.client_name.toLowerCase());
             
-            const potentialMatches = clientsArray.filter(client => isMatch(client, smsParsedName, endpoint.nameMatchingRules!));
+            const potentialMatches = clientsArray.filter(client => isMatch(client, smsParsedName));
             
             let finalMatch: (Client & { id: string }) | null = null;
 
             if (potentialMatches.length === 1) {
                 finalMatch = potentialMatches[0];
             } else if (potentialMatches.length > 1) {
+                // If multiple matches, prefer the one with highest priority flag
                 const prioritizedMatch = potentialMatches.find(c => c.prioritize_sms_matching);
                 if (prioritizedMatch) {
                     finalMatch = prioritizedMatch;
                 } else {
+                    // Tie-breaker: prefer client with most recent confirmed transaction
                     const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
                     const recentClients = potentialMatches.filter(client => 
                         transactionsArray.some(tx => 
