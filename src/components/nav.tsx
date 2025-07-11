@@ -22,6 +22,7 @@ import {
   Settings2,
   Pilcrow,
   Send,
+  Contact,
 } from 'lucide-react';
 
 const menuItems = [
@@ -33,6 +34,7 @@ const menuItems = [
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { type: 'divider' },
+  { href: '/kyc/scan', label: 'KYC ID Scan', icon: Contact },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
