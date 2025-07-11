@@ -12,7 +12,6 @@ import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
 import { createWorker } from 'tesseract.js';
 import { redirect } from 'next/navigation';
-import { useRouter } from 'next/navigation';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1689,7 +1688,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
         
-        const commonNamesToIgnore = new Set(['محمد']);
+        const commonNamesToIgnore = new Set(['محمد', 'علي', 'احمد', 'عبدالله']);
 
         const isMatch = (client: Client, smsParsedName: string): boolean => {
             if (!client.name) return false;
@@ -2102,69 +2101,128 @@ export type ExtractedDataState = {
 } | null;
 
 
+const PassportMRZSchema = z.object({
+  passportNumber: z.string(),
+  countryCode: z.string(),
+  nationality: z.string(),
+  dob: z.string(), // YYYY-MM-DD
+  sex: z.string(),
+  expiryDate: z.string(), // YYYY-MM-DD
+  fullName: z.string(),
+});
+
+function parsePassportMRZ(mrzLines: string[]): z.infer<typeof PassportMRZSchema> | null {
+    if (mrzLines.length < 2) return null;
+    const line1 = mrzLines[0].replace(/\s/g, '');
+    const line2 = mrzLines[1].replace(/\s/g, '');
+
+    if (line1.length < 44 || line2.length < 44) return null;
+
+    try {
+        const type = line1.substring(0, 1);
+        if (type !== 'P') return null; // Not a passport
+
+        const countryCode = line1.substring(2, 5);
+        const namePart = line1.substring(5, 44).replace(/</g, ' ').trim();
+        
+        const passportNumber = line2.substring(0, 9).replace(/</g, '').trim();
+        const nationality = line2.substring(10, 13);
+        const dobRaw = line2.substring(13, 19);
+        const sex = line2.substring(20, 21);
+        const expiryDateRaw = line2.substring(21, 27);
+
+        const formatDate = (raw: string) => {
+            let year = parseInt(raw.substring(0, 2), 10);
+            const month = raw.substring(2, 4);
+            const day = raw.substring(4, 6);
+            // Infer century
+            year += (year < 40) ? 2000 : 1900;
+            return `${year}-${month}-${day}`;
+        };
+
+        const [lastName, ...givenNamesArray] = namePart.split('  ');
+        const givenNames = givenNamesArray.join(' ');
+        
+        return PassportMRZSchema.parse({
+            passportNumber,
+            countryCode,
+            nationality,
+            dob: formatDate(dobRaw),
+            sex,
+            expiryDate: formatDate(expiryDateRaw),
+            fullName: `${givenNames} ${lastName}`.trim(),
+        });
+
+    } catch (e) {
+        console.error("MRZ Parsing failed:", e);
+        return null;
+    }
+}
+
+
 export async function processIdDocumentWithTesseract(
   prevState: ExtractedDataState,
   formData: FormData
 ): Promise<ExtractedDataState> {
-  const imageFile = formData.get("idImage") as File | null;
+    const imageFile = formData.get("idImage") as File | null;
+    if (!imageFile || imageFile.size === 0) return { error: "Please upload an image file." };
 
-  if (!imageFile || imageFile.size === 0) {
-    return { error: "Please upload an image file." };
-  }
+    try {
+        const worker = await createWorker('ara+eng');
+        const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
+        const { data: { text, lines } } = await worker.recognize(imageBuffer);
+        await worker.terminate();
 
-  try {
-    const worker = await createWorker('ara');
-    const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
-    const { data: { text } } = await worker.recognize(imageBuffer);
-    await worker.terminate();
-    
-    const extracted: Record<string, string | undefined> = {};
-    const textLines = text.split('\n').filter(line => line.trim() !== '');
+        const extracted: Partial<ExtractedDataState['data']> = {};
+        
+        const cleanLine = (t: string) => normalizeArabic(t.toLowerCase()).replace(/[:.]/g, '').trim();
+        
+        // 1. Prioritize Machine-Readable Zone (MRZ) for passports
+        const mrzLines = lines.filter(line => line.text.includes('<<<') && line.confidence > 60).map(l => l.text);
+        const mrzData = parsePassportMRZ(mrzLines);
+        
+        if (mrzData) {
+             extracted.name = mrzData.fullName;
+             extracted.nationalId = mrzData.passportNumber;
+             extracted.dob = mrzData.dob;
+             extracted.expiryDate = mrzData.expiryDate;
+        }
 
-    const extractValue = (lines: string[], keywords: string[]): string | undefined => {
-        for (const line of lines) {
-            for (const keyword of keywords) {
-                const regex = new RegExp(`${keyword}\\s*:?\\s*(.+)`);
-                const match = line.match(regex);
-                if (match && match[1]) {
-                    // Clean up common OCR mistakes like reading colons as part of the value
-                    let value = match[1].replace(/^:/, '').trim();
-                    // In case a keyword from the next line is appended
-                    const nextLineKeyword = keywords.find(k => value.includes(k));
-                    if (nextLineKeyword) {
-                        value = value.substring(0, value.indexOf(nextLineKeyword)).trim();
+        // 2. Keyword-based extraction as fallback or for additional fields
+        const extractValue = (keywords: string[]): string | undefined => {
+            for (const line of lines) {
+                const cleanedLineText = cleanLine(line.text);
+                for (const keyword of keywords) {
+                    if (cleanedLineText.startsWith(cleanLine(keyword))) {
+                        return line.text.replace(new RegExp(keyword, 'i'), '').replace(':', '').trim();
                     }
-                    return value;
                 }
             }
+            return undefined;
+        };
+        
+        // Extract fields only if they weren't found in the MRZ
+        if (!extracted.name) {
+            extracted.name = extractValue(['الاسم', 'Name']) || extractValue(['GIVEN NAMES', 'SURNAME']);
         }
-        return undefined;
-    };
-    
-    // Using a more flexible approach to find the name, assuming it's usually one of the first few lines.
-    const nameLine = textLines.find(line => line.includes('الاسم:'));
-    if (nameLine) {
-        extracted.name = nameLine.split(':')[1]?.trim();
-    } else {
-        // Fallback: Assume the first significant line with multiple words is the name
-        for (const line of textLines) {
-            if (line.trim().split(/\s+/).length > 2 && !/[\d:-]/.test(line)) {
-                extracted.name = line.trim();
-                break;
-            }
+        if (!extracted.dob) {
+            extracted.dob = extractValue(['تاريخ الميلاد', 'Date of Birth']);
         }
+        if (!extracted.expiryDate) {
+            extracted.expiryDate = extractValue(['تاريخ الإنتهاء', 'DATE OF EXPIRY']);
+        }
+
+        extracted.pob = extractValue(['مكان الميلاد', 'Place of Birth']);
+        extracted.issueDate = extractValue(['تاريخ الإصدار', 'DATE OF ISSUE']);
+
+        if (!Object.values(extracted).some(v => v !== undefined)) {
+            return { error: "Could not extract any recognizable information. Image may be unclear or format is not supported." };
+        }
+
+        return { data: extracted };
+
+    } catch (error) {
+        console.error("OCR Processing Error:", error);
+        return { error: "Failed to process the document. The image may be unclear or an unexpected error occurred." };
     }
-    
-    extracted.nationalId = extractValue(textLines, ['الرقم الوطني']);
-    extracted.dob = extractValue(textLines, ['تاريخ الميلاد']);
-    extracted.pob = extractValue(textLines, ['مكان الميلاد']);
-    extracted.issueDate = extractValue(textLines, ['تاريخ الإصدار']);
-    extracted.expiryDate = extractValue(textLines, ['تاريخ الإنتهاء']);
-
-    return { data: extracted };
-
-  } catch (error) {
-    console.error("OCR Processing Error:", error);
-    return { error: "Failed to process the document. The image may be unclear or in an unsupported format." };
-  }
 }
