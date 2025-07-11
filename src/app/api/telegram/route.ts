@@ -7,20 +7,25 @@ import type { Settings, Client } from '@/lib/types';
 // Helper function to send messages back to Telegram
 async function sendMessage(botToken: string, chatId: number, text: string, replyMarkup?: any) {
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            chat_id: chatId,
-            text,
-            parse_mode: 'Markdown', // To allow for formatting like bold
-            reply_markup: replyMarkup,
-        }),
-    });
-    if (!response.ok) {
-        console.error("Telegram API Error:", await response.json());
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text,
+                parse_mode: 'Markdown',
+                reply_markup: replyMarkup,
+            }),
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error("Telegram API Error:", errorData);
+        }
+    } catch (error) {
+        console.error("Failed to send Telegram message:", error);
     }
 }
 
@@ -29,13 +34,16 @@ export async function POST(request: NextRequest) {
     try {
         const settingsSnapshot = await get(ref(db, 'settings'));
         if (!settingsSnapshot.exists()) {
-            throw new Error('Bot settings not found in the database.');
+            console.error('Bot settings not found in the database.');
+            // Still return 200 to Telegram to prevent retries
+            return new NextResponse('OK', { status: 200 });
         }
         const settings = settingsSnapshot.val() as Settings;
         const botToken = settings.telegram_bot_token;
 
         if (!botToken) {
-            throw new Error('Telegram bot token is not configured in settings.');
+            console.error('Telegram bot token is not configured in settings.');
+            return new NextResponse('OK', { status: 200 });
         }
         
         const body = await request.json();
@@ -56,11 +64,11 @@ export async function POST(request: NextRequest) {
                 return new NextResponse('OK', { status: 200 });
             }
 
-            const phoneNumber = message.contact.phone_number.replace(/\+/g, '').replace(/\s/g, '');
+            const phoneNumber = message.contact.phone_number.replace(/\+/g, '');
 
             const clientsSnapshot = await get(ref(db, 'clients'));
-            
             let foundClient: (Client & { id: string }) | null = null;
+            
             if (clientsSnapshot.exists()) {
                 const clientsData: Record<string, Client> = clientsSnapshot.val();
                 for (const clientId in clientsData) {
@@ -68,7 +76,7 @@ export async function POST(request: NextRequest) {
                     if (!client.phone) continue;
 
                     const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
-                    const cleanedClientPhones = clientPhones.map(p => p.replace(/\+/g, '').replace(/\s/g, ''));
+                    const cleanedClientPhones = clientPhones.map(p => p.replace(/\+/g, ''));
 
                     if (cleanedClientPhones.includes(phoneNumber)) {
                         foundClient = { ...client, id: clientId };
