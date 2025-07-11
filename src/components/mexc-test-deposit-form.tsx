@@ -7,19 +7,14 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { createMexcTestDeposit, type MexcTestDepositState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
-import type { Client, Account } from '@/lib/types';
-import { Check, ChevronsUpDown, Loader2, Save } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { searchClients } from '@/lib/actions';
+import type { Account } from '@/lib/types';
+import { Loader2, Save } from 'lucide-react';
 
-export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client[], bankAccounts: Account[] }) {
+export function MexcTestDepositForm({ bankAccounts }: { bankAccounts: Account[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
     const [errors, setErrors] = React.useState<MexcTestDepositState['errors']>(undefined);
 
@@ -39,10 +34,6 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
         setIsLoading(false);
     };
 
-    const handleClientSelect = (client: Client | null) => {
-        setSelectedClient(client);
-    };
-
     return (
         <form onSubmit={handleSubmit} ref={formRef}>
             <Card>
@@ -52,9 +43,13 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Client</Label>
-                        <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
-                        <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
+                        <Label htmlFor="clientId">Client ID</Label>
+                        <Input 
+                            id="clientId"
+                            name="clientId"
+                            required
+                            placeholder="Enter the client's ID"
+                        />
                         {errors?.clientId && <p className="text-sm text-destructive">{errors.clientId[0]}</p>}
                     </div>
 
@@ -86,7 +81,6 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                             name="clientWalletAddress" 
                             required 
                             placeholder="0x..."
-                            defaultValue={selectedClient?.bep20_addresses?.[0] || ''}
                         />
                         {errors?.clientWalletAddress && <p className="text-sm text-destructive">{errors.clientWalletAddress[0]}</p>}
                     </div>
@@ -102,106 +96,5 @@ export function MexcTestDepositForm({ clients, bankAccounts }: { clients: Client
                 </CardFooter>
             </Card>
         </form>
-    );
-}
-
-function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
-    const [search, setSearch] = React.useState(selectedClient?.name || "");
-    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [isOpen, setIsOpen] = React.useState(false);
-    const wrapperRef = React.useRef<HTMLDivElement>(null);
-
-    React.useEffect(() => {
-        if (!isOpen || search.trim().length < 2) {
-            setSearchResults([]);
-            if (search.trim().length === 0 && selectedClient) {
-                onSelect(null);
-            }
-            return;
-        }
-
-        setIsLoading(true);
-        const timerId = setTimeout(async () => {
-            const results = await searchClients(search);
-            setSearchResults(results);
-            setIsLoading(false);
-        }, 300);
-
-        return () => clearTimeout(timerId);
-    }, [search, isOpen, onSelect, selectedClient]);
-    
-    React.useEffect(() => {
-        if (selectedClient) {
-            setSearch(selectedClient.name || '');
-        } else {
-            setSearch("");
-        }
-    }, [selectedClient]);
-
-    React.useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-                setSearch(selectedClient?.name || "");
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [wrapperRef, selectedClient]);
-
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
-
-    const handleSelect = (client: Client) => {
-        onSelect(client);
-        setIsOpen(false);
-        setSearch(client.name);
-    };
-
-    return (
-        <div className="relative" ref={wrapperRef}>
-            <Popover open={isOpen} onOpenChange={setIsOpen}>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={isOpen}
-                        className="w-full justify-between font-normal"
-                        onClick={() => setIsOpen(true)}
-                    >
-                        {selectedClient ? selectedClient.name : "Select a client..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command shouldFilter={false}>
-                        <CommandInput 
-                            placeholder="Search by name or phone..."
-                            value={search}
-                            onValueChange={setSearch}
-                        />
-                        <CommandList>
-                            {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                            {!isLoading && searchResults.length === 0 && search.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
-                            <CommandGroup>
-                                {searchResults.map(client => (
-                                    <CommandItem
-                                        key={client.id}
-                                        value={client.id}
-                                        onSelect={() => handleSelect(client)}
-                                    >
-                                        <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                        <div className="flex flex-col">
-                                            <span>{client.name}</span>
-                                            <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
-                                        </div>
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </CommandList>
-                    </Command>
-                </PopoverContent>
-            </Popover>
-        </div>
     );
 }
