@@ -15,6 +15,7 @@ async function sendMessage(botToken: string, chatId: number, text: string, reply
         body: JSON.stringify({
             chat_id: chatId,
             text,
+            parse_mode: 'Markdown', // To allow for formatting like bold
             reply_markup: replyMarkup,
         }),
     });
@@ -41,17 +42,22 @@ export async function POST(request: NextRequest) {
         const message = body.message;
 
         if (!message || !message.chat || !message.chat.id) {
-            return NextResponse.json({ status: 'ok', message: 'No message found' });
+            // Not a message we can handle, but return 200 to Telegram
+            return new NextResponse('OK', { status: 200 });
         }
 
         const chatId = message.chat.id;
-        const text = message.text;
+        const fromId = message.from.id;
 
         // --- Handle user sharing their contact info ---
-        if (message.contact && message.contact.phone_number) {
-            const phoneNumber = message.contact.phone_number.replace(/\+/g, '').replace(/\s/g, ''); // Clean the number
+        if (message.contact) {
+             if (message.contact.user_id !== fromId) {
+                await sendMessage(botToken, chatId, "❌ Please send your *own* contact number by pressing the button.");
+                return new NextResponse('OK', { status: 200 });
+            }
 
-            // Fetch all clients, then filter in code. This is necessary because Firebase RTDB can't query array contents.
+            const phoneNumber = message.contact.phone_number.replace(/\+/g, '').replace(/\s/g, '');
+
             const clientsSnapshot = await get(ref(db, 'clients'));
             
             let foundClient: (Client & { id: string }) | null = null;
@@ -70,17 +76,14 @@ export async function POST(request: NextRequest) {
                     }
                 }
             }
-
+            
             if (foundClient) {
-                // Link the Telegram Chat ID to the client profile for future use
                 await update(ref(db, `clients/${foundClient.id}`), { telegramChatId: chatId });
-                
                 await sendMessage(
                     botToken, 
                     chatId, 
-                    `أهلاً بك يا ${foundClient.name}! تم التحقق من حسابك بنجاح.`,
+                    `✅ أهلاً بك يا ${foundClient.name}! تم التحقق من حسابك بنجاح.`,
                     {
-                        // Remove the special keyboard and show inline buttons for actions
                         remove_keyboard: true,
                         inline_keyboard: [
                             [{ text: "💰 إيداع (Deposit)", callback_data: "deposit" }],
@@ -91,11 +94,13 @@ export async function POST(request: NextRequest) {
             } else {
                 await sendMessage(botToken, chatId, "عفواً، رقم هاتفك غير مسجل لدينا في النظام.");
             }
-            return NextResponse.json({ status: 'ok' });
+            
+            return new NextResponse('OK', { status: 200 });
         }
 
+
         // --- Handle the /start command ---
-        if (text && text.toLowerCase() === '/start') {
+        if (message.text && message.text.toLowerCase() === '/start') {
             await sendMessage(
                 botToken,
                 chatId,
@@ -108,14 +113,15 @@ export async function POST(request: NextRequest) {
                     one_time_keyboard: true,
                 }
             );
-            return NextResponse.json({ status: 'ok' });
+             return new NextResponse('OK', { status: 200 });
         }
-
-        return NextResponse.json({ status: 'ok', message: 'Unhandled message type' });
+        
+        // Acknowledge other messages to prevent Telegram from retrying
+        return new NextResponse('OK', { status: 200 });
 
     } catch (error: any) {
         console.error('Telegram Webhook Error:', error.message, error.stack);
         // We send a 200 OK response even on errors to prevent Telegram from retrying.
-        return NextResponse.json({ status: 'error', message: error.message });
+        return new NextResponse('OK', { status: 200, statusText: 'Internal Server Error' });
     }
 }
