@@ -33,13 +33,9 @@ async function sendMessage(botToken: string, chatId: number, text: string, reply
 export async function POST(request: NextRequest) {
     try {
         const settingsSnapshot = await get(ref(db, 'settings'));
-        if (!settingsSnapshot.exists()) {
-            console.error('Bot settings not found in the database.');
-            // Still return 200 to Telegram to prevent retries
-            return new NextResponse('OK', { status: 200 });
-        }
         const settings = settingsSnapshot.val() as Settings;
-        const botToken = settings.telegram_bot_token;
+        // Use the token from settings, or the one provided as a fallback.
+        const botToken = settings?.telegram_bot_token || "7719960364:AAHs8JUBVhzaHBY3maQtT0uTt_tPrJj9RkI";
 
         if (!botToken) {
             console.error('Telegram bot token is not configured in settings.');
