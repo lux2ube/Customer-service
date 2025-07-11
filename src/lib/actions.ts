@@ -1930,7 +1930,7 @@ export async function executeMexcDeposit(prevState: MexcDepositState, formData: 
             bankAccountName: deposit.smsBankAccountName,
             cryptoWalletId: settings.mexc_usdt_wallet_account_id,
             amount: deposit.smsAmount,
-            currency: deposit.smsCurrency,
+            currency: deposit.smsCurrency as 'YER' | 'SAR' | 'USD' | 'USDT',
             amount_usd: amountUSD,
             fee_usd: fee > 0 ? fee : 0,
             expense_usd: fee < 0 ? -fee : 0,
@@ -2045,3 +2045,5 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
+
+    
