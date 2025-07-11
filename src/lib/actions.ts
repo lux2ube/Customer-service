@@ -774,19 +774,22 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
         const clientNameParts = new Set(normalizedClientName.split(/\s+/));
 
         const suggestions = allSmsTxs.filter(sms => {
-            if (sms.account_id !== bankAccountId) return false;
-            
-            // Suggest only if parsed or matched, but not yet used
+            // Must belong to the selected bank account
+            if (sms.account_id !== bankAccountId) {
+                return false;
+            }
+
+            // Must be in a state where it can be linked
             if (sms.status !== 'parsed' && sms.status !== 'matched') {
                 return false;
             }
 
-            // If it's matched, it must be matched to the current client
+            // If it's already matched, it must be for the correct client.
             if (sms.status === 'matched') {
                 return sms.matched_client_id === clientId;
             }
 
-            // If it's just parsed, check if the name is a reasonable match
+            // If it's just 'parsed', check if the name is a reasonable match.
             if (sms.status === 'parsed' && sms.client_name) {
                 const normalizedSmsName = normalizeArabic(sms.client_name.toLowerCase());
                 const smsNameParts = normalizedSmsName.split(/\s+/);
@@ -2102,49 +2105,97 @@ export async function processIdDocumentWithTesseract(
   }
 
   try {
-    const worker = await createWorker('ara');
+    const worker = await createWorker('ara+eng');
     const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
     const { data: { text } } = await worker.recognize(imageBuffer);
     await worker.terminate();
-
-    const lines = text.split('\n').filter(line => line.trim() !== '');
+    
     const extracted: Record<string, string> = {};
+    const textLines = text.split('\n').filter(line => line.trim() !== '');
 
-    const keyMap: Record<string, string> = {
-      'الاسم': 'name',
-      'الرقم الوطني': 'nationalId',
-      'تاريخ الميلاد': 'dob',
-      'مكان الميلاد': 'pob',
-      'تاريخ الاصدار': 'issueDate',
-      'تاريخ الإنتهاء': 'expiryDate',
+    // Helper to format date YYMMDD to YYYY-MM-DD
+    const formatDate = (dateStr: string, isPast: boolean = true): string => {
+        if (!/^\d{6}$/.test(dateStr)) return dateStr;
+        let year = parseInt(dateStr.substring(0, 2), 10);
+        const month = dateStr.substring(2, 4);
+        const day = dateStr.substring(4, 6);
+        
+        // Simple heuristic for 2-digit year
+        if (isPast) {
+             year += (year > new Date().getFullYear() % 100) ? 1900 : 2000;
+        } else {
+             year += 2000;
+        }
+       
+        return `${year}-${month}-${day}`;
     };
+    
+    // 1. Prioritize Machine-Readable Zone (MRZ)
+    const mrzLine = textLines.find(line => line.startsWith('P<') && line.length > 30);
+    if (mrzLine) {
+        // P<YEMALSABHI<<BASSEM<MUSLEH<ALI<<<<<<<<<<<<<
+        const namePart = mrzLine.substring(5).split('<<');
+        const surname = namePart[0].replace(/</g, ' ').trim();
+        const givenNames = namePart[1].replace(/</g, ' ').trim();
+        extracted.name = `${givenNames} ${surname}`;
 
-    lines.forEach(line => {
-        for (const key in keyMap) {
-            if (line.includes(key)) {
-                let value = line.replace(key, '').replace(/[:\-_]/g, '').trim();
-                // Special handling for name which can be on the next line
-                if (key === 'الاسم' && value.length < 3) {
-                    const nameLineIndex = lines.indexOf(line) + 1;
-                    if (nameLineIndex < lines.length) {
-                         const potentialName = lines[nameLineIndex];
-                         // A simple check to see if the next line looks like a name (contains Arabic letters)
-                         if (/[\u0600-\u06FF]/.test(potentialName)) {
-                            value = potentialName.trim();
-                         }
-                    }
+        // 06620678<7YEM9706039M2610276<<<
+        const numbersPart = textLines.find(line => /^\d{8,10}</.test(line.trim()));
+        if (numbersPart) {
+            extracted.nationalId = numbersPart.match(/^\d+/)?.[0] || '';
+            extracted.dob = formatDate(numbersPart.substring(13, 19));
+            extracted.expiryDate = formatDate(numbersPart.substring(21, 27), false);
+        }
+    }
+
+    // 2. Fallback to keyword-based extraction
+    const extractValue = (text: string, keywords: string[]): string | undefined => {
+        for (const line of text.split('\n')) {
+            for (const keyword of keywords) {
+                const regex = new RegExp(`${keyword}\\s*[:]*\\s*(.+)`, 'i');
+                const match = line.match(regex);
+                if (match && match[1]) {
+                    // Clean up common OCR mistakes
+                    return match[1].replace(/،/g, '').trim();
                 }
-                extracted[keyMap[key]] = value;
-                break; 
             }
         }
-        
-        // Fallback for ID number if not found with a key
-        if (!extracted.nationalId) {
-            const match = line.match(/\b\d{12}\b/);
-            if (match) {
-                extracted.nationalId = match[0];
-            }
+        return undefined;
+    };
+
+    // Extract fields if not found in MRZ
+    if (!extracted.name) {
+        const surname = extractValue(text, ['SURNAME']);
+        const givenNames = extractValue(text, ['GIVEN NAMES']);
+        if (surname && givenNames) {
+            extracted.name = `${givenNames} ${surname}`;
+        } else {
+             // Fallback to Arabic name
+             const arabicName = extractValue(text, ['باسم']);
+             if (arabicName) extracted.name = arabicName;
+        }
+    }
+
+    if (!extracted.nationalId) {
+        extracted.nationalId = extractValue(text, ['PASSPORT No', 'رقم جواز']) || '';
+    }
+    if (!extracted.dob) {
+        extracted.dob = extractValue(text, ['DATE OF BIRTH', 'تاريخ الميلاد', 'التاريخ الميت'])?.replace(/\//g, '-') || '';
+    }
+    if (!extracted.expiryDate) {
+        extracted.expiryDate = extractValue(text, ['DATE OF EXPIRY', 'تاريخ الانتهاء'])?.replace(/\//g, '-') || '';
+    }
+
+    // Extract fields only available via keywords
+    extracted.pob = extractValue(text, ['PLACE OF BIRTH', 'محل الميلاد']);
+    extracted.issueDate = extractValue(text, ['DATE OF ISSUE', 'تاريخ الاصدار'])?.replace(/\//g, '-') || '';
+
+    // Final check for dates and reformat if needed DD-MM-YYYY -> YYYY-MM-DD
+    ['dob', 'issueDate', 'expiryDate'].forEach(key => {
+        const dateVal = extracted[key];
+        if (dateVal && /^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(dateVal)) {
+            const parts = dateVal.split(/[-\/]/);
+            extracted[key] = `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
     });
 
@@ -2155,3 +2206,4 @@ export async function processIdDocumentWithTesseract(
     return { error: "Failed to process the document. The image may be unclear or in an unsupported format." };
   }
 }
+
