@@ -56,7 +56,7 @@ Instructions:
 `
 });
 
-const extractIdInfoFlow = ai.defineFlow(
+export const extractIdInfoFlow = ai.defineFlow(
     {
         name: 'extractIdInfoFlow',
         inputSchema: ExtractIdInfoInputSchema,
