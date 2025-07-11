@@ -754,19 +754,37 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
     }
 
     try {
-        const smsSnapshot = await get(ref(db, 'sms_transactions'));
-        if (!smsSnapshot.exists()) {
+        const [smsSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, 'sms_transactions')),
+            get(ref(db, `clients/${clientId}`))
+        ]);
+
+        if (!smsSnapshot.exists() || !clientSnapshot.exists()) {
             return [];
         }
 
         const allSmsTxs: SmsTransaction[] = Object.keys(smsSnapshot.val()).map(key => ({ id: key, ...smsSnapshot.val()[key] }));
-        
+        const client = clientSnapshot.val() as Client;
+        const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+        const clientNameParts = new Set(normalizedClientName.split(/\s+/));
+
         const suggestions = allSmsTxs.filter(sms => {
             if (sms.account_id !== bankAccountId) return false;
-            // A suggestion is valid if it's parsed, or if it's matched to the current client
-            if (sms.status === 'parsed' || (sms.status === 'matched' && sms.matched_client_id === clientId)) {
+
+            // Condition 1: SMS is already matched to this client
+            if (sms.status === 'matched' && sms.matched_client_id === clientId) {
                 return true;
             }
+
+            // Condition 2: SMS is parsed and the parsed name is a reasonable match
+            if (sms.status === 'parsed' && sms.client_name) {
+                const normalizedSmsName = normalizeArabic(sms.client_name.toLowerCase());
+                const smsNameParts = normalizedSmsName.split(/\s+/);
+                
+                // Check if at least one part of the SMS name exists in the client's name parts
+                return smsNameParts.some(part => clientNameParts.has(part));
+            }
+
             return false;
         });
 
@@ -2050,4 +2068,5 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
     revalidatePath('/mexc-deposits');
     redirect('/mexc-deposits');
 }
+
 
