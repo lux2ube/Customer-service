@@ -7,10 +7,10 @@ import React from 'react';
 import { Button } from "./ui/button";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, Download, Share2, User, Wallet, Hash } from "lucide-react";
-import { CoinCashLogo } from "./coincash-logo";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 const InfoRow = ({ label, value, icon: Icon, isMono = false }: { label: string, value: string | number | undefined | null, icon?: React.ElementType, isMono?: boolean }) => {
     if (!value) return null;
@@ -20,7 +20,7 @@ const InfoRow = ({ label, value, icon: Icon, isMono = false }: { label: string, 
                 {Icon && <Icon className="h-4 w-4" />}
                 <span>{label}</span>
             </div>
-            <span className={`text-sm font-semibold text-gray-800 ${isMono ? 'font-mono' : ''}`}>{value}</span>
+            <span className={cn("text-sm font-semibold text-gray-800 text-right", isMono ? 'font-mono break-all' : '')}>{value}</span>
         </div>
     );
 };
@@ -36,10 +36,13 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
     return (
         <div ref={ref} className="w-full max-w-md mx-auto bg-white text-gray-800 shadow-xl rounded-2xl font-sans overflow-hidden border border-gray-200/80">
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 relative">
+                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white p-2 rounded-full">
+                    <CheckCircle className="h-12 w-12 text-green-500" />
+                </div>
 
-                <header className="flex items-center justify-between">
-                    <CoinCashLogo className="h-10 w-auto" />
+                <header className="flex items-center justify-between pt-6">
+                     <Image src="https://ycoincash.com/wp-content/uploads/2024/10/cropped-20240215_022836-150x150.jpg" alt="Coin Cash Logo" width={40} height={40} className="h-10 w-10" />
                     <Badge variant={transaction.status === 'Confirmed' ? 'default' : 'secondary'} className={cn(
                         transaction.status === 'Confirmed' && 'bg-green-600 text-white',
                         transaction.status === 'Cancelled' && 'bg-red-600 text-white',
@@ -48,7 +51,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
                 {transaction.attachment_url && (
                     <div className="rounded-lg overflow-hidden border">
-                        <img src={transaction.attachment_url} alt="Transaction Attachment" className="w-full h-auto object-cover" />
+                        <Image src={transaction.attachment_url} alt="Transaction Attachment" width={400} height={300} className="w-full h-auto object-cover" />
                     </div>
                 )}
                 
