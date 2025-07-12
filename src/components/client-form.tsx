@@ -28,6 +28,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
 
 
+const reviewFlags: ReviewFlag[] = ['AML', 'KYC', 'Blacklisted', 'Other'];
+
 export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
     const { toast } = useToast();
     const router = useRouter();
