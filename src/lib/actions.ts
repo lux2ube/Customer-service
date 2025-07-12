@@ -771,33 +771,20 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
 
         const allSmsTxs: SmsTransaction[] = Object.keys(smsSnapshot.val()).map(key => ({ id: key, ...smsSnapshot.val()[key] }));
         const client = clientSnapshot.val() as Client;
-        const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-        const clientNameParts = new Set(normalizedClientName.split(/\s+/));
-
+        
         const suggestions = allSmsTxs.filter(sms => {
-            // Must belong to the selected bank account
-            if (sms.account_id !== bankAccountId) {
-                return false;
-            }
+            if (sms.account_id !== bankAccountId) return false;
+            
+            const isAvailable = sms.status === 'parsed' || sms.status === 'matched';
+            if (!isAvailable) return false;
 
-            // Must be in a state where it can be linked
-            if (sms.status !== 'parsed' && sms.status !== 'matched') {
-                return false;
-            }
-
-            // If it's already matched, it must be for the correct client.
             if (sms.status === 'matched') {
                 return sms.matched_client_id === clientId;
             }
 
-            // If it's just 'parsed', check if the name is a reasonable match.
-            if (sms.status === 'parsed' && sms.client_name) {
-                const normalizedSmsName = normalizeArabic(sms.client_name.toLowerCase());
-                const smsNameParts = normalizedSmsName.split(/\s+/);
-                
-                // Check if at least two parts of the SMS name exist in the client's name parts for better accuracy
-                const commonWords = smsNameParts.filter(part => clientNameParts.has(part));
-                return commonWords.length >= 2;
+            // For 'parsed' status, use the more robust matching logic
+            if (sms.client_name) {
+                return isSmsAMatchForClient(client, sms.client_name);
             }
 
             return false;
@@ -1657,6 +1644,31 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     }
 }
 
+// Helper function for more robust name matching.
+const isSmsAMatchForClient = (client: Client, smsParsedName: string): boolean => {
+    if (!client.name || !smsParsedName) return false;
+    
+    // High confidence: phone number found in SMS name field
+    const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
+    const cleanSmsNameForPhoneCheck = smsParsedName.replace(/[^\d]/g, ''); // Keep only digits for phone check
+    if (clientPhones.some(p => p && cleanSmsNameForPhoneCheck.includes(p.replace(/[^\d]/g, '')))) {
+        return true;
+    }
+
+    // Improved name matching
+    const commonNamesToIgnore = new Set(['محمد', 'علي', 'احمد', 'عبدالله']);
+    const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+    const clientNameParts = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1 && !commonNamesToIgnore.has(p)));
+    if (clientNameParts.size < 2) return false; // Client name too generic to match reliably
+
+    const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
+    if (smsNameParts.length === 0) return false;
+    
+    // Check for a significant overlap (at least 2 non-common words)
+    const commonWords = smsNameParts.filter(part => clientNameParts.has(part));
+    return commonWords.length >= 2;
+};
+
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
     try {
         const [smsSnapshot, clientsSnapshot, transactionsSnapshot] = await Promise.all([
@@ -1688,38 +1700,10 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
         
-        const commonNamesToIgnore = new Set(['محمد', 'علي', 'احمد', 'عبدالله']);
-
-        const isMatch = (client: Client, smsParsedName: string): boolean => {
-            if (!client.name) return false;
-            
-            // High confidence match: phone number
-            const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
-            const cleanSmsName = smsParsedName.replace(/[^a-zA-Z0-9\u0600-\u06FF\s]/g, '');
-            if (clientPhones.some(p => p && cleanSmsName.includes(p))) {
-                return true;
-            }
-
-            // Flexible name match logic
-            const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-            const clientNameParts = normalizedClientName.split(/\s+/).filter(p => p.length > 1);
-            const clientNameSet = new Set(clientNameParts);
-
-            const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
-            if (smsNameParts.length === 0) return false;
-            
-            // Check for a significant overlap (at least 2 words), ignoring very common names
-            const commonWords = smsNameParts.filter(part => 
-                clientNameSet.has(part) && !commonNamesToIgnore.has(part)
-            );
-            return commonWords.length >= 2;
-        };
-
-
         for (const sms of smsToMatch) {
             if (!sms.client_name) continue;
             
-            const potentialMatches = clientsArray.filter(client => isMatch(client, sms.client_name!));
+            const potentialMatches = clientsArray.filter(client => isSmsAMatchForClient(client, sms.client_name!));
             
             let finalMatch: (Client & { id: string }) | null = null;
 
@@ -2087,6 +2071,42 @@ export async function createMexcTestDeposit(prevState: MexcTestDepositState, for
 
 
 // --- ID Scanner Actions ---
+export async function processIdDocument(
+  prevState: ExtractedDataState,
+  formData: FormData
+): Promise<ExtractedDataState> {
+    const imageFile = formData.get("idImage") as File | null;
+    if (!imageFile || imageFile.size === 0) return { error: "Please upload an image file." };
+
+    try {
+        const worker = await createWorker('ara');
+        const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
+        const { data: { text } } = await worker.recognize(imageBuffer);
+        await worker.terminate();
+        
+        // This is a placeholder for a much more sophisticated parsing algorithm
+        const extracted: Partial<ExtractedDataState['data']> = {};
+        
+        const lines = text.split('\n');
+        
+        const nameLine = lines.find(line => line.includes('الاسم:'));
+        if (nameLine) extracted.name = nameLine.replace('الاسم:', '').trim();
+
+        const idLine = lines.find(line => line.includes('الرقم الوطني:'));
+        if (idLine) extracted.nationalId = idLine.replace('الرقم الوطني:', '').trim();
+        
+        if (!Object.keys(extracted).length) {
+            return { error: "Could not extract any recognizable information." };
+        }
+
+        return { data: extracted };
+
+    } catch (error) {
+        console.error("OCR Processing Error:", error);
+        return { error: "Failed to process the document." };
+    }
+}
+
 
 export type ExtractedDataState = {
   data?: {
@@ -2224,5 +2244,126 @@ export async function processIdDocumentWithTesseract(
     } catch (error) {
         console.error("OCR Processing Error:", error);
         return { error: "Failed to process the document. The image may be unclear or an unexpected error occurred." };
+    }
+}
+
+
+export type AutoProcessState = { message?: string; error?: boolean; } | undefined;
+
+export async function autoProcessSyncedTransactions(prevState: AutoProcessState, formData: FormData): Promise<AutoProcessState> {
+    
+    // Step 1: Sync new transactions from BSCScan
+    const syncResult = await syncBscTransactions(undefined, new FormData());
+    if (syncResult?.error) {
+        return syncResult;
+    }
+
+    try {
+        // Step 2: Fetch all necessary data
+        const [transactionsSnapshot, smsSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, 'transactions')),
+            get(ref(db, 'sms_transactions')),
+            get(ref(db, 'settings'))
+        ]);
+
+        if (!transactionsSnapshot.exists() || !settingsSnapshot.exists()) {
+            return { message: "No transactions or settings found to process.", error: true };
+        }
+
+        const allTransactions: Record<string, Transaction> = transactionsSnapshot.val();
+        const allSms: Record<string, SmsTransaction> = smsSnapshot.val() || {};
+        const settings: Settings = settingsSnapshot.val();
+
+        // Find "virgin" synced transactions (have hash, are 'Confirmed', but no bankAccountId yet)
+        const virginTxs = Object.values(allTransactions).filter(tx => 
+            tx.hash && tx.status === 'Confirmed' && !tx.bankAccountId && tx.type === 'Deposit'
+        );
+
+        if (virginTxs.length === 0) {
+            return { message: "No new deposits to auto-process.", error: false };
+        }
+
+        const getRate = (currency?: string) => {
+            if (!currency || !settings) return 1;
+            switch(currency) {
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                default: return 1;
+            }
+        };
+
+        const updates: { [key: string]: any } = {};
+        let processedCount = 0;
+
+        // Find available SMS messages
+        const availableSms = Object.entries(allSms)
+            .map(([id, sms]) => ({ ...sms, id }))
+            .filter(sms => (sms.status === 'parsed' || sms.status === 'matched') && sms.type === 'credit' && sms.amount && sms.currency);
+        
+        for (const tx of virginTxs) {
+            if (!tx.clientId || tx.clientId === 'unassigned-bscscan') continue;
+
+            // Find SMS messages relevant to this transaction's client
+            const clientSms = availableSms.filter(sms => 
+                sms.matched_client_id === tx.clientId || // Already matched to this client
+                (sms.status === 'parsed' && sms.client_name === tx.clientName) // Parsed name matches
+            );
+            
+            if (clientSms.length === 0) continue;
+
+            // Find the best SMS match by comparing amounts
+            let bestMatch: { sms: SmsTransaction, difference: number } | null = null;
+            const txAmountUsd = tx.amount_usdt;
+
+            for (const sms of clientSms) {
+                const smsRate = getRate(sms.currency!);
+                if (smsRate > 0) {
+                    const smsAmountUsd = sms.amount! * smsRate;
+                    const difference = Math.abs(txAmountUsd - smsAmountUsd);
+
+                    // Allow a small tolerance (e.g., 2 USDT) for fees/rate fluctuations
+                    if (difference < 2) {
+                        if (!bestMatch || difference < bestMatch.difference) {
+                            bestMatch = { sms, difference };
+                        }
+                    }
+                }
+            }
+            
+            if (bestMatch) {
+                const matchedSms = bestMatch.sms;
+                
+                // Prepare updates for the transaction
+                updates[`/transactions/${tx.id}/bankAccountId`] = matchedSms.account_id;
+                updates[`/transactions/${tx.id}/bankAccountName`] = matchedSms.account_name;
+                updates[`/transactions/${tx.id}/currency`] = matchedSms.currency;
+                updates[`/transactions/${tx.id}/amount`] = matchedSms.amount;
+                updates[`/transactions/${tx.id}/status`] = 'Pending'; // Set to Pending for review
+                updates[`/transactions/${tx.id}/notes`] = `Auto-matched with SMS ID: ${matchedSms.id}. ${tx.notes || ''}`.trim();
+
+                // Prepare updates for the SMS
+                updates[`/sms_transactions/${matchedSms.id}/status`] = 'used';
+                updates[`/sms_transactions/${matchedSms.id}/transaction_id`] = tx.id;
+                
+                // Remove the used SMS from the available pool for this run
+                const index = availableSms.findIndex(s => s.id === matchedSms.id);
+                if (index > -1) {
+                    availableSms.splice(index, 1);
+                }
+
+                processedCount++;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/transactions');
+        return { message: `Auto-processing complete. Updated ${processedCount} transaction(s).`, error: false };
+
+    } catch (error: any) {
+        console.error("Auto Process Error:", error);
+        return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
     }
 }
