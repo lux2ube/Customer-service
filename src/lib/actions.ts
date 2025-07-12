@@ -258,7 +258,9 @@ export async function createClient(clientId: string | null, formData: FormData):
     return { success: true, message: 'Client saved successfully.', clientId: clientId || newId };
 }
 
-export async function manageClient(clientId: string, intent: string, formData?: FormData): Promise<ClientFormState> {
+export async function manageClient(clientId: string, formData: FormData): Promise<ClientFormState> {
+    const intent = formData.get('intent') as string;
+    
     if (intent?.startsWith('delete:')) {
         const documentName = intent.split(':')[1];
         if (!documentName) {
@@ -1024,7 +1026,6 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             }
 
             const isIncoming = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
-            // Corrected logic: Incoming crypto is a 'Withdrawal' for the business. Outgoing crypto is a 'Deposit'.
             const transactionType = isIncoming ? 'Withdraw' : 'Deposit';
             const clientAddress = isIncoming ? tx.from : tx.to;
             const foundClient = addressToClientMap[clientAddress.toLowerCase()];
@@ -1049,7 +1050,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 expense_usd: 0,
                 amount_usdt: syncedAmount,
                 hash: tx.hash,
-                status: 'Confirmed',
+                status: 'Pending',
                 notes: note,
                 client_wallet_address: clientAddress,
                 createdAt: new Date().toISOString(),
@@ -2293,9 +2294,9 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         const allSms: Record<string, SmsTransaction> = smsSnapshot.val() || {};
         const settings: Settings = settingsSnapshot.val();
 
-        // Find "virgin" synced transactions (have hash, are 'Confirmed', but no bankAccountId yet)
+        // Find "virgin" synced transactions (have hash, are 'Pending', but no bankAccountId yet)
         const virginTxs = Object.values(allTransactions).filter(tx => 
-            tx.hash && tx.status === 'Confirmed' && !tx.bankAccountId && tx.type === 'Deposit'
+            tx.hash && tx.status === 'Pending' && !tx.bankAccountId && tx.type === 'Deposit'
         );
 
         if (virginTxs.length === 0) {
@@ -2327,7 +2328,7 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
             
             if (clientSms.length === 0) continue;
 
-            let bestMatch: { sms: SmsTransaction, difference: number } | null = null;
+            let bestMatch: { sms: SmsTransaction & { id: string }, difference: number } | null = null;
             const txAmountUsd = tx.amount_usdt;
 
             for (const sms of clientSms) {
@@ -2352,7 +2353,7 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
                 updates[`/transactions/${tx.id}/bankAccountName`] = matchedSms.account_name;
                 updates[`/transactions/${tx.id}/currency`] = matchedSms.currency;
                 updates[`/transactions/${tx.id}/amount`] = matchedSms.amount;
-                updates[`/transactions/${tx.id}/status`] = 'Pending';
+                updates[`/transactions/${tx.id}/status`] = 'Confirmed';
                 updates[`/transactions/${tx.id}/notes`] = `Auto-matched with SMS ID: ${matchedSms.id}. ${tx.notes || ''}`.trim();
 
                 updates[`/sms_transactions/${matchedSms.id}/status`] = 'used';
