@@ -24,6 +24,7 @@ import {
   Send,
   Contact,
   Bot,
+  Info,
 } from 'lucide-react';
 
 const menuItems = [
@@ -37,13 +38,15 @@ const menuItems = [
   { type: 'divider' },
   { href: '/kyc/scan', label: 'KYC ID Scan', icon: Contact },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { type: 'divider' },
   { href: '/telegram', label: 'Telegram Bot', icon: Bot },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
+  { type: 'divider' },
+  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/about', label: 'About', icon: Info },
 ];
 
 export function Nav() {
