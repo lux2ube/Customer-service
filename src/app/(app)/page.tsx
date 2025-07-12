@@ -4,7 +4,7 @@
 import React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, ShoppingBag, Gamepad2, Phone, Repeat, CircleDollarSign } from "lucide-react";
+import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, Repeat, CircleDollarSign, Phone, ShoppingBag, Gamepad2 } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction, Account } from '@/lib/types';
@@ -67,14 +67,11 @@ export default function DashboardPage() {
     const [clientCount, setClientCount] = React.useState(0);
     const [totalUsd, setTotalUsd] = React.useState(0);
     const [pendingTxs, setPendingTxs] = React.useState(0);
-    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
-    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'transactions');
         const clientsRef = ref(db, 'clients');
-        const accountsRef = ref(db, 'accounts');
         
         const recentTxQuery = query(transactionsRef, limitToLast(5));
         
@@ -103,21 +100,12 @@ export default function DashboardPage() {
         unsubs.push(onValue(clientsRef, (snapshot) => {
             setClientCount(snapshot.exists() ? snapshot.size : 0);
         }));
-
-        unsubs.push(onValue(accountsRef, (snapshot) => {
-             if (snapshot.exists()) {
-                 const allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
-                 setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
-                 setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
-             }
-        }));
         
         // Mark loading as false after initial data load
         Promise.all([
             get(recentTxQuery), 
             get(transactionsRef), 
-            get(clientsRef),
-            get(accountsRef)
+            get(clientsRef)
         ]).then(() => setLoading(false));
 
         return () => unsubs.forEach(unsub => unsub());
