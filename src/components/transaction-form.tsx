@@ -492,7 +492,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     return (
         <>
-            {transaction && selectedClient && (
+            {transaction && (
                 <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
                     <div className="w-[420px]">
                         <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={selectedClient} />
@@ -624,7 +624,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     </Card>
                 </div>
                 <div className="md:col-span-1 space-y-3">
-                    {transaction && selectedClient && (
+                    {transaction && (
                         <Card>
                             <CardHeader>
                                 <CardTitle>Actions</CardTitle>

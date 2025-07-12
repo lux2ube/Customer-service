@@ -30,11 +30,8 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         notFound();
     }
     
+    // Client is optional for this view now
     const client = transaction.clientId ? await getClient(transaction.clientId) : null;
-
-    if (!client) {
-        notFound();
-    }
 
     return (
         <Invoice transaction={transaction} client={client} />
