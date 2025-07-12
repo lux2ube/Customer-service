@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, ShoppingBag, Gamepad2, Phone, Repeat, CircleDollarSign } from "lucide-react";
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction, Account } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
