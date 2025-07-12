@@ -10,6 +10,7 @@ import { ArrowLeft, CheckCircle, Download, Share2, User, Wallet, Hash } from "lu
 import { CoinCashLogo } from "./coincash-logo";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
 
 const InfoRow = ({ label, value, icon: Icon, isMono = false }: { label: string, value: string | number | undefined | null, icon?: React.ElementType, isMono?: boolean }) => {
     if (!value) return null;
