@@ -6,7 +6,7 @@ export default function KycScanPage() {
         <>
             <PageHeader
                 title="KYC Document Scan"
-                description="Upload an image of a Yemeni ID card or passport to automatically extract information using our built-in OCR."
+                description="Upload an image of a Yemeni ID card or passport to automatically extract information."
             />
             <IdScanner />
         </>

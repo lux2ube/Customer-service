@@ -129,25 +129,25 @@ export function JournalEntryForm() {
         return (
             <Card>
                 <CardHeader><CardTitle>Loading Form...</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
                 </CardContent>
             </Card>
         )
     }
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="space-y-4">
         <Card>
             <CardHeader>
-                <CardTitle>Internal Account Transfer</CardTitle>
+                <CardTitle>Record Journal Entry</CardTitle>
                 <CardDescription>Record a transfer between two internal accounts. Conversions are handled automatically.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-                 <div className="grid md:grid-cols-2 gap-3">
-                     <div className="space-y-2">
+            <CardContent className="space-y-4">
+                 <div className="grid md:grid-cols-2 gap-4">
+                     <div className="space-y-1.5">
                         <Label htmlFor="date">Date</Label>
                         <Popover>
                         <PopoverTrigger asChild>
@@ -166,15 +166,15 @@ export function JournalEntryForm() {
                         <input type="hidden" name="date" value={date?.toISOString()} />
                         {state?.errors?.date && <p className="text-sm text-destructive">{state.errors.date[0]}</p>}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label htmlFor="description">Description</Label>
                         <Input id="description" name="description" placeholder="e.g., Transfer to cover expenses" aria-describedby="description-error" />
                         {state?.errors?.description && <p id="description-error" className="text-sm text-destructive">{state.errors.description[0]}</p>}
                     </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3 items-start">
-                    <div className="space-y-2">
+                <div className="grid md:grid-cols-2 gap-4 items-start">
+                    <div className="space-y-1.5">
                         <Label>From (Debit)</Label>
                         <AccountSelector 
                             name="debit_account" 
@@ -184,7 +184,7 @@ export function JournalEntryForm() {
                         />
                         {state?.errors?.debit_account && <p className="text-sm text-destructive">{state.errors.debit_account[0]}</p>}
                     </div>
-                     <div className="space-y-2">
+                     <div className="space-y-1.5">
                         <Label htmlFor="debit_amount">Debit Amount ({debitAccount?.currency || '...'})</Label>
                         <Input 
                             id="debit_amount" 
@@ -204,8 +204,8 @@ export function JournalEntryForm() {
                     </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3 items-start">
-                     <div className="space-y-2">
+                <div className="grid md:grid-cols-2 gap-4 items-start">
+                     <div className="space-y-1.5">
                         <Label>To (Credit)</Label>
                         <AccountSelector 
                             name="credit_account" 
@@ -215,7 +215,7 @@ export function JournalEntryForm() {
                         />
                         {state?.errors?.credit_account && <p className="text-sm text-destructive">{state.errors.credit_account[0]}</p>}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label htmlFor="credit_amount">Credit Amount ({creditAccount?.currency || '...'})</Label>
                         <Input 
                             id="credit_amount" 

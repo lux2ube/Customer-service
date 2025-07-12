@@ -48,6 +48,3 @@ export default async function EditAccountPage({ params }: { params: { id: string
         </>
     );
 }
-
-// Since the ID is part of the path, we need to rename the file to [id]/page.tsx
-// I will create this file with the correct naming convention.

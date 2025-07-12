@@ -59,15 +59,14 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
     };
 
     return (
-        <form action={formAction} className="space-y-3">
+        <form action={formAction} className="space-y-4">
             <Card>
                 <CardHeader>
-                    <CardTitle>{account ? 'Edit' : 'New'} Bank Account</CardTitle>
-                    <CardDescription>Fill in the details for the bank account.</CardDescription>
+                    <CardTitle>{account ? 'Edit' : 'New'} Bank Account Details</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="grid md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
+                <CardContent className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
                             <Label htmlFor="name">Account Name</Label>
                             <Input 
                                 id="name" 
@@ -79,7 +78,7 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                             />
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="account_number">Account Number</Label>
                             <Input 
                                 id="account_number" 
@@ -91,8 +90,8 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                              {state?.errors?.account_number && <p className="text-sm text-destructive">{state.errors.account_number[0]}</p>}
                         </div>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-3">
-                         <div className="space-y-2">
+                    <div className="grid md:grid-cols-2 gap-4">
+                         <div className="space-y-1.5">
                             <Label htmlFor="currency">Currency</Label>
                             <Select 
                                 name="currency" 
@@ -109,7 +108,7 @@ export function BankAccountForm({ account }: { account?: BankAccount }) {
                             </Select>
                             {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label>Status</Label>
                             <RadioGroup 
                                 name="status" 

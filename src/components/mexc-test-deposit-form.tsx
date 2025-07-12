@@ -52,7 +52,7 @@ export function MexcTestDepositForm({ bankAccounts }: { bankAccounts: BankAccoun
                         </Alert>
                     )}
 
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label htmlFor="clientId">Client ID</Label>
                         <Input 
                             id="clientId"
@@ -64,7 +64,7 @@ export function MexcTestDepositForm({ bankAccounts }: { bankAccounts: BankAccoun
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="bankAccountId">Bank Account (Source)</Label>
                             <Select name="bankAccountId" required>
                                 <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
@@ -77,14 +77,14 @@ export function MexcTestDepositForm({ bankAccounts }: { bankAccounts: BankAccoun
                             {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="amount">Amount Received</Label>
                             <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g. 50000" />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label htmlFor="clientWalletAddress">Client Wallet Address (BEP20)</Label>
                         <Input 
                             id="clientWalletAddress" 

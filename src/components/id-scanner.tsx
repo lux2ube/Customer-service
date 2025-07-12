@@ -94,10 +94,10 @@ export function IdScanner() {
             <Card>
                 <CardHeader>
                     <CardTitle>1. Upload Document Image</CardTitle>
-                    <CardDescription>Select an image of the ID card or passport to display it and begin extraction.</CardDescription>
+                    <CardDescription>Select an image to display it and begin extraction.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         <Label htmlFor="id-upload">ID Image</Label>
                         <Input id="id-upload" name="idImage" type="file" accept="image/*" onChange={handleFileChange} required />
                     </div>

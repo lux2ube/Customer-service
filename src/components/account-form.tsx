@@ -66,12 +66,11 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
         <form action={formAction} className="space-y-3">
             <Card>
                 <CardHeader>
-                    <CardTitle>{account ? 'Edit' : 'New'} Account</CardTitle>
-                    <CardDescription>Fill in the details for the account.</CardDescription>
+                    <CardTitle>{account ? 'Edit' : 'New'} Account Details</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                     <div className="grid md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
+                <CardContent className="space-y-4">
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
                             <Label htmlFor="id">Account Code</Label>
                             <Input 
                                 id="id" 
@@ -84,7 +83,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             />
                              {state?.errors?.id && <p className="text-sm text-destructive">{state.errors.id[0]}</p>}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="name">Account Name</Label>
                             <Input 
                                 id="name" 
@@ -97,8 +96,8 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
                             <Label htmlFor="type">Account Type</Label>
                             <Select 
                                 name="type" 
@@ -117,7 +116,7 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             </Select>
                             {state?.errors?.type && <p className="text-sm text-destructive">{state.errors.type[0]}</p>}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="parentId">Parent Account (Group)</Label>
                             <Select 
                                 name="parentId" 
@@ -134,8 +133,8 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                             </Select>
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
                             <Label htmlFor="currency">Currency (Optional)</Label>
                             <Select 
                                 name="currency" 
