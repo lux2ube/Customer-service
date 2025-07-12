@@ -5,6 +5,9 @@
     ".write": "true",
     "sms_transactions": {
       ".indexOn": "parsed_at"
+    },
+    "transactions": {
+      ".indexOn": "createdAt"
     }
   }
 }
