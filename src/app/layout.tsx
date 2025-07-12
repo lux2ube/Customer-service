@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: 'Customer Central',
+  title: 'كوين كاش',
   description: 'A professional CRM built with Firebase Studio.',
 };
 
