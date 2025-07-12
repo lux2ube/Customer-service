@@ -7,7 +7,7 @@
       ".indexOn": "parsed_at"
     },
     "transactions": {
-      ".indexOn": "createdAt"
+      ".indexOn": ["createdAt"]
     }
   }
 }
