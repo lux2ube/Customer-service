@@ -1,6 +1,8 @@
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { Logo } from '@/components/logo';
 import { Nav } from '@/components/nav';
+import { Bell } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function AppLayout({
   children,
@@ -18,11 +20,17 @@ export default function AppLayout({
         </SidebarContent>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 items-center gap-4 border-b bg-card px-6">
-          <SidebarTrigger />
-          <div className="flex-1">
-            {/* Can add breadcrumbs or page title here */}
-          </div>
+        <header className="flex h-20 items-center justify-between gap-4 px-6 bg-background">
+           <div className="flex items-center gap-4">
+              <SidebarTrigger className="md:hidden" />
+              <div>
+                <h1 className="text-xl font-bold">صباح الخير</h1>
+                <p className="text-sm text-muted-foreground">السبحي</p>
+              </div>
+           </div>
+           <Button variant="ghost" size="icon" className="rounded-full">
+                <Bell className="h-5 w-5" />
+           </Button>
         </header>
         <main className="flex flex-1 flex-col p-4 md:p-6">
           {children}

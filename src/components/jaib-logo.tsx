@@ -1,19 +1,21 @@
 import { SVGProps } from "react";
 import { cn } from "@/lib/utils";
 
-// This is a new logo component created to match the design of the invoice image.
-// It is named "JaibLogo" as a generic name for a wallet/pocket service.
 export function JaibLogo({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg 
-      viewBox="0 0 100 40" 
-      className={cn("w-24 h-10", className)}
+      viewBox="0 0 100 100" 
+      className={cn("w-24 h-24", className)}
       {...props}
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="4" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
     >
-      <path d="M95,20 A40,15 0 0,0 5,20" fill="none" stroke="#00008B" strokeWidth="2"/>
-      <ellipse cx="50" cy="20" rx="45" ry="15" fill="#FFFFFF" stroke="#00008B" strokeWidth="2" />
-      <text x="50" y="27" fontFamily="Arial, sans-serif" fontSize="14" fill="#00008B" textAnchor="middle" fontWeight="bold">OR</text>
-      <text x="50" y="18" fontFamily="Arial, sans-serif" fontSize="8" fill="#00008B" textAnchor="middle">للسيارات</text>
+        <path d="M25 30V20a5 5 0 0 1 5-5h40a5 5 0 0 1 5 5v10" stroke="#0A2540" />
+        <path d="M25 30H75V75a10 10 0 0 1-10 10H35a10 10 0 0 1-10-10V30z" stroke="#0A2540" />
+        <path d="M60 45H75" stroke="#E53E3E" />
     </svg>
   );
 }

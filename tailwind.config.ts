@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        body: ['Cairo', 'sans-serif'],
+        headline: ['Cairo', 'sans-serif'],
         code: ['monospace'],
         cairo: ['Cairo', 'sans-serif'],
       },
@@ -45,6 +45,9 @@ export default {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+        },
+        positive: {
+          DEFAULT: 'hsl(var(--positive))',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

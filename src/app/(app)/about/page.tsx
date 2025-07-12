@@ -3,10 +3,11 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Code2, Cpu, Database, Feather } from "lucide-react";
 import { IbnJaberLogo } from "@/components/ibn-jaber-logo";
+import { JaibLogo } from "@/components/jaib-logo";
 
 export default function AboutPage() {
     return (
-        <>
+        <div className="space-y-8">
             <PageHeader
                 title="About This Application"
                 description="An integrated solution for financial CRM and operational management."
@@ -58,7 +59,7 @@ export default function AboutPage() {
                         </div>
                          <div className="flex items-center gap-3">
                             <div className="p-1 border rounded-md bg-white">
-                               <IbnJaberLogo className="h-5 w-5" />
+                               <JaibLogo className="h-5 w-5" />
                             </div>
                             <div>
                                 <p className="font-semibold">ShadCN UI</p>
@@ -68,6 +69,6 @@ export default function AboutPage() {
                     </CardContent>
                 </Card>
             </div>
-        </>
+        </div>
     );
 }

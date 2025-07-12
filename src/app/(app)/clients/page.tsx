@@ -54,7 +54,7 @@ export default function ClientsPage() {
     }));
 
     return (
-        <>
+        <div className="space-y-6">
             <PageHeader 
                 title="Clients"
                 description="Manage customer profiles and history."
@@ -87,6 +87,6 @@ export default function ClientsPage() {
                 loading={loading}
                 onFilteredDataChange={setExportData}
             />
-        </>
+        </div>
     );
 }
