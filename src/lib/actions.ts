@@ -258,9 +258,7 @@ export async function createClient(clientId: string | null, formData: FormData):
     return { success: true, message: 'Client saved successfully.', clientId: clientId || newId };
 }
 
-export async function manageClient(clientId: string, formData: FormData): Promise<ClientFormState> {
-    const intent = formData.get('intent') as string | null;
-
+export async function manageClient(clientId: string, intent: string, formData?: FormData): Promise<ClientFormState> {
     if (intent?.startsWith('delete:')) {
         const documentName = intent.split(':')[1];
         if (!documentName) {
@@ -338,6 +336,9 @@ export async function manageClient(clientId: string, formData: FormData): Promis
     }
 
     // Default action is to update/create the client
+    if (!formData) {
+        return { message: 'Form data is required for saving.' };
+    }
     return createClient(clientId, formData);
 }
 
@@ -2251,15 +2252,32 @@ export async function processIdDocumentWithTesseract(
 export type AutoProcessState = { message?: string; error?: boolean; } | undefined;
 
 export async function autoProcessSyncedTransactions(prevState: AutoProcessState, formData: FormData): Promise<AutoProcessState> {
-    
-    // Step 1: Sync new transactions from BSCScan
-    const syncResult = await syncBscTransactions(undefined, new FormData());
-    if (syncResult?.error) {
-        return syncResult;
-    }
+    let combinedMessage = '';
 
+    // Step 1: Sync new transactions from BSCScan
+    const bscSyncResult = await syncBscTransactions(undefined, new FormData());
+    if (bscSyncResult?.error) {
+        return bscSyncResult;
+    }
+    combinedMessage += bscSyncResult?.message || '';
+
+    // Step 2: Process incoming SMS messages
+    const smsProcessResult = await processIncomingSms(undefined, new FormData());
+    if (smsProcessResult?.error) {
+        return smsProcessResult;
+    }
+    combinedMessage += `\n${smsProcessResult?.message || ''}`;
+
+    // Step 3: Match processed SMS to clients
+    const smsMatchResult = await matchSmsToClients(undefined, new FormData());
+    if (smsMatchResult?.error) {
+        return smsMatchResult;
+    }
+    combinedMessage += `\n${smsMatchResult?.message || ''}`;
+
+
+    // Step 4: Core logic to link synced transactions with now-matched SMS
     try {
-        // Step 2: Fetch all necessary data
         const [transactionsSnapshot, smsSnapshot, settingsSnapshot] = await Promise.all([
             get(ref(db, 'transactions')),
             get(ref(db, 'sms_transactions')),
@@ -2267,7 +2285,8 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         ]);
 
         if (!transactionsSnapshot.exists() || !settingsSnapshot.exists()) {
-            return { message: "No transactions or settings found to process.", error: true };
+            combinedMessage += "\nNo transactions or settings found to process.";
+            return { message: combinedMessage, error: false };
         }
 
         const allTransactions: Record<string, Transaction> = transactionsSnapshot.val();
@@ -2280,7 +2299,8 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         );
 
         if (virginTxs.length === 0) {
-            return { message: "No new deposits to auto-process.", error: false };
+            combinedMessage += "\nNo new deposits to auto-process.";
+            return { message: combinedMessage, error: false };
         }
 
         const getRate = (currency?: string) => {
@@ -2295,23 +2315,18 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
 
-        // Find available SMS messages
+        // Find available SMS messages that are matched
         const availableSms = Object.entries(allSms)
             .map(([id, sms]) => ({ ...sms, id }))
-            .filter(sms => (sms.status === 'parsed' || sms.status === 'matched') && sms.type === 'credit' && sms.amount && sms.currency);
+            .filter(sms => sms.status === 'matched' && sms.type === 'credit' && sms.amount && sms.currency);
         
         for (const tx of virginTxs) {
             if (!tx.clientId || tx.clientId === 'unassigned-bscscan') continue;
 
-            // Find SMS messages relevant to this transaction's client
-            const clientSms = availableSms.filter(sms => 
-                sms.matched_client_id === tx.clientId || // Already matched to this client
-                (sms.status === 'parsed' && sms.client_name === tx.clientName) // Parsed name matches
-            );
+            const clientSms = availableSms.filter(sms => sms.matched_client_id === tx.clientId);
             
             if (clientSms.length === 0) continue;
 
-            // Find the best SMS match by comparing amounts
             let bestMatch: { sms: SmsTransaction, difference: number } | null = null;
             const txAmountUsd = tx.amount_usdt;
 
@@ -2333,23 +2348,18 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
             if (bestMatch) {
                 const matchedSms = bestMatch.sms;
                 
-                // Prepare updates for the transaction
                 updates[`/transactions/${tx.id}/bankAccountId`] = matchedSms.account_id;
                 updates[`/transactions/${tx.id}/bankAccountName`] = matchedSms.account_name;
                 updates[`/transactions/${tx.id}/currency`] = matchedSms.currency;
                 updates[`/transactions/${tx.id}/amount`] = matchedSms.amount;
-                updates[`/transactions/${tx.id}/status`] = 'Pending'; // Set to Pending for review
+                updates[`/transactions/${tx.id}/status`] = 'Pending';
                 updates[`/transactions/${tx.id}/notes`] = `Auto-matched with SMS ID: ${matchedSms.id}. ${tx.notes || ''}`.trim();
 
-                // Prepare updates for the SMS
                 updates[`/sms_transactions/${matchedSms.id}/status`] = 'used';
                 updates[`/sms_transactions/${matchedSms.id}/transaction_id`] = tx.id;
                 
-                // Remove the used SMS from the available pool for this run
                 const index = availableSms.findIndex(s => s.id === matchedSms.id);
-                if (index > -1) {
-                    availableSms.splice(index, 1);
-                }
+                if (index > -1) availableSms.splice(index, 1);
 
                 processedCount++;
             }
@@ -2360,7 +2370,8 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         }
         
         revalidatePath('/transactions');
-        return { message: `Auto-processing complete. Updated ${processedCount} transaction(s).`, error: false };
+        combinedMessage += `\nAuto-linking complete. Updated ${processedCount} transaction(s).`;
+        return { message: combinedMessage, error: false };
 
     } catch (error: any) {
         console.error("Auto Process Error:", error);
