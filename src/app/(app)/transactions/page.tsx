@@ -11,7 +11,8 @@ import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import type { Transaction } from '@/lib/types';
-import { useActionState, useFormStatus } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
 import { autoProcessSyncedTransactions, type AutoProcessState } from '@/lib/actions';
 
