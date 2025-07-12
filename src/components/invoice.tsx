@@ -21,7 +21,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const localAmountText = formatAmount(transaction.amount, transaction.currency);
     const usdtAmountText = transaction.amount_usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
-    // Dynamic text based on transaction type
     const greetingText = `نوّرنا اليوم الأستاذ / ${client.name}، وأجرينا له معاملة ${isDeposit ? 'إيداع' : 'سحب'} مميزة.`;
     const paymentText = `قام بدفع مبلغ`;
     const bankText = `عبر حسابه في ${transaction.bankAccountName || 'حساب بنكي'}.`;

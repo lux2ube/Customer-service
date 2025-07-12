@@ -7,13 +7,26 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, ShoppingBag, Gamepad2, Phone, Repeat, CircleDollarSign } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
-import type { Client, Transaction } from '@/lib/types';
+import type { Client, Transaction, Account } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { JaibLogo } from '@/components/jaib-logo';
 import { IbnJaberLogo } from '@/components/ibn-jaber-logo';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const StatCard = ({ title, value, icon: Icon, loading }: { title: string, value: string, icon: React.ElementType, loading: boolean }) => (
+    <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{title}</CardTitle>
+            <Icon className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+            {loading ? <Skeleton className="h-8 w-3/4" /> : <div className="text-2xl font-bold">{value}</div>}
+        </CardContent>
+    </Card>
+);
 
 const ActionCard = ({ title, icon: Icon, href }: { title: string, icon: React.ElementType, href: string }) => (
     <Link href={href} className="block">
@@ -51,19 +64,63 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
 
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
+    const [clientCount, setClientCount] = React.useState(0);
+    const [totalUsd, setTotalUsd] = React.useState(0);
+    const [pendingTxs, setPendingTxs] = React.useState(0);
+    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
+    const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
-        const transactionsRef = query(ref(db, 'transactions'), orderByChild('createdAt'), limitToLast(5));
-        const unsubscribe = onValue(transactionsRef, (snapshot) => {
+        const transactionsRef = ref(db, 'transactions');
+        const clientsRef = ref(db, 'clients');
+        const accountsRef = ref(db, 'accounts');
+        
+        const recentTxQuery = query(transactionsRef, orderByChild('createdAt'), limitToLast(5));
+        
+        const unsubs: (() => void)[] = [];
+
+        unsubs.push(onValue(recentTxQuery, (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const list: Transaction[] = Object.values(data);
                 list.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 setRecentTransactions(list);
             }
-        });
+        }));
 
-        return () => unsubscribe();
+        unsubs.push(onValue(transactionsRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const list: Transaction[] = Object.values(data);
+                const total = list.reduce((sum, tx) => tx.status === 'Confirmed' ? sum + tx.amount_usd : sum, 0);
+                const pending = list.filter(tx => tx.status === 'Pending').length;
+                setTotalUsd(total);
+                setPendingTxs(pending);
+            }
+        }));
+
+        unsubs.push(onValue(clientsRef, (snapshot) => {
+            setClientCount(snapshot.exists() ? snapshot.size : 0);
+        }));
+
+        unsubs.push(onValue(accountsRef, (snapshot) => {
+             if (snapshot.exists()) {
+                 const allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
+                 setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+                 setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+             }
+        }));
+        
+        // Mark loading as false after initial data load
+        Promise.all([
+            get(recentTxQuery), 
+            get(transactionsRef), 
+            get(clientsRef),
+            get(accountsRef)
+        ]).then(() => setLoading(false));
+
+        return () => unsubs.forEach(unsub => unsub());
     }, []);
 
     const actions = [
@@ -80,6 +137,13 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-6">
+
+             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <StatCard title="Total Clients" value={clientCount.toLocaleString()} icon={Users} loading={loading} />
+                <StatCard title="Total Volume (USD)" value={`$${totalUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} />
+                <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
+            </div>
+
             <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
                 {actions.map(action => <ActionCard key={action.title} {...action} />)}
             </div>
@@ -96,7 +160,21 @@ export default function DashboardPage() {
                     </div>
                 </CardHeader>
                 <CardContent className="divide-y">
-                   {recentTransactions.length > 0 ? (
+                   {loading && recentTransactions.length === 0 ? (
+                       [...Array(3)].map((_, i) => (
+                           <div key={i} className="flex items-center gap-4 py-3">
+                               <Skeleton className="h-12 w-12 rounded-full" />
+                               <div className="flex-1 space-y-2">
+                                   <Skeleton className="h-4 w-3/4" />
+                                   <Skeleton className="h-3 w-1/2" />
+                               </div>
+                               <div className="text-right space-y-2">
+                                   <Skeleton className="h-4 w-16" />
+                                   <Skeleton className="h-3 w-10" />
+                               </div>
+                           </div>
+                       ))
+                   ) : recentTransactions.length > 0 ? (
                        recentTransactions.map(tx => <TransactionItem key={tx.id} tx={tx} />)
                    ) : (
                        <p className="text-muted-foreground text-center py-8">No recent transactions.</p>
