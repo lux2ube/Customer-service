@@ -1023,16 +1023,15 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            const transactionType = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase() ? 'Withdraw' : 'Deposit';
-            const clientAddress = transactionType === 'Withdraw' ? tx.from : tx.to;
+            const isIncoming = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
+            const transactionType = isIncoming ? 'Deposit' : 'Withdraw';
+            const clientAddress = isIncoming ? tx.from : tx.to;
             const foundClient = addressToClientMap[clientAddress.toLowerCase()];
 
             const newTxId = push(ref(db, 'transactions')).key;
             if (!newTxId) continue;
             
-            const note = transactionType === 'Withdraw' 
-                ? `Synced from BscScan. From: ${tx.from}` 
-                : `Synced from BscScan. To: ${tx.to}`;
+            const note = `Synced from BscScan. From: ${tx.from}. To: ${tx.to}`;
 
             const newTxData = {
                 id: newTxId,
