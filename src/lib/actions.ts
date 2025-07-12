@@ -1024,7 +1024,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             }
 
             const isIncoming = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
-            const transactionType = isIncoming ? 'Deposit' : 'Withdraw';
+            // Corrected logic: Incoming crypto is a 'Withdrawal' for the business. Outgoing crypto is a 'Deposit'.
+            const transactionType = isIncoming ? 'Withdraw' : 'Deposit';
             const clientAddress = isIncoming ? tx.from : tx.to;
             const foundClient = addressToClientMap[clientAddress.toLowerCase()];
 
