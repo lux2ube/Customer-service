@@ -5,7 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle, Circle, XCircle, Landmark, Wallet } from "lucide-react";
+import { CheckCircle, Circle, XCircle, Landmark, Wallet, Hourglass, Check } from "lucide-react";
 
 interface Step {
     title: string;
@@ -24,7 +24,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
     const isConfirmed = transaction.status === 'Confirmed';
     const isCancelled = transaction.status === 'Cancelled';
-
+    
     if (transaction.type === 'Deposit') {
         steps.push({
             title: 'الطلب المستلم (إيداع)',
@@ -56,6 +56,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
                     <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
+                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
                 </div>
             )
         });
@@ -91,6 +93,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p className="text-xs">{transaction.bankAccountName}</p>
                     <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
+                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
