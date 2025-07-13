@@ -5,8 +5,9 @@ import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Circle, CircleDot } from "lucide-react";
+import { CheckCircle2, Circle, CircleDot, Banknote, Landmark, ArrowDownUp, Hash } from "lucide-react";
 import { Card } from "./ui/card";
+import { Separator } from "./ui/separator";
 
 interface Step {
     title: string;
@@ -16,6 +17,20 @@ interface Step {
     isCompleted: boolean;
     isCurrent: boolean;
 }
+
+const InfoRow = ({ label, value, icon: Icon }: { label: string, value: string | number | undefined, icon?: React.ElementType }) => {
+    if (!value) return null;
+    return (
+        <div className="flex items-center justify-between py-3 px-4 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+                {Icon && <Icon className="h-4 w-4" />}
+                <p>{label}</p>
+            </div>
+            <p className="font-mono font-semibold text-right">{value}</p>
+        </div>
+    )
+};
+
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
@@ -54,6 +69,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: transaction.status === 'Confirmed' || transaction.status === 'Cancelled',
         }
     ];
+
+    const exchangeRate = transaction.amount_usd / transaction.amount;
 
     return (
         <Card ref={ref} className="w-full max-w-md bg-background text-foreground font-cairo p-4 md:p-6" dir="rtl">
@@ -94,6 +111,23 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     })}
                 </div>
             </div>
+
+            <Separator className="my-6" />
+
+            <div>
+                <h2 className="text-lg font-semibold mb-2">التفاصيل المالية</h2>
+                <div className="border rounded-lg">
+                    <InfoRow label="المبلغ المرسل" value={`${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}`} icon={Banknote} />
+                    <InfoRow label="سعر الصرف" value={exchangeRate && transaction.currency !== 'USD' && transaction.currency !== 'USDT' ? `1 USD = ${new Intl.NumberFormat().format(1/exchangeRate)} ${transaction.currency}` : undefined} icon={ArrowDownUp}/>
+                    <InfoRow label="الإجمالي (USD)" value={`$${transaction.amount_usd.toFixed(2)}`} />
+                    <InfoRow label="الرسوم (USD)" value={`$${transaction.fee_usd.toFixed(2)}`} />
+                    {transaction.expense_usd && transaction.expense_usd > 0 && <InfoRow label="مصاريف/خسارة (USD)" value={`$${transaction.expense_usd.toFixed(2)}`} />}
+                    <InfoRow label="صافي المبلغ للمستلم" value={`${transaction.amount_usdt.toFixed(2)} USDT`} />
+                    <InfoRow label="رقم الحوالة" value={transaction.remittance_number} icon={Landmark} />
+                    <InfoRow label="معرف العملية (Hash)" value={transaction.hash} icon={Hash} />
+                </div>
+            </div>
+
         </Card>
     );
 });
