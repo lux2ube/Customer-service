@@ -140,8 +140,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                 </div>
 
-                <div className="p-3 border-b border-border">
-                    <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                <div className="p-3 border-b border-border bg-muted/30">
+                    <p className="text-xs text-muted-foreground text-justify leading-relaxed">
                         نحذّركم من إرسال أي مبلغ من محفظتكم لأي شخص أو جهة تدّعي تقديم أرباح أو استثمار مضمون، فهذه من الطرق الشائعة للاحتيال.
                         <br/>
                         ونؤكد بأن العملات الرقمية لا يمكن استرجاعها بعد إرسالها، ولن نتمكن من التدخل أو المساعدة في حال حدوث أي عملية غير آمنة.
