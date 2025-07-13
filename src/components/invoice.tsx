@@ -5,97 +5,108 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle, CircleDot, Circle, Wallet, Landmark, Hash } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
+import { CheckCircle, CircleDot, Circle, XCircle, Banknote, Landmark, Wallet } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface Step {
     title: string;
-    description: string;
+    details: React.ReactNode;
     icon: React.ElementType;
     isCompleted: boolean;
     isCurrent: boolean;
+    timestamp?: string;
 }
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
-    const getStatusText = (status: Transaction['status']) => {
-        switch (status) {
-            case 'Confirmed': return 'مؤكد';
-            case 'Cancelled': return 'ملغي';
-            case 'Pending': return 'قيد الإنتظار';
-            default: return status;
-        }
-    };
-
-    const formatCurrency = (value: number | undefined, currency: string) => {
-        if (value === undefined) return '';
-        return new Intl.NumberFormat('en-US').format(value) + ` ${currency}`;
-    }
-
     const steps: Step[] = [];
+    const transactionTime = transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a") : 'N/A';
+    const confirmedTime = transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy, h:mm a") : transactionTime;
+
+    const isConfirmed = transaction.status === 'Confirmed';
+    const isPending = transaction.status === 'Pending';
+    const isCancelled = transaction.status === 'Cancelled';
 
     if (transaction.type === 'Deposit') {
         steps.push({
-            title: 'تم استلام الطلب',
-            description: `العميل ${client?.name || transaction.clientName} أرسل ${formatCurrency(transaction.amount, transaction.currency)} من حساب ${transaction.bankAccountName}.`,
-            icon: Circle,
+            title: 'الطلب المستلم (إيداع)',
+            icon: Landmark,
             isCompleted: true,
-            isCurrent: false,
+            isCurrent: !isConfirmed && !isCancelled,
+            timestamp: transactionTime,
+            details: (
+                <div className="space-y-1">
+                    <p>العميل <span className="font-bold">{client?.name || transaction.clientName}</span> قام بإيداع:</p>
+                    <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
+                    <p className="text-xs text-muted-foreground">من حساب: {transaction.bankAccountName}</p>
+                </div>
+            )
         });
-
         steps.push({
-            title: 'قيد التنفيذ',
-            description: `سيتم إرسال ${formatCurrency(transaction.amount_usdt, 'USDT')} إلى محفظة العميل: ${transaction.client_wallet_address}. الرسوم: ${formatCurrency(transaction.fee_usd, 'USD')}.`,
-            icon: CircleDot,
-            isCompleted: transaction.status === 'Confirmed',
-            isCurrent: transaction.status === 'Pending',
+            title: 'تم التسليم بنجاح',
+            icon: Wallet,
+            isCompleted: isConfirmed,
+            isCurrent: isConfirmed,
+            timestamp: confirmedTime,
+            details: (
+                <div className="space-y-1">
+                    <p>تم إرسال المبلغ الصافي:</p>
+                    <p className="text-lg font-bold text-green-600">{transaction.amount_usdt.toFixed(2)} USDT</p>
+                    <p className="text-xs text-muted-foreground">إلى المحفظة:</p>
+                    <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
+                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
+                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
+                </div>
+            )
         });
-
+    } else { // Withdraw
         steps.push({
-            title: 'تم التسليم',
-            description: `تم تأكيد العملية بنجاح. Hash: ${transaction.hash || 'N/A'}.`,
-            icon: CheckCircle,
-            isCompleted: transaction.status === 'Confirmed',
-            isCurrent: transaction.status === 'Confirmed',
-        });
-    } else { // Withdraw Logic
-        steps.push({
-            title: 'تم استلام الطلب',
-            description: `العميل ${client?.name || transaction.clientName} أرسل ${formatCurrency(transaction.amount_usdt, 'USDT')} من محفظته إلى حسابنا ${transaction.cryptoWalletName}.`,
-            icon: Circle,
+            title: 'الطلب المستلم (سحب)',
+            icon: Wallet,
             isCompleted: true,
-            isCurrent: false,
+            isCurrent: !isConfirmed && !isCancelled,
+            timestamp: transactionTime,
+            details: (
+                 <div className="space-y-1">
+                    <p>العميل <span className="font-bold">{client?.name || transaction.clientName}</span> قام بإرسال:</p>
+                    <p className="text-lg font-bold text-primary">{transaction.amount_usdt.toFixed(2)} USDT</p>
+                    <p className="text-xs text-muted-foreground">من محفظته إلى:</p>
+                    <p className="text-xs">{transaction.cryptoWalletName}</p>
+                </div>
+            )
         });
-
-        steps.push({
-            title: 'قيد التنفيذ',
-            description: `سيتم إرسال ${formatCurrency(transaction.amount, transaction.currency)} إلى حساب العميل البنكي: ${transaction.bankAccountName}.`,
-            icon: CircleDot,
-            isCompleted: transaction.status === 'Confirmed',
-            isCurrent: transaction.status === 'Pending',
-        });
-
-        steps.push({
-            title: 'تم التسليم',
-            description: `تم تأكيد العملية بنجاح. رقم الحوالة: ${transaction.remittance_number || 'N/A'}.`,
-            icon: CheckCircle,
-            isCompleted: transaction.status === 'Confirmed',
-            isCurrent: transaction.status === 'Confirmed',
+         steps.push({
+            title: 'تم التسليم بنجاح',
+            icon: Landmark,
+            isCompleted: isConfirmed,
+            isCurrent: isConfirmed,
+            timestamp: confirmedTime,
+            details: (
+                <div className="space-y-1">
+                    <p>تم إرسال المبلغ الصافي:</p>
+                    <p className="text-lg font-bold text-green-600">{transaction.amount} {transaction.currency}</p>
+                    <p className="text-xs text-muted-foreground">إلى حساب:</p>
+                    <p className="text-xs">{transaction.bankAccountName}</p>
+                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
+                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                </div>
+            )
         });
     }
      
     // Adjust logic for cancelled state
-    if (transaction.status === 'Cancelled') {
+    if (isCancelled) {
         steps.forEach(step => {
             step.isCompleted = false;
             step.isCurrent = false;
         });
         steps.push({
             title: 'تم إلغاء الطلب',
-            description: 'تم إلغاء هذه العملية.',
-            icon: CheckCircle, // You can use a different icon like XCircle
+            icon: XCircle,
             isCompleted: true,
             isCurrent: true,
+            timestamp: confirmedTime,
+            details: <p>تم إلغاء هذه العملية.</p>
         });
     }
 
@@ -104,8 +115,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4">
             <Card className="border-border">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-lg">معرف التتبع: {transaction.id.slice(-12).toUpperCase()}</CardTitle>
-                    <CardDescription>{client?.name || transaction.clientName}</CardDescription>
+                    <CardTitle className="text-lg">معرف التتبع: <span className="font-mono">{transaction.id.slice(-12).toUpperCase()}</span></CardTitle>
+                    <p className="text-muted-foreground text-sm">{client?.name || transaction.clientName}</p>
                 </CardHeader>
                 <CardContent>
                     <div className="relative pl-8 pr-4 py-4">
@@ -128,9 +139,11 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                                 </div>
                                 <div className="mr-12">
                                     <p className="font-semibold">{step.title}</p>
-                                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                                    <p className="text-xs text-muted-foreground pt-1">
-                                        {format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a")}
+                                    <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md mt-2">
+                                        {step.details}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground pt-2">
+                                        {step.timestamp}
                                     </p>
                                 </div>
                             </div>
