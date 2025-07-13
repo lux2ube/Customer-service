@@ -358,16 +358,12 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
         }
         
         const allClientsData: Record<string, Client> = snapshot.val();
-        const allClients: Client[] = Object.keys(allClientsData).map(key => ({
-            id: key,
-            ...allClientsData[key]
-        }));
         
         const normalizedSearch = normalizeArabic(searchTerm.toLowerCase().trim());
         const searchTerms = normalizedSearch.split(' ').filter(Boolean);
         const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
 
-        const filtered = allClients.filter(client => {
+        const filtered = Object.keys(allClientsData).map(key => ({ id: key, ...allClientsData[key] })).filter(client => {
             const phone = getPhone(client.phone).toLowerCase();
             
             if (phone.includes(searchTerm.trim())) {
@@ -1059,7 +1055,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 expense_usd: 0,
                 amount_usdt: syncedAmount,
                 hash: tx.hash,
-                status: 'Pending',
+                status: 'Confirmed',
                 notes: note,
                 client_wallet_address: clientAddress,
                 createdAt: new Date().toISOString(),
@@ -1655,41 +1651,38 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     }
 }
 
-// Helper function for more robust name matching.
 const isSmsAMatchForClient = (client: Client, smsParsedName: string): boolean => {
     if (!client.name || !smsParsedName) return false;
 
-    // High confidence: phone number found in SMS name field
     const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone].filter(Boolean);
-    const cleanSmsNameForPhoneCheck = smsParsedName.replace(/[^\d]/g, ''); // Keep only digits for phone check
+    const cleanSmsNameForPhoneCheck = smsParsedName.replace(/[^\d]/g, '');
     if (clientPhones.some(p => p && cleanSmsNameForPhoneCheck.includes(p.replace(/[^\d]/g, '')))) {
         return true;
     }
 
-    // Improved name matching
     const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-    const clientNameParts = normalizedClientName.split(/\s+/).filter(p => p.length > 1);
-    
-    const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
-    if (smsNameParts.length === 0) return false;
+    const normalizedSmsName = normalizeArabic(smsParsedName.toLowerCase());
 
-    // Case 1: All parts of the client's name are found in the SMS name
-    if (clientNameParts.length > 0 && clientNameParts.every(part => smsNameParts.includes(part))) {
+    const clientParts = normalizedClientName.split(/\s+/).filter(p => p.length > 1);
+    const smsParts = normalizedSmsName.split(/\s+/).filter(p => p.length > 1);
+    if (smsParts.length === 0) return false;
+
+    const commonPartsCount = clientParts.filter(part => smsParts.includes(part)).length;
+
+    if (commonPartsCount >= 2) {
         return true;
     }
     
-    // Case 2: At least two parts of the client's name match parts of the SMS name
-    const commonWords = clientNameParts.filter(part => smsNameParts.includes(part));
-    if (commonWords.length >= 2) {
+    if (clientParts.length > 0 && clientParts.every(part => smsParts.includes(part))) {
         return true;
     }
     
-    // Case 3: Handle two-part names like "Abdullah Abdulqader" where one part might be common
-    if (clientNameParts.length === 2 && smsNameParts.length >= 2) {
-        // If the first name matches and the SMS has more than just that name, it's a likely match
-        if (clientNameParts[0] === smsNameParts[0] && smsNameParts.length > 1) {
-            return true;
-        }
+    if (clientParts.length === 2 && commonPartsCount === 1 && smsParts.length > 1) {
+         return true;
+    }
+    
+    if (clientParts.length === 1 && clientParts[0] === smsParts[0]) {
+        return true;
     }
 
     return false;
@@ -2403,3 +2396,5 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
     }
 }
+
+    
