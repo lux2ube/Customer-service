@@ -5,7 +5,8 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle, Circle, XCircle, Landmark, Wallet, Hourglass, Check } from "lucide-react";
+import { CheckCircle, Circle, XCircle, Landmark, Wallet, Hourglass, Check, UserCircle, FileText } from "lucide-react";
+import { CoinCashLogo } from "./coincash-logo";
 
 interface Step {
     title: string;
@@ -25,41 +26,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const isConfirmed = transaction.status === 'Confirmed';
     const isCancelled = transaction.status === 'Cancelled';
     
-    if (transaction.type === 'Deposit') {
-        steps.push({
-            title: 'الطلب المستلم (إيداع)',
-            icon: Landmark,
-            isCompleted: true,
-            isCurrent: !isConfirmed && !isCancelled,
-            timestamp: transactionTime,
-            details: (
-                <div className="space-y-1">
-                    <p>العميل <span className="font-bold">{client?.name || transaction.clientName}</span> قام بإيداع:</p>
-                    <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
-                    <p className="text-xs text-muted-foreground">من حساب: {transaction.bankAccountName}</p>
-                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
-                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
-                </div>
-            )
-        });
-        steps.push({
-            title: 'تم التسليم بنجاح',
-            icon: Wallet,
-            isCompleted: isConfirmed,
-            isCurrent: isConfirmed,
-            timestamp: confirmedTime,
-            details: (
-                <div className="space-y-1">
-                    <p>تم إرسال المبلغ الصافي:</p>
-                    <p className="text-lg font-bold text-green-600">{transaction.amount_usdt.toFixed(2)} USDT</p>
-                    <p className="text-xs text-muted-foreground">إلى المحفظة:</p>
-                    <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
-                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
-                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
-                </div>
-            )
-        });
-    } else { // Withdraw
+    if (transaction.type === 'Withdraw') {
         steps.push({
             title: 'الطلب المستلم (سحب)',
             icon: Wallet,
@@ -67,13 +34,14 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: !isConfirmed && !isCancelled,
             timestamp: transactionTime,
             details: (
-                 <div className="space-y-1">
-                    <p>العميل <span className="font-bold">{client?.name || transaction.clientName}</span> قام بإرسال:</p>
+                 <div className="space-y-2">
                     <p className="text-lg font-bold text-primary">{transaction.amount_usdt.toFixed(2)} USDT</p>
-                    <p className="text-xs text-muted-foreground">من محفظته إلى:</p>
-                    <p className="text-xs">{transaction.cryptoWalletName}</p>
-                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
-                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
+                    <div className="text-xs">
+                        <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
+                        <p><span className="text-muted-foreground">إلى:</span> {transaction.cryptoWalletName}</p>
+                    </div>
+                     <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
+                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -84,13 +52,48 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: isConfirmed,
             timestamp: confirmedTime,
             details: (
-                <div className="space-y-1">
-                    <p>تم إرسال المبلغ الصافي:</p>
+                <div className="space-y-2">
                     <p className="text-lg font-bold text-green-600">{transaction.amount} {transaction.currency}</p>
-                    <p className="text-xs text-muted-foreground">إلى حساب:</p>
-                    <p className="text-xs">{transaction.bankAccountName}</p>
-                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
+                     <div className="text-xs">
+                        <p><span className="text-muted-foreground">إلى حساب:</span> {transaction.bankAccountName}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                </div>
+            )
+        });
+    } else { // Deposit
+        steps.push({
+            title: 'الطلب المستلم (إيداع)',
+            icon: Landmark,
+            isCompleted: true,
+            isCurrent: !isConfirmed && !isCancelled,
+            timestamp: transactionTime,
+            details: (
+                <div className="space-y-2">
+                    <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
+                     <div className="text-xs">
+                        <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
+                        <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.bankAccountName}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
+                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                </div>
+            )
+        });
+        steps.push({
+            title: 'تم التسليم بنجاح',
+            icon: Wallet,
+            isCompleted: isConfirmed,
+            isCurrent: isConfirmed,
+            timestamp: confirmedTime,
+            details: (
+                <div className="space-y-2">
+                    <p className="text-lg font-bold text-green-600">{transaction.amount_usdt.toFixed(2)} USDT</p>
+                    <p className="text-xs"><span className="text-muted-foreground">إلى المحفظة:</span></p>
+                    <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
+                    <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
+                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -114,13 +117,29 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
 
     return (
-        <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4">
-            <div className="border border-border rounded-lg">
-                <div className="text-center p-4 border-b border-border">
-                    <h2 className="text-lg font-semibold">معرف التتبع</h2>
-                    <p className="font-mono text-muted-foreground">{transaction.id.slice(-12).toUpperCase()}</p>
-                    <p className="text-sm font-semibold mt-1">{client?.name || transaction.clientName}</p>
+        <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
+            <div className="border border-border rounded-lg overflow-hidden">
+                <div className="p-3 bg-muted/50 border-b border-border flex justify-between items-start text-sm">
+                    <div className="flex items-center gap-2">
+                        <CoinCashLogo />
+                        <div>
+                            <p className="font-bold">CoinCash</p>
+                            <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
+                        </div>
+                    </div>
+                    <div className="text-left">
+                         <div className="flex items-center gap-1.5 justify-end">
+                             <UserCircle className="w-4 h-4 text-primary" />
+                             <p className="font-semibold">{client?.name || transaction.clientName}</p>
+                         </div>
+                         <p className="text-xs text-muted-foreground">ID: {client?.id}</p>
+                         <div className="flex items-center gap-1.5 justify-end mt-1">
+                             <FileText className="w-3 h-3 text-muted-foreground" />
+                             <p className="text-xs text-muted-foreground font-mono">{transaction.id}</p>
+                         </div>
+                    </div>
                 </div>
+
                 <div className="p-4">
                     <div className="relative pl-8 pr-4 py-4">
                         {/* Vertical line */}
@@ -142,7 +161,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                                 </div>
                                 <div className="mr-10">
                                     <p className="font-semibold">{step.title}</p>
-                                    <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md mt-2">
+                                    <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
                                         {step.details}
                                     </div>
                                     <p className="text-xs text-muted-foreground pt-2">
