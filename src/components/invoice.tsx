@@ -7,6 +7,7 @@ import React from 'react';
 import { cn } from "@/lib/utils";
 import { Landmark, Wallet, XCircle, UserCircle, FileText, AlertTriangle } from "lucide-react";
 import { CoinCashLogo } from "./coincash-logo";
+import { Alert } from "./ui/alert";
 
 interface Step {
     title: string;
@@ -140,14 +141,14 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                 </div>
 
-                <div className="p-3 border-b border-border bg-destructive/10 flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 shrink-0"/>
-                    <p className="text-xs text-destructive text-justify leading-relaxed">
+                <Alert variant="destructive" className="border-x-0 border-t-0 rounded-none">
+                    <AlertTriangle className="h-5 w-5"/>
+                    <p className="text-xs text-justify leading-relaxed">
                         نحذّركم من إرسال أي مبلغ من محفظتكم لأي شخص أو جهة تدّعي تقديم أرباح أو استثمار مضمون، فهذه من الطرق الشائعة للاحتيال.
                         <br/>
                         ونؤكد بأن العملات الرقمية لا يمكن استرجاعها بعد إرسالها، ولن نتمكن من التدخل أو المساعدة في حال حدوث أي عملية غير آمنة.
                     </p>
-                </div>
+                </Alert>
 
                 <div className="p-4">
                     <div className="relative pl-8 pr-4 py-4">
@@ -186,3 +187,5 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     );
 });
 Invoice.displayName = 'Invoice';
+
+    
