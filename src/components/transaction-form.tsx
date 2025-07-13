@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle } from 'lucide-react';
 import React from 'react';
 import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -431,7 +431,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (!invoiceRef.current || !transaction) return;
         setIsDownloading(true);
         try {
-            const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: null });
+            const canvas = await html2canvas(invoiceRef.current, { scale: 3, useCORS: true, backgroundColor: null });
             const link = document.createElement('a');
             link.href = canvas.toDataURL('image/png');
             link.download = `invoice-${transaction.id.slice(-8).toUpperCase()}.png`;
@@ -449,7 +449,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (!invoiceRef.current || !transaction || !selectedClient) return;
         setIsSharing(true);
         try {
-            const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: null });
+            const canvas = await html2canvas(invoiceRef.current, { scale: 3, useCORS: true, backgroundColor: null });
             if (navigator.share) {
                 canvas.toBlob(async (blob) => {
                     if (!blob) {
