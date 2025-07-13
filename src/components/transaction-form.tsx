@@ -129,7 +129,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
-    const pristineRef = React.useRef(false);
 
     const [formData, setFormData] = React.useState<Transaction>(initialFormData);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
@@ -179,19 +178,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setFormData(formState);
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
-
-    React.useEffect(() => {
-        if (isDataLoading) return;
-
-        const isSynced = !!formData.hash;
-        if (isSynced) {
-            const isPristineSync = isSynced && !transaction?.amount;
-             pristineRef.current = isPristineSync;
-             if (isPristineSync) {
-                setFormData(prev => ({...prev, amount: 0}));
-             }
-        }
-    }, [formData.hash, transaction, isDataLoading]);
     
     // Effect to fetch SMS suggestions
     React.useEffect(() => {
@@ -258,23 +244,22 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const newAmountUSD = amount * rate;
         result.amount_usd = parseFloat(newAmountUSD.toFixed(2));
         
-        if (hash) {
+        if (hash && usdtFromSync) {
             let newFeeUSD = 0;
             let newExpenseUSD = 0;
-            const fixedUsdtAmount = usdtFromSync || 0;
-
+            
             if (type === 'Deposit') {
-                const difference = newAmountUSD - fixedUsdtAmount;
+                const difference = newAmountUSD - usdtFromSync;
                 if (difference >= 0) newFeeUSD = difference;
                 else newExpenseUSD = -difference;
             } else { // Withdraw
-                const difference = fixedUsdtAmount - newAmountUSD;
+                const difference = usdtFromSync - newAmountUSD;
                 if (difference >= 0) newFeeUSD = difference;
                 else newExpenseUSD = -difference;
             }
             result.fee_usd = parseFloat(newFeeUSD.toFixed(2));
             result.expense_usd = parseFloat(newExpenseUSD.toFixed(2));
-            result.amount_usdt = fixedUsdtAmount;
+            result.amount_usdt = usdtFromSync;
         } else {
             let finalFee = 0;
             let newUsdtAmount = 0;
@@ -304,7 +289,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const handleManualAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
-        pristineRef.current = false;
 
         setFormData(prev => {
             const updates = recalculateFinancials(newAmountNum, prev.type, prev.currency, prev.hash, prev.amount_usdt);
@@ -488,12 +472,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     };
 
-    const amountToDisplay = pristineRef.current ? '' : (formData.amount || '');
+    const amountToDisplay = formData.hash && formData.amount === 0 ? '' : (formData.amount || '');
 
     return (
         <>
             {transaction && (
-                <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1, fontFamily: 'sans-serif' }}>
+                <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1 }}>
                     <div className="w-[420px]">
                         <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={selectedClient} />
                     </div>
@@ -710,16 +694,18 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 }
 
 function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
-    const [search, setSearch] = React.useState(selectedClient?.name || "");
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
 
     // Debounce search input
     React.useEffect(() => {
-        if (!isOpen || search.trim().length < 2) {
+        if (!isOpen) return;
+
+        if (inputValue.trim().length < 2) {
             setSearchResults([]);
-            if (search.trim().length === 0 && selectedClient) {
+            if (inputValue.trim().length === 0 && selectedClient) {
                 // User cleared the input, so un-select the client
                 onSelect(null);
             }
@@ -728,21 +714,17 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
 
         setIsLoading(true);
         const timerId = setTimeout(async () => {
-            const results = await searchClients(search);
+            const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
         }, 300);
 
         return () => clearTimeout(timerId);
-    }, [search, isOpen, onSelect, selectedClient]);
+    }, [inputValue, isOpen, onSelect, selectedClient]);
     
-    // Update input text when client is selected from parent (e.g. on initial load)
+    // Update input text when client is selected from parent
     React.useEffect(() => {
-        if (selectedClient) {
-            setSearch(selectedClient.name || '');
-        } else {
-            setSearch("");
-        }
+        setInputValue(selectedClient?.name || "");
     }, [selectedClient]);
 
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
@@ -750,7 +732,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     const handleSelect = (client: Client) => {
         onSelect(client);
         setIsOpen(false);
-        setSearch(client.name);
+        setInputValue(client.name);
     };
 
     return (
@@ -770,12 +752,12 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
                 <Command shouldFilter={false}>
                     <CommandInput 
                         placeholder="Search by name or phone..."
-                        value={search}
-                        onValueChange={setSearch}
+                        value={inputValue}
+                        onValueChange={setInputValue}
                     />
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && search.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem
