@@ -49,7 +49,7 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
             </div>
             <div className="flex-1">
                 <p className="font-semibold">{tx.clientName}</p>
-                <p className="text-xs text-muted-foreground">{format(new Date(tx.date), "dd/MM/yyyy (HH:mm)")}</p>
+                <p className="text-xs text-muted-foreground">{tx.date && !isNaN(new Date(tx.date).getTime()) ? format(new Date(tx.date), "dd/MM/yyyy (HH:mm)") : 'Invalid Date'}</p>
             </div>
             <div className={cn(
                 "font-bold text-right",
@@ -80,7 +80,10 @@ export default function DashboardPage() {
         unsubs.push(onValue(recentTxQuery, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                const list: Transaction[] = Object.values(data);
+                const list: Transaction[] = Object.keys(data).map(key => ({
+                    id: key,
+                    ...data[key]
+                }));
                 list.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                 setRecentTransactions(list);
             }
