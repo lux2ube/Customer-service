@@ -5,153 +5,95 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Circle, CircleDot } from "lucide-react";
-import { Card } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
+import { Separator } from "./ui/separator";
 
-interface Step {
-    title: string;
-    location?: string;
-    description: string;
-    timestamp: string;
-    isCompleted: boolean;
-    isCurrent: boolean;
-}
+const InfoRow = ({ label, value, valueClass, isMono = false }: { label: string, value: string | number | undefined | null, valueClass?: string, isMono?: boolean }) => {
+    if (value === undefined || value === null || value === '') return null;
+    return (
+        <div className="flex justify-between items-center py-3 px-4 text-sm">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className={cn("font-semibold text-left break-all", isMono && "font-mono", valueClass)}>{String(value)}</dd>
+        </div>
+    );
+};
+
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
+    const formatCurrency = (value: number | undefined, currency: string) => {
+        if (value === undefined) return '';
+        return new Intl.NumberFormat('en-US').format(value) + ` ${currency}`;
+    }
+
     const getStatusText = (status: Transaction['status']) => {
         switch (status) {
-            case 'Confirmed': return 'تم التسليم';
+            case 'Confirmed': return 'مؤكد';
             case 'Cancelled': return 'ملغي';
             case 'Pending': return 'قيد الإنتظار';
             default: return status;
         }
     };
+     const getStatusClass = (status: Transaction['status']) => {
+        switch (status) {
+            case 'Confirmed': return 'text-green-600';
+            case 'Cancelled': return 'text-destructive';
+            case 'Pending': return 'text-amber-600';
+            default: return 'text-muted-foreground';
+        }
+    };
 
-    let steps: Step[] = [];
-    const isConfirmed = transaction.status === 'Confirmed';
-    const isCancelled = transaction.status === 'Cancelled';
-    const isPending = transaction.status === 'Pending';
-    const isFinished = isConfirmed || isCancelled;
-
-    if (transaction.type === 'Withdraw') {
-        // --- WITHDRAWAL FLOW ---
-        // 1. Client sends USDT to us.
-        // 2. We send local currency to them.
-        // 3. Confirmation.
-        steps = [
-            {
-                title: "تم استلام الطلب",
-                location: transaction.client_wallet_address ? `${transaction.client_wallet_address.substring(0, 6)}...` : "محفظة العميل",
-                description: `استلام ${transaction.amount_usdt.toFixed(2)} USDT من العميل إلى محفظة النظام (${transaction.cryptoWalletName || 'USDT Wallet'})`,
-                timestamp: transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy h:mm a") : 'N/A',
-                isCompleted: true,
-                isCurrent: isPending,
-            },
-            {
-                title: "إرسال المبلغ للعميل",
-                location: transaction.bankAccountName || 'حساب بنكي',
-                description: `تم إرسال ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency} من حسابنا البنكي.`,
-                timestamp: '...',
-                isCompleted: isFinished,
-                isCurrent: false,
-            },
-            {
-                title: getStatusText(transaction.status),
-                location: `تأكيد العملية`,
-                description: `تم تأكيد العملية. رقم الحوالة: ${transaction.remittance_number || 'N/A'}. معرف العملية: ${transaction.hash ? `${transaction.hash.substring(0, 10)}...` : 'N/A'}`,
-                timestamp: transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy h:mm a") : 'N/A',
-                isCompleted: isFinished,
-                isCurrent: isFinished,
-            }
-        ];
-    } else {
-        // --- DEPOSIT FLOW (DEFAULT) ---
-        // 1. Client sends local currency to us.
-        // 2. We send USDT to them.
-        // 3. Confirmation.
-        const exchangeRate = transaction.amount > 0 ? transaction.amount_usd / transaction.amount : 0;
-        steps = [
-            {
-                title: "تم إنشاء الطلب",
-                location: "النظام",
-                description: `تم تسجيل طلب إيداع من العميل ${client?.name || transaction.clientName}`,
-                timestamp: transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy h:mm a") : 'N/A',
-                isCompleted: true,
-                isCurrent: isPending,
-            },
-            {
-                title: "تفاصيل الدفعة",
-                location: transaction.bankAccountName || 'البنك المصدر',
-                description: 
-                    `المبلغ المستلم: ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}\n` +
-                    (exchangeRate && transaction.currency !== 'USD' && transaction.currency !== 'USDT' ? `سعر الصرف: ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(1 / exchangeRate)} ${transaction.currency} / USD\n` : '') +
-                    `الرسوم: ${transaction.fee_usd.toFixed(2)} USD\n` +
-                    `الصافي للإرسال: ${transaction.amount_usdt.toFixed(2)} USDT`,
-                timestamp: '...',
-                isCompleted: isFinished,
-                isCurrent: false,
-            },
-            {
-                title: getStatusText(transaction.status),
-                location: transaction.client_wallet_address ? `${transaction.client_wallet_address.substring(0, 6)}...` : 'محفظة العميل',
-                description: 
-                    (isConfirmed ? 'تم تأكيد إرسال USDT بنجاح.' : 
-                    (isCancelled ? 'تم إلغاء المعاملة.' : 'في انتظار التأكيد النهائي.')) +
-                    (transaction.hash ? `\nمعرف العملية: ${transaction.hash.substring(0, 10)}...` : '') +
-                    (transaction.remittance_number ? `\nرقم الحوالة: ${transaction.remittance_number}` : ''),
-                timestamp: transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy h:mm a") : 'N/A',
-                isCompleted: isFinished,
-                isCurrent: isFinished,
-            }
-        ];
-    }
-
+    const isDeposit = transaction.type === 'Deposit';
 
     return (
-        <Card ref={ref} className="w-full max-w-md bg-background text-foreground font-cairo p-4 md:p-6" dir="rtl">
-            <div className="mb-6">
-                <p className="text-sm text-muted-foreground">معرف التتبع</p>
-                <h1 className="text-xl font-bold font-mono tracking-wider">{transaction.id}</h1>
-            </div>
-
-            <div className="relative">
-                {/* The vertical line */}
-                <div className="absolute right-4 top-2 bottom-2 w-0.5 bg-muted-foreground/30"></div>
-                
-                <div className="space-y-8">
-                    {steps.map((step, index) => {
-                        const isLastStep = index === steps.length - 1;
-                        let Icon;
-                        if (isLastStep) {
-                            Icon = step.isCompleted ? CheckCircle2 : Circle;
-                        } else {
-                            Icon = step.isCompleted ? CircleDot : Circle;
-                        }
+        <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
+            <Card className="border-primary/50 border-2 shadow-lg">
+                <CardHeader className="text-center bg-muted/30">
+                    <CardTitle className="text-xl">فاتورة عملية</CardTitle>
+                    {client && (
+                        <CardDescription className="pt-2">
+                           <span className="font-bold text-lg text-foreground">{client.name}</span>
+                           <br/>
+                           <span className="font-mono text-xs text-muted-foreground">ID: {client.id}</span>
+                        </CardDescription>
+                    )}
+                </CardHeader>
+                <CardContent className="p-0">
+                    <dl className="divide-y">
+                        <InfoRow label="رقم العملية" value={transaction.id} isMono />
+                        <InfoRow label="التاريخ" value={transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a") : ''} />
+                        <InfoRow label="نوع العملية" value={transaction.type === 'Deposit' ? 'إيداع' : 'سحب'} />
+                        <InfoRow label="الحالة" value={getStatusText(transaction.status)} valueClass={getStatusClass(transaction.status)} />
                         
-                        return (
-                            <div key={index} className="flex gap-4 relative items-start">
-                                <div className={cn(
-                                    "z-10 flex h-8 w-8 items-center justify-center rounded-full shrink-0",
-                                    step.isCompleted ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                                )}>
-                                    <Icon className="h-5 w-5" />
-                                </div>
-                                <div className={cn(
-                                    "flex-1 pt-1",
-                                    step.isCurrent && isLastStep && "p-4 bg-primary/10 rounded-lg"
-                                )}>
-                                    <p className="font-bold text-sm uppercase">{step.title}</p>
-                                    {step.location && <p className="text-sm text-muted-foreground">{step.location}</p>}
-                                    <p className="text-sm mt-1 whitespace-pre-line">{step.description}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">{step.timestamp}</p>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        </Card>
+                        <Separator />
+                        
+                        <InfoRow label={isDeposit ? "المبلغ المستلم" : "المبلغ المرسل"} value={formatCurrency(transaction.amount, transaction.currency)} />
+                        <InfoRow label="الرسوم" value={formatCurrency(transaction.fee_usd, 'USD')} />
+                        {transaction.expense_usd && transaction.expense_usd > 0 ? (
+                           <InfoRow label="مصاريف/خسارة" value={formatCurrency(transaction.expense_usd, 'USD')} valueClass="text-destructive" />
+                        ) : null}
+                         <InfoRow 
+                            label={isDeposit ? "صافي الإيداع" : "إجمالي السحب"} 
+                            value={formatCurrency(transaction.amount_usdt, 'USDT')} 
+                            valueClass="text-primary font-bold"
+                        />
+
+                        <Separator />
+                        
+                        <InfoRow label="من حساب" value={transaction.bankAccountName || 'N/A'} />
+                        <InfoRow label="إلى محفظة" value={transaction.cryptoWalletName || 'N/A'} />
+                        <InfoRow label="محفظة العميل" value={transaction.client_wallet_address} isMono />
+
+                        <Separator />
+                        
+                        <InfoRow label="رقم الحوالة" value={transaction.remittance_number} isMono />
+                        <InfoRow label="معرف العملية (Hash)" value={transaction.hash} isMono />
+                        <InfoRow label="ملاحظات" value={transaction.notes} />
+
+                    </dl>
+                </CardContent>
+            </Card>
+        </div>
     );
 });
 Invoice.displayName = 'Invoice';
