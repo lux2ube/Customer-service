@@ -56,8 +56,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
                     <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
-                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
-                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
                 </div>
             )
         });
@@ -93,8 +91,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p className="text-xs">{transaction.bankAccountName}</p>
                     <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
-                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
-                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
