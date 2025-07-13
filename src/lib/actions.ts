@@ -448,6 +448,15 @@ const TransactionSchema = z.object({
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
     flags: z.array(z.string()).optional(),
     linkedSmsId: z.string().optional().nullable(),
+}).refine(data => {
+    // If a hash exists, amount can be 0 initially, but must be > 0 if confirmed
+    if (data.hash && data.status === 'Confirmed') {
+        return data.amount > 0;
+    }
+    return true;
+}, {
+    message: "Amount must be filled in for a confirmed BscScan transaction.",
+    path: ["amount"],
 });
 
 
@@ -1043,7 +1052,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 clientName: foundClient ? foundClient.name : 'Unassigned (BSCScan)',
                 cryptoWalletId: '1003',
                 cryptoWalletName: cryptoWalletName,
-                amount: syncedAmount,
+                amount: 0,
                 currency: 'USDT',
                 amount_usd: syncedAmount,
                 fee_usd: 0,
@@ -1649,26 +1658,41 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 // Helper function for more robust name matching.
 const isSmsAMatchForClient = (client: Client, smsParsedName: string): boolean => {
     if (!client.name || !smsParsedName) return false;
-    
+
     // High confidence: phone number found in SMS name field
-    const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
+    const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone].filter(Boolean);
     const cleanSmsNameForPhoneCheck = smsParsedName.replace(/[^\d]/g, ''); // Keep only digits for phone check
     if (clientPhones.some(p => p && cleanSmsNameForPhoneCheck.includes(p.replace(/[^\d]/g, '')))) {
         return true;
     }
 
     // Improved name matching
-    const commonNamesToIgnore = new Set(['محمد', 'علي', 'احمد', 'عبدالله']);
     const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-    const clientNameParts = new Set(normalizedClientName.split(/\s+/).filter(p => p.length > 1 && !commonNamesToIgnore.has(p)));
-    if (clientNameParts.size < 2) return false; // Client name too generic to match reliably
-
+    const clientNameParts = normalizedClientName.split(/\s+/).filter(p => p.length > 1);
+    
     const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(/\s+/).filter(p => p.length > 1);
     if (smsNameParts.length === 0) return false;
+
+    // Case 1: All parts of the client's name are found in the SMS name
+    if (clientNameParts.length > 0 && clientNameParts.every(part => smsNameParts.includes(part))) {
+        return true;
+    }
     
-    // Check for a significant overlap (at least 2 non-common words)
-    const commonWords = smsNameParts.filter(part => clientNameParts.has(part));
-    return commonWords.length >= 2;
+    // Case 2: At least two parts of the client's name match parts of the SMS name
+    const commonWords = clientNameParts.filter(part => smsNameParts.includes(part));
+    if (commonWords.length >= 2) {
+        return true;
+    }
+    
+    // Case 3: Handle two-part names like "Abdullah Abdulqader" where one part might be common
+    if (clientNameParts.length === 2 && smsNameParts.length >= 2) {
+        // If the first name matches and the SMS has more than just that name, it's a likely match
+        if (clientNameParts[0] === smsNameParts[0] && smsNameParts.length > 1) {
+            return true;
+        }
+    }
+
+    return false;
 };
 
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
