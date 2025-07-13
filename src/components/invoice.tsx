@@ -5,8 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { Landmark, Wallet, XCircle, UserCircle, FileText, AlertTriangle } from "lucide-react";
-import { CoinCashLogo } from "./coincash-logo";
+import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Separator } from "./ui/separator";
 
@@ -36,14 +35,28 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: !isConfirmed && !isCancelled,
             timestamp: transactionTime,
             details: (
-                 <div className="space-y-2">
-                    <p className="text-lg font-bold text-primary">{transaction.amount_usdt.toFixed(2)} USDT</p>
-                    <div className="text-xs">
-                        <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
-                        <p><span className="text-muted-foreground">إلى:</span> {transaction.cryptoWalletName}</p>
+                 <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
+                        <p className="text-lg font-bold text-primary">{transaction.amount_usdt.toFixed(2)} USDT</p>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
-                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
+                    <div className="space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                           <User className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <p><span className="text-muted-foreground">من:</span> <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                           <Wallet className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <p><span className="text-muted-foreground">إلى محفظة النظام:</span> {transaction.cryptoWalletName}</p>
+                        </div>
+                         <div className="flex items-start gap-2">
+                            <Hash className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                            <div>
+                                <p className="text-muted-foreground">معرّف العملية (Hash):</p>
+                                <p className="font-mono break-all">{transaction.hash || 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )
         });
@@ -54,13 +67,24 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: isConfirmed,
             timestamp: confirmedTime,
             details: (
-                <div className="space-y-2">
-                    <p className="text-lg font-bold text-green-600">{transaction.amount} {transaction.currency}</p>
-                     <div className="text-xs">
-                        <p><span className="text-muted-foreground">إلى حساب:</span> {transaction.bankAccountName}</p>
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                        <p className="text-lg font-bold text-green-600">{transaction.amount} {transaction.currency}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
-                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                     <div className="space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                           <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <p><span className="text-muted-foreground">إلى حساب:</span> {transaction.bankAccountName}</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                           <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <div>
+                                <p className="text-muted-foreground">رقم الحوالة:</p>
+                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
+                           </div>
+                        </div>
+                    </div>
                 </div>
             )
         });
@@ -72,14 +96,28 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: !isConfirmed && !isCancelled,
             timestamp: transactionTime,
             details: (
-                <div className="space-y-2">
-                    <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
-                     <div className="text-xs">
-                        <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
-                        <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.bankAccountName}</p>
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <ArrowDown className="h-5 w-5 text-green-500 flex-shrink-0" />
+                        <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
                     </div>
-                     <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
-                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                     <div className="space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                           <User className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <p><span className="text-muted-foreground">من:</span> <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
+                        </div>
+                         <div className="flex items-start gap-2">
+                           <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.bankAccountName}</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                           <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                           <div>
+                                <p className="text-muted-foreground">رقم الحوالة:</p>
+                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
+                           </div>
+                        </div>
+                    </div>
                 </div>
             )
         });
@@ -90,18 +128,32 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             isCurrent: isConfirmed,
             timestamp: confirmedTime,
             details: (
-                <div className="space-y-2">
-                    <p className="text-lg font-bold text-green-600">{transaction.amount_usdt.toFixed(2)} USDT</p>
-                    <p className="text-xs"><span className="text-muted-foreground">إلى المحفظة:</span></p>
-                    <p className="font-mono text-xs break-all">{transaction.client_wallet_address}</p>
-                    <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
-                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                        <p className="text-lg font-bold text-green-600">{transaction.amount_usdt.toFixed(2)} USDT</p>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                            <Wallet className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                            <div>
+                                <p><span className="text-muted-foreground">إلى المحفظة:</span></p>
+                                <p className="font-mono break-all">{transaction.client_wallet_address}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <Hash className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                            <div>
+                                <p className="text-muted-foreground">معرّف العملية (Hash):</p>
+                                <p className="font-mono break-all">{transaction.hash || 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )
         });
     }
      
-    // Adjust logic for cancelled state
     if (isCancelled) {
         steps.forEach(step => {
             step.isCompleted = false;
@@ -122,31 +174,33 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
             <div className="border border-border rounded-lg overflow-hidden">
                 <div className="p-4 bg-muted/50">
-                    <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2">
-                            <CoinCashLogo className="h-10 w-10" />
-                            <div>
-                                <p className="font-bold text-lg">كوين كاش</p>
-                                <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
-                            </div>
-                        </div>
-                         <div className="text-left text-xs text-muted-foreground">
-                            <p>Transaction ID</p>
-                            <p className="font-mono">{transaction.id}</p>
-                        </div>
+                    <div className="text-center mb-4">
+                        <p className="font-bold text-lg">كوين كاش</p>
+                        <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
                     </div>
                     <Separator />
-                    <div className="flex justify-between items-center mt-3 text-sm">
-                        <div className="font-medium">Invoice For:</div>
-                        <div className="text-left font-semibold">
-                            {client?.name || transaction.clientName}
+                    <div className="flex justify-between items-start mt-3 text-sm">
+                        <div className="flex items-center gap-2">
+                           <UserCircle className="h-5 w-5 text-primary" />
+                            <div>
+                                <p className="font-semibold">عزيزينا العميل</p>
+                                <p className="text-xs text-muted-foreground">{client?.name || transaction.clientName}</p>
+                                <p className="font-mono text-xs text-muted-foreground">{client?.id}</p>
+                            </div>
+                        </div>
+                         <div className="flex items-center gap-2 text-left">
+                            <div className="text-right">
+                                <p className="font-semibold">Invoice ID</p>
+                                <p className="font-mono text-xs text-muted-foreground">{transaction.id}</p>
+                            </div>
+                             <FileText className="h-5 w-5 text-primary" />
                         </div>
                     </div>
                 </div>
 
-                <Alert variant="destructive" className="border-x-0 border-t-0 rounded-none">
+                <Alert variant="destructive" className="border-x-0 border-t-0 rounded-none bg-destructive/10 text-destructive text-justify">
                     <AlertTriangle className="h-5 w-5"/>
-                    <AlertDescription className="text-xs text-justify leading-relaxed">
+                    <AlertDescription className="text-xs leading-relaxed">
                         نحذّركم من إرسال أي مبلغ من محفظتكم لأي شخص أو جهة تدّعي تقديم أرباح أو استثمار مضمون، فهذه من الطرق الشائعة للاحتيال.
                         <br/>
                         ونؤكد بأن العملات الرقمية لا يمكن استرجاعها بعد إرسالها، ولن نتمكن من التدخل أو المساعدة في حال حدوث أي عملية غير آمنة.
@@ -155,7 +209,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
                 <div className="p-4">
                     <div className="relative pl-8 pr-4 py-4">
-                        {/* Vertical line */}
                         <div className="absolute top-4 bottom-4 right-6 w-0.5 bg-border"></div>
                         
                         {steps.map((step, index) => (
@@ -190,5 +243,3 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     );
 });
 Invoice.displayName = 'Invoice';
-
-    
