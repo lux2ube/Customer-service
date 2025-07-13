@@ -40,6 +40,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
                         <p><span className="text-muted-foreground">إلى:</span> {transaction.cryptoWalletName}</p>
                     </div>
+                    <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
+                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -57,8 +59,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                     <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
-                     <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
-                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -121,7 +121,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             <div className="border border-border rounded-lg overflow-hidden">
                 <div className="p-3 bg-muted/50 border-b border-border flex justify-between items-start text-sm">
                     <div className="flex items-center gap-2">
-                        <CoinCashLogo />
+                        <CoinCashLogo className="h-10 w-10" />
                         <div>
                             <p className="font-bold">كوين كاش</p>
                             <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
