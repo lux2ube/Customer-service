@@ -5,7 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp } from "lucide-react";
+import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp, UserCircle } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Separator } from "./ui/separator";
 
