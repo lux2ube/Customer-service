@@ -7,7 +7,8 @@ import React from 'react';
 import { cn } from "@/lib/utils";
 import { Landmark, Wallet, XCircle, UserCircle, FileText, AlertTriangle } from "lucide-react";
 import { CoinCashLogo } from "./coincash-logo";
-import { Alert } from "./ui/alert";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Separator } from "./ui/separator";
 
 interface Step {
     title: string;
@@ -120,34 +121,36 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
             <div className="border border-border rounded-lg overflow-hidden">
-                <div className="p-3 bg-muted/50 border-b border-border flex justify-between items-start text-sm">
-                    <div className="flex items-center gap-2">
-                        <CoinCashLogo className="h-10 w-10" />
-                        <div>
-                            <p className="font-bold">كوين كاش</p>
-                            <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
+                <div className="p-4 bg-muted/50">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                            <CoinCashLogo className="h-10 w-10" />
+                            <div>
+                                <p className="font-bold text-lg">كوين كاش</p>
+                                <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
+                            </div>
+                        </div>
+                         <div className="text-left text-xs text-muted-foreground">
+                            <p>Transaction ID</p>
+                            <p className="font-mono">{transaction.id}</p>
                         </div>
                     </div>
-                    <div className="text-left">
-                         <div className="flex items-center gap-1.5 justify-end">
-                             <UserCircle className="w-4 h-4 text-primary" />
-                             <p className="font-semibold">{client?.name || transaction.clientName}</p>
-                         </div>
-                         <p className="text-xs text-muted-foreground">ID: {client?.id}</p>
-                         <div className="flex items-center gap-1.5 justify-end mt-1">
-                             <FileText className="w-3 h-3 text-muted-foreground" />
-                             <p className="text-xs text-muted-foreground font-mono">{transaction.id}</p>
-                         </div>
+                    <Separator />
+                    <div className="flex justify-between items-center mt-3 text-sm">
+                        <div className="font-medium">Invoice For:</div>
+                        <div className="text-left font-semibold">
+                            {client?.name || transaction.clientName}
+                        </div>
                     </div>
                 </div>
 
                 <Alert variant="destructive" className="border-x-0 border-t-0 rounded-none">
                     <AlertTriangle className="h-5 w-5"/>
-                    <p className="text-xs text-justify leading-relaxed">
+                    <AlertDescription className="text-xs text-justify leading-relaxed">
                         نحذّركم من إرسال أي مبلغ من محفظتكم لأي شخص أو جهة تدّعي تقديم أرباح أو استثمار مضمون، فهذه من الطرق الشائعة للاحتيال.
                         <br/>
                         ونؤكد بأن العملات الرقمية لا يمكن استرجاعها بعد إرسالها، ولن نتمكن من التدخل أو المساعدة في حال حدوث أي عملية غير آمنة.
-                    </p>
+                    </AlertDescription>
                 </Alert>
 
                 <div className="p-4">
