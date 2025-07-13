@@ -40,8 +40,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
                         <p><span className="text-muted-foreground">إلى:</span> {transaction.cryptoWalletName}</p>
                     </div>
-                     <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
-                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -59,6 +57,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                     <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
+                     <p className="text-xs text-muted-foreground pt-1">معرّف العملية (Hash):</p>
+                     <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -76,7 +76,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         <p><span className="text-muted-foreground">من:</span> العميل <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
                         <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.bankAccountName}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
+                     <p className="text-xs text-muted-foreground pt-1">رقم الحوالة:</p>
                     <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
                 </div>
             )
@@ -123,7 +123,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <div className="flex items-center gap-2">
                         <CoinCashLogo />
                         <div>
-                            <p className="font-bold">CoinCash</p>
+                            <p className="font-bold">كوين كاش</p>
                             <p className="text-xs text-muted-foreground">www.ycoincash.com</p>
                         </div>
                     </div>
