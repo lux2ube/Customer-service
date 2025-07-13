@@ -10,7 +10,7 @@ import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction, Account } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { format, startOfWeek, endOfDay, subDays, startOfDay, subWeeks, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfDay, subDays, startOfDay, subWeeks, parseISO, endOfWeek } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
