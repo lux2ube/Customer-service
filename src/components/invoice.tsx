@@ -2,7 +2,7 @@
 'use client';
 
 import type { Transaction, Client } from "@/lib/types";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Circle, CircleDot } from "lucide-react";
@@ -28,42 +28,85 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
         }
     };
 
-    const exchangeRate = transaction.amount > 0 ? transaction.amount_usd / transaction.amount : 0;
+    let steps: Step[] = [];
+    const isConfirmed = transaction.status === 'Confirmed';
+    const isCancelled = transaction.status === 'Cancelled';
+    const isPending = transaction.status === 'Pending';
+    const isFinished = isConfirmed || isCancelled;
 
-    const steps: Step[] = [
-        {
-            title: "تم إنشاء الطلب",
-            location: "النظام",
-            description: `تم تسجيل المعاملة في النظام للعميل ${client?.name || transaction.clientName}`,
-            timestamp: transaction.createdAt ? format(new Date(transaction.createdAt), "dd/MM/yyyy h:mm a") : 'N/A',
-            isCompleted: true,
-            isCurrent: transaction.status === 'Pending',
-        },
-        {
-            title: "التفاصيل المالية",
-            location: transaction.bankAccountName || 'البنك المصدر',
-            description: 
-                `المبلغ المرسل: ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}\n` +
-                (exchangeRate && transaction.currency !== 'USD' && transaction.currency !== 'USDT' ? `سعر الصرف: ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(1 / exchangeRate)} ${transaction.currency} / USD\n` : '') +
-                `الرسوم: ${transaction.fee_usd.toFixed(2)} USD\n` +
-                `الصافي للمستلم: ${transaction.amount_usdt.toFixed(2)} USDT`,
-            timestamp: '...',
-            isCompleted: transaction.status === 'Confirmed' || transaction.status === 'Cancelled',
-            isCurrent: false,
-        },
-        {
-            title: getStatusText(transaction.status),
-            location: transaction.client_wallet_address ? `${transaction.client_wallet_address.substring(0, 6)}...` : 'محفظة العميل',
-            description: 
-                (transaction.status === 'Confirmed' ? 'تم تأكيد المعاملة بنجاح.' : 
-                (transaction.status === 'Cancelled' ? 'تم إلغاء المعاملة.' : 'في انتظار التأكيد النهائي.')) +
-                (transaction.hash ? `\nمعرف العملية: ${transaction.hash.substring(0, 10)}...` : '') +
-                (transaction.remittance_number ? `\nرقم الحوالة: ${transaction.remittance_number}` : ''),
-            timestamp: transaction.date ? format(new Date(transaction.date), "dd/MM/yyyy h:mm a") : 'N/A',
-            isCompleted: transaction.status === 'Confirmed' || transaction.status === 'Cancelled',
-            isCurrent: transaction.status === 'Confirmed' || transaction.status === 'Cancelled',
-        }
-    ];
+    if (transaction.type === 'Withdraw') {
+        // --- WITHDRAWAL FLOW ---
+        // 1. Client sends USDT to us.
+        // 2. We send local currency to them.
+        // 3. Confirmation.
+        steps = [
+            {
+                title: "تم استلام الطلب",
+                location: transaction.client_wallet_address ? `${transaction.client_wallet_address.substring(0, 6)}...` : "محفظة العميل",
+                description: `استلام ${transaction.amount_usdt.toFixed(2)} USDT من العميل إلى محفظة النظام (${transaction.cryptoWalletName || 'USDT Wallet'})`,
+                timestamp: transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy h:mm a") : 'N/A',
+                isCompleted: true,
+                isCurrent: isPending,
+            },
+            {
+                title: "إرسال المبلغ للعميل",
+                location: transaction.bankAccountName || 'حساب بنكي',
+                description: `تم إرسال ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency} من حسابنا البنكي.`,
+                timestamp: '...',
+                isCompleted: isFinished,
+                isCurrent: false,
+            },
+            {
+                title: getStatusText(transaction.status),
+                location: `تأكيد العملية`,
+                description: `تم تأكيد العملية. رقم الحوالة: ${transaction.remittance_number || 'N/A'}. معرف العملية: ${transaction.hash ? `${transaction.hash.substring(0, 10)}...` : 'N/A'}`,
+                timestamp: transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy h:mm a") : 'N/A',
+                isCompleted: isFinished,
+                isCurrent: isFinished,
+            }
+        ];
+    } else {
+        // --- DEPOSIT FLOW (DEFAULT) ---
+        // 1. Client sends local currency to us.
+        // 2. We send USDT to them.
+        // 3. Confirmation.
+        const exchangeRate = transaction.amount > 0 ? transaction.amount_usd / transaction.amount : 0;
+        steps = [
+            {
+                title: "تم إنشاء الطلب",
+                location: "النظام",
+                description: `تم تسجيل طلب إيداع من العميل ${client?.name || transaction.clientName}`,
+                timestamp: transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy h:mm a") : 'N/A',
+                isCompleted: true,
+                isCurrent: isPending,
+            },
+            {
+                title: "تفاصيل الدفعة",
+                location: transaction.bankAccountName || 'البنك المصدر',
+                description: 
+                    `المبلغ المستلم: ${new Intl.NumberFormat().format(transaction.amount)} ${transaction.currency}\n` +
+                    (exchangeRate && transaction.currency !== 'USD' && transaction.currency !== 'USDT' ? `سعر الصرف: ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(1 / exchangeRate)} ${transaction.currency} / USD\n` : '') +
+                    `الرسوم: ${transaction.fee_usd.toFixed(2)} USD\n` +
+                    `الصافي للإرسال: ${transaction.amount_usdt.toFixed(2)} USDT`,
+                timestamp: '...',
+                isCompleted: isFinished,
+                isCurrent: false,
+            },
+            {
+                title: getStatusText(transaction.status),
+                location: transaction.client_wallet_address ? `${transaction.client_wallet_address.substring(0, 6)}...` : 'محفظة العميل',
+                description: 
+                    (isConfirmed ? 'تم تأكيد إرسال USDT بنجاح.' : 
+                    (isCancelled ? 'تم إلغاء المعاملة.' : 'في انتظار التأكيد النهائي.')) +
+                    (transaction.hash ? `\nمعرف العملية: ${transaction.hash.substring(0, 10)}...` : '') +
+                    (transaction.remittance_number ? `\nرقم الحوالة: ${transaction.remittance_number}` : ''),
+                timestamp: transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy h:mm a") : 'N/A',
+                isCompleted: isFinished,
+                isCurrent: isFinished,
+            }
+        ];
+    }
+
 
     return (
         <Card ref={ref} className="w-full max-w-md bg-background text-foreground font-cairo p-4 md:p-6" dir="rtl">
@@ -79,7 +122,12 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="space-y-8">
                     {steps.map((step, index) => {
                         const isLastStep = index === steps.length - 1;
-                        const Icon = step.isCompleted && isLastStep ? CheckCircle2 : (step.isCompleted ? CircleDot : Circle);
+                        let Icon;
+                        if (isLastStep) {
+                            Icon = step.isCompleted ? CheckCircle2 : Circle;
+                        } else {
+                            Icon = step.isCompleted ? CircleDot : Circle;
+                        }
                         
                         return (
                             <div key={index} className="flex gap-4 relative items-start">
