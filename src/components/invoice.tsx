@@ -5,26 +5,17 @@ import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
 import { Button } from "./ui/button";
-import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Separator } from "./ui/separator";
+import { Label } from "./ui/label";
 import { cn } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
-import { Card, CardContent } from "./ui/card";
 
-const InfoRow = ({ label, value, valueClassName }: { label: string, value: string | number | undefined | null, valueClassName?: string }) => {
+const InfoRow = ({ label, value, isMono = false }: { label: string, value: string | number | undefined | null, isMono?: boolean }) => {
     if (value === undefined || value === null || value === '') return null;
-    
-    // Check if the value contains multiple lines (for the notes)
-    const isMultiline = typeof value === 'string' && value.includes('\n');
-
     return (
-        <div className={cn("flex justify-between items-start py-4 px-4 text-sm", isMultiline && 'flex-col items-end')}>
-            <div className={cn("text-right font-medium", valueClassName)}>
-                 {isMultiline 
-                    ? value.split('\n').map((line, index) => <p key={index}>{line}</p>)
-                    : <p>{value}</p>
-                 }
-            </div>
-            <span className="text-muted-foreground whitespace-nowrap">{label}</span>
+        <div className="flex justify-between items-center text-sm py-2">
+            <Label className="text-muted-foreground">{label}</Label>
+            <p className={cn("font-medium", isMono && "font-mono")}>{value}</p>
         </div>
     );
 };
@@ -32,57 +23,68 @@ const InfoRow = ({ label, value, valueClassName }: { label: string, value: strin
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
     const transactionDate = new Date(transaction.date);
-    const amountUSDT = transaction.amount_usdt || 0;
+    const formattedDate = format(transactionDate, "PPP p");
 
-    const formattedDate = format(transactionDate, "yyyy-MM-dd HH:mm:ss");
-
-    const getStatusText = (status: Transaction['status']) => {
+    const getStatusVariant = (status: Transaction['status']) => {
         switch(status) {
-            case 'Confirmed': return 'مكتمل';
-            case 'Pending': return 'قيد الانتظار';
-            case 'Cancelled': return 'ملغاة';
-            default: return status;
+            case 'Confirmed': return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
+            case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300';
+            case 'Cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
+            default: return 'bg-muted text-muted-foreground';
         }
     }
-    
-    const sender = transaction.cryptoWalletName || transaction.bankAccountName || 'USDT BEP20';
-    const transactionIdShort = transaction.id.slice(-12).toUpperCase();
-    
-    // The "Synced from BscScan" note can be part of the main notes or constructed
-    const notesToDisplay = transaction.notes?.startsWith('Synced from BscScan')
-        ? transaction.notes.replace(/\.\s/g, '.\n') // Add line breaks after periods for better layout
-        : transaction.notes;
-
 
     return (
-        <div ref={ref} className="w-full max-w-sm mx-auto bg-background text-foreground font-cairo">
-            <div className="p-4 md:p-6 space-y-6">
-                
-                <div className="text-center space-y-4 pt-8">
-                     <div className="inline-block p-3 bg-green-100 dark:bg-green-900/50 rounded-full">
-                        <div className="h-10 w-10 bg-green-200 dark:bg-green-800/50 rounded-full" />
+        <div ref={ref} className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4">
+             <Card>
+                <CardHeader>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle>Transaction Invoice</CardTitle>
+                            <CardDescription className="font-mono pt-1">{transaction.id}</CardDescription>
+                        </div>
+                         <div className={cn("text-xs font-bold px-2.5 py-1 rounded-full", getStatusVariant(transaction.status))}>
+                            {transaction.status}
+                        </div>
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight">
-                        تم الإرسال بنجاح
-                    </h1>
-                     <p className="text-sm text-muted-foreground/80" dir="rtl">
-                        لقد دفعت {amountUSDT.toFixed(2)} USDT بنجاح
-                    </p>
-                </div>
-                
-                <Card className="overflow-hidden shadow-none border">
-                    <CardContent className="divide-y p-0">
-                        <InfoRow label="وضع الإرسال" value={getStatusText(transaction.status)} />
-                        <InfoRow label="إلى" value={client?.name || transaction.clientName} />
-                        <InfoRow label="المبلغ الإجمالي" value={`${amountUSDT.toFixed(2)} USDT`} />
-                        <InfoRow label="مبلغ الاستلام" value={`${amountUSDT.toFixed(2)} USDT`} />
-                        <InfoRow label="إرسال من" value={sender} />
-                        {notesToDisplay && <InfoRow label="ملاحظة" value={notesToDisplay} valueClassName="text-xs" />}
-                        <InfoRow label="التاريخ" value={formattedDate} valueClassName="font-mono" />
-                        <InfoRow label="معرّف العملية" value={transactionIdShort} valueClassName="font-mono" />
-                    </CardContent>
-                </Card>
-            </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div>
+                        <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Details</h4>
+                        <div className="divide-y divide-border rounded-md border p-4">
+                            <InfoRow label="Date" value={formattedDate} />
+                            <InfoRow label="Client" value={client?.name || transaction.clientName} />
+                            <InfoRow label="Type" value={transaction.type} />
+                            <InfoRow label="Source/Destination Account" value={transaction.bankAccountName || transaction.cryptoWalletName} />
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Financials</h4>
+                         <div className="divide-y divide-border rounded-md border p-4">
+                            <InfoRow label={`Amount (${transaction.currency})`} value={transaction.amount.toLocaleString()} isMono />
+                            <InfoRow label="Amount (USD)" value={transaction.amount_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono />
+                            <InfoRow label="Fee (USD)" value={transaction.fee_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono />
+                            {transaction.expense_usd && transaction.expense_usd > 0 ? (
+                                <InfoRow label="Expense/Loss (USD)" value={transaction.expense_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono />
+                            ): null}
+                            <InfoRow label="Final USDT Amount" value={`${transaction.amount_usdt.toLocaleString()} USDT`} isMono />
+                        </div>
+                    </div>
+
+                    {(transaction.notes || transaction.hash || transaction.client_wallet_address) && (
+                        <div>
+                            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Additional Info</h4>
+                            <div className="divide-y divide-border rounded-md border p-4 space-y-2">
+                               {transaction.notes && <p className="text-sm break-words">{transaction.notes}</p>}
+                               {transaction.hash && <InfoRow label="Hash" value={transaction.hash} isMono />}
+                               {transaction.client_wallet_address && <InfoRow label="Client Wallet" value={transaction.client_wallet_address} isMono />}
+                               {transaction.remittance_number && <InfoRow label="Remittance #" value={transaction.remittance_number} isMono />}
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 });
