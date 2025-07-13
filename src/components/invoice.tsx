@@ -5,7 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { Landmark, Wallet, XCircle, UserCircle, FileText } from "lucide-react";
+import { Landmark, Wallet, XCircle, UserCircle, FileText, AlertTriangle } from "lucide-react";
 import { CoinCashLogo } from "./coincash-logo";
 
 interface Step {
@@ -140,8 +140,9 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     </div>
                 </div>
 
-                <div className="p-3 border-b border-border bg-muted/30">
-                    <p className="text-xs text-muted-foreground text-justify leading-relaxed">
+                <div className="p-3 border-b border-border bg-destructive/10 flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 shrink-0"/>
+                    <p className="text-xs text-destructive text-justify leading-relaxed">
                         نحذّركم من إرسال أي مبلغ من محفظتكم لأي شخص أو جهة تدّعي تقديم أرباح أو استثمار مضمون، فهذه من الطرق الشائعة للاحتيال.
                         <br/>
                         ونؤكد بأن العملات الرقمية لا يمكن استرجاعها بعد إرسالها، ولن نتمكن من التدخل أو المساعدة في حال حدوث أي عملية غير آمنة.
