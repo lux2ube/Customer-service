@@ -5,27 +5,19 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
+import { CheckCircle, CircleDot, Circle, Wallet, Landmark, Hash } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { Separator } from "./ui/separator";
 
-const InfoRow = ({ label, value, valueClass, isMono = false }: { label: string, value: string | number | undefined | null, valueClass?: string, isMono?: boolean }) => {
-    if (value === undefined || value === null || value === '') return null;
-    return (
-        <div className="flex justify-between items-center py-3 px-4 text-sm">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className={cn("font-semibold text-left break-all", isMono && "font-mono", valueClass)}>{String(value)}</dd>
-        </div>
-    );
-};
-
+interface Step {
+    title: string;
+    description: string;
+    icon: React.ElementType;
+    isCompleted: boolean;
+    isCurrent: boolean;
+}
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
-    const formatCurrency = (value: number | undefined, currency: string) => {
-        if (value === undefined) return '';
-        return new Intl.NumberFormat('en-US').format(value) + ` ${currency}`;
-    }
-
     const getStatusText = (status: Transaction['status']) => {
         switch (status) {
             case 'Confirmed': return 'مؤكد';
@@ -34,63 +26,116 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             default: return status;
         }
     };
-     const getStatusClass = (status: Transaction['status']) => {
-        switch (status) {
-            case 'Confirmed': return 'text-green-600';
-            case 'Cancelled': return 'text-destructive';
-            case 'Pending': return 'text-amber-600';
-            default: return 'text-muted-foreground';
-        }
-    };
 
-    const isDeposit = transaction.type === 'Deposit';
+    const formatCurrency = (value: number | undefined, currency: string) => {
+        if (value === undefined) return '';
+        return new Intl.NumberFormat('en-US').format(value) + ` ${currency}`;
+    }
+
+    const steps: Step[] = [];
+
+    if (transaction.type === 'Deposit') {
+        steps.push({
+            title: 'تم استلام الطلب',
+            description: `العميل ${client?.name || transaction.clientName} أرسل ${formatCurrency(transaction.amount, transaction.currency)} من حساب ${transaction.bankAccountName}.`,
+            icon: Circle,
+            isCompleted: true,
+            isCurrent: false,
+        });
+
+        steps.push({
+            title: 'قيد التنفيذ',
+            description: `سيتم إرسال ${formatCurrency(transaction.amount_usdt, 'USDT')} إلى محفظة العميل: ${transaction.client_wallet_address}. الرسوم: ${formatCurrency(transaction.fee_usd, 'USD')}.`,
+            icon: CircleDot,
+            isCompleted: transaction.status === 'Confirmed',
+            isCurrent: transaction.status === 'Pending',
+        });
+
+        steps.push({
+            title: 'تم التسليم',
+            description: `تم تأكيد العملية بنجاح. Hash: ${transaction.hash || 'N/A'}.`,
+            icon: CheckCircle,
+            isCompleted: transaction.status === 'Confirmed',
+            isCurrent: transaction.status === 'Confirmed',
+        });
+    } else { // Withdraw Logic
+        steps.push({
+            title: 'تم استلام الطلب',
+            description: `العميل ${client?.name || transaction.clientName} أرسل ${formatCurrency(transaction.amount_usdt, 'USDT')} من محفظته إلى حسابنا ${transaction.cryptoWalletName}.`,
+            icon: Circle,
+            isCompleted: true,
+            isCurrent: false,
+        });
+
+        steps.push({
+            title: 'قيد التنفيذ',
+            description: `سيتم إرسال ${formatCurrency(transaction.amount, transaction.currency)} إلى حساب العميل البنكي: ${transaction.bankAccountName}.`,
+            icon: CircleDot,
+            isCompleted: transaction.status === 'Confirmed',
+            isCurrent: transaction.status === 'Pending',
+        });
+
+        steps.push({
+            title: 'تم التسليم',
+            description: `تم تأكيد العملية بنجاح. رقم الحوالة: ${transaction.remittance_number || 'N/A'}.`,
+            icon: CheckCircle,
+            isCompleted: transaction.status === 'Confirmed',
+            isCurrent: transaction.status === 'Confirmed',
+        });
+    }
+     
+    // Adjust logic for cancelled state
+    if (transaction.status === 'Cancelled') {
+        steps.forEach(step => {
+            step.isCompleted = false;
+            step.isCurrent = false;
+        });
+        steps.push({
+            title: 'تم إلغاء الطلب',
+            description: 'تم إلغاء هذه العملية.',
+            icon: CheckCircle, // You can use a different icon like XCircle
+            isCompleted: true,
+            isCurrent: true,
+        });
+    }
+
 
     return (
-        <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
-            <Card className="border-primary/50 border-2 shadow-lg">
-                <CardHeader className="text-center bg-muted/30">
-                    <CardTitle className="text-xl">فاتورة عملية</CardTitle>
-                    {client && (
-                        <CardDescription className="pt-2">
-                           <span className="font-bold text-lg text-foreground">{client.name}</span>
-                           <br/>
-                           <span className="font-mono text-xs text-muted-foreground">ID: {client.id}</span>
-                        </CardDescription>
-                    )}
+        <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4">
+            <Card className="border-border">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-lg">معرف التتبع: {transaction.id.slice(-12).toUpperCase()}</CardTitle>
+                    <CardDescription>{client?.name || transaction.clientName}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-0">
-                    <dl className="divide-y">
-                        <InfoRow label="رقم العملية" value={transaction.id} isMono />
-                        <InfoRow label="التاريخ" value={transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a") : ''} />
-                        <InfoRow label="نوع العملية" value={transaction.type === 'Deposit' ? 'إيداع' : 'سحب'} />
-                        <InfoRow label="الحالة" value={getStatusText(transaction.status)} valueClass={getStatusClass(transaction.status)} />
+                <CardContent>
+                    <div className="relative pl-8 pr-4 py-4">
+                        {/* Vertical line */}
+                        <div className="absolute top-0 bottom-0 right-8 w-0.5 bg-border"></div>
                         
-                        <Separator />
-                        
-                        <InfoRow label={isDeposit ? "المبلغ المستلم" : "المبلغ المرسل"} value={formatCurrency(transaction.amount, transaction.currency)} />
-                        <InfoRow label="الرسوم" value={formatCurrency(transaction.fee_usd, 'USD')} />
-                        {transaction.expense_usd && transaction.expense_usd > 0 ? (
-                           <InfoRow label="مصاريف/خسارة" value={formatCurrency(transaction.expense_usd, 'USD')} valueClass="text-destructive" />
-                        ) : null}
-                         <InfoRow 
-                            label={isDeposit ? "صافي الإيداع" : "إجمالي السحب"} 
-                            value={formatCurrency(transaction.amount_usdt, 'USDT')} 
-                            valueClass="text-primary font-bold"
-                        />
-
-                        <Separator />
-                        
-                        <InfoRow label="من حساب" value={transaction.bankAccountName || 'N/A'} />
-                        <InfoRow label="إلى محفظة" value={transaction.cryptoWalletName || 'N/A'} />
-                        <InfoRow label="محفظة العميل" value={transaction.client_wallet_address} isMono />
-
-                        <Separator />
-                        
-                        <InfoRow label="رقم الحوالة" value={transaction.remittance_number} isMono />
-                        <InfoRow label="معرف العملية (Hash)" value={transaction.hash} isMono />
-                        <InfoRow label="ملاحظات" value={transaction.notes} />
-
-                    </dl>
+                        {steps.map((step, index) => (
+                            <div key={index} className="relative mb-8 last:mb-0">
+                                <div className="absolute -top-1 right-8 transform translate-x-1/2">
+                                     <div className={cn(
+                                        "h-5 w-5 rounded-full flex items-center justify-center",
+                                        step.isCompleted ? 'bg-primary' : 'bg-muted',
+                                        step.isCurrent && 'ring-4 ring-primary/30'
+                                    )}>
+                                        <step.icon className={cn(
+                                            "h-3 w-3",
+                                            step.isCompleted ? 'text-primary-foreground' : 'text-muted-foreground'
+                                        )} />
+                                    </div>
+                                </div>
+                                <div className="mr-12">
+                                    <p className="font-semibold">{step.title}</p>
+                                    <p className="text-sm text-muted-foreground">{step.description}</p>
+                                    <p className="text-xs text-muted-foreground pt-1">
+                                        {format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a")}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </CardContent>
             </Card>
         </div>
