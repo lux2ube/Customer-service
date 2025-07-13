@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
+import { Card, CardContent } from "./ui/card";
 
 const InfoRow = ({ label, value, valueClassName }: { label: string, value: string | number | undefined | null, valueClassName?: string }) => {
     if (value === undefined || value === null || value === '') return null;
