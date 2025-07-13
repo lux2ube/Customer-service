@@ -5,8 +5,7 @@ import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { CheckCircle, CircleDot, Circle, XCircle, Banknote, Landmark, Wallet } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { CheckCircle, Circle, XCircle, Landmark, Wallet } from "lucide-react";
 
 interface Step {
     title: string;
@@ -24,7 +23,6 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     const confirmedTime = transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy, h:mm a") : transactionTime;
 
     const isConfirmed = transaction.status === 'Confirmed';
-    const isPending = transaction.status === 'Pending';
     const isCancelled = transaction.status === 'Cancelled';
 
     if (transaction.type === 'Deposit') {
@@ -39,6 +37,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p>العميل <span className="font-bold">{client?.name || transaction.clientName}</span> قام بإيداع:</p>
                     <p className="text-lg font-bold text-primary">{transaction.amount} {transaction.currency}</p>
                     <p className="text-xs text-muted-foreground">من حساب: {transaction.bankAccountName}</p>
+                    <p className="text-xs text-muted-foreground pt-2">رقم الحوالة:</p>
+                    <p className="font-mono text-xs break-all">{transaction.remittance_number || 'N/A'}</p>
                 </div>
             )
         });
@@ -72,6 +72,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                     <p className="text-lg font-bold text-primary">{transaction.amount_usdt.toFixed(2)} USDT</p>
                     <p className="text-xs text-muted-foreground">من محفظته إلى:</p>
                     <p className="text-xs">{transaction.cryptoWalletName}</p>
+                    <p className="text-xs text-muted-foreground pt-2">معرّف العملية (Hash):</p>
+                    <p className="font-mono text-xs break-all">{transaction.hash || 'N/A'}</p>
                 </div>
             )
         });
@@ -113,33 +115,34 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
 
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4">
-            <Card className="border-border">
-                <CardHeader className="text-center">
-                    <CardTitle className="text-lg">معرف التتبع: <span className="font-mono">{transaction.id.slice(-12).toUpperCase()}</span></CardTitle>
-                    <p className="text-muted-foreground text-sm">{client?.name || transaction.clientName}</p>
-                </CardHeader>
-                <CardContent>
+            <div className="border border-border rounded-lg">
+                <div className="text-center p-4 border-b border-border">
+                    <h2 className="text-lg font-semibold">معرف التتبع</h2>
+                    <p className="font-mono text-muted-foreground">{transaction.id.slice(-12).toUpperCase()}</p>
+                    <p className="text-sm font-semibold mt-1">{client?.name || transaction.clientName}</p>
+                </div>
+                <div className="p-4">
                     <div className="relative pl-8 pr-4 py-4">
                         {/* Vertical line */}
-                        <div className="absolute top-0 bottom-0 right-8 w-0.5 bg-border"></div>
+                        <div className="absolute top-4 bottom-4 right-6 w-0.5 bg-border"></div>
                         
                         {steps.map((step, index) => (
                             <div key={index} className="relative mb-8 last:mb-0">
-                                <div className="absolute -top-1 right-8 transform translate-x-1/2">
+                                <div className="absolute top-0 right-[25px] transform translate-x-1/2 -translate-y-1/2">
                                      <div className={cn(
-                                        "h-5 w-5 rounded-full flex items-center justify-center",
-                                        step.isCompleted ? 'bg-primary' : 'bg-muted',
-                                        step.isCurrent && 'ring-4 ring-primary/30'
+                                        "h-6 w-6 rounded-full flex items-center justify-center bg-background border-2",
+                                        step.isCurrent ? "border-primary" : "border-border"
                                     )}>
-                                        <step.icon className={cn(
-                                            "h-3 w-3",
-                                            step.isCompleted ? 'text-primary-foreground' : 'text-muted-foreground'
-                                        )} />
+                                        <div className={cn(
+                                            "h-3 w-3 rounded-full",
+                                            step.isCompleted ? 'bg-primary' : 'bg-muted'
+                                        )}>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="mr-12">
+                                <div className="mr-10">
                                     <p className="font-semibold">{step.title}</p>
-                                    <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md mt-2">
+                                    <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md mt-2">
                                         {step.details}
                                     </div>
                                     <p className="text-xs text-muted-foreground pt-2">
@@ -149,8 +152,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                             </div>
                         ))}
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         </div>
     );
 });
