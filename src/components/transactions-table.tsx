@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -68,16 +69,16 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
 
             // Simple search for other fields, using the normalized search term for consistency
             const otherFieldsMatch = (
-                tx.id.toLowerCase().includes(normalizedSearch) ||
-                tx.type.toLowerCase().includes(normalizedSearch) ||
-                tx.amount.toString().includes(normalizedSearch) ||
-                tx.currency.toLowerCase().includes(normalizedSearch) ||
-                tx.amount_usd.toString().includes(normalizedSearch) ||
-                tx.status.toLowerCase().includes(normalizedSearch) ||
-                tx.hash?.toLowerCase().includes(normalizedSearch) ||
-                tx.remittance_number?.toLowerCase().includes(normalizedSearch) ||
+                (tx.id && tx.id.toLowerCase().includes(normalizedSearch)) ||
+                (tx.type && tx.type.toLowerCase().includes(normalizedSearch)) ||
+                (tx.amount && tx.amount.toString().includes(normalizedSearch)) ||
+                (tx.currency && tx.currency.toLowerCase().includes(normalizedSearch)) ||
+                (tx.amount_usd && tx.amount_usd.toString().includes(normalizedSearch)) ||
+                (tx.status && tx.status.toLowerCase().includes(normalizedSearch)) ||
+                (tx.hash && tx.hash.toLowerCase().includes(normalizedSearch)) ||
+                (tx.remittance_number && tx.remittance_number.toLowerCase().includes(normalizedSearch)) ||
                 (tx.notes && normalizeArabic(tx.notes.toLowerCase()).includes(normalizedSearch)) ||
-                tx.client_wallet_address?.toLowerCase().includes(normalizedSearch)
+                (tx.client_wallet_address && tx.client_wallet_address.toLowerCase().includes(normalizedSearch))
             );
             
             return otherFieldsMatch;
@@ -87,6 +88,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
     // Date range filter
     if (dateRange?.from) {
         filtered = filtered.filter(tx => {
+            if (!tx.date) return false;
             const txDate = new Date(tx.date);
             const fromDate = dateRange.from!;
             // If only 'from' is selected, range is from that day to future.
@@ -258,7 +260,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                       <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
                     </TableCell>
                     <TableCell className="font-mono">
-                      {new Intl.NumberFormat().format(tx.amount)} {tx.currency}
+                      {tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}
                     </TableCell>
                     <TableCell className="font-mono">
                       {formatCurrency(tx.amount_usd || 0)}
