@@ -4,7 +4,7 @@
 import React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, Repeat, CircleDollarSign, Phone, ShoppingBag, Gamepad2 } from "lucide-react";
+import { DollarSign, Banknote, Users, Activity, ArrowRight, Wallet, Repeat, CircleDollarSign, Phone, ShoppingBag, Gamepad2, TrendingUp, TrendingDown } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction, Account } from '@/lib/types';
@@ -12,11 +12,11 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { JaibLogo } from '@/components/jaib-logo';
 import { IbnJaberLogo } from '@/components/ibn-jaber-logo';
-import { format } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfDay, endOfDay, subDays, subWeeks, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const StatCard = ({ title, value, icon: Icon, loading }: { title: string, value: string, icon: React.ElementType, loading: boolean }) => (
+const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -24,6 +24,7 @@ const StatCard = ({ title, value, icon: Icon, loading }: { title: string, value:
         </CardHeader>
         <CardContent>
             {loading ? <Skeleton className="h-8 w-3/4" /> : <div className="text-2xl font-bold">{value}</div>}
+            {loading ? <Skeleton className="h-4 w-1/2 mt-1" /> : (subText && <p className="text-xs text-muted-foreground">{subText}</p>)}
         </CardContent>
     </Card>
 );
@@ -65,9 +66,15 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
     const [clientCount, setClientCount] = React.useState(0);
-    const [totalUsd, setTotalUsd] = React.useState(0);
     const [pendingTxs, setPendingTxs] = React.useState(0);
     const [loading, setLoading] = React.useState(true);
+
+    const [totalVolumeToday, setTotalVolumeToday] = React.useState(0);
+    const [dayOverDayChange, setDayOverDayChange] = React.useState<string | null>(null);
+
+    const [totalVolumeThisWeek, setTotalVolumeThisWeek] = React.useState(0);
+    const [weekOverWeekChange, setWeekOverWeekChange] = React.useState<string | null>(null);
+
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'transactions');
@@ -92,10 +99,54 @@ export default function DashboardPage() {
         unsubs.push(onValue(transactionsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                const list: Transaction[] = Object.values(data);
-                const total = list.reduce((sum, tx) => tx.status === 'Confirmed' ? sum + tx.amount_usd : sum, 0);
-                const pending = list.filter(tx => tx.status === 'Pending').length;
-                setTotalUsd(total);
+                const allTxs: Transaction[] = Object.values(data);
+                const confirmedTxs = allTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
+
+                // --- Daily Stats ---
+                const todayStart = startOfDay(new Date());
+                const todayEnd = endOfDay(new Date());
+                const yesterdayStart = startOfDay(subDays(new Date(), 1));
+                const yesterdayEnd = endOfDay(subDays(new Date(), 1));
+
+                const todayVolume = confirmedTxs
+                    .filter(tx => parseISO(tx.date) >= todayStart && parseISO(tx.date) <= todayEnd)
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+
+                const yesterdayVolume = confirmedTxs
+                    .filter(tx => parseISO(tx.date) >= yesterdayStart && parseISO(tx.date) <= yesterdayEnd)
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+
+                setTotalVolumeToday(todayVolume);
+                if (yesterdayVolume > 0) {
+                    const percentChange = ((todayVolume - yesterdayVolume) / yesterdayVolume) * 100;
+                    setDayOverDayChange(`${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}% from yesterday`);
+                } else {
+                    setDayOverDayChange('vs $0 yesterday');
+                }
+
+                 // --- Weekly Stats ---
+                const thisWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // Monday
+                const lastWeekStart = startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 });
+                const lastWeekEnd = endOfWeek(lastWeekStart, { weekStartsOn: 1 });
+                
+                const thisWeekVolume = confirmedTxs
+                    .filter(tx => parseISO(tx.date) >= thisWeekStart)
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+
+                const lastWeekVolume = confirmedTxs
+                    .filter(tx => parseISO(tx.date) >= lastWeekStart && parseISO(tx.date) <= lastWeekEnd)
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                
+                setTotalVolumeThisWeek(thisWeekVolume);
+                if (lastWeekVolume > 0) {
+                    const percentChange = ((thisWeekVolume - lastWeekVolume) / lastWeekVolume) * 100;
+                    setWeekOverWeekChange(`${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}% from last week`);
+                } else {
+                    setWeekOverWeekChange('vs $0 last week');
+                }
+                
+                // --- Global Stats ---
+                const pending = allTxs.filter(tx => tx.status === 'Pending').length;
                 setPendingTxs(pending);
             }
         }));
@@ -129,10 +180,11 @@ export default function DashboardPage() {
     return (
         <div className="space-y-6">
 
-             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Total Clients" value={clientCount.toLocaleString()} icon={Users} loading={loading} />
-                <StatCard title="Total Volume (USD)" value={`$${totalUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} />
                 <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
+                <StatCard title="Volume Today" value={`$${totalVolumeToday.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={dayOverDayChange || ''} />
+                <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
             </div>
 
             <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
