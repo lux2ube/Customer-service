@@ -4,22 +4,15 @@
 import type { Transaction, Client } from "@/lib/types";
 import { format } from "date-fns";
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { cn } from "@/lib/utils";
-import { CheckCircle2 } from "lucide-react";
+import { IbnJaberLogo } from "./ibn-jaber-logo";
 
-const InfoRow = ({ label, value, isMono = false, isLtr = false }: { label: string, value: string | number | undefined | null, isMono?: boolean, isLtr?: boolean }) => {
+const InfoCell = ({ label, value, className, fullWidth = false, labelClassName, valueClassName }: { label?: string, value?: string | number | null, className?: string, fullWidth?: boolean, labelClassName?: string, valueClassName?: string }) => {
     if (value === undefined || value === null || value === '') return null;
     return (
-        <div className="flex justify-between items-center text-sm py-3 px-4">
-            <span className="font-semibold text-muted-foreground">{label}</span>
-            <p className={cn(
-                "font-bold text-foreground/90 text-left break-words", 
-                isMono && "font-mono tracking-tighter",
-                isLtr && "dir-ltr"
-            )}>
-                {value}
-            </p>
+        <div className={cn("border border-black rounded-lg p-2 text-center", fullWidth && "col-span-2", className)}>
+            {label && <p className={cn("text-sm font-semibold mb-1", labelClassName)}>{label}</p>}
+            <p className={cn("font-bold", valueClassName)}>{value}</p>
         </div>
     );
 };
@@ -27,79 +20,94 @@ const InfoRow = ({ label, value, isMono = false, isLtr = false }: { label: strin
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
     const transactionDate = new Date(transaction.date);
-    const formattedDate = format(transactionDate, "PPP p");
+    const formattedDate = format(transactionDate, "yyyy-MM-dd");
+    const formattedTime = format(transactionDate, "p");
 
-    const getStatusText = (status: Transaction['status']) => {
-        switch(status) {
-            case 'Confirmed': return 'مؤكدة';
-            case 'Pending': return 'قيد الانتظار';
-            case 'Cancelled': return 'ملغاة';
-            default: return status;
-        }
-    }
-    
-    const getStatusVariant = (status: Transaction['status']) => {
-        switch(status) {
-            case 'Confirmed': return 'text-green-500';
-            case 'Pending': return 'text-yellow-500';
-            case 'Cancelled': return 'text-red-500';
-            default: return 'text-muted-foreground';
-        }
-    }
+    const amountInWords = `(${transaction.amount_usd} USD equivalent)`; // Placeholder for amount in words
 
     return (
-        <div ref={ref} className="w-full max-w-md mx-auto bg-background text-foreground font-cairo p-4" dir="rtl">
-            <Card className="rounded-2xl shadow-lg border-2 border-primary/10">
-                <div className="bg-gradient-to-b from-primary/80 to-primary p-6 text-center rounded-t-2xl text-primary-foreground">
-                    <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-white/90" strokeWidth={1.5} />
-                    <h2 className="text-2xl font-bold">تمت العملية بنجاح</h2>
-                    <p className="opacity-80 mt-1">{formattedDate}</p>
-                </div>
-                <CardContent className="p-0">
-                    <div className="py-4">
-                        <h3 className="text-center font-bold text-lg text-primary">تفاصيل العملية</h3>
+        <div ref={ref} className="w-full max-w-4xl mx-auto bg-white text-black font-cairo p-4" dir="rtl">
+            <div className="border-4 border-blue-800 p-2">
+                <header className="relative bg-blue-800 text-white p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                            <h1 className="text-3xl font-bold">أبن جابراكسبرس</h1>
+                            <p className="text-sm">للصرافة والتحويلات</p>
+                        </div>
+                        <IbnJaberLogo className="w-24 h-auto" />
+                    </div>
+                    <div className="absolute -bottom-4 left-0 right-0 px-4">
+                        <div className="bg-yellow-500 text-black text-xs font-bold p-2 rounded-full text-center tracking-wider">
+                           714254621 - 733465111 - 771195040
+                        </div>
+                    </div>
+                </header>
+
+                <main className="mt-8 space-y-3">
+                    <div className="relative text-center my-4">
+                        <h2 className="inline-block bg-blue-800 text-white font-bold text-2xl px-12 py-2 rounded-lg">
+                            سند إشعار {transaction.type === 'Deposit' ? 'دائن' : 'مدين'}
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div></div>
+                        <InfoCell label="رقم المستند" value={transaction.id.slice(-6).toUpperCase()} className="!border-blue-800 !border-2" />
+                        <InfoCell label="التاريخ" value={formattedDate} className="!border-blue-800 !border-2" />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                       <InfoCell label="عميلنا" value={client?.name || transaction.clientName} className="col-span-2" />
+                       <InfoCell label="رقم الحساب" value={transaction.clientId.slice(0, 10)} />
+                    </div>
+
+                    <InfoCell value="نود إشعاركم أننا قيدنا لحسابكم لدينا حسب التفاصيل التالية" fullWidth />
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                       <InfoCell label="مبلغ الحساب" value={transaction.amount.toLocaleString()} />
+                       <InfoCell label="عملة الحساب" value={transaction.currency} />
                     </div>
                     
-                    <div className="divide-y divide-border/50">
-                        <InfoRow label="العميل" value={client?.name || transaction.clientName} />
-                        <InfoRow label="نوع العملية" value={transaction.type === 'Deposit' ? 'إيداع' : 'سحب'} />
-                        <InfoRow label="الحالة" value={<span className={cn('font-bold', getStatusVariant(transaction.status))}>{getStatusText(transaction.status)}</span>} />
-                        <InfoRow label="الحساب" value={transaction.bankAccountName || transaction.cryptoWalletName} />
-                    </div>
+                    <InfoCell value={amountInWords} fullWidth />
 
-                    <div className="bg-muted/30 py-4 mt-4">
-                        <h3 className="text-center font-bold text-lg text-primary">المبالغ المالية</h3>
-                    </div>
-
-                     <div className="divide-y divide-border/50">
-                        <InfoRow label={`المبلغ (${transaction.currency})`} value={transaction.amount.toLocaleString()} isMono />
-                        <InfoRow label="المبلغ (USD)" value={transaction.amount_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono isLtr />
-                        <InfoRow label="الرسوم (USD)" value={transaction.fee_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono isLtr />
-                        {transaction.expense_usd && transaction.expense_usd > 0 ? (
-                            <InfoRow label="مصروف / خسارة (USD)" value={transaction.expense_usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} isMono isLtr />
-                        ): null}
-                        <InfoRow label="المبلغ النهائي (USDT)" value={`${transaction.amount_usdt.toLocaleString()} USDT`} isMono isLtr />
-                    </div>
-
-                    {(transaction.notes || transaction.hash || transaction.client_wallet_address || transaction.remittance_number) && (
-                        <>
-                        <div className="bg-muted/30 py-4 mt-4">
-                            <h3 className="text-center font-bold text-lg text-primary">معلومات إضافية</h3>
+                    <div className="space-y-2 pt-2">
+                        <h3 className="text-center font-bold bg-gray-200 p-1 rounded-md">البيان</h3>
+                        <div className="border border-black rounded-lg p-3 space-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span className="font-semibold">رقم الحوالة:</span>
+                                <span>{transaction.remittance_number || 'N/A'}</span>
+                            </div>
+                             <div className="flex justify-between">
+                                <span className="font-semibold">المستلم:</span>
+                                <span>{client?.name || transaction.clientName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-semibold">المصدر:</span>
+                                <span>{transaction.bankAccountName || 'N/A'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-semibold">المرسل:</span>
+                                <span>{transaction.notes || 'N/A'}</span>
+                            </div>
+                            {transaction.hash && (
+                                <div className="flex justify-between">
+                                    <span className="font-semibold">معرف العملية:</span>
+                                    <span className="font-mono text-xs break-all">{transaction.hash}</span>
+                                </div>
+                            )}
                         </div>
-                        <div className="divide-y divide-border/50">
-                           {transaction.notes && <InfoRow label="ملاحظات" value={transaction.notes} />}
-                           {transaction.remittance_number && <InfoRow label="رقم الحوالة" value={transaction.remittance_number} isMono isLtr />}
-                           {transaction.hash && <InfoRow label="معرف العملية (Hash)" value={transaction.hash} isMono isLtr />}
-                           {transaction.client_wallet_address && <InfoRow label="محفظة العميل" value={transaction.client_wallet_address} isMono isLtr />}
-                        </div>
-                        </>
-                    )}
-
-                    <div className="text-center p-6 text-muted-foreground text-xs font-mono tracking-widest" dir="ltr">
-                        TXN ID: {transaction.id}
                     </div>
-                </CardContent>
-            </Card>
+                </main>
+
+                <footer className="flex justify-between items-center mt-6 text-xs">
+                     <div className="bg-blue-800 text-white p-2 rounded-lg">
+                        {formattedDate} {formattedTime}
+                    </div>
+                    <div className="bg-blue-800 text-white p-2 rounded-lg font-semibold">
+                        هذا الإشعار آلي ولا يحتاج ختم أو توقيع
+                    </div>
+                </footer>
+            </div>
         </div>
     );
 });
