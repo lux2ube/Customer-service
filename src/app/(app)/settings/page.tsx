@@ -3,17 +3,18 @@
 
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
-import type { Settings, Account } from '@/lib/types';
+import type { Settings, Account, TransactionFlag } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save } from 'lucide-react';
+import { Save, Trash2, PlusCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const initialSettings: Settings = {
     yer_usd: 0.0016,
@@ -31,7 +32,29 @@ const initialSettings: Settings = {
     mexc_min_deposit_usdt: 10,
     mexc_max_deposit_usdt: 1000,
     telegram_bot_token: '',
+    transaction_flags: [],
 };
+
+const flagColors = [
+    { name: 'Gray', value: 'bg-gray-500' },
+    { name: 'Red', value: 'bg-red-500' },
+    { name: 'Orange', value: 'bg-orange-500' },
+    { name: 'Amber', value: 'bg-amber-500' },
+    { name: 'Yellow', value: 'bg-yellow-500' },
+    { name: 'Lime', value: 'bg-lime-500' },
+    { name: 'Green', value: 'bg-green-500' },
+    { name: 'Emerald', value: 'bg-emerald-500' },
+    { name: 'Teal', value: 'bg-teal-500' },
+    { name: 'Cyan', value: 'bg-cyan-500' },
+    { name: 'Sky', value: 'bg-sky-500' },
+    { name: 'Blue', value: 'bg-blue-500' },
+    { name: 'Indigo', value: 'bg-indigo-500' },
+    { name: 'Violet', value: 'bg-violet-500' },
+    { name: 'Purple', value: 'bg-purple-500' },
+    { name: 'Fuchsia', value: 'bg-fuchsia-500' },
+    { name: 'Pink', value: 'bg-pink-500' },
+    { name: 'Rose', value: 'bg-rose-500' },
+];
 
 export default function SettingsPage() {
     const [settings, setSettings] = React.useState<Settings>(initialSettings);
@@ -39,6 +62,10 @@ export default function SettingsPage() {
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const { toast } = useToast();
+
+    // State for the new flag form
+    const [newFlagName, setNewFlagName] = React.useState('');
+    const [newFlagColor, setNewFlagColor] = React.useState(flagColors[0].value);
 
     React.useEffect(() => {
         const settingsRef = ref(db, 'settings');
@@ -77,6 +104,41 @@ export default function SettingsPage() {
     const handleSelectChange = (id: string, value: string) => {
         setSettings(prev => ({ ...prev, [id]: value }));
     }
+
+    const handleAddFlag = () => {
+        if (!newFlagName.trim()) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Flag name cannot be empty.' });
+            return;
+        }
+
+        const newFlag: TransactionFlag = {
+            id: newFlagName.trim().toLowerCase().replace(/\s+/g, '-'),
+            name: newFlagName.trim(),
+            color: newFlagColor,
+        };
+        
+        const currentFlags = settings.transaction_flags || [];
+
+        if (currentFlags.some(flag => flag.id === newFlag.id)) {
+            toast({ variant: 'destructive', title: 'Error', description: 'A flag with this name already exists.' });
+            return;
+        }
+
+        setSettings(prev => ({
+            ...prev,
+            transaction_flags: [...currentFlags, newFlag],
+        }));
+        
+        setNewFlagName('');
+        setNewFlagColor(flagColors[0].value);
+    };
+
+    const handleDeleteFlag = (flagId: string) => {
+        setSettings(prev => ({
+            ...prev,
+            transaction_flags: (prev.transaction_flags || []).filter(flag => flag.id !== flagId),
+        }));
+    };
 
     const handleSave = async () => {
         setSaving(true);
@@ -187,6 +249,52 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Transaction & Client Flags</CardTitle>
+                        <CardDescription>Create and manage custom labels for transactions and clients.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="space-y-4 p-4 border rounded-lg">
+                            <h4 className="font-medium">Create New Flag</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="newFlagName">Flag Name</Label>
+                                    <Input id="newFlagName" value={newFlagName} onChange={(e) => setNewFlagName(e.target.value)} placeholder="e.g., High Risk" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Flag Color</Label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {flagColors.map(color => (
+                                            <button key={color.value} type="button" onClick={() => setNewFlagColor(color.value)} className={cn('h-6 w-6 rounded-full border', color.value, newFlagColor === color.value && 'ring-2 ring-ring ring-offset-2')}>
+                                                <span className="sr-only">{color.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <Button size="sm" type="button" onClick={handleAddFlag}><PlusCircle className="mr-2 h-4 w-4" /> Add Flag</Button>
+                        </div>
+                        <div className="space-y-2">
+                            <h4 className="font-medium">Existing Flags</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {(settings.transaction_flags || []).length > 0 ? (
+                                    settings.transaction_flags?.map(flag => (
+                                        <div key={flag.id} className="flex items-center gap-2 rounded-full border py-1 pl-3 pr-1 text-sm">
+                                            <span className={cn('h-3 w-3 rounded-full', flag.color)} />
+                                            <span>{flag.name}</span>
+                                            <button type="button" onClick={() => handleDeleteFlag(flag.id)} className="h-5 w-5 rounded-full hover:bg-muted flex items-center justify-center">
+                                                <Trash2 className="h-3 w-3 text-destructive" />
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No custom flags created yet.</p>
+                                )}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle>API Integrations</CardTitle>

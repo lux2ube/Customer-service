@@ -8,7 +8,12 @@ export interface KycDocument {
 }
 
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
-export type ReviewFlag = 'AML' | 'Volume' | 'Scam' | 'None' | 'Other' | 'Blacklisted';
+
+export interface TransactionFlag {
+    id: string;
+    name: string;
+    color: string; // e.g., 'blue', 'red', 'green'
+}
 
 export interface Client {
     id: string;
@@ -17,7 +22,7 @@ export interface Client {
     telegramChatId?: number; // Added for Telegram integration
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
-    review_flags: ReviewFlag[];
+    review_flags: string[]; // Now an array of flag IDs
     prioritize_sms_matching?: boolean;
     createdAt: string;
     bep20_addresses?: string[];
@@ -66,7 +71,7 @@ export interface Transaction {
     hash?: string;
     client_wallet_address?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
-    flags: ('AML' | 'KYC' | 'Other' | 'Blacklisted')[];
+    flags: string[]; // Now an array of flag IDs
     createdAt: string;
     linkedSmsId?: string;
 }
@@ -112,6 +117,7 @@ export interface Settings {
     mexc_min_deposit_usdt?: number;
     mexc_max_deposit_usdt?: number;
     telegram_bot_token?: string;
+    transaction_flags?: TransactionFlag[];
 }
 
 export interface BlacklistItem {

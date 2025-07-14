@@ -677,10 +677,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                         <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
-                                            <SelectItem value="AML">AML</SelectItem>
-                                            <SelectItem value="KYC">KYC</SelectItem>
-                                            <SelectItem value="Blacklisted">Blacklisted</SelectItem>
-                                            <SelectItem value="Other">Other</SelectItem>
+                                            {settings?.transaction_flags?.map(flag => (
+                                                <SelectItem key={flag.id} value={flag.id}>{flag.name}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>

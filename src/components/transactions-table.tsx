@@ -10,7 +10,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Transaction } from '@/lib/types';
+import type { Transaction, Settings } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -21,6 +21,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn, normalizeArabic } from '@/lib/utils';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+
 
 type SortableKeys = keyof Transaction;
 
@@ -38,6 +41,15 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [settings, setSettings] = React.useState<Settings | null>(null);
+
+  React.useEffect(() => {
+    const settingsRef = ref(db, 'settings');
+    const unsubscribe = onValue(settingsRef, (snapshot) => {
+        setSettings(snapshot.val());
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleSort = (key: SortableKeys) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -172,6 +184,11 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
         </Button>
     </TableHead>
   );
+  
+  const flagsMap = React.useMemo(() => {
+    return new Map(settings?.transaction_flags?.map(flag => [flag.id, flag]));
+  }, [settings]);
+
 
   return (
     <>
@@ -269,9 +286,16 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                         <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
                     </TableCell>
                     <TableCell>
-                      {tx.flags?.map(flag => (
-                          <Badge key={flag} variant={flag === 'Blacklisted' ? 'destructive' : 'outline'} className="mr-1">{flag}</Badge>
-                      ))}
+                      {tx.flags?.map(flagId => {
+                          const flag = flagsMap.get(flagId);
+                          if (!flag) return null;
+                          return (
+                            <div key={flag.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs">
+                                <span className={cn('h-2 w-2 rounded-full', flag.color)} />
+                                {flag.name}
+                            </div>
+                          );
+                      })}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="ghost" size="icon">

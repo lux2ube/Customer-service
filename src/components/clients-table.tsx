@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -9,14 +10,16 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client } from '@/lib/types';
+import type { Client, Settings } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import Link from 'next/link';
 import { Pencil, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { normalizeArabic } from '@/lib/utils';
+import { normalizeArabic, cn } from '@/lib/utils';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
 interface ClientsTableProps {
     clients: Client[];
@@ -29,6 +32,15 @@ const ITEMS_PER_PAGE = 50;
 export function ClientsTable({ clients, loading, onFilteredDataChange }: ClientsTableProps) {
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [settings, setSettings] = React.useState<Settings | null>(null);
+
+  React.useEffect(() => {
+    const settingsRef = ref(db, 'settings');
+    const unsubscribe = onValue(settingsRef, (snapshot) => {
+        setSettings(snapshot.val());
+    });
+    return () => unsubscribe();
+  }, []);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -86,6 +98,10 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
     }
   }
 
+  const flagsMap = React.useMemo(() => {
+    return new Map(settings?.transaction_flags?.map(flag => [flag.id, flag]));
+  }, [settings]);
+
   return (
     <>
       <div className="flex items-center py-4">
@@ -126,9 +142,16 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
                       </Badge>
                     </TableCell>
                     <TableCell className="space-x-1">
-                      {client.review_flags?.filter(f => f !== 'None').map(flag => (
-                        <Badge key={flag} variant="outline">{flag}</Badge>
-                      ))}
+                      {client.review_flags?.map(flagId => {
+                          const flag = flagsMap.get(flagId);
+                          if (!flag) return null;
+                          return (
+                            <div key={flag.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs">
+                                <span className={cn('h-2 w-2 rounded-full', flag.color)} />
+                                {flag.name}
+                            </div>
+                          );
+                      })}
                     </TableCell>
                     <TableCell>
                       {client.createdAt && !isNaN(new Date(client.createdAt).getTime())

@@ -11,7 +11,7 @@ import { createClient, manageClient, type ClientFormState } from '@/lib/actions'
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, ReviewFlag, KycDocument, Account, Transaction } from '@/lib/types';
+import type { Client, Account, Transaction, Settings } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -26,9 +26,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
-
-const reviewFlags: ReviewFlag[] = ['AML', 'KYC', 'Blacklisted', 'Other'];
 
 export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
     const { toast } = useToast();
@@ -37,6 +37,7 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
 
     const [state, setState] = React.useState<ClientFormState>();
     const [isSaving, setIsSaving] = React.useState(false);
+    const [settings, setSettings] = React.useState<Settings | null>(null);
     
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
@@ -62,6 +63,14 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         description: string;
         intent: string;
     } | null>(null);
+
+    React.useEffect(() => {
+        const settingsRef = ref(db, 'settings');
+        const unsubscribe = onValue(settingsRef, (snapshot) => {
+            setSettings(snapshot.val());
+        });
+        return () => unsubscribe();
+    }, []);
 
     const usedBankAccounts = React.useMemo(() => {
         if (!transactions) return [];
@@ -152,11 +161,11 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         }
     };
 
-    const handleFlagChange = (flag: ReviewFlag, checked: boolean) => {
+    const handleFlagChange = (flagId: string, checked: boolean) => {
         setFormData(prev => {
             const newFlags = checked 
-                ? [...prev.review_flags, flag]
-                : prev.review_flags.filter(f => f !== flag);
+                ? [...prev.review_flags, flagId]
+                : prev.review_flags.filter(f => f !== flagId);
             return { ...prev, review_flags: newFlags };
         });
     };
@@ -272,18 +281,19 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                         <div className="space-y-2">
                             <Label>Review Flags</Label>
                             <div className="flex flex-wrap items-center gap-4 pt-2">
-                                {reviewFlags.map(flag => (
-                                <div key={flag} className="flex items-center space-x-2">
+                                {settings?.transaction_flags?.map(flag => (
+                                <div key={flag.id} className="flex items-center space-x-2">
                                     <Checkbox 
-                                        id={`flag-${flag}`} 
+                                        id={`flag-${flag.id}`} 
                                         name="review_flags" 
-                                        value={flag} 
-                                        checked={formData.review_flags?.includes(flag)}
-                                        onCheckedChange={(checked) => handleFlagChange(flag, !!checked)}
+                                        value={flag.id} 
+                                        checked={formData.review_flags?.includes(flag.id)}
+                                        onCheckedChange={(checked) => handleFlagChange(flag.id, !!checked)}
                                     />
-                                    <Label htmlFor={`flag-${flag}`} className="font-normal">{flag}</Label>
+                                    <Label htmlFor={`flag-${flag.id}`} className="font-normal">{flag.name}</Label>
                                 </div>
                                 ))}
+                                {!settings?.transaction_flags?.length && <p className="text-xs text-muted-foreground">No flags configured in settings.</p>}
                             </div>
                         </div>
                         <div className="space-y-2 pt-2">
