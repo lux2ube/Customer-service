@@ -172,7 +172,9 @@ export default function SettingsPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle><Skeleton className="h-7 w-48" /></CardTitle>
-                                <CardDescription><Skeleton className="h-4 w-full" /></CardDescription>
+                                <div className="text-sm text-muted-foreground">
+                                    <Skeleton className="h-4 w-full" />
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
@@ -183,7 +185,9 @@ export default function SettingsPage() {
                          <Card>
                             <CardHeader>
                                 <CardTitle><Skeleton className="h-7 w-48" /></CardTitle>
-                                <CardDescription><Skeleton className="h-4 w-full" /></CardDescription>
+                                <div className="text-sm text-muted-foreground">
+                                    <Skeleton className="h-4 w-full" />
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
