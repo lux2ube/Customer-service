@@ -5,13 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 import React from 'react';
 import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, Account, Transaction, Settings } from '@/lib/types';
+import type { Client, Account, Transaction, TransactionFlag } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -28,6 +28,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { cn } from '@/lib/utils';
 
 
 export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
@@ -37,7 +38,7 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
 
     const [state, setState] = React.useState<ClientFormState>();
     const [isSaving, setIsSaving] = React.useState(false);
-    const [settings, setSettings] = React.useState<Settings | null>(null);
+    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
@@ -65,9 +66,9 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
     } | null>(null);
 
     React.useEffect(() => {
-        const settingsRef = ref(db, 'settings');
-        const unsubscribe = onValue(settingsRef, (snapshot) => {
-            setSettings(snapshot.val());
+        const labelsRef = ref(db, 'labels');
+        const unsubscribe = onValue(labelsRef, (snapshot) => {
+            setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
         });
         return () => unsubscribe();
     }, []);
@@ -131,6 +132,10 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         setIsSaving(true);
         const actionFormData = new FormData(formRef.current);
         actionFormData.set('intent', intent);
+        
+        formData.review_flags.forEach(flag => {
+            actionFormData.append('review_flags', flag);
+        });
 
         try {
             const result = client
@@ -161,11 +166,11 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         }
     };
 
-    const handleFlagChange = (flagId: string, checked: boolean) => {
+    const handleFlagChange = (flagId: string) => {
         setFormData(prev => {
-            const newFlags = checked 
-                ? [...prev.review_flags, flagId]
-                : prev.review_flags.filter(f => f !== flagId);
+            const newFlags = prev.review_flags.includes(flagId)
+                ? prev.review_flags.filter(f => f !== flagId)
+                : [...prev.review_flags, flagId];
             return { ...prev, review_flags: newFlags };
         });
     };
@@ -279,22 +284,12 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                             <p className="text-xs text-muted-foreground">This is automatically set by the last confirmed transaction.</p>
                         </div>
                         <div className="space-y-2">
-                            <Label>Review Flags</Label>
-                            <div className="flex flex-wrap items-center gap-4 pt-2">
-                                {settings?.transaction_flags?.map(flag => (
-                                <div key={flag.id} className="flex items-center space-x-2">
-                                    <Checkbox 
-                                        id={`flag-${flag.id}`} 
-                                        name="review_flags" 
-                                        value={flag.id} 
-                                        checked={formData.review_flags?.includes(flag.id)}
-                                        onCheckedChange={(checked) => handleFlagChange(flag.id, !!checked)}
-                                    />
-                                    <Label htmlFor={`flag-${flag.id}`} className="font-normal">{flag.name}</Label>
-                                </div>
-                                ))}
-                                {!settings?.transaction_flags?.length && <p className="text-xs text-muted-foreground">No flags configured in settings.</p>}
-                            </div>
+                            <Label>Labels</Label>
+                            <LabelSelector
+                                labels={labels}
+                                selectedLabels={formData.review_flags}
+                                onLabelChange={handleFlagChange}
+                            />
                         </div>
                         <div className="space-y-2 pt-2">
                             <div className="flex items-center space-x-2">
@@ -476,3 +471,38 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         </>
     );
 }
+
+
+function LabelSelector({ labels, selectedLabels, onLabelChange }: { labels: TransactionFlag[], selectedLabels: string[], onLabelChange: (id: string) => void }) {
+    const [showAll, setShowAll] = React.useState(false);
+    const visibleLabels = showAll ? labels : labels.slice(0, 5);
+
+    if (labels.length === 0) {
+        return <p className="text-sm text-muted-foreground">No labels configured. <Link href="/labels" className="text-primary underline">Manage Labels</Link></p>;
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+                {visibleLabels.map(label => (
+                    <Button
+                        key={label.id}
+                        type="button"
+                        variant={selectedLabels.includes(label.id) ? 'default' : 'outline'}
+                        onClick={() => onLabelChange(label.id)}
+                        className={cn("text-xs h-7", selectedLabels.includes(label.id) && 'text-white')}
+                        style={selectedLabels.includes(label.id) ? { backgroundColor: label.color } : { borderColor: label.color, color: label.color }}
+                    >
+                        {label.name}
+                    </Button>
+                ))}
+            </div>
+            {labels.length > 5 && (
+                <Button type="button" variant="link" size="sm" className="p-0 h-auto" onClick={() => setShowAll(!showAll)}>
+                    {showAll ? 'Show Less' : 'Show More'} <ChevronDown className={cn('ml-1 h-4 w-4 transition-transform', showAll && 'rotate-180')} />
+                </Button>
+            )}
+        </div>
+    );
+}
+

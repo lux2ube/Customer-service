@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
 import React from 'react';
 import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -16,13 +16,14 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
+import type { Client, Account, Transaction, Settings, SmsTransaction, TransactionFlag } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 
 const initialFormData: Transaction = {
@@ -111,6 +112,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
+    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     
     // Form State
@@ -147,6 +149,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const settingsRef = ref(db, 'settings');
+        const labelsRef = ref(db, 'labels');
 
         const unsubAccounts = onValue(accountsRef, (snap) => {
             const allAccounts: Account[] = snap.val() ? Object.keys(snap.val()).map(key => ({ id: key, ...snap.val()[key] })) : [];
@@ -154,12 +157,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'));
         });
         const unsubSettings = onValue(settingsRef, (snap) => setSettings(snap.val() || null));
+        const unsubLabels = onValue(labelsRef, (snap) => setLabels(snap.val() ? Object.values(snap.val()) : []));
         
-        Promise.all([ get(accountsRef), get(settingsRef) ]).then(() => {
+        Promise.all([ get(accountsRef), get(settingsRef), get(labelsRef) ]).then(() => {
             setIsDataLoading(false);
         });
 
-        return () => { unsubAccounts(); unsubSettings(); };
+        return () => { unsubAccounts(); unsubSettings(); unsubLabels(); };
     }, []);
 
     // Effect to set initial form data when editing a transaction
@@ -386,8 +390,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     };
     
-    const handleFieldChange = (field: keyof Omit<Transaction, 'amount'>, value: any) => {
+    const handleFieldChange = (field: keyof Omit<Transaction, 'amount' | 'flags'>, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleFlagChange = (flagId: string) => {
+        setFormData(prev => {
+            const newFlags = prev.flags.includes(flagId)
+                ? prev.flags.filter(f => f !== flagId)
+                : [...prev.flags, flagId];
+            return { ...prev, flags: newFlags };
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -409,6 +422,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         actionFormData.set('expense_usd', String(formData.expense_usd || 0));
         actionFormData.set('amount_usdt', String(formData.amount_usdt));
         actionFormData.set('linkedSmsId', formData.linkedSmsId || '');
+        
+        formData.flags.forEach(flagId => {
+            actionFormData.append('flags', flagId);
+        });
         
         if(attachmentToUpload) {
             actionFormData.set('attachment_url', attachmentToUpload);
@@ -659,30 +676,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Label htmlFor="client_wallet_address">Client Wallet Address</Label>
                                 <Input id="client_wallet_address" name="client_wallet_address" value={formData.client_wallet_address || ''} onChange={(e) => handleFieldChange('client_wallet_address', e.target.value)}/>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-3">
-                                <div className="space-y-2">
-                                    <Label>Status</Label>
-                                    <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
-                                        <SelectTrigger><SelectValue/></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Pending">Pending</SelectItem>
-                                            <SelectItem value="Confirmed">Confirmed</SelectItem>
-                                            <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Need Flag Review</Label>
-                                    <Select name="flags" value={formData.flags?.[0] || 'none'} onValueChange={(v) => handleFieldChange('flags', v === 'none' ? [] : (v ? [v] : []))}>
-                                        <SelectTrigger><SelectValue placeholder="Add a flag..."/></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            {settings?.transaction_flags?.map(flag => (
-                                                <SelectItem key={flag.id} value={flag.id}>{flag.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            <div className="space-y-2">
+                                <Label>Status</Label>
+                                <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
+                                    <SelectTrigger><SelectValue/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Pending">Pending</SelectItem>
+                                        <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                        <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Labels</Label>
+                                <LabelSelector 
+                                    labels={labels}
+                                    selectedLabels={formData.flags}
+                                    onLabelChange={handleFlagChange}
+                                />
                             </div>
                         </CardContent>
                     </Card>
@@ -691,6 +702,40 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         </>
     );
 }
+
+function LabelSelector({ labels, selectedLabels, onLabelChange }: { labels: TransactionFlag[], selectedLabels: string[], onLabelChange: (id: string) => void }) {
+    const [showAll, setShowAll] = React.useState(false);
+    const visibleLabels = showAll ? labels : labels.slice(0, 5);
+
+    if (labels.length === 0) {
+        return <p className="text-sm text-muted-foreground">No labels configured. <Link href="/labels" className="text-primary underline">Manage Labels</Link></p>;
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+                {visibleLabels.map(label => (
+                    <Button
+                        key={label.id}
+                        type="button"
+                        variant={selectedLabels.includes(label.id) ? 'default' : 'outline'}
+                        onClick={() => onLabelChange(label.id)}
+                        className={cn("text-xs h-7", selectedLabels.includes(label.id) && 'text-white')}
+                        style={selectedLabels.includes(label.id) ? { backgroundColor: label.color } : { borderColor: label.color, color: label.color }}
+                    >
+                        {label.name}
+                    </Button>
+                ))}
+            </div>
+            {labels.length > 5 && (
+                <Button type="button" variant="link" size="sm" className="p-0 h-auto" onClick={() => setShowAll(!showAll)}>
+                    {showAll ? 'Show Less' : 'Show More'} <ChevronDown className={cn('ml-1 h-4 w-4 transition-transform', showAll && 'rotate-180')} />
+                </Button>
+            )}
+        </div>
+    );
+}
+
 
 function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
     const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");

@@ -7,7 +7,7 @@ import { db, storage } from './firebase';
 import { push, ref, set, update, get, remove, query, orderByChild, equalTo, startAt } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit, TransactionFlag } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
 import { createWorker } from 'tesseract.js';
@@ -473,11 +473,10 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    const flag = formData.get('flags');
     const dataToValidate = {
         ...Object.fromEntries(formData.entries()),
+        flags: formData.getAll('flags'),
         attachment_url: attachmentUrlString,
-        flags: flag ? [flag] : [],
     };
     
     const validatedFields = TransactionSchema.safeParse(dataToValidate);
@@ -2397,4 +2396,75 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
     }
 }
 
+// --- Label Actions ---
+export type LabelFormState = { message?: string } | undefined;
+
+const LabelSchema = z.object({
+  name: z.string().min(1, { message: "Label name is required." }),
+  color: z.string().regex(/^#([0-9a-f]{3}){1,2}$/i, { message: "Must be a valid hex color code." }),
+});
+
+export async function createLabel(formData: FormData): Promise<LabelFormState> {
+    const rawData = {
+        name: formData.get('name'),
+        color: formData.get('color-text') || formData.get('color'),
+    };
+    const validatedFields = LabelSchema.safeParse(rawData);
+
+    if (!validatedFields.success) {
+        return { message: validatedFields.error.flatten().fieldErrors.name?.[0] || 'Invalid data.' };
+    }
+
+    try {
+        const newRef = push(ref(db, 'labels'));
+        await set(newRef, validatedFields.data);
+        revalidatePath('/labels');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to save label.' };
+    }
+}
+
+export async function deleteLabel(id: string): Promise<LabelFormState> {
+    if (!id) return { message: 'Invalid ID.' };
+    try {
+        await remove(ref(db, `labels/${id}`));
+        // We also need to remove this label from all clients and transactions
+        const clientsRef = ref(db, 'clients');
+        const clientsSnapshot = await get(clientsRef);
+        if (clientsSnapshot.exists()) {
+            const updates: { [key: string]: any } = {};
+            clientsSnapshot.forEach(childSnapshot => {
+                const client = childSnapshot.val() as Client;
+                if (client.review_flags?.includes(id)) {
+                    const newFlags = client.review_flags.filter(flagId => flagId !== id);
+                    updates[`/clients/${childSnapshot.key}/review_flags`] = newFlags;
+                }
+            });
+            if(Object.keys(updates).length > 0) await update(ref(db), updates);
+        }
+
+        const transactionsRef = ref(db, 'transactions');
+        const transactionsSnapshot = await get(transactionsRef);
+        if (transactionsSnapshot.exists()) {
+            const updates: { [key: string]: any } = {};
+            transactionsSnapshot.forEach(childSnapshot => {
+                const tx = childSnapshot.val() as Transaction;
+                if (tx.flags?.includes(id)) {
+                    const newFlags = tx.flags.filter(flagId => flagId !== id);
+                    updates[`/transactions/${childSnapshot.key}/flags`] = newFlags;
+                }
+            });
+            if(Object.keys(updates).length > 0) await update(ref(db), updates);
+        }
+
+        revalidatePath('/labels');
+        revalidatePath('/clients');
+        revalidatePath('/transactions');
+        return {};
+    } catch (error) {
+        console.error(error);
+        return { message: 'Database error: Failed to delete label.' };
+    }
+}
     

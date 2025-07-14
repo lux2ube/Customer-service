@@ -25,6 +25,7 @@ import {
   Contact,
   Bot,
   Info,
+  Tags,
 } from 'lucide-react';
 
 const menuItems = [
@@ -39,6 +40,7 @@ const menuItems = [
   { href: '/kyc/scan', label: 'KYC ID Scan', icon: Contact },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
+  { href: '/labels', label: 'Labels', icon: Tags },
   { type: 'divider' },
   { href: '/telegram', label: 'Telegram Bot', icon: Bot },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },

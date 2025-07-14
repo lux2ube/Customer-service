@@ -10,7 +10,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client, Settings } from '@/lib/types';
+import type { Client, TransactionFlag } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -32,12 +32,12 @@ const ITEMS_PER_PAGE = 50;
 export function ClientsTable({ clients, loading, onFilteredDataChange }: ClientsTableProps) {
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [settings, setSettings] = React.useState<Settings | null>(null);
+  const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
 
   React.useEffect(() => {
-    const settingsRef = ref(db, 'settings');
-    const unsubscribe = onValue(settingsRef, (snapshot) => {
-        setSettings(snapshot.val());
+    const labelsRef = ref(db, 'labels');
+    const unsubscribe = onValue(labelsRef, (snapshot) => {
+        setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
     });
     return () => unsubscribe();
   }, []);
@@ -98,9 +98,9 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
     }
   }
 
-  const flagsMap = React.useMemo(() => {
-    return new Map(settings?.transaction_flags?.map(flag => [flag.id, flag]));
-  }, [settings]);
+  const labelsMap = React.useMemo(() => {
+    return new Map(labels?.map(label => [label.id, label]));
+  }, [labels]);
 
   return (
     <>
@@ -116,10 +116,11 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8 p-2"></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Flags</TableHead>
+                <TableHead>Labels</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -127,49 +128,56 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={7} className="h-24 text-center">
                     Loading clients...
                   </TableCell>
                 </TableRow>
               ) : paginatedClients.length > 0 ? (
-                paginatedClients.map(client => (
-                  <TableRow key={client.id}>
-                    <TableCell className="font-medium">{client.name}</TableCell>
-                    <TableCell>{Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusVariant(client.verification_status)}>
-                        {client.verification_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="space-x-1">
-                      {client.review_flags?.map(flagId => {
-                          const flag = flagsMap.get(flagId);
-                          if (!flag) return null;
-                          return (
-                            <div key={flag.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs">
-                                <span className={cn('h-2 w-2 rounded-full', flag.color)} />
-                                {flag.name}
-                            </div>
-                          );
-                      })}
-                    </TableCell>
-                    <TableCell>
-                      {client.createdAt && !isNaN(new Date(client.createdAt).getTime())
-                        ? format(new Date(client.createdAt), 'PPP')
-                        : 'N/A'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="icon">
-                          <Link href={`/clients/${client.id}/edit`}>
-                              <Pencil className="h-4 w-4" />
-                          </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                paginatedClients.map(client => {
+                  const firstLabelId = client.review_flags?.[0];
+                  const firstLabel = firstLabelId ? labelsMap.get(firstLabelId) : null;
+                  return (
+                    <TableRow key={client.id}>
+                      <TableCell className="p-2">
+                        {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
+                      </TableCell>
+                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell>{Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusVariant(client.verification_status)}>
+                          {client.verification_status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="flex flex-wrap gap-1">
+                        {client.review_flags?.map(labelId => {
+                            const label = labelsMap.get(labelId);
+                            if (!label) return null;
+                            return (
+                                <div key={label.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" style={{ backgroundColor: `${label.color}20` }}>
+                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: label.color }} />
+                                    {label.name}
+                                </div>
+                            );
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        {client.createdAt && !isNaN(new Date(client.createdAt).getTime())
+                          ? format(new Date(client.createdAt), 'PPP')
+                          : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button asChild variant="ghost" size="icon">
+                            <Link href={`/clients/${client.id}/edit`}>
+                                <Pencil className="h-4 w-4" />
+                            </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={7} className="h-24 text-center">
                     No clients found for the selected criteria.
                   </TableCell>
                 </TableRow>

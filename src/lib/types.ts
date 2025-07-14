@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -12,7 +13,7 @@ export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 export interface TransactionFlag {
     id: string;
     name: string;
-    color: string; // e.g., 'blue', 'red', 'green'
+    color: string; // e.g., '#FF5733'
 }
 
 export interface Client {
@@ -117,7 +118,6 @@ export interface Settings {
     mexc_min_deposit_usdt?: number;
     mexc_max_deposit_usdt?: number;
     telegram_bot_token?: string;
-    transaction_flags?: TransactionFlag[];
 }
 
 export interface BlacklistItem {

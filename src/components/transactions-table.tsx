@@ -10,7 +10,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Transaction, Settings } from '@/lib/types';
+import type { Transaction, TransactionFlag } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -41,12 +41,12 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [settings, setSettings] = React.useState<Settings | null>(null);
+  const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
 
   React.useEffect(() => {
-    const settingsRef = ref(db, 'settings');
-    const unsubscribe = onValue(settingsRef, (snapshot) => {
-        setSettings(snapshot.val());
+    const labelsRef = ref(db, 'labels');
+    const unsubscribe = onValue(labelsRef, (snapshot) => {
+        setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
     });
     return () => unsubscribe();
   }, []);
@@ -185,9 +185,9 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
     </TableHead>
   );
   
-  const flagsMap = React.useMemo(() => {
-    return new Map(settings?.transaction_flags?.map(flag => [flag.id, flag]));
-  }, [settings]);
+  const labelsMap = React.useMemo(() => {
+    return new Map(labels?.map(label => [label.id, label]));
+  }, [labels]);
 
 
   return (
@@ -247,68 +247,76 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8 p-2"></TableHead>
                 <SortableHeader sortKey="date">Date</SortableHeader>
                 <SortableHeader sortKey="clientName">Client</SortableHeader>
                 <SortableHeader sortKey="type">Type</SortableHeader>
                 <SortableHeader sortKey="amount">Amount</SortableHeader>
                 <SortableHeader sortKey="amount_usd">Amount (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
-                <TableHead>Flags</TableHead>
+                <TableHead>Labels</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     Loading transactions...
                   </TableCell>
                 </TableRow>
               ) : paginatedTransactions.length > 0 ? (
-                paginatedTransactions.map(tx => (
-                  <TableRow key={tx.id}>
-                    <TableCell>
-                      {tx.date && !isNaN(new Date(tx.date).getTime())
-                        ? format(new Date(tx.date), 'PPP')
-                        : 'N/A'}
-                    </TableCell>
-                    <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
-                    <TableCell>
-                      <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {formatCurrency(tx.amount_usd || 0)}
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {tx.flags?.map(flagId => {
-                          const flag = flagsMap.get(flagId);
-                          if (!flag) return null;
-                          return (
-                            <div key={flag.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs">
-                                <span className={cn('h-2 w-2 rounded-full', flag.color)} />
-                                {flag.name}
-                            </div>
-                          );
-                      })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="icon">
-                          <Link href={`/transactions/${tx.id}/edit`}>
-                              <Pencil className="h-4 w-4" />
-                          </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                paginatedTransactions.map(tx => {
+                  const firstLabelId = tx.flags?.[0];
+                  const firstLabel = firstLabelId ? labelsMap.get(firstLabelId) : null;
+                  return (
+                    <TableRow key={tx.id}>
+                        <TableCell className="p-2">
+                            {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
+                        </TableCell>
+                        <TableCell>
+                        {tx.date && !isNaN(new Date(tx.date).getTime())
+                            ? format(new Date(tx.date), 'PPP')
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
+                        <TableCell>
+                        <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">
+                        {tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                        {formatCurrency(tx.amount_usd || 0)}
+                        </TableCell>
+                        <TableCell>
+                            <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
+                        </TableCell>
+                        <TableCell className="flex flex-wrap gap-1">
+                          {tx.flags?.map(labelId => {
+                              const label = labelsMap.get(labelId);
+                              if (!label) return null;
+                              return (
+                                <div key={label.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" style={{ backgroundColor: `${label.color}20` }}>
+                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: label.color }} />
+                                    {label.name}
+                                </div>
+                              );
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                        <Button asChild variant="ghost" size="icon">
+                            <Link href={`/transactions/${tx.id}/edit`}>
+                                <Pencil className="h-4 w-4" />
+                            </Link>
+                        </Button>
+                        </TableCell>
+                    </TableRow>
+                  )
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     No transactions found for the selected criteria.
                   </TableCell>
                 </TableRow>
