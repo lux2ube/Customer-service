@@ -1,18 +1,22 @@
 
 'use client';
 
-import React from 'react';
+import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2 } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
-import type { Client, Transaction, Account } from '@/lib/types';
+import type { Client, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { format, startOfWeek, endOfDay, subDays, startOfDay, subWeeks, parseISO, endOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfDay, subDays, startOfDay, subWeeks, parseISO, endOfWeek, eachDayOfInterval, sub } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useFormStatus } from 'react-dom';
+import { useToast } from '@/hooks/use-toast';
+import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
+import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
     <Card>
@@ -59,7 +63,56 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
             </div>
         </div>
     )
+};
+
+
+// --- Action Button Components ---
+
+function ActionButton({ Icon, text, pendingText }: { Icon: React.ElementType, text: string, pendingText: string }) {
+    const { pending } = useFormStatus();
+    return (
+        <Button variant="outline" type="submit" disabled={pending} className="flex-1 min-w-[200px]">
+            <Icon className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
+            {pending ? pendingText : text}
+        </Button>
+    )
 }
+
+function SyncForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={RefreshCw} text="Sync with BSCScan" pendingText="Syncing..." /></form>;
+}
+
+function AutoProcessForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<AutoProcessState, FormData>(autoProcessSyncedTransactions, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Processing Failed' : 'Processing Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Bot} text="Auto-Process Deposits" pendingText="Processing..." /></form>;
+}
+
+function ProcessSmsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<ProcessSmsState, FormData>(processIncomingSms, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Processing Failed' : 'Processing Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={RefreshCw} text="Process Incoming SMS" pendingText="Processing..." /></form>;
+}
+
+function MatchClientsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Matching Failed' : 'Matching Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Users} text="Match SMS to Clients" pendingText="Matching..." /></form>;
+}
+
+function MergeClientsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<MergeState, FormData>(mergeDuplicateClients, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Merge Failed' : 'Merge Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Users2} text="Merge Duplicates" pendingText="Merging..." /></form>;
+}
+
 
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
@@ -72,6 +125,8 @@ export default function DashboardPage() {
 
     const [totalVolumeThisWeek, setTotalVolumeThisWeek] = React.useState(0);
     const [weekOverWeekChange, setWeekOverWeekChange] = React.useState<string | null>(null);
+    
+    const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string, value: number }[]>([]);
 
 
     React.useEffect(() => {
@@ -143,6 +198,28 @@ export default function DashboardPage() {
                     setWeekOverWeekChange('vs $0 last week');
                 }
                 
+                // --- Daily Volume Chart Data ---
+                const last7Days = eachDayOfInterval({
+                    start: sub(new Date(), { days: 6 }),
+                    end: new Date()
+                });
+
+                const dailyData = last7Days.map(day => {
+                    const dayStart = startOfDay(day);
+                    const dayEnd = endOfDay(day);
+                    const volume = confirmedTxs
+                        .filter(tx => {
+                            const txDate = parseISO(tx.date);
+                            return txDate >= dayStart && txDate <= dayEnd;
+                        })
+                        .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    return {
+                        name: format(day, 'E'), // e.g., 'Mon'
+                        value: volume,
+                    };
+                });
+                setDailyVolumeData(dailyData);
+                
                 // --- Global Stats ---
                 const pending = allTxs.filter(tx => tx.status === 'Pending').length;
                 setPendingTxs(pending);
@@ -178,6 +255,35 @@ export default function DashboardPage() {
                 <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
                 <StatCard title="Volume Today" value={`$${totalVolumeToday.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={dayOverDayChange || ''} />
                 <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Daily Volume (Last 7 Days)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? <Skeleton className="h-[300px] w-full" /> : <DashboardChart data={dailyVolumeData} />}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>System Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-2">
+                           <SyncForm />
+                           <AutoProcessForm />
+                        </div>
+                         <div className="flex flex-wrap gap-2">
+                           <ProcessSmsForm />
+                           <MatchClientsForm />
+                        </div>
+                         <div className="flex flex-wrap gap-2">
+                           <MergeClientsForm />
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
