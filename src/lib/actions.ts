@@ -1772,10 +1772,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 export type MergeState = {
     message?: string;
     error?: boolean;
-    mergedGroups?: {
-        primaryClient: { id: string; name: string };
-        duplicates: { id: string; name: string }[];
-    }[];
+    success?: boolean;
 } | undefined;
 
 export async function mergeDuplicateClients(prevState: MergeState, formData: FormData): Promise<MergeState> {
@@ -1804,24 +1801,19 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         }
 
         const updates: { [key: string]: any } = {};
-        const mergedGroupsData: NonNullable<MergeState['mergedGroups']> = [];
+        let groupsMerged = 0;
         let deletedClients = 0;
 
         for (const name in clientsByName) {
             const group = clientsByName[name];
             if (group.length > 1) {
-
+                groupsMerged++;
                 // The primary client is the one created first
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 
                 const primaryClient = group[0];
                 const duplicates = group.slice(1);
                 
-                mergedGroupsData.push({
-                    primaryClient: { id: primaryClient.id, name: primaryClient.name },
-                    duplicates: duplicates.map(d => ({ id: d.id, name: d.name }))
-                });
-
                 // Aggregate data from duplicates into the primary client
                 const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
@@ -1852,11 +1844,12 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
             await update(ref(db), updates);
         }
 
+        revalidatePath('/clients/merge');
         revalidatePath('/clients');
         return { 
-            message: `Merge complete. Merged ${mergedGroupsData.length} groups of clients and removed ${deletedClients} duplicates.`, 
+            message: `Merge complete. Merged ${groupsMerged} groups and removed ${deletedClients} duplicates.`, 
             error: false,
-            mergedGroups: mergedGroupsData,
+            success: true,
         };
 
     } catch (error: any) {
@@ -1870,7 +1863,7 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
 export type ParsingRuleFormState = { message?: string } | undefined;
 
 const SmsParsingRuleSchema = z.object({
-    name: z.string().min(1, { message: 'Rule name is required.' }),
+    name: z.string().min(1, { message: "Rule name is required." }),
     type: z.enum(['credit', 'debit']),
     amountStartsAfter: z.string().min(1, { message: 'This marker is required.' }),
     amountEndsBefore: z.string().min(1, { message: 'This marker is required.' }),
@@ -2482,4 +2475,3 @@ export async function deleteLabel(id: string): Promise<LabelFormState> {
         return { message: 'Database error: Failed to delete label.' };
     }
 }
-    
