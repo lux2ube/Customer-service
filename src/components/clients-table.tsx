@@ -10,46 +10,68 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client, TransactionFlag } from '@/lib/types';
+import type { Client, TransactionFlag, Transaction, Account } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import Link from 'next/link';
-import { Pencil, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { Pencil, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { normalizeArabic, cn } from '@/lib/utils';
-import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 interface ClientsTableProps {
     clients: Client[];
+    transactions: Transaction[];
+    bankAccounts: Account[];
+    cryptoWallets: Account[];
+    labels: TransactionFlag[];
     loading: boolean;
     onFilteredDataChange: (data: Client[]) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
 
-export function ClientsTable({ clients, loading, onFilteredDataChange }: ClientsTableProps) {
+export function ClientsTable({ 
+    clients, 
+    transactions,
+    bankAccounts,
+    cryptoWallets,
+    labels,
+    loading, 
+    onFilteredDataChange 
+}: ClientsTableProps) {
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
-
-  React.useEffect(() => {
-    const labelsRef = ref(db, 'labels');
-    const unsubscribe = onValue(labelsRef, (snapshot) => {
-        setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
-    });
-    return () => unsubscribe();
-  }, []);
+  const [bankAccountFilter, setBankAccountFilter] = React.useState('all');
+  const [cryptoWalletFilter, setCryptoWalletFilter] = React.useState('all');
+  const [labelFilter, setLabelFilter] = React.useState('all');
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
     if (Array.isArray(phone)) return phone.join(' ');
     return phone;
   };
+  
+  const clientTransactionMap = React.useMemo(() => {
+    const map = new Map<string, { bankAccountIds: Set<string>; cryptoWalletIds: Set<string> }>();
+    transactions.forEach(tx => {
+        if (!tx.clientId) return;
+        if (!map.has(tx.clientId)) {
+            map.set(tx.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
+        }
+        const clientEntry = map.get(tx.clientId)!;
+        if (tx.bankAccountId) clientEntry.bankAccountIds.add(tx.bankAccountId);
+        if (tx.cryptoWalletId) clientEntry.cryptoWalletIds.add(tx.cryptoWalletId);
+    });
+    return map;
+  }, [transactions]);
+
 
   const filteredClients = React.useMemo(() => {
     let filtered = [...clients];
+
     if (search) {
         const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
         const searchTerms = normalizedSearch.split(' ').filter(Boolean);
@@ -71,8 +93,25 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
             );
         });
     }
+
+    if (bankAccountFilter !== 'all') {
+        filtered = filtered.filter(client => 
+            clientTransactionMap.get(client.id)?.bankAccountIds.has(bankAccountFilter)
+        );
+    }
+    
+    if (cryptoWalletFilter !== 'all') {
+        filtered = filtered.filter(client => 
+            clientTransactionMap.get(client.id)?.cryptoWalletIds.has(cryptoWalletFilter)
+        );
+    }
+
+    if (labelFilter !== 'all') {
+        filtered = filtered.filter(client => client.review_flags?.includes(labelFilter));
+    }
+
     return filtered;
-  }, [clients, search]);
+  }, [clients, search, bankAccountFilter, cryptoWalletFilter, labelFilter, clientTransactionMap]);
 
   React.useEffect(() => {
     onFilteredDataChange(filteredClients);
@@ -102,15 +141,47 @@ export function ClientsTable({ clients, loading, onFilteredDataChange }: Clients
     return new Map(labels?.map(label => [label.id, label]));
   }, [labels]);
 
+  const clearFilters = () => {
+    setSearch('');
+    setBankAccountFilter('all');
+    setCryptoWalletFilter('all');
+    setLabelFilter('all');
+  }
+
   return (
     <>
-      <div className="flex items-center py-4">
+      <div className="flex items-center py-4 flex-wrap gap-2">
         <Input
           placeholder="Search by name, phone, or ID..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="max-w-sm"
+          className="max-w-xs"
         />
+        <Select value={bankAccountFilter} onValueChange={setBankAccountFilter}>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by bank account..." /></SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Bank Accounts</SelectItem>
+                {bankAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+            </SelectContent>
+        </Select>
+        <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter}>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by crypto wallet..." /></SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Crypto Wallets</SelectItem>
+                {cryptoWallets.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+            </SelectContent>
+        </Select>
+        <Select value={labelFilter} onValueChange={setLabelFilter}>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by label..." /></SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Labels</SelectItem>
+                {labels.map(label => <SelectItem key={label.id} value={label.id}>{label.name}</SelectItem>)}
+            </SelectContent>
+        </Select>
+        <Button variant="ghost" onClick={clearFilters}>
+            <X className="mr-2 h-4 w-4" />
+            Clear Filters
+        </Button>
       </div>
       <div className="rounded-md border bg-card">
           <Table>

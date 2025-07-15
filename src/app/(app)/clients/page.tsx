@@ -12,37 +12,69 @@ import { ImportClientsButton } from "@/components/import-clients-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Client } from '@/lib/types';
+import type { Client, Account, Transaction, TransactionFlag } from '@/lib/types';
 import { MergeClientsButton } from '@/components/merge-clients-button';
 
 export default function ClientsPage() {
     const [clients, setClients] = React.useState<Client[]>([]);
+    const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
+    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [exportData, setExportData] = React.useState<Client[]>([]);
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients/');
-        const unsubscribe = onValue(clientsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            const list: Client[] = Object.keys(data).map(key => ({
-            id: key,
-            ...data[key]
-            })).sort((a, b) => {
-                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                if (isNaN(dateA)) return 1;
-                if (isNaN(dateB)) return -1;
-                return dateB - dateA;
-            });
-            setClients(list);
-        } else {
-            setClients([]);
-        }
-        setLoading(false);
-        });
+        const transactionsRef = ref(db, 'transactions/');
+        const accountsRef = ref(db, 'accounts/');
+        const labelsRef = ref(db, 'labels');
+        
+        const unsubs: (()=>void)[] = [];
 
-        return () => unsubscribe();
+        unsubs.push(onValue(clientsRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const list: Client[] = Object.keys(data).map(key => ({
+                id: key,
+                ...data[key]
+                })).sort((a, b) => {
+                    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    if (isNaN(dateA)) return 1;
+                    if (isNaN(dateB)) return -1;
+                    return dateB - dateA;
+                });
+                setClients(list);
+            } else {
+                setClients([]);
+            }
+            setLoading(false);
+        }));
+        
+        unsubs.push(onValue(transactionsRef, (snapshot) => {
+            const data = snapshot.val();
+            setTransactions(data ? Object.values(data) : []);
+        }));
+        
+        unsubs.push(onValue(accountsRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const allAccounts: Account[] = Object.values(data);
+                setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+                setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+            } else {
+                 setBankAccounts([]);
+                 setCryptoWallets([]);
+            }
+        }));
+
+        unsubs.push(onValue(labelsRef, (snapshot) => {
+            const data = snapshot.val();
+            setLabels(data ? Object.values(data) : []);
+        }));
+
+        return () => unsubs.forEach(unsub => unsub());
     }, []);
 
     const exportableData = exportData.map(client => ({
@@ -85,6 +117,10 @@ export default function ClientsPage() {
             </PageHeader>
             <ClientsTable 
                 clients={clients} 
+                transactions={transactions}
+                bankAccounts={bankAccounts}
+                cryptoWallets={cryptoWallets}
+                labels={labels}
                 loading={loading}
                 onFilteredDataChange={setExportData}
             />
