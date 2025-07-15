@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -6,7 +7,7 @@ import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { mergeDuplicateClients, type MergeState } from '@/lib/actions';
-import { Users2 } from 'lucide-react';
+import { Users2, ArrowRight } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DialogClose
+} from '@/components/ui/dialog';
+import { ScrollArea } from './ui/scroll-area';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -29,6 +40,7 @@ function SubmitButton() {
 
 export function MergeClientsButton() {
     const [open, setOpen] = React.useState(false);
+    const [results, setResults] = React.useState<MergeState['mergedGroups'] | undefined>(undefined);
     const { toast } = useToast();
     const [state, formAction] = useActionState<MergeState, FormData>(mergeDuplicateClients, undefined);
 
@@ -40,6 +52,9 @@ export function MergeClientsButton() {
                 variant: state.error ? 'destructive' : 'default',
             });
             setOpen(false);
+            if (state.mergedGroups && state.mergedGroups.length > 0) {
+                setResults(state.mergedGroups);
+            }
         }
     }, [state, toast]);
 
@@ -65,6 +80,40 @@ export function MergeClientsButton() {
                     </form>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Dialog open={!!results} onOpenChange={(open) => !open && setResults(undefined)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Merge Results</DialogTitle>
+                        <DialogDescription>
+                            The following clients have been merged. The "Primary Client" is the record that was kept and updated.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ScrollArea className="max-h-[60vh]">
+                        <div className="space-y-4 pr-6">
+                            {results?.map((group, index) => (
+                                <div key={index} className="rounded-lg border p-4">
+                                    <h3 className="font-semibold text-primary">{group.primaryClient.name}</h3>
+                                    <p className="text-xs text-muted-foreground mb-2">Primary Client ID: {group.primaryClient.id}</p>
+                                    <div className="space-y-1">
+                                        {group.duplicates.map(dup => (
+                                             <div key={dup.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <ArrowRight className="h-4 w-4 text-destructive" />
+                                                <span>Merged duplicate with ID: <span className="font-mono">{dup.id}</span></span>
+                                             </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button>Close</Button>
+                        </DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

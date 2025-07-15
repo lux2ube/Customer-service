@@ -1769,7 +1769,14 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
 
 // --- Client Merge Action ---
-export type MergeState = { message?: string; error?: boolean; } | undefined;
+export type MergeState = {
+    message?: string;
+    error?: boolean;
+    mergedGroups?: {
+        primaryClient: { id: string; name: string };
+        duplicates: { id: string; name: string }[];
+    }[];
+} | undefined;
 
 export async function mergeDuplicateClients(prevState: MergeState, formData: FormData): Promise<MergeState> {
     try {
@@ -1797,13 +1804,12 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         }
 
         const updates: { [key: string]: any } = {};
-        let mergedGroups = 0;
+        const mergedGroupsData: NonNullable<MergeState['mergedGroups']> = [];
         let deletedClients = 0;
 
         for (const name in clientsByName) {
             const group = clientsByName[name];
             if (group.length > 1) {
-                mergedGroups++;
 
                 // The primary client is the one created first
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -1811,6 +1817,11 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
                 const primaryClient = group[0];
                 const duplicates = group.slice(1);
                 
+                mergedGroupsData.push({
+                    primaryClient: { id: primaryClient.id, name: primaryClient.name },
+                    duplicates: duplicates.map(d => ({ id: d.id, name: d.name }))
+                });
+
                 // Aggregate data from duplicates into the primary client
                 const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
@@ -1842,7 +1853,11 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         }
 
         revalidatePath('/clients');
-        return { message: `Merge complete. Merged ${mergedGroups} groups of clients and removed ${deletedClients} duplicates.`, error: false };
+        return { 
+            message: `Merge complete. Merged ${mergedGroupsData.length} groups of clients and removed ${deletedClients} duplicates.`, 
+            error: false,
+            mergedGroups: mergedGroupsData,
+        };
 
     } catch (error: any) {
         console.error("Client Merge Error:", error);
