@@ -1054,7 +1054,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 expense_usd: 0,
                 amount_usdt: syncedAmount,
                 hash: tx.hash,
-                status: 'Confirmed',
+                status: 'Pending', // Start as pending to be filled in later
                 notes: note,
                 client_wallet_address: clientAddress,
                 createdAt: new Date().toISOString(),
@@ -1773,6 +1773,10 @@ export type MergeState = {
     message?: string;
     error?: boolean;
     success?: boolean;
+    mergedGroups?: {
+        primary: Client;
+        duplicates: Client[];
+    }[];
 } | undefined;
 
 export async function mergeDuplicateClients(prevState: MergeState, formData: FormData): Promise<MergeState> {
@@ -1801,26 +1805,25 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         }
 
         const updates: { [key: string]: any } = {};
-        let groupsMerged = 0;
-        let deletedClients = 0;
+        const mergedGroups: { primary: Client, duplicates: Client[] }[] = [];
 
         for (const name in clientsByName) {
             const group = clientsByName[name];
             if (group.length > 1) {
-                groupsMerged++;
                 // The primary client is the one created first
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 
                 const primaryClient = group[0];
                 const duplicates = group.slice(1);
                 
+                mergedGroups.push({ primary: primaryClient, duplicates });
+
                 // Aggregate data from duplicates into the primary client
                 const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
                 const allBep20 = new Set(primaryClient.bep20_addresses || []);
 
                 for (const dup of duplicates) {
-                    deletedClients++;
                     (Array.isArray(dup.phone) ? dup.phone : [dup.phone]).forEach(p => p && allPhones.add(p));
                     (dup.bep20_addresses || []).forEach(a => allBep20.add(a));
                     (dup.kyc_documents || []).forEach(doc => {
@@ -1847,9 +1850,10 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         revalidatePath('/clients/merge');
         revalidatePath('/clients');
         return { 
-            message: `Merge complete. Merged ${groupsMerged} groups and removed ${deletedClients} duplicates.`, 
+            message: `Merge complete. Processed ${mergedGroups.length} groups.`, 
             error: false,
             success: true,
+            mergedGroups,
         };
 
     } catch (error: any) {
@@ -2318,9 +2322,9 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         const allSms: Record<string, SmsTransaction> = smsSnapshot.val() || {};
         const settings: Settings = settingsSnapshot.val();
 
-        // Find "virgin" synced transactions (have hash, are 'Pending', but no bankAccountId yet)
+        // Find "virgin" synced transactions (have hash, but no bankAccountId yet)
         const virginTxs = Object.values(allTransactions).filter(tx => 
-            tx.hash && tx.status === 'Pending' && !tx.bankAccountId && tx.type === 'Deposit'
+            tx.hash && !tx.bankAccountId && tx.type === 'Deposit'
         );
 
         if (virginTxs.length === 0) {
@@ -2373,10 +2377,17 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
             if (bestMatch) {
                 const matchedSms = bestMatch.sms;
                 
+                const smsRate = getRate(matchedSms.currency!);
+                const finalAmountUsd = matchedSms.amount! * smsRate;
+                const fee = finalAmountUsd - tx.amount_usdt;
+
                 updates[`/transactions/${tx.id}/bankAccountId`] = matchedSms.account_id;
                 updates[`/transactions/${tx.id}/bankAccountName`] = matchedSms.account_name;
                 updates[`/transactions/${tx.id}/currency`] = matchedSms.currency;
                 updates[`/transactions/${tx.id}/amount`] = matchedSms.amount;
+                updates[`/transactions/${tx.id}/amount_usd`] = finalAmountUsd;
+                updates[`/transactions/${tx.id}/fee_usd`] = fee > 0 ? fee : 0;
+                updates[`/transactions/${tx.id}/expense_usd`] = fee < 0 ? -fee : 0;
                 updates[`/transactions/${tx.id}/status`] = 'Confirmed';
                 updates[`/transactions/${tx.id}/notes`] = `Auto-matched with SMS ID: ${matchedSms.id}. ${tx.notes || ''}`.trim();
 
