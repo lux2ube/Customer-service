@@ -160,21 +160,21 @@ export function ClientsTable({
         <Select value={bankAccountFilter} onValueChange={setBankAccountFilter}>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by bank account..." /></SelectTrigger>
             <SelectContent>
-                <SelectItem key="all-banks" value="all">All Bank Accounts</SelectItem>
+                <SelectItem value="all">All Bank Accounts</SelectItem>
                 {bankAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
             </SelectContent>
         </Select>
         <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter}>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by crypto wallet..." /></SelectTrigger>
             <SelectContent>
-                <SelectItem key="all-crypto" value="all">All Crypto Wallets</SelectItem>
+                <SelectItem value="all">All Crypto Wallets</SelectItem>
                 {cryptoWallets.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
             </SelectContent>
         </Select>
         <Select value={labelFilter} onValueChange={setLabelFilter}>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by label..." /></SelectTrigger>
             <SelectContent>
-                <SelectItem key="all-labels" value="all">All Labels</SelectItem>
+                <SelectItem value="all">All Labels</SelectItem>
                 {labels.map(label => <SelectItem key={label.id} value={label.id}>{label.name}</SelectItem>)}
             </SelectContent>
         </Select>
