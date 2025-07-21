@@ -60,9 +60,13 @@ export default function ClientsPage() {
         unsubs.push(onValue(accountsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                const allAccounts: Account[] = Object.values(data);
-                setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
-                setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+                const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                
+                const uniqueBankAccounts = allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT');
+                const uniqueCryptoWallets = allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT');
+
+                setBankAccounts(uniqueBankAccounts);
+                setCryptoWallets(uniqueCryptoWallets);
             } else {
                  setBankAccounts([]);
                  setCryptoWallets([]);
