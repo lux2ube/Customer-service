@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Copy, PlusCircle, Trash2, Bot, Settings as SettingsIcon } from 'lucide-react';
+import { Copy, PlusCircle, Trash2, Bot, Settings as SettingsIcon, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -45,19 +45,49 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import Link from 'next/link';
+import { Checkbox } from '@/components/ui/checkbox';
 
-function CreateEndpointButton() {
+function EndpointDialogButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending}>
-            {pending ? 'Creating...' : 'Create Endpoint'}
+            {pending ? (isEditing ? 'Saving...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Create Endpoint')}
         </Button>
     );
 }
 
-function AddEndpointDialog({ accounts, open, setOpen }: { accounts: Account[], open: boolean, setOpen: (open: boolean) => void }) {
+const nameMatchingRules = [
+    { id: 'phone_number', label: 'Phone Number' },
+    { id: 'first_and_second', label: 'First & Second Name' },
+    { id: 'first_and_last', label: 'First & Last Name' },
+    { id: 'full_name', label: 'Full Name (Exact Match)' },
+    { id: 'part_of_full_name', label: 'Part of Full Name' },
+];
+
+function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { accounts: Account[], open: boolean, setOpen: (open: boolean) => void, endpointToEdit?: SmsEndpoint | null }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
+    
+    const [selectedRules, setSelectedRules] = React.useState<string[]>(endpointToEdit?.nameMatchingRules || []);
+    
+    React.useEffect(() => {
+        if (endpointToEdit) {
+            setSelectedRules(endpointToEdit.nameMatchingRules || []);
+        } else {
+            setSelectedRules([]);
+        }
+    }, [endpointToEdit]);
+
+    const handleRuleChange = (ruleId: string, checked: boolean) => {
+        setSelectedRules(prev => {
+            if (checked) {
+                return [...prev, ruleId];
+            } else {
+                return prev.filter(id => id !== ruleId);
+            }
+        });
+    };
+    
     const [state, formAction] = useActionState<SmsEndpointState, FormData>(createSmsEndpoint, undefined);
 
     React.useEffect(() => {
@@ -69,38 +99,60 @@ function AddEndpointDialog({ accounts, open, setOpen }: { accounts: Account[], o
         });
         if (!state.error) {
             setOpen(false);
-            formRef.current?.reset();
         }
     }, [state, toast, setOpen]);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
-                    <DialogTitle>Create New SMS Endpoint</DialogTitle>
+                    <DialogTitle>{endpointToEdit ? 'Edit' : 'Create New'} SMS Endpoint</DialogTitle>
                     <DialogDescription>
-                        Select an account from your Chart of Accounts to generate a unique POST URL. You can create multiple endpoints for the same account.
+                        Select an account and define the name matching rules for this SMS provider.
                     </DialogDescription>
                 </DialogHeader>
                 <form action={formAction} ref={formRef}>
-                    <div className="py-4">
-                        <Label htmlFor="accountId">Account</Label>
-                        <Select name="accountId" required>
-                            <SelectTrigger><SelectValue placeholder="Select an account..." /></SelectTrigger>
-                            <SelectContent>
-                                {accounts.map(acc => (
-                                    <SelectItem key={acc.id} value={acc.id}>
-                                        {acc.name} ({acc.currency})
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <input type="hidden" name="endpointId" value={endpointToEdit?.id || ''} />
+                    <div className="py-4 space-y-4">
+                        <div>
+                            <Label htmlFor="accountId">Account</Label>
+                            <Select name="accountId" required defaultValue={endpointToEdit?.accountId}>
+                                <SelectTrigger><SelectValue placeholder="Select an account..." /></SelectTrigger>
+                                <SelectContent>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id}>
+                                            {acc.name} ({acc.currency})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                             <Label>Name Matching Rules</Label>
+                             <Card className="p-4 mt-2 bg-muted/50">
+                                 <div className="grid grid-cols-2 gap-4">
+                                     {nameMatchingRules.map(rule => (
+                                         <div key={rule.id} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={rule.id}
+                                                name="nameMatchingRules"
+                                                value={rule.id}
+                                                checked={selectedRules.includes(rule.id)}
+                                                onCheckedChange={(checked) => handleRuleChange(rule.id, !!checked)}
+                                            />
+                                            <Label htmlFor={rule.id} className="font-normal">{rule.label}</Label>
+                                         </div>
+                                     ))}
+                                 </div>
+                             </Card>
+                             <p className="text-xs text-muted-foreground mt-2">Select all formats this provider might use to identify a client in an SMS.</p>
+                        </div>
                     </div>
                     <DialogFooter>
                         <DialogClose asChild>
                             <Button type="button" variant="secondary">Cancel</Button>
                         </DialogClose>
-                        <CreateEndpointButton />
+                        <EndpointDialogButton isEditing={!!endpointToEdit} />
                     </DialogFooter>
                 </form>
             </DialogContent>
@@ -115,6 +167,7 @@ export default function SmsGatewaySetupPage() {
     const [loading, setLoading] = React.useState(true);
     const [dialogOpen, setDialogOpen] = React.useState(false);
     const [endpointToDelete, setEndpointToDelete] = React.useState<SmsEndpoint | null>(null);
+    const [endpointToEdit, setEndpointToEdit] = React.useState<SmsEndpoint | null>(null);
 
     const { toast } = useToast();
     const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
@@ -161,6 +214,11 @@ export default function SmsGatewaySetupPage() {
             description: "The endpoint URL has been copied to your clipboard.",
         });
     };
+    
+    const handleOpenDialog = (endpoint: SmsEndpoint | null = null) => {
+        setEndpointToEdit(endpoint);
+        setDialogOpen(true);
+    }
 
     if (!databaseURL) {
         return (
@@ -179,12 +237,12 @@ export default function SmsGatewaySetupPage() {
                 title="SMS Gateway Setup"
                 description="Create and manage unique endpoints for your SMS providers."
             >
-                <Button onClick={() => setDialogOpen(true)}>
+                <Button onClick={() => handleOpenDialog()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Add Endpoint
                 </Button>
             </PageHeader>
-            <AddEndpointDialog accounts={accounts} open={dialogOpen} setOpen={setDialogOpen} />
+            <AddEditEndpointDialog accounts={accounts} open={dialogOpen} setOpen={setDialogOpen} endpointToEdit={endpointToEdit} />
 
              <Card>
                 <CardHeader className="flex-row items-center gap-4 space-y-0">
@@ -247,6 +305,9 @@ export default function SmsGatewaySetupPage() {
                                                 </TableCell>
                                                 <TableCell>{format(new Date(endpoint.createdAt), 'PPP')}</TableCell>
                                                 <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(endpoint)}>
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setEndpointToDelete(endpoint)}>
                                                         <Trash2 className="h-4 w-4 text-destructive" />
                                                     </Button>
