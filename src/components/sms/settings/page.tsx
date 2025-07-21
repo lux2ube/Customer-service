@@ -2,6 +2,7 @@
 'use client';
 
 import * as React from 'react';
+import { useFormStatus } from 'react-dom';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,9 +32,10 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { useActionState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { createSmsEndpoint, deleteSmsEndpoint, type SmsEndpointState } from '@/lib/actions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +47,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import Link from 'next/link';
-import { Checkbox } from '@/components/ui/checkbox';
 
 function EndpointDialogButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -68,7 +69,7 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
     
-    const [selectedRules, setSelectedRules] = React.useState<string[]>(endpointToEdit?.nameMatchingRules || []);
+    const [selectedRules, setSelectedRules] = React.useState<string[]>([]);
     
     React.useEffect(() => {
         if (endpointToEdit) {
@@ -88,7 +89,8 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
         });
     };
     
-    const [state, formAction] = useActionState<SmsEndpointState, FormData>(createSmsEndpoint, undefined);
+    const actionWithId = createSmsEndpoint.bind(null, endpointToEdit?.id || null);
+    const [state, formAction] = useActionState<SmsEndpointState, FormData>(actionWithId, undefined);
 
     React.useEffect(() => {
         if (!state) return;
@@ -99,6 +101,7 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
         });
         if (!state.error) {
             setOpen(false);
+            formRef.current?.reset();
         }
     }, [state, toast, setOpen]);
 
@@ -112,7 +115,6 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
                     </DialogDescription>
                 </DialogHeader>
                 <form action={formAction} ref={formRef}>
-                    <input type="hidden" name="endpointId" value={endpointToEdit?.id || ''} />
                     <div className="py-4 space-y-4">
                         <div>
                             <Label htmlFor="accountId">Account</Label>

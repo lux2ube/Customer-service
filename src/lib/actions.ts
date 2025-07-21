@@ -1428,16 +1428,14 @@ export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
 const SmsEndpointSchema = z.object({
   accountId: z.string().min(1, 'Account selection is required.'),
   nameMatchingRules: z.array(z.string()).optional(),
-  endpointId: z.string().optional().nullable(),
 });
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
-export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+export async function createSmsEndpoint(endpointId: string | null, prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
     const dataToValidate = {
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
-        endpointId: formData.get('endpointId'),
     };
 
     const validatedFields = SmsEndpointSchema.safeParse(dataToValidate);
@@ -1445,7 +1443,7 @@ export async function createSmsEndpoint(prevState: SmsEndpointState, formData: F
         return { message: 'Invalid data provided.', error: true };
     }
 
-    const { accountId, nameMatchingRules, endpointId } = validatedFields.data;
+    const { accountId, nameMatchingRules } = validatedFields.data;
 
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
