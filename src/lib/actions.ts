@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -7,11 +6,11 @@ import { db, storage } from './firebase';
 import { push, ref, set, update, get, remove, query, orderByChild, equalTo, startAt } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, MexcPendingDeposit, TransactionFlag } from './types';
+import type { Client, Account, Settings, Transaction, KycDocument, BlacklistItem, BankAccount, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, TransactionFlag } from './types';
 import { parseSmsWithCustomRules } from './custom-sms-parser';
 import { normalizeArabic } from './utils';
-import { createWorker } from 'tesseract.js';
 import { redirect } from 'next/navigation';
+import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -1433,7 +1432,11 @@ const SmsEndpointSchema = z.object({
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
-export async function createSmsEndpoint(endpointId: string | null, formData: FormData): Promise<SmsEndpointState> {
+export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+    if (!formData) {
+        return { message: "Server error: missing form data.", error: true }
+    }
+    
     const dataToValidate = {
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
@@ -1445,6 +1448,7 @@ export async function createSmsEndpoint(endpointId: string | null, formData: For
     }
 
     const { accountId, nameMatchingRules } = validatedFields.data;
+    const endpointId = formData.get('endpointId') as string | null;
 
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -1585,7 +1589,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 // Fallback to AI parser if custom rules fail
                 const settings = (await get(ref(db, 'settings'))).val() as Settings;
                 if (settings?.gemini_api_key) {
-                    const { parseSmsWithAi } = await import('@/ai/flows/parse-sms-flow');
                     parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
                 }
             }
@@ -1903,377 +1906,6 @@ export async function deleteSmsParsingRule(id: string): Promise<ParsingRuleFormS
         return {};
     } catch (error) {
         return { message: 'Database error: Failed to delete rule.' };
-    }
-}
-
-
-export type MexcDepositState = { message?: string, error?: boolean, errors?: { finalUsdtAmount?: string[] } } | undefined;
-export type MexcTestDepositState = { success?: boolean, message?: string, error?: boolean, errors?: { clientId?: string[], bankAccountId?: string[], amount?: string[], clientWalletAddress?: string[] } } | undefined;
-
-
-export async function executeMexcDeposit(prevState: MexcDepositState, formData: FormData): Promise<MexcDepositState> {
-    const depositId = formData.get('depositId') as string;
-    const finalUsdtAmountStr = formData.get('finalUsdtAmount') as string;
-    
-    const finalUsdtAmount = parseFloat(finalUsdtAmountStr);
-    if (!depositId || isNaN(finalUsdtAmount) || finalUsdtAmount <= 0) {
-        return { error: true, message: "Invalid deposit data provided.", errors: { finalUsdtAmount: ["Please enter a valid positive amount."] } };
-    }
-
-    try {
-        const settingsSnapshot = await get(ref(db, 'settings'));
-        if (!settingsSnapshot.exists()) {
-            return { error: true, message: 'API settings are not configured.' };
-        }
-        const settings: Settings = settingsSnapshot.val();
-        const { mexc_api_key, mexc_secret_key } = settings;
-
-        if (!mexc_api_key || !mexc_secret_key) {
-            return { error: true, message: 'MEXC API Key or Secret Key is not set in Settings.' };
-        }
-
-        const depositRef = ref(db, `mexc_pending_deposits/${depositId}`);
-        const depositSnapshot = await get(depositRef);
-        if (!depositSnapshot.exists()) {
-            return { error: true, message: "Pending deposit not found." };
-        }
-        const deposit = depositSnapshot.val() as MexcPendingDeposit;
-        
-        // Dynamically import the SDK to avoid server start issues
-        const { Spot } = await import('mexc-api-sdk');
-        
-        // Initialize MEXC SDK Client
-        const client = new Spot(mexc_api_key, mexc_secret_key);
-
-        // Execute the withdrawal via MEXC API
-        const withdrawResult = await client.withdraw(
-            'USDT',                       // coin
-            deposit.clientWalletAddress,  // address
-            finalUsdtAmount,              // amount
-            'BSC'                         // network (BEP20)
-        );
-
-        // The SDK throws an error on failure, so if we're here, it's likely successful.
-        // We'll use the withdrawal ID from the response as the "hash".
-        const withdrawalId = withdrawResult.id;
-        if (!withdrawalId) {
-            throw new Error('MEXC API did not return a withdrawal ID.');
-        }
-
-        // 1. Create the final transaction record
-        const newTxId = push(ref(db, 'transactions')).key;
-        if (!newTxId) { throw new Error("Could not generate transaction ID"); }
-        
-        const rate = deposit.smsCurrency === 'YER' ? (settings.yer_usd || 1) : (settings.sar_usd || 1);
-        const amountUSD = deposit.smsAmount * rate;
-        const fee = amountUSD - finalUsdtAmount;
-        
-        const newTxData: Omit<Transaction, 'id' | 'createdAt'> = {
-            date: new Date().toISOString(),
-            type: 'Deposit',
-            clientId: deposit.clientId,
-            clientName: deposit.clientName,
-            bankAccountId: deposit.smsBankAccountId,
-            bankAccountName: deposit.smsBankAccountName,
-            cryptoWalletId: settings.mexc_usdt_wallet_account_id,
-            amount: deposit.smsAmount,
-            currency: deposit.smsCurrency as 'YER' | 'SAR' | 'USD' | 'USDT',
-            amount_usd: amountUSD,
-            fee_usd: fee > 0 ? fee : 0,
-            expense_usd: fee < 0 ? -fee : 0,
-            amount_usdt: finalUsdtAmount,
-            hash: withdrawalId,
-            client_wallet_address: deposit.clientWalletAddress,
-            status: 'Confirmed',
-            notes: `Auto-deposit via MEXC from SMS ID: ${deposit.smsId}`,
-            flags: [],
-        };
-        await set(ref(db, `transactions/${newTxId}`), { ...newTxData, createdAt: new Date().toISOString() });
-        
-        // 2. Update the pending deposit status
-        await update(depositRef, {
-            status: 'confirmed',
-            finalUsdtAmount: finalUsdtAmount,
-            transactionId: newTxId,
-        });
-
-        // 3. Mark the original SMS as used
-        if (deposit.smsId.startsWith('test-deposit-')) {
-             // This is a test deposit, no real SMS to update.
-        } else {
-            await update(ref(db, `sms_transactions/${deposit.smsId}`), {
-                status: 'used',
-                transaction_id: newTxId,
-            });
-        }
-        
-
-    } catch (error: any) {
-        console.error("MEXC Deposit Execution Error:", error);
-        // The SDK might return structured errors.
-        const errorMessage = error.response?.data?.msg || error.message || "An unknown error occurred during API execution.";
-        return { error: true, message: errorMessage };
-    }
-
-    revalidatePath('/mexc-deposits');
-    revalidatePath('/transactions');
-    redirect('/mexc-deposits');
-}
-
-const MexcTestDepositSchema = z.object({
-    clientId: z.string().min(1, 'Please select a client.'),
-    bankAccountId: z.string().min(1, 'Please select a bank account.'),
-    amount: z.coerce.number().gt(0, 'Amount must be a positive number.'),
-    clientWalletAddress: z.string().startsWith('0x', 'Wallet address must start with 0x.').min(42, 'Invalid wallet address length.'),
-});
-
-export async function createMexcTestDeposit(prevState: MexcTestDepositState, formData: FormData): Promise<MexcTestDepositState> {
-    const validatedFields = MexcTestDepositSchema.safeParse(Object.fromEntries(formData.entries()));
-
-    if (!validatedFields.success) {
-        return {
-            error: true,
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Please correct the errors and try again.',
-        };
-    }
-
-    const { clientId, bankAccountId, amount, clientWalletAddress } = validatedFields.data;
-
-    try {
-        const [clientSnapshot, bankAccountSnapshot, settingsSnapshot] = await Promise.all([
-            get(ref(db, `clients/${clientId}`)),
-            get(ref(db, `bank_accounts/${bankAccountId}`)),
-            get(ref(db, 'settings'))
-        ]);
-
-        if (!clientSnapshot.exists()) {
-             return { error: true, message: "Selected client not found.", errors: { clientId: ['Client does not exist.'] } };
-        }
-        if (!bankAccountSnapshot.exists()) {
-             return { error: true, message: "Selected bank account not found." };
-        }
-        if (!settingsSnapshot.exists()) {
-            return { error: true, message: "System settings not found." };
-        }
-
-        const client = clientSnapshot.val() as Client;
-        const bankAccount = bankAccountSnapshot.val() as BankAccount;
-        const settings = settingsSnapshot.val() as Settings;
-
-        if (!bankAccount.currency || bankAccount.currency === 'USDT') {
-            return { error: true, message: "Invalid bank account currency." };
-        }
-
-        const rate = bankAccount.currency === 'YER' ? settings.yer_usd : settings.sar_usd;
-        if (!rate || rate <= 0) {
-            return { error: true, message: "Exchange rate for the selected currency is not set or invalid." };
-        }
-        
-        const calculatedUsdtAmount = (amount * rate) * (1 - (settings.deposit_fee_percent || 0) / 100);
-
-        const newDepositRef = push(ref(db, 'mexc_pending_deposits'));
-
-        const newDeposit: Omit<MexcPendingDeposit, 'id'> = {
-            createdAt: new Date().toISOString(),
-            status: 'pending-review',
-            clientId,
-            clientName: client.name,
-            clientWalletAddress,
-            smsId: `test-deposit-${newDepositRef.key}`,
-            smsBankAccountId: bankAccountId,
-            smsBankAccountName: bankAccount.name,
-            smsAmount: amount,
-            smsCurrency: bankAccount.currency,
-            calculatedUsdtAmount: parseFloat(calculatedUsdtAmount.toFixed(2)),
-        };
-
-        await set(newDepositRef, newDeposit);
-
-    } catch (error: any) {
-        console.error("Create Test Deposit Error:", error);
-        return { error: true, message: "An unexpected error occurred while creating the test deposit." };
-    }
-
-    revalidatePath('/mexc-deposits');
-    redirect('/mexc-deposits');
-}
-
-
-// --- ID Scanner Actions ---
-export async function processIdDocument(
-  prevState: ExtractedDataState,
-  formData: FormData
-): Promise<ExtractedDataState> {
-    const imageFile = formData.get("idImage") as File | null;
-    if (!imageFile || imageFile.size === 0) return { error: "Please upload an image file." };
-
-    try {
-        const worker = await createWorker('ara');
-        const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
-        const { data: { text } } = await worker.recognize(imageBuffer);
-        await worker.terminate();
-        
-        // This is a placeholder for a much more sophisticated parsing algorithm
-        const extracted: Partial<ExtractedDataState['data']> = {};
-        
-        const lines = text.split('\n');
-        
-        const nameLine = lines.find(line => line.includes('الاسم:'));
-        if (nameLine) extracted.name = nameLine.replace('الاسم:', '').trim();
-
-        const idLine = lines.find(line => line.includes('الرقم الوطني:'));
-        if (idLine) extracted.nationalId = idLine.replace('الرقم الوطني:', '').trim();
-        
-        if (!Object.keys(extracted).length) {
-            return { error: "Could not extract any recognizable information." };
-        }
-
-        return { data: extracted };
-
-    } catch (error) {
-        console.error("OCR Processing Error:", error);
-        return { error: "Failed to process the document." };
-    }
-}
-
-
-export type ExtractedDataState = {
-  data?: {
-    name?: string;
-    nationalId?: string;
-    dob?: string;
-    pob?: string;
-    issueDate?: string;
-    expiryDate?: string;
-  };
-  error?: string;
-} | null;
-
-
-const PassportMRZSchema = z.object({
-  passportNumber: z.string(),
-  countryCode: z.string(),
-  nationality: z.string(),
-  dob: z.string(), // YYYY-MM-DD
-  sex: z.string(),
-  expiryDate: z.string(), // YYYY-MM-DD
-  fullName: z.string(),
-});
-
-function parsePassportMRZ(mrzLines: string[]): z.infer<typeof PassportMRZSchema> | null {
-    if (mrzLines.length < 2) return null;
-    const line1 = mrzLines[0].replace(/\s/g, '');
-    const line2 = mrzLines[1].replace(/\s/g, '');
-
-    if (line1.length < 44 || line2.length < 44) return null;
-
-    try {
-        const type = line1.substring(0, 1);
-        if (type !== 'P') return null; // Not a passport
-
-        const countryCode = line1.substring(2, 5);
-        const namePart = line1.substring(5, 44).replace(/</g, ' ').trim();
-        
-        const passportNumber = line2.substring(0, 9).replace(/</g, '').trim();
-        const nationality = line2.substring(10, 13);
-        const dobRaw = line2.substring(13, 19);
-        const sex = line2.substring(20, 21);
-        const expiryDateRaw = line2.substring(21, 27);
-
-        const formatDate = (raw: string) => {
-            let year = parseInt(raw.substring(0, 2), 10);
-            const month = raw.substring(2, 4);
-            const day = raw.substring(4, 6);
-            // Infer century
-            year += (year < 40) ? 2000 : 1900;
-            return `${year}-${month}-${day}`;
-        };
-
-        const [lastName, ...givenNamesArray] = namePart.split('  ');
-        const givenNames = givenNamesArray.join(' ');
-        
-        return PassportMRZSchema.parse({
-            passportNumber,
-            countryCode,
-            nationality,
-            dob: formatDate(dobRaw),
-            sex,
-            expiryDate: formatDate(expiryDateRaw),
-            fullName: `${givenNames} ${lastName}`.trim(),
-        });
-
-    } catch (e) {
-        console.error("MRZ Parsing failed:", e);
-        return null;
-    }
-}
-
-
-export async function processIdDocumentWithTesseract(
-  prevState: ExtractedDataState,
-  formData: FormData
-): Promise<ExtractedDataState> {
-    const imageFile = formData.get("idImage") as File | null;
-    if (!imageFile || imageFile.size === 0) return { error: "Please upload an image file." };
-
-    try {
-        const worker = await createWorker('ara+eng');
-        const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
-        const { data: { text, lines } } = await worker.recognize(imageBuffer);
-        await worker.terminate();
-
-        const extracted: Partial<ExtractedDataState['data']> = {};
-        
-        const cleanLine = (t: string) => normalizeArabic(t.toLowerCase()).replace(/[:.]/g, '').trim();
-        
-        // 1. Prioritize Machine-Readable Zone (MRZ) for passports
-        const mrzLines = lines.filter(line => line.text.includes('<<<') && line.confidence > 60).map(l => l.text);
-        const mrzData = parsePassportMRZ(mrzLines);
-        
-        if (mrzData) {
-             extracted.name = mrzData.fullName;
-             extracted.nationalId = mrzData.passportNumber;
-             extracted.dob = mrzData.dob;
-             extracted.expiryDate = mrzData.expiryDate;
-        }
-
-        // 2. Keyword-based extraction as fallback or for additional fields
-        const extractValue = (keywords: string[]): string | undefined => {
-            for (const line of lines) {
-                const cleanedLineText = cleanLine(line.text);
-                for (const keyword of keywords) {
-                    if (cleanedLineText.startsWith(cleanLine(keyword))) {
-                        return line.text.replace(new RegExp(keyword, 'i'), '').replace(':', '').trim();
-                    }
-                }
-            }
-            return undefined;
-        };
-        
-        // Extract fields only if they weren't found in the MRZ
-        if (!extracted.name) {
-            extracted.name = extractValue(['الاسم', 'Name']) || extractValue(['GIVEN NAMES', 'SURNAME']);
-        }
-        if (!extracted.dob) {
-            extracted.dob = extractValue(['تاريخ الميلاد', 'Date of Birth']);
-        }
-        if (!extracted.expiryDate) {
-            extracted.expiryDate = extractValue(['تاريخ الإنتهاء', 'DATE OF EXPIRY']);
-        }
-
-        extracted.pob = extractValue(['مكان الميلاد', 'Place of Birth']);
-        extracted.issueDate = extractValue(['تاريخ الإصدار', 'DATE OF ISSUE']);
-
-        if (!Object.values(extracted).some(v => v !== undefined)) {
-            return { error: "Could not extract any recognizable information. Image may be unclear or format is not supported." };
-        }
-
-        return { data: extracted };
-
-    } catch (error) {
-        console.error("OCR Processing Error:", error);
-        return { error: "Failed to process the document. The image may be unclear or an unexpected error occurred." };
     }
 }
 

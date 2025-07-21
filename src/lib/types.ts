@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -20,7 +19,6 @@ export interface Client {
     id: string;
     name: string; // The full name of the client
     phone: string[];
-    telegramChatId?: number; // Added for Telegram integration
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
     review_flags: string[]; // Now an array of flag IDs
@@ -112,12 +110,6 @@ export interface Settings {
     bsc_api_key?: string;
     bsc_wallet_address?: string;
     gemini_api_key?: string;
-    mexc_api_key?: string;
-    mexc_secret_key?: string;
-    mexc_usdt_wallet_account_id?: string;
-    mexc_min_deposit_usdt?: number;
-    mexc_max_deposit_usdt?: number;
-    telegram_bot_token?: string;
 }
 
 export interface BlacklistItem {
@@ -174,22 +166,4 @@ export interface SmsParsingRule {
     personStartsAfter: string;
     personEndsBefore: string;
     createdAt: string;
-}
-
-export interface MexcPendingDeposit {
-    id: string;
-    createdAt: string;
-    status: 'pending-review' | 'confirmed' | 'failed';
-    clientId: string;
-    clientName: string;
-    clientWalletAddress: string;
-    smsId: string;
-    smsBankAccountId: string;
-    smsBankAccountName: string;
-    smsAmount: number;
-    smsCurrency: string;
-    calculatedUsdtAmount: number;
-    finalUsdtAmount?: number;
-    transactionId?: string; // The final transaction ID after confirmation
-    failReason?: string;
 }

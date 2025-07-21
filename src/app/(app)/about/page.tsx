@@ -53,8 +53,8 @@ export default function AboutPage() {
                         <div className="flex items-center gap-3">
                             <Cpu className="h-5 w-5 text-muted-foreground" />
                             <div>
-                                <p className="font-semibold">Genkit AI</p>
-                                <p className="text-xs text-muted-foreground">AI Integration</p>
+                                <p className="font-semibold">AI Integration</p>
+                                <p className="text-xs text-muted-foreground">SMS Parsing</p>
                             </div>
                         </div>
                          <div className="flex items-center gap-3">

@@ -200,20 +200,6 @@ export default function SettingsPage() {
                         <CardDescription>Manage API keys for external services.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                         <div className="space-y-2">
-                            <Label htmlFor="telegram_bot_token">Telegram Bot Token</Label>
-                            <Input id="telegram_bot_token" type="password" placeholder="Your Telegram Bot Token" value={settings.telegram_bot_token || ''} onChange={handleInputChange} />
-                             <p className="text-xs text-muted-foreground">
-                                Required for client interaction via Telegram.
-                            </p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="gemini_api_key">Gemini API Key</Label>
-                            <Input id="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" value={settings.gemini_api_key || ''} onChange={handleInputChange} />
-                             <p className="text-xs text-muted-foreground">
-                                Required for AI-powered SMS parsing.
-                            </p>
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="bsc_api_key">BscScan API Key</Label>
                             <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />
@@ -221,49 +207,6 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                             <Label htmlFor="bsc_wallet_address">USDT Wallet Address (BSC)</Label>
                             <Input id="bsc_wallet_address" type="text" placeholder="0x..." value={settings.bsc_wallet_address || ''} onChange={handleInputChange} />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>MEXC Automation</CardTitle>
-                        <CardDescription>Configure API keys and settings for automated deposits via MEXC.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid md:grid-cols-2 gap-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="mexc_api_key">MEXC API Key</Label>
-                                <Input id="mexc_api_key" type="password" placeholder="Your MEXC API Key" value={settings.mexc_api_key || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="mexc_secret_key">MEXC Secret Key</Label>
-                                <Input id="mexc_secret_key" type="password" placeholder="Your MEXC Secret Key" value={settings.mexc_secret_key || ''} onChange={handleInputChange} />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="mexc_usdt_wallet_account_id">MEXC Source Wallet</Label>
-                             <Select onValueChange={(v) => handleSelectChange('mexc_usdt_wallet_account_id', v)} value={settings.mexc_usdt_wallet_account_id}>
-                                <SelectTrigger><SelectValue placeholder="Select your MEXC USDT wallet..." /></SelectTrigger>
-                                <SelectContent>
-                                    {usdtWallets.map(wallet => (
-                                        <SelectItem key={wallet.id} value={wallet.id}>
-                                            {wallet.name} ({wallet.id})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">This is the wallet in your Chart of Accounts that represents your MEXC funds.</p>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="mexc_min_deposit_usdt">Min. Auto-Deposit (USDT)</Label>
-                                <Input id="mexc_min_deposit_usdt" type="number" value={settings.mexc_min_deposit_usdt || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="mexc_max_deposit_usdt">Max. Auto-Deposit (USDT)</Label>
-                                <Input id="mexc_max_deposit_usdt" type="number" value={settings.mexc_max_deposit_usdt || ''} onChange={handleInputChange} />
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
