@@ -444,7 +444,6 @@ const TransactionSchema = z.object({
     flags: z.array(z.string()).optional(),
     linkedSmsId: z.string().optional().nullable(),
 }).refine(data => {
-    // If a hash exists, amount can be 0 initially, but must be > 0 if confirmed
     if (data.hash && data.status === 'Confirmed') {
         return data.amount > 0;
     }
@@ -491,7 +490,6 @@ export async function createTransaction(transactionId: string | null, formData: 
     let dataToSave = { ...validatedFields.data };
     let finalClientId = dataToSave.clientId;
 
-    // If no client was selected, try to find one by wallet address
     if (!finalClientId && dataToSave.client_wallet_address) {
         try {
             const clientsSnapshot = await get(ref(db, 'clients'));
@@ -514,7 +512,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    // After attempting to find a client, we must have one.
     if (!finalClientId) {
         return {
             errors: { clientId: ["A client must be selected, or one must be found via a known wallet address."] },
@@ -654,7 +651,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    // Link SMS if provided
     const { linkedSmsId } = finalData;
     if (linkedSmsId) {
         try {
@@ -668,7 +664,6 @@ export async function createTransaction(transactionId: string | null, formData: 
                 await update(smsTxRef, smsUpdateData);
             }
         } catch (e) {
-            // Log this but don't fail the whole transaction
             console.error(`Failed to update linked SMS transaction ${linkedSmsId}:`, e);
         }
     }
@@ -720,7 +715,7 @@ export async function createTransaction(transactionId: string | null, formData: 
 
             const newEntryRef = push(ref(db, 'journal_entries'));
             await set(newEntryRef, {
-                date: finalData.date, // Use transaction date
+                date: finalData.date,
                 description,
                 debit_account: debitAccountId,
                 credit_account: creditAccountId,
@@ -760,6 +755,32 @@ export async function createTransaction(transactionId: string | null, formData: 
     return { success: true, transactionId: newId };
 }
 
+export type BulkUpdateState = { message?: string; error?: boolean } | undefined;
+
+export async function updateBulkTransactions(prevState: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+    const transactionIds = formData.getAll('transactionIds') as string[];
+    const status = formData.get('status') as Transaction['status'];
+
+    if (!transactionIds || transactionIds.length === 0 || !status) {
+        return { message: 'No transactions or status selected.', error: true };
+    }
+
+    const updates: { [key: string]: any } = {};
+    for (const id of transactionIds) {
+        updates[`/transactions/${id}/status`] = status;
+    }
+
+    try {
+        await update(ref(db), updates);
+        revalidatePath('/transactions');
+        return { message: `Successfully updated ${transactionIds.length} transactions to "${status}".`, error: false };
+    } catch (error) {
+        console.error('Bulk update error:', error);
+        return { message: 'Database error: Failed to update transactions.', error: true };
+    }
+}
+
+
 export async function getSmsSuggestions(clientId: string, bankAccountId: string): Promise<SmsTransaction[]> {
     if (!clientId || !bankAccountId) {
         return [];
@@ -788,7 +809,6 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
                 return sms.matched_client_id === clientId;
             }
 
-            // For 'parsed' status, use the more robust matching logic
             if (sms.client_name) {
                 return isSmsAMatchForClient(client, sms.client_name);
             }
@@ -870,7 +890,7 @@ export async function createAccount(accountId: string | null, formData: FormData
             const newAccountRef = ref(db, `accounts/${id}`)
             await set(newAccountRef, {
                 ...dataForFirebase,
-                priority: count, // Assign priority at the end
+                priority: count,
             });
         }
     } catch (error) {
@@ -902,10 +922,8 @@ export async function updateAccountPriority(accountId: string, parentId: string 
 
     const allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
     
-    // Filter for sibling accounts
     const siblingAccounts = allAccounts.filter(acc => (acc.parentId || null) === (parentId || null));
 
-    // Ensure all siblings have a priority number for sorting. This makes the system resilient.
     let maxPriority = -1;
     siblingAccounts.forEach(acc => {
       if (typeof acc.priority === 'number' && acc.priority > maxPriority) {
@@ -914,21 +932,18 @@ export async function updateAccountPriority(accountId: string, parentId: string 
     });
     
     const updates: { [key: string]: any } = {};
-    // Assign priorities to any account that is missing one.
     siblingAccounts.forEach(acc => {
       if (typeof acc.priority !== 'number') {
         maxPriority++;
-        acc.priority = maxPriority; // Update local object for sorting
-        updates[`/accounts/${acc.id}/priority`] = acc.priority; // And prepare to persist it
+        acc.priority = maxPriority;
+        updates[`/accounts/${acc.id}/priority`] = acc.priority;
       }
     });
 
-    // If we had to assign new priorities, save them first before proceeding.
     if (Object.keys(updates).length > 0) {
         await update(ref(db), updates);
     }
     
-    // Sort siblings by their now-guaranteed priority
     siblingAccounts.sort((a, b) => a.priority! - b.priority!);
 
     const currentIndex = siblingAccounts.findIndex(acc => acc.id === accountId);
@@ -945,7 +960,6 @@ export async function updateAccountPriority(accountId: string, parentId: string 
         const currentAccount = siblingAccounts[currentIndex];
         const otherAccount = siblingAccounts[otherIndex];
         
-        // Swap priorities
         const priorityUpdates: { [key: string]: any } = {};
         priorityUpdates[`/accounts/${currentAccount.id}/priority`] = otherAccount.priority;
         priorityUpdates[`/accounts/${otherAccount.id}/priority`] = currentAccount.priority;
@@ -1053,7 +1067,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 expense_usd: 0,
                 amount_usdt: syncedAmount,
                 hash: tx.hash,
-                status: 'Pending', // Start as pending to be filled in later
+                status: 'Pending',
                 notes: note,
                 client_wallet_address: clientAddress,
                 createdAt: new Date().toISOString(),
@@ -1231,7 +1245,6 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
             let needsUpdate = false;
             let currentFlags = client.review_flags || [];
             
-            // Check against name blacklist
             for (const item of nameBlacklist) {
                 if (!client.name) continue;
                 const clientWords = new Set(client.name.toLowerCase().split(/\s+/));
@@ -1246,7 +1259,6 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
                 }
             }
             
-            // Check against phone blacklist
             for (const item of phoneBlacklist) {
                 const clientPhones = Array.isArray(client.phone) ? client.phone : [client.phone];
                 if (clientPhones.includes(item.value)) {
@@ -1340,7 +1352,6 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
 
     let accounts: BankAccount[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
 
-    // Assign default priority if missing, to handle legacy data
     accounts.forEach((acc, index) => {
         if (acc.priority === undefined || acc.priority === null) {
             acc.priority = index;
@@ -1360,7 +1371,6 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
     }
     
     if (otherIndex !== -1) {
-        // Swap priorities
         const currentAccount = accounts[currentIndex];
         const otherAccount = accounts[otherIndex];
         
@@ -1372,7 +1382,6 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
             await update(ref(db), updates);
         } catch (error) {
             console.error("Failed to update priority:", error);
-            // Optionally return an error state
         }
     }
     
@@ -1432,10 +1441,11 @@ const SmsEndpointSchema = z.object({
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
-export async function createSmsEndpoint(endpointId: string | null, prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
+export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
     const dataToValidate = {
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
+        endpointId: formData.get('endpointId'),
     };
 
     const validatedFields = SmsEndpointSchema.safeParse(dataToValidate);
@@ -1444,6 +1454,7 @@ export async function createSmsEndpoint(endpointId: string | null, prevState: Sm
     }
 
     const { accountId, nameMatchingRules } = validatedFields.data;
+    const endpointId = dataToValidate.endpointId as string | null;
 
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -1581,7 +1592,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
             
             if (!parsed) {
-                // Fallback to AI parser if custom rules fail
                 const settings = (await get(ref(db, 'settings'))).val() as Settings;
                 if (settings?.gemini_api_key) {
                     parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
@@ -1790,7 +1800,6 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         
         const clientsByName: Record<string, Client[]> = {};
 
-        // Group clients by a normalized name
         for (const clientId in clientsData) {
             const client = { id: clientId, ...clientsData[clientId] };
             if (!client.name) continue;
@@ -1808,7 +1817,6 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
         for (const name in clientsByName) {
             const group = clientsByName[name];
             if (group.length > 1) {
-                // The primary client is the one created first
                 group.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 
                 const primaryClient = group[0];
@@ -1816,7 +1824,6 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
                 
                 mergedGroups.push({ primary: primaryClient, duplicates });
 
-                // Aggregate data from duplicates into the primary client
                 const allPhones = new Set(Array.isArray(primaryClient.phone) ? primaryClient.phone : [primaryClient.phone].filter(Boolean));
                 const allKycDocs = new Map(primaryClient.kyc_documents?.map(doc => [doc.url, doc]) || []);
                 const allBep20 = new Set(primaryClient.bep20_addresses || []);
@@ -1830,11 +1837,9 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
                         }
                     });
                     
-                    // Mark the duplicate for deletion
                     updates[`/clients/${dup.id}`] = null;
                 };
                 
-                // Prepare updates for the primary client
                 updates[`/clients/${primaryClient.id}/phone`] = Array.from(allPhones);
                 updates[`/clients/${primaryClient.id}/bep20_addresses`] = Array.from(allBep20);
                 updates[`/clients/${primaryClient.id}/kyc_documents`] = Array.from(allKycDocs.values());
@@ -1910,21 +1915,18 @@ export type AutoProcessState = { message?: string; error?: boolean; } | undefine
 export async function autoProcessSyncedTransactions(prevState: AutoProcessState, formData: FormData): Promise<AutoProcessState> {
     let combinedMessage = '';
 
-    // Step 1: Sync new transactions from BSCScan
     const bscSyncResult = await syncBscTransactions(undefined, new FormData());
     if (bscSyncResult?.error) {
         return bscSyncResult;
     }
     combinedMessage += bscSyncResult?.message || '';
 
-    // Step 2: Process incoming SMS messages
     const smsProcessResult = await processIncomingSms(undefined, new FormData());
     if (smsProcessResult?.error) {
         return smsProcessResult;
     }
     combinedMessage += `\n${smsProcessResult?.message || ''}`;
 
-    // Step 3: Match processed SMS to clients
     const smsMatchResult = await matchSmsToClients(undefined, new FormData());
     if (smsMatchResult?.error) {
         return smsMatchResult;
@@ -1932,7 +1934,6 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
     combinedMessage += `\n${smsMatchResult?.message || ''}`;
 
 
-    // Step 4: Core logic to link synced transactions with now-matched SMS
     try {
         const [transactionsSnapshot, smsSnapshot, settingsSnapshot] = await Promise.all([
             get(ref(db, 'transactions')),
@@ -1949,7 +1950,6 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         const allSms: Record<string, SmsTransaction> = smsSnapshot.val() || {};
         const settings: Settings = settingsSnapshot.val();
 
-        // Find "virgin" synced transactions (have hash, but no bankAccountId yet)
         const virginTxs = Object.values(allTransactions).filter(tx => 
             tx.hash && !tx.bankAccountId && tx.type === 'Deposit'
         );
@@ -1971,7 +1971,6 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         const updates: { [key: string]: any } = {};
         let processedCount = 0;
 
-        // Find available SMS messages that are matched
         const availableSms = Object.entries(allSms)
             .map(([id, sms]) => ({ ...sms, id }))
             .filter(sms => sms.status === 'matched' && sms.type === 'credit' && sms.amount && sms.currency);
@@ -1992,7 +1991,6 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
                     const smsAmountUsd = sms.amount! * smsRate;
                     const difference = Math.abs(txAmountUsd - smsAmountUsd);
 
-                    // Allow a small tolerance (e.g., 2 USDT) for fees/rate fluctuations
                     if (difference < 2) {
                         if (!bestMatch || difference < bestMatch.difference) {
                             bestMatch = { sms, difference };
@@ -2075,7 +2073,6 @@ export async function deleteLabel(id: string): Promise<LabelFormState> {
     if (!id) return { message: 'Invalid ID.' };
     try {
         await remove(ref(db, `labels/${id}`));
-        // We also need to remove this label from all clients and transactions
         const clientsRef = ref(db, 'clients');
         const clientsSnapshot = await get(clientsRef);
         if (clientsSnapshot.exists()) {

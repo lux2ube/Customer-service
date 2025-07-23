@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -10,7 +11,7 @@ import { SyncButton } from "@/components/sync-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Transaction } from '@/lib/types';
+import type { Transaction, TransactionFlag } from '@/lib/types';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -51,13 +52,18 @@ function AutoProcessForm() {
 
 export default function TransactionsPage() {
     const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [loading, setLoading] = React.useState(true);
     // This state will hold the filtered and sorted data from the table for export
     const [exportData, setExportData] = React.useState<Transaction[]>([]);
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'transactions/');
-        const unsubscribe = onValue(transactionsRef, (snapshot) => {
+        const labelsRef = ref(db, 'labels');
+        
+        const unsubs: (()=>void)[] = [];
+
+        unsubs.push(onValue(transactionsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const list: Transaction[] = Object.keys(data).map(key => ({
@@ -69,9 +75,14 @@ export default function TransactionsPage() {
                 setTransactions([]);
             }
             setLoading(false);
-        });
+        }));
 
-        return () => unsubscribe();
+        unsubs.push(onValue(labelsRef, (snapshot) => {
+            const data = snapshot.val();
+            setLabels(data ? Object.values(data) : []);
+        }));
+
+        return () => unsubs.forEach(unsub => unsub());
     }, []);
 
     const exportableData = exportData.map(tx => ({
@@ -124,9 +135,11 @@ export default function TransactionsPage() {
             </PageHeader>
             <TransactionsTable 
                 transactions={transactions} 
+                labels={labels}
                 loading={loading}
                 onFilteredDataChange={setExportData}
             />
         </>
     );
 }
+

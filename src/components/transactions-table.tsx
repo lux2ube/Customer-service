@@ -21,35 +21,30 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn, normalizeArabic } from '@/lib/utils';
-import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { Checkbox } from '@/components/ui/checkbox';
+import { TransactionBulkActions } from './transaction-bulk-actions';
 
 
 type SortableKeys = keyof Transaction;
 
 interface TransactionsTableProps {
     transactions: Transaction[];
+    labels: TransactionFlag[];
     loading: boolean;
     onFilteredDataChange: (data: Transaction[]) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
 
-export function TransactionsTable({ transactions, loading, onFilteredDataChange }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, labels, loading, onFilteredDataChange }: TransactionsTableProps) {
   // Filter and sort state
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
 
-  React.useEffect(() => {
-    const labelsRef = ref(db, 'labels');
-    const unsubscribe = onValue(labelsRef, (snapshot) => {
-        setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
-    });
-    return () => unsubscribe();
-  }, []);
+  // Selection state
+  const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
   const handleSort = (key: SortableKeys) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -68,7 +63,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
         const searchTerms = normalizedSearch.split(' ').filter(Boolean);
 
         filtered = filtered.filter(tx => {
-            // Smart search for client name
             const clientName = normalizeArabic(tx.clientName?.toLowerCase() || '');
             const clientNameWords = clientName.split(' ');
             const clientNameMatch = searchTerms.every(term => 
@@ -78,8 +72,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
             if (clientNameMatch) {
                 return true;
             }
-
-            // Simple search for other fields, using the normalized search term for consistency
+            
             const otherFieldsMatch = (
                 (tx.id && tx.id.toLowerCase().includes(normalizedSearch)) ||
                 (tx.type && tx.type.toLowerCase().includes(normalizedSearch)) ||
@@ -103,13 +96,12 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
             if (!tx.date) return false;
             const txDate = new Date(tx.date);
             const fromDate = dateRange.from!;
-            // If only 'from' is selected, range is from that day to future.
             let toDate: Date;
             if (dateRange.to) {
                 toDate = new Date(dateRange.to);
-                toDate.setHours(23, 59, 59, 999); // end of day to make range inclusive
+                toDate.setHours(23, 59, 59, 999);
             } else {
-                toDate = new Date(8640000000000000); // far future
+                toDate = new Date(8640000000000000);
             }
             return txDate >= fromDate && txDate <= toDate;
         });
@@ -143,6 +135,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   React.useEffect(() => {
     onFilteredDataChange(filteredAndSortedTransactions);
     setCurrentPage(1);
+    setRowSelection({}); // Reset selection when filters change
   }, [filteredAndSortedTransactions, onFilteredDataChange]);
 
   const totalPages = Math.ceil(filteredAndSortedTransactions.length / ITEMS_PER_PAGE);
@@ -189,9 +182,20 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
     return new Map(labels?.map(label => [label.id, label]));
   }, [labels]);
 
+  const selectedTransactionIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
+
+  const handleSelectAll = (checked: boolean) => {
+    const newSelection: Record<string, boolean> = {};
+    if (checked) {
+      paginatedTransactions.forEach(tx => {
+        newSelection[tx.id] = true;
+      });
+    }
+    setRowSelection(newSelection);
+  };
 
   return (
-    <>
+    <div className="space-y-4">
       <div className="flex flex-col md:flex-row items-center gap-4 py-4">
         <Input
           placeholder="Search transactions..."
@@ -205,48 +209,38 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                 <Button
                 id="date"
                 variant={"outline"}
-                className={cn(
-                    "w-[260px] justify-start text-left font-normal",
-                    !dateRange && "text-muted-foreground"
-                )}
+                className={cn("w-[260px] justify-start text-left font-normal",!dateRange && "text-muted-foreground")}
                 >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {dateRange?.from ? (
-                    dateRange.to ? (
-                    <>
-                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                        {format(dateRange.to, "LLL dd, y")}
-                    </>
-                    ) : (
-                    format(dateRange.from, "LLL dd, y")
-                    )
-                ) : (
-                    <span>Pick a date range</span>
-                )}
+                {dateRange?.from ? ( dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                initialFocus
-                mode="range"
-                defaultMonth={dateRange?.from}
-                selected={dateRange}
-                onSelect={setDateRange}
-                numberOfMonths={2}
-                />
+                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/>
             </PopoverContent>
             </Popover>
-            {dateRange && (
-                <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)}>
-                    <X className="h-4 w-4" />
-                </Button>
-            )}
+            {dateRange && (<Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)}><X className="h-4 w-4" /></Button>)}
         </div>
       </div>
+
+      {selectedTransactionIds.length > 0 && (
+          <TransactionBulkActions 
+            selectedIds={selectedTransactionIds}
+            onActionComplete={() => setRowSelection({})}
+          />
+      )}
+      
       <div className="rounded-md border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10 px-2">
+                    <Checkbox
+                        checked={Object.keys(rowSelection).length > 0 && Object.keys(rowSelection).length === paginatedTransactions.length}
+                        onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                        aria-label="Select all"
+                    />
+                </TableHead>
                 <TableHead className="w-8 p-2"></TableHead>
                 <SortableHeader sortKey="date">Date</SortableHeader>
                 <SortableHeader sortKey="clientName">Client</SortableHeader>
@@ -260,24 +254,25 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center">
-                    Loading transactions...
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={10} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map(tx => {
                   const firstLabelId = tx.flags?.[0];
                   const firstLabel = firstLabelId ? labelsMap.get(firstLabelId) : null;
                   return (
-                    <TableRow key={tx.id}>
+                    <TableRow key={tx.id} data-state={rowSelection[tx.id] && "selected"}>
+                        <TableCell className="px-2">
+                            <Checkbox
+                                checked={rowSelection[tx.id] || false}
+                                onCheckedChange={(checked) => setRowSelection(prev => ({...prev, [tx.id]: !!checked}))}
+                                aria-label="Select row"
+                            />
+                        </TableCell>
                         <TableCell className="p-2">
                             {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
                         </TableCell>
                         <TableCell>
-                        {tx.date && !isNaN(new Date(tx.date).getTime())
-                            ? format(new Date(tx.date), 'PPP')
-                            : 'N/A'}
+                        {tx.date && !isNaN(new Date(tx.date).getTime()) ? format(new Date(tx.date), 'PPP') : 'N/A'}
                         </TableCell>
                         <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
                         <TableCell>
@@ -286,12 +281,8 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                         <TableCell className="font-mono">
                         {tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}
                         </TableCell>
-                        <TableCell className="font-mono">
-                        {formatCurrency(tx.amount_usd || 0)}
-                        </TableCell>
-                        <TableCell>
-                            <Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge>
-                        </TableCell>
+                        <TableCell className="font-mono">{formatCurrency(tx.amount_usd || 0)}</TableCell>
+                        <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                         <TableCell className="flex flex-wrap gap-1">
                           {tx.flags?.map(labelId => {
                               const label = labelsMap.get(labelId);
@@ -306,27 +297,21 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                         </TableCell>
                         <TableCell className="text-right">
                         <Button asChild variant="ghost" size="icon">
-                            <Link href={`/transactions/${tx.id}/edit`}>
-                                <Pencil className="h-4 w-4" />
-                            </Link>
+                            <Link href={`/transactions/${tx.id}/edit`}><Pencil className="h-4 w-4" /></Link>
                         </Button>
                         </TableCell>
                     </TableRow>
                   )
                 })
               ) : (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center">
-                    No transactions found for the selected criteria.
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={10} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </div>
         <div className="flex items-center justify-between py-4">
             <div className="text-sm text-muted-foreground">
-                Page {totalPages > 0 ? currentPage : 0} of {totalPages}
+                {selectedTransactionIds.length} of {filteredAndSortedTransactions.length} row(s) selected.
             </div>
             <div className="flex items-center space-x-2">
                 <Button variant="outline" size="icon" onClick={() => setCurrentPage(1)} disabled={currentPage === 1 || totalPages === 0}>
@@ -347,6 +332,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                 </Button>
             </div>
         </div>
-    </>
+    </div>
   );
 }
