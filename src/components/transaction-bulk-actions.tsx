@@ -2,7 +2,7 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus, useFormState } from 'react-dom';
+import { useFormStatus, useActionState } from 'react';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 import { updateBulkTransactions, type BulkUpdateState } from '@/lib/actions';
@@ -17,7 +17,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
 interface TransactionBulkActionsProps {
@@ -40,7 +39,7 @@ export function TransactionBulkActions({ selectedIds, onActionComplete }: Transa
     const [statusToSet, setStatusToSet] = React.useState<'Pending' | 'Confirmed' | 'Cancelled'>('Pending');
     const formRef = React.useRef<HTMLFormElement>(null);
 
-    const [state, formAction] = useFormState<BulkUpdateState, FormData>(updateBulkTransactions, undefined);
+    const [state, formAction] = useActionState<BulkUpdateState, FormData>(updateBulkTransactions, undefined);
 
     React.useEffect(() => {
         if (state?.message) {
@@ -106,4 +105,3 @@ export function TransactionBulkActions({ selectedIds, onActionComplete }: Transa
         </div>
     );
 }
-
