@@ -11,7 +11,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import type { Transaction, TransactionFlag } from '@/lib/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
 import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
@@ -94,7 +94,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
     if (dateRange?.from) {
         filtered = filtered.filter(tx => {
             if (!tx.date) return false;
-            const txDate = new Date(tx.date);
+            const txDate = parseISO(tx.date);
             const fromDate = dateRange.from!;
             let toDate: Date;
             if (dateRange.to) {
@@ -118,7 +118,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
         
         let comparison = 0;
         if (sortConfig.key === 'date' || sortConfig.key === 'createdAt') {
-            comparison = new Date(aVal).getTime() - new Date(bVal).getTime();
+            comparison = parseISO(aVal).getTime() - parseISO(bVal).getTime();
         } else if (typeof aVal === 'number' && typeof bVal === 'number') {
             comparison = aVal - bVal;
         } else {
@@ -236,7 +236,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
               <TableRow>
                 <TableHead className="w-10 px-2">
                     <Checkbox
-                        checked={Object.keys(rowSelection).length > 0 && Object.keys(rowSelection).length === paginatedTransactions.length}
+                        checked={Object.keys(rowSelection).length > 0 && paginatedTransactions.length > 0 && Object.keys(rowSelection).length === paginatedTransactions.length}
                         onCheckedChange={(checked) => handleSelectAll(!!checked)}
                         aria-label="Select all"
                     />
@@ -272,7 +272,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                             {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
                         </TableCell>
                         <TableCell>
-                        {tx.date && !isNaN(new Date(tx.date).getTime()) ? format(new Date(tx.date), 'PPP') : 'N/A'}
+                        {tx.date && !isNaN(parseISO(tx.date).getTime()) ? format(parseISO(tx.date), 'PPP') : 'N/A'}
                         </TableCell>
                         <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
                         <TableCell>
