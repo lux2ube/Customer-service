@@ -1093,6 +1093,125 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
     }
 }
 
+export async function syncHistoricalBscTransactions(prevState: SyncState, formData: FormData): Promise<SyncState> {
+    try {
+        const settingsSnapshot = await get(ref(db, 'settings'));
+        if (!settingsSnapshot.exists()) {
+            return { message: 'Settings not found. Please configure API key and wallet address.', error: true };
+        }
+        const settings: Settings = settingsSnapshot.val();
+        const { bsc_api_key, bsc_wallet_address } = settings;
+
+        if (!bsc_api_key || !bsc_wallet_address) {
+            return { message: 'BscScan API Key or Wallet Address is not set in Settings.', error: true };
+        }
+
+        const transactionsSnapshot = await get(ref(db, 'transactions'));
+        const existingTxs = transactionsSnapshot.val() || {};
+        const existingHashes = new Set(Object.values(existingTxs).map((tx: any) => tx.hash));
+        
+        const clientsSnapshot = await get(ref(db, 'clients'));
+        const clientsData: Record<string, Client> = clientsSnapshot.val() || {};
+        const addressToClientMap: Record<string, { id: string, name: string }> = {};
+        for (const clientId in clientsData) {
+            const client = clientsData[clientId];
+            if (client.bep20_addresses) {
+                for (const address of client.bep20_addresses) {
+                    addressToClientMap[address.toLowerCase()] = { id: clientId, name: client.name };
+                }
+            }
+        }
+        
+        const walletAccountRef = ref(db, 'accounts/1003');
+        const walletAccountSnapshot = await get(walletAccountRef);
+        const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
+
+        let page = 1;
+        let allNewTransactions: any[] = [];
+        let keepFetching = true;
+        const startDate = new Date('2025-05-16T00:00:00Z').getTime() / 1000;
+
+        while (keepFetching) {
+            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${bsc_wallet_address}&page=${page}&offset=1000&sort=desc&apikey=${bsc_api_key}`;
+            const response = await fetch(apiUrl);
+            if (!response.ok) throw new Error(`BscScan API request failed: ${response.statusText}`);
+            
+            const data = await response.json();
+            if (data.status !== "1" && data.message !== "No transactions found") {
+                throw new Error(`BscScan API Error: ${data.message}`);
+            }
+
+            const results = data.result || [];
+            if (results.length === 0) {
+                keepFetching = false;
+                break;
+            }
+
+            for (const tx of results) {
+                if (parseInt(tx.timeStamp) < startDate) {
+                    keepFetching = false;
+                    break;
+                }
+                if (!existingHashes.has(tx.hash)) {
+                    allNewTransactions.push(tx);
+                }
+            }
+            page++;
+            // Safety break to avoid infinite loops
+            if (page > 50) { 
+                keepFetching = false;
+                console.warn("Historical sync stopped after 50 pages to prevent infinite loops.");
+            }
+            await new Promise(resolve => setTimeout(resolve, 250)); // Rate limit
+        }
+
+        let newTxCount = 0;
+        const updates: { [key: string]: any } = {};
+
+        for (const tx of allNewTransactions) {
+            const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
+            if (syncedAmount <= 0.01) continue;
+
+            const isIncoming = tx.to.toLowerCase() === bsc_wallet_address.toLowerCase();
+            const transactionType = isIncoming ? 'Withdraw' : 'Deposit';
+            const clientAddress = isIncoming ? tx.from : tx.to;
+            const foundClient = addressToClientMap[clientAddress.toLowerCase()];
+
+            const newTxId = push(ref(db, 'transactions')).key;
+            if (!newTxId) continue;
+            
+            const note = `Synced from BscScan. From: ${tx.from}. To: ${tx.to}`;
+            const newTxData = {
+                id: newTxId,
+                date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
+                type: transactionType,
+                clientId: foundClient ? foundClient.id : 'unassigned-bscscan',
+                clientName: foundClient ? foundClient.name : 'Unassigned (BSCScan)',
+                cryptoWalletId: '1003',
+                cryptoWalletName: cryptoWalletName,
+                amount: 0, currency: 'USDT',
+                amount_usd: syncedAmount, fee_usd: 0, expense_usd: 0, amount_usdt: syncedAmount,
+                hash: tx.hash, status: 'Pending', notes: note,
+                client_wallet_address: clientAddress,
+                createdAt: new Date().toISOString(), flags: [],
+            };
+            updates[`/transactions/${newTxId}`] = stripUndefined(newTxData);
+            newTxCount++;
+        }
+
+        if (newTxCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/transactions');
+        return { message: `Historical Sync Complete: ${newTxCount} new transaction(s) were successfully synced.`, error: false };
+    } catch (error: any) {
+        console.error("BscScan Historical Sync Error:", error);
+        return { message: error.message || "An unknown error occurred during historical sync.", error: true };
+    }
+}
+
+
 // --- Client Import Action ---
 export type ImportState = { message?: string; error?: boolean; } | undefined;
 
@@ -1446,11 +1565,13 @@ const SmsEndpointSchema = z.object({
 });
 
 export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
-    const validatedFields = SmsEndpointSchema.safeParse({
+    const dataToValidate = {
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
         endpointId: formData.get('endpointId'),
-    });
+    };
+    
+    const validatedFields = SmsEndpointSchema.safeParse(dataToValidate);
 
     if (!validatedFields.success) {
         return { message: 'Invalid data provided.', error: true };

@@ -4,7 +4,7 @@
 import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2 } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
+import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -83,6 +83,13 @@ function SyncForm() {
     const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={RefreshCw} text="Sync with BSCScan" pendingText="Syncing..." /></form>;
+}
+
+function HistoricalSyncForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SyncState, FormData>(syncHistoricalBscTransactions, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={History} text="Sync Historical USDT" pendingText="Syncing History..." /></form>;
 }
 
 function AutoProcessForm() {
@@ -281,6 +288,7 @@ export default function DashboardPage() {
                         </div>
                          <div className="flex flex-wrap gap-2">
                            <MergeClientsForm />
+                           <HistoricalSyncForm />
                         </div>
                     </CardContent>
                 </Card>
