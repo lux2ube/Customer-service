@@ -89,7 +89,7 @@ function HistoricalSyncForm() {
     const { toast } = useToast();
     const [state, formAction] = useActionState<SyncState, FormData>(syncHistoricalBscTransactions, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={History} text="Sync Historical USDT" pendingText="Syncing History..." /></form>;
+    return <form action={formAction}><ActionButton Icon={History} text="Sync (Before 25 May)" pendingText="Syncing History..." /></form>;
 }
 
 function AutoProcessForm() {

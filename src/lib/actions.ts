@@ -1129,7 +1129,7 @@ export async function syncHistoricalBscTransactions(prevState: SyncState, formDa
         let page = 1;
         let allNewTransactions: any[] = [];
         let keepFetching = true;
-        const startDate = new Date('2025-05-16T00:00:00Z').getTime() / 1000;
+        const cutoffDate = new Date('2025-05-25T00:00:00Z').getTime() / 1000;
 
         while (keepFetching) {
             const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${bsc_wallet_address}&page=${page}&offset=1000&sort=desc&apikey=${bsc_api_key}`;
@@ -1148,14 +1148,22 @@ export async function syncHistoricalBscTransactions(prevState: SyncState, formDa
             }
 
             for (const tx of results) {
-                if (parseInt(tx.timeStamp) < startDate) {
-                    keepFetching = false;
-                    break;
+                if (parseInt(tx.timeStamp) >= cutoffDate) {
+                    continue; // Skip transactions on or after the cutoff date
                 }
+                
                 if (!existingHashes.has(tx.hash)) {
                     allNewTransactions.push(tx);
                 }
             }
+            // Check if the last transaction on the page is still after our cutoff, if so, no need to fetch more
+            if (results.length > 0 && parseInt(results[results.length - 1].timeStamp) < cutoffDate) {
+                 // Potentially more older transactions to fetch
+            } else if (results.length < 1000) {
+                 keepFetching = false;
+            }
+
+
             page++;
             // Safety break to avoid infinite loops
             if (page > 50) { 
@@ -2255,7 +2263,10 @@ export async function createLabel(formData: FormData): Promise<LabelFormState> {
 
     try {
         const newRef = push(ref(db, 'labels'));
-        await set(newRef, validatedFields.data);
+        await set(newRef, {
+            ...validatedFields.data,
+            createdAt: new Date().toISOString(),
+        });
         revalidatePath('/labels');
         return {};
     } catch (error) {
