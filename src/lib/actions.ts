@@ -1434,27 +1434,26 @@ export async function linkSmsToClient(smsId: string, clientId: string): Promise<
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
 
+export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
+
 const SmsEndpointSchema = z.object({
   accountId: z.string().min(1, 'Account selection is required.'),
   nameMatchingRules: z.array(z.string()).optional(),
+  endpointId: z.string().optional().nullable(),
 });
 
-export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
-
 export async function createSmsEndpoint(prevState: SmsEndpointState, formData: FormData): Promise<SmsEndpointState> {
-    const dataToValidate = {
+    const validatedFields = SmsEndpointSchema.safeParse({
         accountId: formData.get('accountId'),
         nameMatchingRules: formData.getAll('nameMatchingRules'),
         endpointId: formData.get('endpointId'),
-    };
+    });
 
-    const validatedFields = SmsEndpointSchema.safeParse(dataToValidate);
     if (!validatedFields.success) {
         return { message: 'Invalid data provided.', error: true };
     }
 
-    const { accountId, nameMatchingRules } = validatedFields.data;
-    const endpointId = dataToValidate.endpointId as string | null;
+    const { accountId, nameMatchingRules, endpointId } = validatedFields.data;
 
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
