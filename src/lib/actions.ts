@@ -1674,35 +1674,35 @@ const matchByPhoneNumber = (clients: ClientWithId[], smsParsedName: string): Cli
 };
 
 const matchByFirstNameAndSecondName = (clients: ClientWithId[], smsParsedName: string): ClientWithId[] => {
-    const normalizedSmsName = normalizeArabic(smsParsedName.toLowerCase());
+    const normalizedSmsName = normalizeArabic(smsParsedName.toLowerCase()).trim();
     return clients.filter(client => {
         if (!client.name) return false;
-        const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+        const normalizedClientName = normalizeArabic(client.name.toLowerCase()).trim();
         const clientNameParts = normalizedClientName.split(' ');
         const smsNameParts = normalizedSmsName.split(' ');
-        if (clientNameParts.length < 2 || smsNameParts.length !== 2) return false;
+        if (smsNameParts.length !== 2) return false;
         return clientNameParts[0] === smsNameParts[0] && clientNameParts[1] === smsNameParts[1];
     });
 };
 
 const matchByFullNameOrPartial = (clients: ClientWithId[], smsParsedName: string): ClientWithId[] => {
-    const normalizedSmsName = normalizeArabic(smsParsedName.toLowerCase());
+    const normalizedSmsName = normalizeArabic(smsParsedName.toLowerCase()).trim();
     return clients.filter(client => {
         if (!client.name) return false;
-        const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+        const normalizedClientName = normalizeArabic(client.name.toLowerCase()).trim();
         return normalizedClientName.startsWith(normalizedSmsName);
     });
 };
 
 const matchByFirstNameAndLastName = (clients: ClientWithId[], smsParsedName: string): ClientWithId[] => {
-    const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).split(' ');
+    const smsNameParts = normalizeArabic(smsParsedName.toLowerCase()).trim().split(' ');
     if (smsNameParts.length < 2) return [];
     const smsFirst = smsNameParts[0];
     const smsLast = smsNameParts[smsNameParts.length - 1];
 
     return clients.filter(client => {
         if (!client.name) return false;
-        const clientNameParts = normalizeArabic(client.name.toLowerCase()).split(' ');
+        const clientNameParts = normalizeArabic(client.name.toLowerCase()).trim().split(' ');
         if (clientNameParts.length < 2) return false;
         const clientFirst = clientNameParts[0];
         const clientLast = clientNameParts[clientNameParts.length - 1];
@@ -1714,7 +1714,6 @@ const scoreAndSelectBestMatch = (
     matches: ClientWithId[],
     sms: SmsTransaction & { id: string },
     allTransactions: (Transaction & { id: string })[],
-    allClients: ClientWithId[]
 ): ClientWithId | null => {
     if (matches.length === 1) return matches[0];
     if (matches.length === 0) return null;
@@ -1723,22 +1722,13 @@ const scoreAndSelectBestMatch = (
     const prioritizedMatch = matches.find(c => c.prioritize_sms_matching);
     if (prioritizedMatch) return prioritizedMatch;
 
-    const getRate = (settings: Settings, currency: string) => {
-        if (!settings) return 1;
-        switch(currency) {
-            case 'YER': return settings.yer_usd || 0;
-            case 'SAR': return settings.sar_usd || 0;
-            default: return 1;
-        }
-    };
-
     let scores = matches.map(client => ({
         client,
         score: 0,
         lastUsed: 0
     }));
 
-    // Score based on previous use of bank account & currency
+    // Score based on previous use of bank account
     const clientTxHistory = allTransactions.filter(tx => tx.bankAccountId === sms.account_id && tx.status === 'Confirmed');
     
     scores.forEach(item => {
@@ -1750,13 +1740,6 @@ const scoreAndSelectBestMatch = (
         }
     });
 
-    // Check for transactions with similar values if still ambiguous
-    const highScorers = scores.filter(s => s.score > 0);
-    if (highScorers.length > 1) {
-        // This part is complex and might be better as a future enhancement.
-        // For now, we'll proceed to the next tie-breaker.
-    }
-
     // Sort by score, then by most recent usage
     scores.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
@@ -1766,7 +1749,6 @@ const scoreAndSelectBestMatch = (
     const bestScore = scores[0].score;
     const topScorers = scores.filter(s => s.score === bestScore);
 
-    // If there's a single top scorer, we have a match.
     if (topScorers.length === 1) {
         return topScorers[0].client;
     }
@@ -1843,7 +1825,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             }
             
             if (potentialMatches.length > 0) {
-                const finalMatch = scoreAndSelectBestMatch(potentialMatches, sms, transactionsArray, clientsArray);
+                const finalMatch = scoreAndSelectBestMatch(potentialMatches, sms, transactionsArray);
                 if (finalMatch) {
                     updates[`/sms_transactions/${sms.id}/status`] = 'matched';
                     updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
@@ -2201,3 +2183,5 @@ export async function deleteLabel(id: string): Promise<LabelFormState> {
         return { message: 'Database error: Failed to delete label.' };
     }
 }
+
+    

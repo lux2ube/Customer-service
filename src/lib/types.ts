@@ -167,3 +167,5 @@ export interface SmsParsingRule {
     personEndsBefore: string;
     createdAt: string;
 }
+
+    

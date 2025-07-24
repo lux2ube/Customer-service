@@ -89,8 +89,7 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
         });
     };
     
-    const actionWithId = createSmsEndpoint.bind(null, endpointToEdit?.id || null);
-    const [state, formAction] = useActionState<SmsEndpointState, FormData>(actionWithId, undefined);
+    const [state, formAction] = useActionState<SmsEndpointState, FormData>(createSmsEndpoint, undefined);
 
     React.useEffect(() => {
         if (!state) return;
@@ -101,7 +100,6 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
         });
         if (!state.error) {
             setOpen(false);
-            formRef.current?.reset();
         }
     }, [state, toast, setOpen]);
 
@@ -115,6 +113,7 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
                     </DialogDescription>
                 </DialogHeader>
                 <form action={formAction} ref={formRef}>
+                    <input type="hidden" name="endpointId" value={endpointToEdit?.id || ''} />
                     <div className="py-4 space-y-4">
                         <div>
                             <Label htmlFor="accountId">Account</Label>
@@ -341,3 +340,5 @@ export default function SmsGatewaySetupPage() {
         </>
     );
 }
+
+    
