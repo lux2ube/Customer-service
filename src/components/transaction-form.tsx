@@ -22,7 +22,7 @@ import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { useRouter } from 'next/navigation';
+import { useRouter, revalidatePath } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertDialog,
