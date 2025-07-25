@@ -2265,6 +2265,61 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
     }
 }
 
+export async function linkAllUnassignedTransactions(prevState: AutoProcessState, formData: FormData): Promise<AutoProcessState> {
+    try {
+        const [clientsSnapshot, transactionsSnapshot] = await Promise.all([
+            get(ref(db, 'clients')),
+            get(ref(db, 'transactions')),
+        ]);
+
+        if (!clientsSnapshot.exists() || !transactionsSnapshot.exists()) {
+            return { message: "No clients or transactions to process.", error: false };
+        }
+
+        const clientsData: Record<string, Client> = clientsSnapshot.val();
+        const transactionsData: Record<string, Transaction> = transactionsSnapshot.val();
+
+        // Create a map of wallet addresses to client info
+        const addressToClientMap: Record<string, { id: string, name: string }> = {};
+        for (const clientId in clientsData) {
+            const client = clientsData[clientId];
+            if (client.bep20_addresses) {
+                for (const address of client.bep20_addresses) {
+                    addressToClientMap[address.toLowerCase()] = { id: clientId, name: client.name };
+                }
+            }
+        }
+        
+        const updates: { [key: string]: any } = {};
+        let updatedCount = 0;
+
+        for (const txId in transactionsData) {
+            const tx = transactionsData[txId];
+            if (tx.clientId === 'unassigned-bscscan' && tx.client_wallet_address) {
+                const foundClient = addressToClientMap[tx.client_wallet_address.toLowerCase()];
+                if (foundClient) {
+                    updates[`/transactions/${txId}/clientId`] = foundClient.id;
+                    updates[`/transactions/${txId}/clientName`] = foundClient.name;
+                    updatedCount++;
+                }
+            }
+        }
+        
+        if (updatedCount > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/transactions');
+        revalidatePath('/clients');
+        return { message: `Scan complete. Linked ${updatedCount} unassigned transaction(s).`, error: false };
+
+    } catch (error: any) {
+        console.error("Link All Unassigned Error:", error);
+        return { message: error.message || "An unknown error occurred during the linking process.", error: true };
+    }
+}
+
+
 // --- Label Actions ---
 export type LabelFormState = { message?: string } | undefined;
 
@@ -2406,3 +2461,4 @@ export async function batchUpdateClientForTransactions(clientId: string, address
         return { error: true, message: 'A database error occurred during the batch update.' };
     }
 }
+
