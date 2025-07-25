@@ -2299,7 +2299,7 @@ export async function linkAllUnassignedTransactions(prevState: AutoProcessState,
                 const foundClient = addressToClientMap[tx.client_wallet_address.toLowerCase()];
                 if (foundClient) {
                     updates[`/transactions/${txId}/clientId`] = foundClient.id;
-                    updates[`/transactions/${txId}/clientName`] = foundClient.name;
+                    updates[`/transactions/${txId}/clientName`] = foundClient.name || 'Name not found';
                     updatedCount++;
                 }
             }
@@ -2461,4 +2461,5 @@ export async function batchUpdateClientForTransactions(clientId: string, address
         return { error: true, message: 'A database error occurred during the batch update.' };
     }
 }
+
 
