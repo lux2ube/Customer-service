@@ -2339,4 +2339,70 @@ export async function deleteLabel(id: string): Promise<LabelFormState> {
     }
 }
 
-    
+export async function findUnassignedTransactionsByAddress(address: string): Promise<number> {
+    if (!address) return 0;
+    try {
+        const txsRef = ref(db, 'transactions');
+        const q = query(txsRef, orderByChild('client_wallet_address'), equalTo(address));
+        const snapshot = await get(q);
+        if (!snapshot.exists()) return 0;
+        
+        const transactions = snapshot.val();
+        let count = 0;
+        for (const txId in transactions) {
+            const tx = transactions[txId];
+            if (tx.clientId === 'unassigned-bscscan') {
+                count++;
+            }
+        }
+        return count;
+    } catch (error) {
+        console.error('Error finding unassigned transactions:', error);
+        return 0;
+    }
+}
+
+export async function batchUpdateClientForTransactions(clientId: string, address: string): Promise<{error?: boolean, message: string}> {
+    if (!clientId || !address) {
+        return { error: true, message: 'Client ID and address are required.' };
+    }
+
+    try {
+        const [clientSnapshot, txsSnapshot] = await Promise.all([
+            get(ref(db, `clients/${clientId}`)),
+            get(query(ref(db, 'transactions'), orderByChild('client_wallet_address'), equalTo(address)))
+        ]);
+
+        if (!clientSnapshot.exists()) {
+            return { error: true, message: 'Client not found.' };
+        }
+        if (!txsSnapshot.exists()) {
+            return { message: 'No transactions found for this address.', error: false };
+        }
+        
+        const client = clientSnapshot.val() as Client;
+        const transactions = txsSnapshot.val();
+        const updates: { [key: string]: any } = {};
+        let updatedCount = 0;
+
+        for (const txId in transactions) {
+            const tx = transactions[txId];
+            if (tx.clientId === 'unassigned-bscscan') {
+                updates[`/transactions/${txId}/clientId`] = clientId;
+                updates[`/transactions/${txId}/clientName`] = client.name;
+                updatedCount++;
+            }
+        }
+
+        if (updatedCount > 0) {
+            await update(ref(db), updates);
+            return { message: `Successfully assigned ${client.name} to ${updatedCount} transaction(s).`, error: false };
+        } else {
+            return { message: 'No unassigned transactions needed updating.', error: false };
+        }
+
+    } catch (error) {
+        console.error('Error in batch update:', error);
+        return { error: true, message: 'A database error occurred during the batch update.' };
+    }
+}

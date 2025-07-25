@@ -8,7 +8,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
 import React from 'react';
-import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions, findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -24,6 +24,16 @@ import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 
 const initialFormData: Transaction = {
@@ -134,6 +144,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const [formData, setFormData] = React.useState<Transaction>(initialFormData);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
+    
+    const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
 
     const getRate = React.useCallback((currency?: string) => {
         if (!currency || !settings) return 1;
@@ -369,25 +381,57 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
     };
 
-    const handleClientSelect = (client: Client | null) => {
+    const handleClientSelect = async (client: Client | null) => {
         setSelectedClient(client);
         
+        let newFormData = { ...formData };
+
         if (client) {
             const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-            setFormData(prev => ({
-                ...prev,
+            newFormData = {
+                ...newFormData,
                 clientId: client.id,
                 bankAccountId: favoriteAccount?.id || '',
                 currency: favoriteAccount?.currency || 'USD',
-            }));
+            };
+            
+            // Check for unassigned transactions if it's a deposit with a wallet address
+            if (formData.type === 'Deposit' && formData.client_wallet_address) {
+                const count = await findUnassignedTransactionsByAddress(formData.client_wallet_address);
+                if (count > 0) {
+                    setBatchUpdateInfo({ client, count });
+                }
+            }
         } else {
-             setFormData(prev => ({
-                ...prev,
+             newFormData = {
+                ...newFormData,
                 clientId: '',
                 bankAccountId: '',
                 currency: 'USD',
-            }));
+            };
         }
+        
+        setFormData(newFormData);
+    };
+
+    const handleBatchUpdateConfirm = async () => {
+        if (!batchUpdateInfo || !formData.client_wallet_address) return;
+        
+        const result = await batchUpdateClientForTransactions(
+            batchUpdateInfo.client.id, 
+            formData.client_wallet_address
+        );
+
+        toast({
+            title: result.error ? 'Error' : 'Success',
+            description: result.message
+        });
+
+        if (!result.error) {
+            revalidatePath('/transactions');
+        }
+
+        setBatchUpdateInfo(null);
     };
     
     const handleFieldChange = (field: keyof Omit<Transaction, 'amount' | 'flags'>, value: any) => {
@@ -699,6 +743,24 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     </Card>
                 </div>
             </form>
+            
+            {batchUpdateInfo && (
+                 <AlertDialog open={!!batchUpdateInfo} onOpenChange={() => setBatchUpdateInfo(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Assign Client to Other Transactions?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                We found {batchUpdateInfo.count} other unassigned transaction(s) from this same wallet address.
+                                Do you want to assign them all to "{batchUpdateInfo.client.name}"?
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setBatchUpdateInfo(null)}>No, Just This One</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleBatchUpdateConfirm}>Yes, Assign All</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </>
     );
 }
