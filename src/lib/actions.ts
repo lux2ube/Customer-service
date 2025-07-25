@@ -2278,30 +2278,48 @@ export async function linkAllUnassignedTransactions(prevState: AutoProcessState,
 
         const clientsData: Record<string, Client> = clientsSnapshot.val();
         const transactionsData: Record<string, Transaction> = transactionsSnapshot.val();
-
-        // Create a map of wallet addresses to client info
-        const addressToClientMap: Record<string, { id: string, name: string }> = {};
-        for (const clientId in clientsData) {
-            const client = clientsData[clientId];
-            if (client.bep20_addresses) {
-                for (const address of client.bep20_addresses) {
-                    addressToClientMap[address.toLowerCase()] = { id: clientId, name: client.name };
-                }
-            }
-        }
         
         const updates: { [key: string]: any } = {};
         let updatedCount = 0;
 
-        for (const txId in transactionsData) {
-            const tx = transactionsData[txId];
-            if (tx.clientId === 'unassigned-bscscan' && tx.client_wallet_address) {
-                const foundClient = addressToClientMap[tx.client_wallet_address.toLowerCase()];
-                if (foundClient) {
-                    updates[`/transactions/${txId}/clientId`] = foundClient.id;
-                    updates[`/transactions/${txId}/clientName`] = foundClient.name || 'Name not found';
-                    updatedCount++;
+        // Create a mutable copy of clients data to update addresses during the run
+        let mutableClientsData = { ...clientsData };
+
+        const transactionsToProcess = Object.entries(transactionsData)
+            .filter(([_, tx]) => tx.clientId === 'unassigned-bscscan' && tx.client_wallet_address)
+            .map(([id, tx]) => ({ ...tx, id }));
+
+        for (const tx of transactionsToProcess) {
+            // Rebuild the address map in each iteration to use updated client data
+            const addressToClientMap: Record<string, { id: string, name: string }> = {};
+            for (const clientId in mutableClientsData) {
+                const client = mutableClientsData[clientId];
+                if (client.bep20_addresses) {
+                    for (const address of client.bep20_addresses) {
+                        addressToClientMap[address.toLowerCase()] = { id: clientId, name: client.name || 'Name not found' };
+                    }
                 }
+            }
+
+            const clientWalletAddress = tx.client_wallet_address!.toLowerCase();
+            const foundClient = addressToClientMap[clientWalletAddress];
+
+            if (foundClient) {
+                updates[`/transactions/${tx.id}/clientId`] = foundClient.id;
+                updates[`/transactions/${tx.id}/clientName`] = foundClient.name;
+                
+                // Also, ensure this address is saved back to the client if somehow it's not.
+                // This makes the process idempotent.
+                const clientToUpdate = mutableClientsData[foundClient.id];
+                const existingAddresses = new Set((clientToUpdate.bep20_addresses || []).map(a => a.toLowerCase()));
+                if (!existingAddresses.has(clientWalletAddress)) {
+                    const newAddresses = [...(clientToUpdate.bep20_addresses || []), tx.client_wallet_address!];
+                    updates[`/clients/${foundClient.id}/bep20_addresses`] = newAddresses;
+                    // Update the mutable copy for the next iteration
+                    mutableClientsData[foundClient.id].bep20_addresses = newAddresses;
+                }
+                
+                updatedCount++;
             }
         }
         
@@ -2461,6 +2479,7 @@ export async function batchUpdateClientForTransactions(clientId: string, address
         return { error: true, message: 'A database error occurred during the batch update.' };
     }
 }
+
 
 
 
