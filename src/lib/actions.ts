@@ -621,7 +621,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    if (finalData.type === 'Deposit' && finalData.status === 'Confirmed' && finalData.client_wallet_address) {
+    if (finalData.clientId && finalData.client_wallet_address) {
         try {
             const clientRef = ref(db, `clients/${finalData.clientId}`);
             const clientSnapshot = await get(clientRef);
@@ -630,7 +630,7 @@ export async function createTransaction(transactionId: string | null, formData: 
                 const existingAddresses = clientData.bep20_addresses || [];
                 const newAddress = finalData.client_wallet_address;
 
-                if (!existingAddresses.includes(newAddress)) {
+                if (!existingAddresses.some(addr => addr.toLowerCase() === newAddress.toLowerCase())) {
                     const updatedAddresses = [...existingAddresses, newAddress];
                     await update(clientRef, { bep20_addresses: updatedAddresses });
                 }
@@ -2461,5 +2461,6 @@ export async function batchUpdateClientForTransactions(clientId: string, address
         return { error: true, message: 'A database error occurred during the batch update.' };
     }
 }
+
 
 
