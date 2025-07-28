@@ -23,6 +23,7 @@ import type { DateRange } from 'react-day-picker';
 import { cn, normalizeArabic } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TransactionBulkActions } from './transaction-bulk-actions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 
 type SortableKeys = keyof Transaction;
@@ -36,12 +37,20 @@ interface TransactionsTableProps {
 
 const ITEMS_PER_PAGE = 50;
 
+const statuses: Transaction['status'][] = ['Pending', 'Confirmed', 'Cancelled'];
+const types: Transaction['type'][] = ['Deposit', 'Withdraw'];
+const currencies: Transaction['currency'][] = ['USD', 'YER', 'SAR', 'USDT'];
+
 export function TransactionsTable({ transactions, labels, loading, onFilteredDataChange }: TransactionsTableProps) {
   // Filter and sort state
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [typeFilter, setTypeFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [currencyFilter, setCurrencyFilter] = React.useState('all');
+
 
   // Selection state
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
@@ -90,6 +99,16 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
         });
     }
 
+    if (typeFilter !== 'all') {
+        filtered = filtered.filter(tx => tx.type === typeFilter);
+    }
+    if (statusFilter !== 'all') {
+        filtered = filtered.filter(tx => tx.status === statusFilter);
+    }
+    if (currencyFilter !== 'all') {
+        filtered = filtered.filter(tx => tx.currency === currencyFilter);
+    }
+
     // Date range filter
     if (dateRange?.from) {
         filtered = filtered.filter(tx => {
@@ -130,7 +149,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
     }
 
     return filtered;
-  }, [transactions, search, dateRange, sortConfig]);
+  }, [transactions, search, dateRange, sortConfig, typeFilter, statusFilter, currencyFilter]);
 
   React.useEffect(() => {
     onFilteredDataChange(filteredAndSortedTransactions);
@@ -193,6 +212,14 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
     }
     setRowSelection(newSelection);
   };
+  
+  const clearFilters = () => {
+    setSearch('');
+    setDateRange(undefined);
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setCurrencyFilter('all');
+  };
 
   return (
     <div className="space-y-4">
@@ -203,7 +230,28 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
           onChange={(event) => setSearch(event.target.value)}
           className="max-w-sm"
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by type..." /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    {statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+            </Select>
+             <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
+                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by currency..." /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Currencies</SelectItem>
+                    {currencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+            </Select>
             <Popover>
             <PopoverTrigger asChild>
                 <Button
@@ -219,7 +267,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                 <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/>
             </PopoverContent>
             </Popover>
-            {dateRange && (<Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)}><X className="h-4 w-4" /></Button>)}
+            <Button variant="ghost" onClick={clearFilters}><X className="mr-2 h-4 w-4" />Clear Filters</Button>
         </div>
       </div>
 
