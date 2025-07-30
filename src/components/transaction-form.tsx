@@ -77,7 +77,7 @@ function BankAccountSelector({
         if (priorityA !== priorityB) {
             return priorityA - priorityB;
         }
-        return a.name.localeCompare(b.name);
+        return (a.name || '').localeCompare(b.name || '');
     });
   }, [accounts]);
 
@@ -875,4 +875,5 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
 
