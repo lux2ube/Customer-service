@@ -216,12 +216,12 @@ export function ChartOfAccountsTable() {
           <TableRow className={cn(isGroup && 'bg-muted/50')}>
              <TableCell className="w-[100px]">
                   <div className="flex items-center">
-                      <form action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'up')}>
+                      <form key={`${account.id}-up`} action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'up')}>
                           <Button type="submit" variant="ghost" size="icon" disabled={index === 0}>
                               <ArrowUp className="h-4 w-4" />
                           </Button>
                       </form>
-                      <form action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'down')}>
+                      <form key={`${account.id}-down`} action={updateAccountPriority.bind(null, account.id, account.parentId || null, 'down')}>
                           <Button type="submit" variant="ghost" size="icon" disabled={index === siblings.length - 1}>
                               <ArrowDown className="h-4 w-4" />
                           </Button>
