@@ -193,9 +193,9 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                         </div>
                                     ) : (
                                         <div className="font-mono text-sm space-y-1">
-                                            <p>Type: <span className="font-semibold">{testResult.type}</span></p>
-                                            <p>Amount: <span className="font-semibold">{testResult.amount}</span></p>
-                                            <p>Person: <span className="font-semibold">{testResult.person}</span></p>
+                                            <p key="type">Type: <span className="font-semibold">{testResult.type}</span></p>
+                                            <p key="amount">Amount: <span className="font-semibold">{testResult.amount}</span></p>
+                                            <p key="person">Person: <span className="font-semibold">{testResult.person}</span></p>
                                         </div>
                                     )}
                                 </CardContent>
