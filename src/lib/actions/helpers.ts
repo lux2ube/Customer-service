@@ -2,7 +2,8 @@
 export const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
     const newObj: Record<string, any> = {};
     for (const key in obj) {
-        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+        // Only include the key if the value is not undefined. Allow null and empty strings.
+        if (obj[key] !== undefined) {
             newObj[key] = obj[key];
         }
     }

@@ -207,15 +207,14 @@ export async function createTransaction(transactionId: string | null, formData: 
         cryptoWalletName,
     };
     
-    const dataForFirebase = stripUndefined(finalData);
+    let dataForFirebase = stripUndefined(finalData);
 
     try {
+        const transactionRef = ref(db, `transactions/${newId}`);
         if (transactionId) {
-            const transactionRef = ref(db, `transactions/${transactionId}`);
             await update(transactionRef, dataForFirebase);
         } else {
-            const newTransactionRef = ref(db, `transactions/${newId}`);
-            await set(newTransactionRef, {
+            await set(transactionRef, {
                 ...dataForFirebase,
                 createdAt: new Date().toISOString(),
             });
