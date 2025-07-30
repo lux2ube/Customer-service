@@ -2,7 +2,6 @@
 // It re-exports all actions from the domain-specific modules.
 
 export * from './account';
-export * from './automation';
 export * from './client';
 export * from './integration';
 export * from './sms';
