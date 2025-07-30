@@ -6,13 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertTriangle, ChevronDown, History } from 'lucide-react';
 import React from 'react';
 import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, Account, Transaction } from '@/lib/types';
+import type { Client, Account, Transaction, AuditLog } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -30,9 +30,18 @@ import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'database';
 import { cn } from '@/lib/utils';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableRow,
+    TableHeader,
+    TableHead,
+} from '@/components/ui/table';
+import { ScrollArea } from './ui/scroll-area';
 
 
-export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
+export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName, auditLogs }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[], auditLogs?: AuditLog[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -431,6 +440,32 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                         )}
                     </CardContent>
                 </Card>
+                {auditLogs && auditLogs.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Audit History</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <ScrollArea className="h-72">
+                                <div className="space-y-4">
+                                    {auditLogs.map(log => (
+                                        <div key={log.id} className="flex items-start gap-3">
+                                            <div className="flex-shrink-0 pt-1">
+                                                <History className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">{log.action.replace(/_/g, ' ')}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    by {log.user} on {format(new Date(log.timestamp), 'PPP p')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
              <div className="md:col-span-2 flex justify-end">
                 <Button type="submit" disabled={isSaving}>

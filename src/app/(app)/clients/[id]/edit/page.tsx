@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { ClientForm } from "@/components/client-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
-import { ref, get } from 'firebase/database';
-import type { Client, Account, Transaction } from '@/lib/types';
+import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import type { Client, Account, Transaction, AuditLog } from '@/lib/types';
 import { notFound } from "next/navigation";
 
 async function getClient(id: string): Promise<Client | null> {
@@ -26,6 +26,20 @@ async function getClientTransactions(clientId: string): Promise<Transaction[]> {
     const allTransactions: Transaction[] = Object.values(snapshot.val());
     // Filter for transactions that are confirmed and belong to the specific client
     return allTransactions.filter(tx => tx.clientId === clientId && tx.status === 'Confirmed');
+}
+
+async function getClientAuditLogs(clientId: string): Promise<AuditLog[]> {
+    const logsRef = ref(db, 'logs');
+    const q = query(logsRef, orderByChild('entityId'), equalTo(clientId));
+    const snapshot = await get(q);
+    if (!snapshot.exists()) {
+        return [];
+    }
+    const logsData = snapshot.val();
+    return Object.keys(logsData)
+        .map(key => ({ id: key, ...logsData[key]}))
+        .filter(log => log.entityType === 'client')
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
 async function getBankAccounts(): Promise<Account[]> {
@@ -77,6 +91,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
     const bankAccounts = await getBankAccounts();
     const transactions = await getClientTransactions(id);
     const otherClientsWithSameName = await getOtherClientsWithSameName(client);
+    const auditLogs = await getClientAuditLogs(id);
 
     return (
         <>
@@ -85,7 +100,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
                 description="Update the client's profile details."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} otherClientsWithSameName={otherClientsWithSameName} />
+                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} otherClientsWithSameName={otherClientsWithSameName} auditLogs={auditLogs} />
             </Suspense>
         </>
     );

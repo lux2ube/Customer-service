@@ -26,6 +26,7 @@ import {
   Contact,
   Bot,
   Info,
+  History
 } from 'lucide-react';
 
 const menuItems = [
@@ -37,6 +38,7 @@ const menuItems = [
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { type: 'divider' },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/logs', label: 'Audit Log', icon: History },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { type: 'divider' },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },

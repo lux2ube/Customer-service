@@ -9,7 +9,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'fi
 import { revalidatePath } from 'next/cache';
 import type { Client, BlacklistItem, KycDocument } from '../types';
 import { normalizeArabic } from '../utils';
-import { stripUndefined } from './helpers';
+import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 
 export type ClientFormState =
@@ -87,6 +87,7 @@ export async function createClient(clientId: string | null, formData: FormData):
     let finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
     
     const dataForFirebase = stripUndefined(finalData);
+    const isEditing = !!clientId;
 
     try {
         const clientDbRef = ref(db, `clients/${clientId || newId}`);
@@ -96,7 +97,7 @@ export async function createClient(clientId: string | null, formData: FormData):
         
         dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
 
-        if (clientId) {
+        if (isEditing) {
             await update(clientDbRef, dataForFirebase);
         } else {
             await set(clientDbRef, {
@@ -104,6 +105,13 @@ export async function createClient(clientId: string | null, formData: FormData):
                 createdAt: new Date().toISOString()
             });
         }
+        
+        await logAction(
+            isEditing ? 'update_client' : 'create_client',
+            { type: 'client', id: clientId || newId, name: validatedFields.data.name },
+            { new: dataForFirebase, old: existingData }
+        );
+
     } catch (error) {
         return { message: 'Database Error: Failed to save client data. Check server logs.' }
     }
@@ -112,6 +120,7 @@ export async function createClient(clientId: string | null, formData: FormData):
         revalidatePath(`/clients/${clientId}/edit`);
     }
     revalidatePath('/clients');
+    revalidatePath('/logs');
     
     return { success: true, message: 'Client saved successfully.', clientId: clientId || newId };
 }
@@ -135,6 +144,12 @@ export async function manageClient(clientId: string, formData: FormData): Promis
                 const clientData = snapshot.val() as Client;
                 const updatedDocs = clientData.kyc_documents?.filter(doc => doc.name !== documentName) || [];
                 await update(clientRef, { kyc_documents: updatedDocs });
+
+                await logAction(
+                    'delete_client_kyc',
+                    { type: 'client', id: clientId, name: clientData.name },
+                    { documentName: documentName }
+                );
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
@@ -160,6 +175,11 @@ export async function manageClient(clientId: string, formData: FormData): Promis
                 const clientData = snapshot.val() as Client;
                 const updatedAddresses = clientData.bep20_addresses?.filter(addr => addr !== addressToDelete) || [];
                 await update(clientRef, { bep20_addresses: updatedAddresses });
+                 await logAction(
+                    'delete_client_address',
+                    { type: 'client', id: clientId, name: clientData.name },
+                    { address: addressToDelete }
+                );
             }
 
             revalidatePath(`/clients/${clientId}/edit`);
@@ -331,6 +351,7 @@ export async function importClients(prevState: ImportState, formData: FormData):
             };
             
             updates[`/clients/${uniqueId}`] = stripUndefined(newClient);
+            await logAction('import_client', { type: 'client', id: uniqueId, name }, newClient);
             importedCount++;
         }
 
@@ -339,6 +360,7 @@ export async function importClients(prevState: ImportState, formData: FormData):
         }
 
         revalidatePath('/clients');
+        revalidatePath('/logs');
         
         let message = `Successfully imported ${importedCount} new clients.`;
         if (skippedCount > 0) {

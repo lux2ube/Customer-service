@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Account, BankAccount } from '../types';
-import { stripUndefined } from './helpers';
+import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 
 // --- Chart of Accounts Actions ---
@@ -64,10 +65,14 @@ export async function createAccount(accountId: string | null, formData: FormData
     }
 
     const dataForFirebase = stripUndefined(data);
+    const isEditing = !!accountId;
+    let oldData = null;
 
     try {
         const accountRef = ref(db, `accounts/${id}`);
-        if(accountId) {
+        if(isEditing) {
+             const snapshot = await get(accountRef);
+             oldData = snapshot.val();
              await update(accountRef, dataForFirebase);
         } else {
             const accountsSnapshot = await get(ref(db, 'accounts'));
@@ -78,11 +83,20 @@ export async function createAccount(accountId: string | null, formData: FormData
                 priority: count,
             });
         }
+        
+        // Logging
+        await logAction(
+            isEditing ? 'update_account' : 'create_account',
+            { type: 'account', id: id, name: data.name },
+            { new: dataForFirebase, old: oldData }
+        );
+
     } catch (error) {
         return { message: 'Database Error: Failed to save account.' }
     }
     
     revalidatePath('/accounting/chart-of-accounts');
+    revalidatePath('/logs');
     redirect('/accounting/chart-of-accounts');
 }
 
@@ -92,8 +106,21 @@ export async function deleteAccount(accountId: string) {
     }
     try {
         const accountRef = ref(db, `accounts/${accountId}`);
+        const snapshot = await get(accountRef);
+        if (!snapshot.exists()) {
+             return { message: 'Account not found.' };
+        }
+        const accountData = snapshot.val();
         await remove(accountRef);
+
+        await logAction(
+            'delete_account',
+            { type: 'account', id: accountId, name: accountData.name },
+            { deletedData: accountData }
+        );
+
         revalidatePath('/accounting/chart-of-accounts');
+        revalidatePath('/logs');
         return { success: true };
     } catch (error) {
         return { message: 'Database Error: Failed to delete account.' };
@@ -151,6 +178,11 @@ export async function updateAccountPriority(accountId: string, parentId: string 
         
         try {
             await update(ref(db), priorityUpdates);
+             await logAction(
+                'update_account_priority',
+                { type: 'account', id: accountId, name: currentAccount.name },
+                { direction, newPriority: otherAccount.priority }
+            );
         } catch (error) {
             console.error("Failed to update priority:", error);
         }
@@ -192,13 +224,16 @@ export async function createBankAccount(accountId: string | null, formData: Form
 
     const data = validatedFields.data;
     const dataForFirebase = stripUndefined(data);
+    const isEditing = !!accountId;
+    let finalId = accountId;
 
     try {
-        if (accountId) {
+        if (isEditing) {
             const accountRef = ref(db, `bank_accounts/${accountId}`);
             await update(accountRef, dataForFirebase);
         } else {
             const newAccountRef = push(ref(db, 'bank_accounts'));
+            finalId = newAccountRef.key;
             const snapshot = await get(ref(db, 'bank_accounts'));
             const count = snapshot.exists() ? snapshot.size : 0;
             
@@ -208,11 +243,19 @@ export async function createBankAccount(accountId: string | null, formData: Form
                 createdAt: new Date().toISOString(),
             });
         }
+        
+        await logAction(
+            isEditing ? 'update_bank_account' : 'create_bank_account',
+            { type: 'bank_account', id: finalId!, name: data.name },
+            dataForFirebase
+        );
+
     } catch (error) {
         return { message: 'Database Error: Failed to save bank account.' }
     }
     
     revalidatePath('/bank-accounts');
+    revalidatePath('/logs');
     redirect('/bank-accounts');
 }
 
@@ -251,6 +294,11 @@ export async function updateBankAccountPriority(accountId: string, direction: 'u
         
         try {
             await update(ref(db), updates);
+            await logAction(
+                'update_bank_account_priority',
+                { type: 'bank_account', id: accountId, name: currentAccount.name },
+                { direction, newPriority: otherAccount.priority }
+            );
         } catch (error) {
             console.error("Failed to update priority:", error);
         }

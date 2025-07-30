@@ -162,4 +162,14 @@ export interface SmsParsingRule {
     createdAt: string;
 }
 
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  user: string; // For now, can be 'system' or an admin ID
+  action: string;
+  entityType: 'client' | 'account' | 'bank_account';
+  entityId: string;
+  entityName?: string;
+  details?: Record<string, any> | string;
+}
     
