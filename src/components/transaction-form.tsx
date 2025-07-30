@@ -454,7 +454,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         actionFormData.set('fee_usd', String(formData.fee_usd));
         actionFormData.set('expense_usd', String(formData.expense_usd || 0));
         actionFormData.set('amount_usdt', String(formData.amount_usdt));
-        actionFormData.set('linkedSmsId', formData.linkedSmsId || '');
+        if (formData.linkedSmsId) {
+            actionFormData.set('linkedSmsId', formData.linkedSmsId);
+        }
         
         formData.flags.forEach(flagId => {
             actionFormData.append('flags', flagId);
@@ -873,3 +875,4 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
