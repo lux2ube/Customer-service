@@ -22,7 +22,7 @@ import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { useRouter, revalidatePath } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -70,7 +70,6 @@ function BankAccountSelector({
 }) {
   const [showAll, setShowAll] = React.useState(false);
 
-  // Sort accounts by priority, then by name as a fallback.
   const sortedAccounts = React.useMemo(() => {
     return [...accounts].sort((a, b) => {
         const priorityA = a.priority ?? Infinity;
@@ -118,26 +117,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const { toast } = useToast();
     const router = useRouter();
 
-    // Data state
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
     const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     
-    // Form State
     const [isSaving, setIsSaving] = React.useState(false);
     const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
     
-    // Suggestion State
     const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
 
-    // Attachment State
     const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
     
-    // Invoice generation state
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
     const invoiceRef = React.useRef<HTMLDivElement>(null);
@@ -157,7 +151,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [settings]);
 
-    // Effect for fetching supporting data from Firebase
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const settingsRef = ref(db, 'settings');
@@ -178,7 +171,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         return () => { unsubAccounts(); unsubSettings(); unsubLabels(); };
     }, []);
 
-    // Effect to set initial form data when editing a transaction
     React.useEffect(() => {
         if (transaction && !isDataLoading) {
             const formState = { ...initialFormData, ...transaction };
@@ -195,7 +187,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
     
-    // Effect to fetch SMS suggestions
     React.useEffect(() => {
         const fetchSuggestions = async () => {
             if (!formData.clientId || !formData.bankAccountId) {
@@ -218,7 +209,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         fetchSuggestions();
     }, [formData.clientId, formData.bankAccountId]);
     
-    // Effect to handle attachment preview cleanup
     React.useEffect(() => {
         return () => {
             if (attachmentPreview) {
@@ -395,7 +385,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 currency: favoriteAccount?.currency || 'USD',
             };
             
-            // Check for unassigned transactions if it's a deposit with a wallet address
             if (formData.type === 'Deposit' && formData.client_wallet_address) {
                 const count = await findUnassignedTransactionsByAddress(formData.client_wallet_address);
                 if (count > 0) {
@@ -428,7 +417,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
 
         if (!result.error) {
-            revalidatePath('/transactions');
+            // Re-fetching transactions might be complex, so we'll just revalidate the path
+            router.refresh();
         }
 
         setBatchUpdateInfo(null);
@@ -455,7 +445,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const formElement = e.target as HTMLFormElement;
         const actionFormData = new FormData(formElement);
         
-        // Append dynamic/state data to FormData
         actionFormData.set('date', formData.date ? new Date(formData.date).toISOString() : new Date().toISOString());
         actionFormData.set('clientId', formData.clientId || '');
         actionFormData.set('bankAccountId', formData.bankAccountId || '');
@@ -582,6 +571,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     selectedClient={selectedClient}
                                     onSelect={handleClientSelect}
                                 />
+                                {formErrors?.clientId && <p className="text-sm text-destructive">{formErrors.clientId[0]}</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label>Bank Account</Label>
@@ -634,6 +624,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                 <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
                             </div>
+                             {formErrors?.amount && <p className="text-sm text-destructive text-right">{formErrors.amount[0]}</p>}
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usd" className="w-1/3 shrink-0 text-right text-xs">Amount (USD)</Label>
                                 <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly />
@@ -805,14 +796,12 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     const [isLoading, setIsLoading] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
 
-    // Debounce search input
     React.useEffect(() => {
         if (!isOpen) return;
 
         if (inputValue.trim().length < 2) {
             setSearchResults([]);
             if (inputValue.trim().length === 0 && selectedClient) {
-                // User cleared the input, so un-select the client
                 onSelect(null);
             }
             return;
@@ -828,7 +817,6 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         return () => clearTimeout(timerId);
     }, [inputValue, isOpen, onSelect, selectedClient]);
     
-    // Update input text when client is selected from parent
     React.useEffect(() => {
         setInputValue(selectedClient?.name || "");
     }, [selectedClient]);
