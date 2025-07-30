@@ -8,7 +8,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
 import React from 'react';
-import { createTransaction, type TransactionFormState, searchClients, getSmsSuggestions, findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, searchClients, /* getSmsSuggestions, */ findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -127,8 +127,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [isSaving, setIsSaving] = React.useState(false);
     const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
     
-    const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
-    const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
+    // const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
+    // const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
 
     const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
@@ -188,27 +188,27 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
     
-    React.useEffect(() => {
-        const fetchSuggestions = async () => {
-            if (!formData.clientId || !formData.bankAccountId) {
-                setSuggestedSms([]);
-                return;
-            }
+    // React.useEffect(() => {
+    //     const fetchSuggestions = async () => {
+    //         if (!formData.clientId || !formData.bankAccountId) {
+    //             setSuggestedSms([]);
+    //             return;
+    //         }
 
-            setIsLoadingSuggestions(true);
-            try {
-                const suggestions = await getSmsSuggestions(formData.clientId, formData.bankAccountId);
-                setSuggestedSms(suggestions);
-            } catch (error) {
-                console.error("Failed to fetch SMS suggestions:", error);
-                setSuggestedSms([]);
-            } finally {
-                setIsLoadingSuggestions(false);
-            }
-        };
+    //         setIsLoadingSuggestions(true);
+    //         try {
+    //             const suggestions = await getSmsSuggestions(formData.clientId, formData.bankAccountId);
+    //             setSuggestedSms(suggestions);
+    //         } catch (error) {
+    //             console.error("Failed to fetch SMS suggestions:", error);
+    //             setSuggestedSms([]);
+    //         } finally {
+    //             setIsLoadingSuggestions(false);
+    //         }
+    //     };
 
-        fetchSuggestions();
-    }, [formData.clientId, formData.bankAccountId]);
+    //     fetchSuggestions();
+    // }, [formData.clientId, formData.bankAccountId]);
     
     React.useEffect(() => {
         return () => {
@@ -344,27 +344,27 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
     };
 
-    const handleSuggestionClick = async (sms: SmsTransaction) => {
-        const newAmount = sms.amount || 0;
-        const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
+    // const handleSuggestionClick = async (sms: SmsTransaction) => {
+    //     const newAmount = sms.amount || 0;
+    //     const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
 
-        setFormData(prev => {
-            const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.hash ? prev.amount_usdt : undefined);
-            return {
-                ...prev,
-                amount: newAmount,
-                currency: smsCurrency,
-                linkedSmsId: sms.id,
-                ...updates,
-            }
-        });
-        setSuggestedSms([]);
+    //     setFormData(prev => {
+    //         const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.hash ? prev.amount_usdt : undefined);
+    //         return {
+    //             ...prev,
+    //             amount: newAmount,
+    //             currency: smsCurrency,
+    //             linkedSmsId: sms.id,
+    //             ...updates,
+    //         }
+    //     });
+    //     setSuggestedSms([]);
         
-        toast({
-            title: 'SMS Applied',
-            description: 'The selected SMS has been applied to the form. It will be marked as used upon saving.',
-        });
-    };
+    //     toast({
+    //         title: 'SMS Applied',
+    //         description: 'The selected SMS has been applied to the form. It will be marked as used upon saving.',
+    //     });
+    // };
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
@@ -595,6 +595,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </CardContent>
                     </Card>
 
+                    {/*
                     {(isLoadingSuggestions || suggestedSms.length > 0) && (
                         <Card>
                             <CardHeader>
@@ -612,6 +613,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                             </CardContent>
                         </Card>
                     )}
+                    */}
 
                     <Card>
                         <CardHeader>
@@ -842,3 +844,4 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+

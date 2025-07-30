@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -385,7 +386,7 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     }
 }
 
-
+/*
 export async function getSmsSuggestions(clientId: string, bankAccountId: string): Promise<SmsTransaction[]> {
     if (!clientId || !bankAccountId) {
         return [];
@@ -431,6 +432,7 @@ export async function getSmsSuggestions(clientId: string, bankAccountId: string)
         return [];
     }
 }
+*/
 
 export async function findUnassignedTransactionsByAddress(address: string): Promise<number> {
     if (!address) return 0;
@@ -560,3 +562,4 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
     }
 }
+
