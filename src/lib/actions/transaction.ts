@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import { z } from 'zod';
@@ -48,7 +49,6 @@ const TransactionSchema = z.object({
     hash: z.string().optional(),
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
-    flags: z.array(z.string()).optional(),
     linkedSmsId: z.string().optional().nullable(),
 }).refine(data => {
     if (data.hash && data.status === 'Confirmed') {
@@ -80,7 +80,6 @@ export async function createTransaction(transactionId: string | null, formData: 
 
     const dataToValidate = {
         ...Object.fromEntries(formData.entries()),
-        flags: formData.getAll('flags'),
         attachment_url: attachmentUrlString,
     };
     
@@ -126,35 +125,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         };
     }
     dataToSave.clientId = finalClientId;
-    
-    let isBlacklisted = false;
-    const clientAddress = dataToSave.client_wallet_address;
-    if (clientAddress) {
-        try {
-            const blacklistSnapshot = await get(ref(db, 'blacklist'));
-            if (blacklistSnapshot.exists()) {
-                const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
-                const addressToCheck = clientAddress.toLowerCase();
-                const addressBlacklist = blacklistItems.filter(item => item.type === 'Address');
-
-                for (const item of addressBlacklist) {
-                    if (addressToCheck === item.value.toLowerCase()) {
-                        isBlacklisted = true;
-                        break;
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("Blacklist check for transaction failed:", e);
-        }
-    }
-
-    if (isBlacklisted) {
-        if (!dataToSave.flags) dataToSave.flags = [];
-        if (!dataToSave.flags.includes('Blacklisted')) {
-            dataToSave.flags.push('Blacklisted');
-        }
-    }
     
     if (transactionId && !dataToSave.attachment_url) {
         const transactionRef = ref(db, `transactions/${transactionId}`);
@@ -386,54 +356,6 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     }
 }
 
-/*
-export async function getSmsSuggestions(clientId: string, bankAccountId: string): Promise<SmsTransaction[]> {
-    if (!clientId || !bankAccountId) {
-        return [];
-    }
-
-    try {
-        const [smsSnapshot, clientSnapshot] = await Promise.all([
-            get(ref(db, 'sms_transactions')),
-            get(ref(db, `clients/${clientId}`))
-        ]);
-
-        if (!smsSnapshot.exists() || !clientSnapshot.exists()) {
-            return [];
-        }
-
-        const allSmsTxs: SmsTransaction[] = Object.keys(smsSnapshot.val()).map(key => ({ id: key, ...smsSnapshot.val()[key] }));
-        const client = clientSnapshot.val() as Client;
-        
-        const suggestions = allSmsTxs.filter(sms => {
-            if (sms.account_id !== bankAccountId) return false;
-            
-            const isAvailable = sms.status === 'parsed' || sms.status === 'matched';
-            if (!isAvailable) return false;
-
-            if (sms.status === 'matched') {
-                return sms.matched_client_id === clientId;
-            }
-
-            if (sms.client_name) {
-                // This simple check will be replaced by the more advanced matching logic.
-                const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-                const normalizedSmsName = normalizeArabic(sms.client_name.toLowerCase());
-                return normalizedClientName.includes(normalizedSmsName);
-            }
-
-            return false;
-        });
-
-        return suggestions.sort((a,b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime());
-
-    } catch (error) {
-        console.error("Error fetching SMS suggestions:", error);
-        return [];
-    }
-}
-*/
-
 export async function findUnassignedTransactionsByAddress(address: string): Promise<number> {
     if (!address) return 0;
     try {
@@ -562,4 +484,3 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
         return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
     }
 }
-

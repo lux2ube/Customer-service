@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
-import type { Settings, Account, TransactionFlag } from '@/lib/types';
+import type { Settings, Account } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save, Link as LinkIcon } from 'lucide-react';
@@ -180,20 +181,6 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </div>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Transaction & Client Labels</CardTitle>
-                        <CardDescription>Create and manage custom labels for transactions and clients from the dedicated labels page.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Button asChild>
-                           <Link href="/labels">
-                                <LinkIcon className="mr-2 h-4 w-4" />
-                                Manage Labels
-                           </Link>
-                        </Button>
-                    </CardContent>
-                </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle>API Integrations</CardTitle>

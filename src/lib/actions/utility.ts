@@ -1,11 +1,12 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, TransactionFlag } from '../types';
+import type { Client, Transaction, BlacklistItem } from '../types';
 
 // --- Blacklist Actions ---
 export type BlacklistFormState = { message?: string } | undefined;
@@ -113,81 +114,5 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
     } catch (error: any) {
         console.error("Blacklist Scan Error:", error);
         return { message: error.message || "An unknown error occurred during the scan.", error: true };
-    }
-}
-
-
-// --- Label Actions ---
-export type LabelFormState = { message?: string } | undefined;
-
-const LabelSchema = z.object({
-  name: z.string().min(1, { message: "Label name is required." }),
-  color: z.string().regex(/^#([0-9a-f]{3}){1,2}$/i, { message: "Must be a valid hex color code." }),
-});
-
-export async function createLabel(formData: FormData): Promise<LabelFormState> {
-    const rawData = {
-        name: formData.get('name'),
-        color: formData.get('color-text') || formData.get('color'),
-    };
-    const validatedFields = LabelSchema.safeParse(rawData);
-
-    if (!validatedFields.success) {
-        return { message: validatedFields.error.flatten().fieldErrors.name?.[0] || 'Invalid data.' };
-    }
-
-    try {
-        const newRef = push(ref(db, 'labels'));
-        await set(newRef, {
-            ...validatedFields.data,
-            id: newRef.key,
-            createdAt: new Date().toISOString(),
-        });
-        revalidatePath('/labels');
-        return {};
-    } catch (error) {
-        return { message: 'Database error: Failed to save label.' };
-    }
-}
-
-export async function deleteLabel(id: string): Promise<LabelFormState> {
-    if (!id) return { message: 'Invalid ID.' };
-    try {
-        await remove(ref(db, `labels/${id}`));
-        const clientsRef = ref(db, 'clients');
-        const clientsSnapshot = await get(clientsRef);
-        if (clientsSnapshot.exists()) {
-            const updates: { [key: string]: any } = {};
-            clientsSnapshot.forEach(childSnapshot => {
-                const client = childSnapshot.val() as Client;
-                if (client.review_flags?.includes(id)) {
-                    const newFlags = client.review_flags.filter(flagId => flagId !== id);
-                    updates[`/clients/${childSnapshot.key}/review_flags`] = newFlags;
-                }
-            });
-            if(Object.keys(updates).length > 0) await update(ref(db), updates);
-        }
-
-        const transactionsRef = ref(db, 'transactions');
-        const transactionsSnapshot = await get(transactionsRef);
-        if (transactionsSnapshot.exists()) {
-            const updates: { [key: string]: any } = {};
-            transactionsSnapshot.forEach(childSnapshot => {
-                const tx = childSnapshot.val() as Transaction;
-                if (tx.flags?.includes(id)) {
-                    const newFlags = tx.flags.filter(flagId => flagId !== id);
-                    updates[`/transactions/${childSnapshot.key}/flags`] = newFlags;
-                }
-            });
-            if(Object.keys(updates).length > 0) await update(ref(db), updates);
-        }
-
-        revalidatePath('/labels');
-        revalidatePath('/clients');
-        revalidatePath('/transactions');
-        return {};
-    } catch (error) {
-        console.error(error);
-        return { message: 'Database error: Failed to delete label.' };
     }
 }

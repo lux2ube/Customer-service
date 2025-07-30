@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -10,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Transaction, TransactionFlag } from '@/lib/types';
+import type { Transaction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -30,7 +31,6 @@ type SortableKeys = keyof Transaction;
 
 interface TransactionsTableProps {
     transactions: Transaction[];
-    labels: TransactionFlag[];
     loading: boolean;
     onFilteredDataChange: (data: Transaction[]) => void;
 }
@@ -41,7 +41,7 @@ const statuses: Transaction['status'][] = ['Pending', 'Confirmed', 'Cancelled'];
 const types: Transaction['type'][] = ['Deposit', 'Withdraw'];
 const currencies: Transaction['currency'][] = ['USD', 'YER', 'SAR', 'USDT'];
 
-export function TransactionsTable({ transactions, labels, loading, onFilteredDataChange }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, loading, onFilteredDataChange }: TransactionsTableProps) {
   // Filter and sort state
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
@@ -197,10 +197,6 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
     </TableHead>
   );
   
-  const labelsMap = React.useMemo(() => {
-    return new Map(labels?.map(label => [label.id, label]));
-  }, [labels]);
-
   const selectedTransactionIds = Object.keys(rowSelection).filter(id => rowSelection[id]);
 
   const handleSelectAll = (checked: boolean) => {
@@ -289,24 +285,20 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                         aria-label="Select all"
                     />
                 </TableHead>
-                <TableHead className="w-8 p-2"></TableHead>
                 <SortableHeader sortKey="date">Date</SortableHeader>
                 <SortableHeader sortKey="clientName">Client</SortableHeader>
                 <SortableHeader sortKey="type">Type</SortableHeader>
                 <SortableHeader sortKey="amount">Amount</SortableHeader>
                 <SortableHeader sortKey="amount_usd">Amount (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
-                <TableHead>Labels</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map(tx => {
-                  const firstLabelId = tx.flags?.[0];
-                  const firstLabel = firstLabelId ? labelsMap.get(firstLabelId) : null;
                   return (
                     <TableRow key={tx.id} data-state={rowSelection[tx.id] && "selected"}>
                         <TableCell className="px-2">
@@ -315,9 +307,6 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                                 onCheckedChange={(checked) => setRowSelection(prev => ({...prev, [tx.id]: !!checked}))}
                                 aria-label="Select row"
                             />
-                        </TableCell>
-                        <TableCell className="p-2">
-                            {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
                         </TableCell>
                         <TableCell>
                         {tx.date && !isNaN(parseISO(tx.date).getTime()) ? format(parseISO(tx.date), 'PPP') : 'N/A'}
@@ -331,18 +320,6 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                         </TableCell>
                         <TableCell className="font-mono">{formatCurrency(tx.amount_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
-                        <TableCell className="flex flex-wrap gap-1">
-                          {tx.flags?.map(labelId => {
-                              const label = labelsMap.get(labelId);
-                              if (!label) return null;
-                              return (
-                                <div key={label.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" style={{ backgroundColor: `${label.color}20` }}>
-                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: label.color }} />
-                                    {label.name}
-                                </div>
-                              );
-                          })}
-                        </TableCell>
                         <TableCell className="text-right">
                         <Button asChild variant="ghost" size="icon">
                             <Link href={`/transactions/${tx.id}/edit`}><Pencil className="h-4 w-4" /></Link>
@@ -352,7 +329,7 @@ export function TransactionsTable({ transactions, labels, loading, onFilteredDat
                   )
                 })
               ) : (
-                <TableRow><TableCell colSpan={10} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -8,7 +9,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
 import React from 'react';
-import { createTransaction, type TransactionFormState, searchClients, /* getSmsSuggestions, */ findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, searchClients, findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -16,7 +17,7 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, Transaction, Settings, SmsTransaction, TransactionFlag } from '@/lib/types';
+import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import { Invoice } from '@/components/invoice';
@@ -34,7 +35,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { LabelSelector } from './label-selector';
 
 
 const initialFormData: Transaction = {
@@ -121,14 +121,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
     const [settings, setSettings] = React.useState<Settings | null>(null);
-    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     
     const [isSaving, setIsSaving] = React.useState(false);
     const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
     
-    // const [suggestedSms, setSuggestedSms] = React.useState<SmsTransaction[]>([]);
-    // const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState(false);
 
     const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
@@ -155,7 +152,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const settingsRef = ref(db, 'settings');
-        const labelsRef = ref(db, 'labels');
 
         const unsubAccounts = onValue(accountsRef, (snap) => {
             const allAccounts: Account[] = snap.val() ? Object.keys(snap.val()).map(key => ({ id: key, ...snap.val()[key] })) : [];
@@ -163,13 +159,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'));
         });
         const unsubSettings = onValue(settingsRef, (snap) => setSettings(snap.val() || null));
-        const unsubLabels = onValue(labelsRef, (snap) => setLabels(snap.val() ? Object.values(snap.val()) : []));
         
-        Promise.all([ get(accountsRef), get(settingsRef), get(labelsRef) ]).then(() => {
+        Promise.all([ get(accountsRef), get(settingsRef) ]).then(() => {
             setIsDataLoading(false);
         });
 
-        return () => { unsubAccounts(); unsubSettings(); unsubLabels(); };
+        return () => { unsubAccounts(); unsubSettings(); };
     }, []);
 
     React.useEffect(() => {
@@ -187,28 +182,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setFormData(formState);
         }
     }, [transaction, client, isDataLoading, bankAccounts]);
-    
-    // React.useEffect(() => {
-    //     const fetchSuggestions = async () => {
-    //         if (!formData.clientId || !formData.bankAccountId) {
-    //             setSuggestedSms([]);
-    //             return;
-    //         }
-
-    //         setIsLoadingSuggestions(true);
-    //         try {
-    //             const suggestions = await getSmsSuggestions(formData.clientId, formData.bankAccountId);
-    //             setSuggestedSms(suggestions);
-    //         } catch (error) {
-    //             console.error("Failed to fetch SMS suggestions:", error);
-    //             setSuggestedSms([]);
-    //         } finally {
-    //             setIsLoadingSuggestions(false);
-    //         }
-    //     };
-
-    //     fetchSuggestions();
-    // }, [formData.clientId, formData.bankAccountId]);
     
     React.useEffect(() => {
         return () => {
@@ -344,27 +317,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
     };
 
-    // const handleSuggestionClick = async (sms: SmsTransaction) => {
-    //     const newAmount = sms.amount || 0;
-    //     const smsCurrency = (sms.currency || 'USD') as Transaction['currency'];
-
-    //     setFormData(prev => {
-    //         const updates = recalculateFinancials(newAmount, prev.type, smsCurrency, prev.hash, prev.hash ? prev.amount_usdt : undefined);
-    //         return {
-    //             ...prev,
-    //             amount: newAmount,
-    //             currency: smsCurrency,
-    //             linkedSmsId: sms.id,
-    //             ...updates,
-    //         }
-    //     });
-    //     setSuggestedSms([]);
-        
-    //     toast({
-    //         title: 'SMS Applied',
-    //         description: 'The selected SMS has been applied to the form. It will be marked as used upon saving.',
-    //     });
-    // };
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
@@ -429,15 +381,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleFlagChange = (flagId: string) => {
-        setFormData(prev => {
-            const newFlags = prev.flags.includes(flagId)
-                ? prev.flags.filter(f => f !== flagId)
-                : [...prev.flags, flagId];
-            return { ...prev, flags: newFlags };
-        });
-    };
-
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsSaving(true);
@@ -458,10 +401,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (formData.linkedSmsId) {
             actionFormData.set('linkedSmsId', formData.linkedSmsId);
         }
-        
-        formData.flags.forEach(flagId => {
-            actionFormData.append('flags', flagId);
-        });
         
         if(attachmentToUpload) {
             actionFormData.set('attachment_url', attachmentToUpload);
@@ -595,26 +534,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                         </CardContent>
                     </Card>
 
-                    {/*
-                    {(isLoadingSuggestions || suggestedSms.length > 0) && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>SMS Suggestions</CardTitle>
-                                <CardDescription>Matching pending SMS messages for this client and account. Click to apply.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-wrap gap-2">
-                                {isLoadingSuggestions && <p className="text-sm text-muted-foreground">Loading suggestions...</p>}
-                                {!isLoadingSuggestions && suggestedSms.map(sms => (
-                                    <Button key={sms.id} type="button" variant="outline" size="sm" onClick={() => handleSuggestionClick(sms)}>
-                                        <MessageSquare className="mr-2 h-3 w-3" />
-                                        {sms.amount} {sms.currency} ({format(new Date(sms.parsed_at), 'MMM d')})
-                                    </Button>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    )}
-                    */}
-
                     <Card>
                         <CardHeader>
                             <CardTitle>Financial Details</CardTitle>
@@ -727,14 +646,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-2">
-                                <Label>Labels</Label>
-                                <LabelSelector 
-                                    labels={labels}
-                                    selectedLabels={formData.flags}
-                                    onLabelChange={handleFlagChange}
-                                />
-                            </div>
                         </CardContent>
                     </Card>
                 </div>
@@ -844,4 +755,5 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
 

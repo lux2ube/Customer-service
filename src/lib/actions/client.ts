@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -30,7 +31,6 @@ const ClientSchema = z.object({
     name: z.string().min(1, { message: 'Name is required.' }),
     phone: z.array(z.string().min(1, { message: 'Phone number cannot be empty.' })).min(1, { message: 'At least one phone number is required.' }),
     verification_status: z.enum(['Active', 'Inactive', 'Pending']),
-    review_flags: z.array(z.string()).optional(),
     prioritize_sms_matching: z.boolean().default(false),
 });
 
@@ -72,7 +72,6 @@ export async function createClient(clientId: string | null, formData: FormData):
         name: formData.get('name'),
         phone: formData.getAll('phone'),
         verification_status: formData.get('verification_status'),
-        review_flags: formData.getAll('review_flags'),
         prioritize_sms_matching: formData.get('prioritize_sms_matching') === 'on',
     };
 
@@ -85,45 +84,7 @@ export async function createClient(clientId: string | null, formData: FormData):
         };
     }
     
-    let isBlacklisted = false;
-    try {
-        const blacklistSnapshot = await get(ref(db, 'blacklist'));
-        if (blacklistSnapshot.exists()) {
-            const blacklistItems: BlacklistItem[] = Object.values(blacklistSnapshot.val());
-            const clientName = validatedFields.data.name;
-            const clientPhones = validatedFields.data.phone;
-
-            for (const item of blacklistItems) {
-                if (isBlacklisted) break;
-                if (item.type === 'Name') {
-                    const clientWords = new Set(clientName.toLowerCase().split(/\s+/));
-                    const blacklistWords = item.value.toLowerCase().split(/\s+/);
-                    if (blacklistWords.every(word => clientWords.has(word))) {
-                        isBlacklisted = true;
-                    }
-                }
-                if (item.type === 'Phone') {
-                    for (const clientPhone of clientPhones) {
-                        if (clientPhone === item.value) {
-                            isBlacklisted = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Blacklist check failed:", e);
-    }
-    
     let finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
-
-    if (isBlacklisted) {
-        if (!finalData.review_flags) finalData.review_flags = [];
-        if (!finalData.review_flags.includes('Blacklisted')) {
-            finalData.review_flags.push('Blacklisted');
-        }
-    }
     
     const dataForFirebase = stripUndefined(finalData);
 

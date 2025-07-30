@@ -12,7 +12,7 @@ import { ImportClientsButton } from "@/components/import-clients-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Client, Account, Transaction, TransactionFlag } from '@/lib/types';
+import type { Client, Account, Transaction } from '@/lib/types';
 import { MergeClientsButton } from '@/components/merge-clients-button';
 
 export default function ClientsPage() {
@@ -20,7 +20,6 @@ export default function ClientsPage() {
     const [transactions, setTransactions] = React.useState<Transaction[]>([]);
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
-    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [exportData, setExportData] = React.useState<Client[]>([]);
 
@@ -28,7 +27,6 @@ export default function ClientsPage() {
         const clientsRef = ref(db, 'clients/');
         const transactionsRef = ref(db, 'transactions/');
         const accountsRef = ref(db, 'accounts/');
-        const labelsRef = ref(db, 'labels');
         
         const unsubs: (()=>void)[] = [];
 
@@ -73,11 +71,6 @@ export default function ClientsPage() {
             }
         }));
 
-        unsubs.push(onValue(labelsRef, (snapshot) => {
-            const data = snapshot.val();
-            setLabels(data ? Object.values(data) : []);
-        }));
-
         return () => unsubs.forEach(unsub => unsub());
     }, []);
 
@@ -86,7 +79,6 @@ export default function ClientsPage() {
         name: client.name,
         phone: (Array.isArray(client.phone) ? client.phone.join(', ') : client.phone) || '',
         verification_status: client.verification_status,
-        review_flags: client.review_flags?.join(', ') || 'None',
         createdAt: client.createdAt,
     }));
 
@@ -107,7 +99,6 @@ export default function ClientsPage() {
                             name: "Name",
                             phone: "Phone",
                             verification_status: "Status",
-                            review_flags: "Flags",
                             createdAt: "Created At",
                         }}
                     />
@@ -124,7 +115,6 @@ export default function ClientsPage() {
                 transactions={transactions}
                 bankAccounts={bankAccounts}
                 cryptoWallets={cryptoWallets}
-                labels={labels}
                 loading={loading}
                 onFilteredDataChange={setExportData}
             />

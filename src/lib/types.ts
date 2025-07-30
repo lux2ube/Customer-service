@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -9,19 +10,13 @@ export interface KycDocument {
 
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 
-export interface TransactionFlag {
-    id: string;
-    name: string;
-    color: string; // e.g., '#FF5733'
-}
-
 export interface Client {
     id: string;
     name: string; // The full name of the client
     phone: string[];
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
-    review_flags: string[]; // Now an array of flag IDs
+    review_flags?: string[];
     prioritize_sms_matching?: boolean;
     createdAt: string;
     bep20_addresses?: string[];
@@ -70,7 +65,6 @@ export interface Transaction {
     hash?: string;
     client_wallet_address?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
-    flags: string[]; // Now an array of flag IDs
     createdAt: string;
     linkedSmsId?: string;
 }

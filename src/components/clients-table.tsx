@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -10,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client, TransactionFlag, Transaction, Account } from '@/lib/types';
+import type { Client, Transaction, Account } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -26,7 +27,6 @@ interface ClientsTableProps {
     transactions: Transaction[];
     bankAccounts: Account[];
     cryptoWallets: Account[];
-    labels: TransactionFlag[];
     loading: boolean;
     onFilteredDataChange: (data: Client[]) => void;
 }
@@ -38,7 +38,6 @@ export function ClientsTable({
     transactions,
     bankAccounts,
     cryptoWallets,
-    labels,
     loading, 
     onFilteredDataChange 
 }: ClientsTableProps) {
@@ -46,7 +45,6 @@ export function ClientsTable({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [bankAccountFilter, setBankAccountFilter] = React.useState('all');
   const [cryptoWalletFilter, setCryptoWalletFilter] = React.useState('all');
-  const [labelFilter, setLabelFilter] = React.useState('all');
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -106,12 +104,8 @@ export function ClientsTable({
         );
     }
 
-    if (labelFilter !== 'all') {
-        filtered = filtered.filter(client => client.review_flags?.includes(labelFilter));
-    }
-
     return filtered;
-  }, [clients, search, bankAccountFilter, cryptoWalletFilter, labelFilter, clientTransactionMap]);
+  }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientTransactionMap]);
 
   React.useEffect(() => {
     onFilteredDataChange(filteredClients);
@@ -137,15 +131,10 @@ export function ClientsTable({
     }
   }
 
-  const labelsMap = React.useMemo(() => {
-    return new Map(labels?.map(label => [label.id, label]));
-  }, [labels]);
-
   const clearFilters = () => {
     setSearch('');
     setBankAccountFilter('all');
     setCryptoWalletFilter('all');
-    setLabelFilter('all');
   }
 
   return (
@@ -171,13 +160,6 @@ export function ClientsTable({
                 {cryptoWallets.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
             </SelectContent>
         </Select>
-        <Select value={labelFilter} onValueChange={setLabelFilter}>
-            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by label..." /></SelectTrigger>
-            <SelectContent>
-                <SelectItem value="all">All Labels</SelectItem>
-                {labels.map(label => <SelectItem key={label.id} value={label.id}>{label.name}</SelectItem>)}
-            </SelectContent>
-        </Select>
         <Button variant="ghost" onClick={clearFilters}>
             <X className="mr-2 h-4 w-4" />
             Clear Filters
@@ -187,11 +169,9 @@ export function ClientsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8 p-2"></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Labels</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -199,37 +179,20 @@ export function ClientsTable({
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={5} className="h-24 text-center">
                     Loading clients...
                   </TableCell>
                 </TableRow>
               ) : paginatedClients.length > 0 ? (
                 paginatedClients.map(client => {
-                  const firstLabelId = client.review_flags?.[0];
-                  const firstLabel = firstLabelId ? labelsMap.get(firstLabelId) : null;
                   return (
                     <TableRow key={client.id}>
-                      <TableCell className="p-2">
-                        {firstLabel && <div className="h-4 w-4 rounded-full" style={{ backgroundColor: firstLabel.color }} />}
-                      </TableCell>
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>{Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(client.verification_status)}>
                           {client.verification_status}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="flex flex-wrap gap-1">
-                        {client.review_flags?.map(labelId => {
-                            const label = labelsMap.get(labelId);
-                            if (!label) return null;
-                            return (
-                                <div key={label.id} className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" style={{ backgroundColor: `${label.color}20` }}>
-                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: label.color }} />
-                                    {label.name}
-                                </div>
-                            );
-                        })}
                       </TableCell>
                       <TableCell>
                         {client.createdAt && !isNaN(new Date(client.createdAt).getTime())
@@ -248,7 +211,7 @@ export function ClientsTable({
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={5} className="h-24 text-center">
                     No clients found for the selected criteria.
                   </TableCell>
                 </TableRow>

@@ -1,162 +1,161 @@
+import { z } from 'zod';
 
-'use client';
-
-import * as React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
-import { PlusCircle, Save, Trash2 } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
-import { createLabel, deleteLabel } from '@/lib/actions';
-import { useToast } from '@/hooks/use-toast';
-import type { TransactionFlag } from '@/lib/types';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending}>
-            {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Label</>}
-        </Button>
-    );
+export interface KycDocument {
+    name: string;
+    url: string;
+    uploadedAt: string;
 }
 
-export function LabelManager({ initialLabels }: { initialLabels: TransactionFlag[] }) {
-    const { toast } = useToast();
-    const formRef = React.useRef<HTMLFormElement>(null);
+export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 
-    const [labels, setLabels] = React.useState<TransactionFlag[]>(initialLabels);
-    const [itemToDelete, setItemToDelete] = React.useState<TransactionFlag | null>(null);
+export interface Client {
+    id: string;
+    name: string; // The full name of the client
+    phone: string[];
+    kyc_documents?: KycDocument[];
+    verification_status: VerificationStatus;
+    review_flags?: string[];
+    prioritize_sms_matching?: boolean;
+    createdAt: string;
+    bep20_addresses?: string[];
+    favoriteBankAccountId?: string;
+    favoriteBankAccountName?: string;
+}
 
-    // This effect ensures the client-side state is updated when initialLabels change (e.g., after form submission and revalidation)
-    React.useEffect(() => {
-        setLabels(initialLabels);
-    }, [initialLabels]);
+export interface BankAccount {
+    id: string;
+    name: string;
+    account_number?: string;
+    currency: 'USD' | 'YER' | 'SAR';
+    status: 'Active' | 'Inactive';
+    createdAt: string;
+    priority?: number;
+}
 
-    const handleFormSubmit = async (formData: FormData) => {
-        const result = await createLabel(formData);
-        if (result?.message) {
-            toast({ variant: 'destructive', title: 'Error', description: result.message });
-        } else {
-            toast({ title: 'Success', description: 'Label saved successfully.' });
-            formRef.current?.reset();
-        }
-    };
+export interface CryptoWallet {
+    id: string;
+    name: string;
+    currency: 'USDT';
+    address: string;
+    createdAt: string;
+}
 
-    const handleDeleteClick = (item: TransactionFlag) => {
-        setItemToDelete(item);
-    };
 
-    const handleDeleteConfirm = async () => {
-        if (itemToDelete) {
-            const result = await deleteLabel(itemToDelete.id);
-            if (result?.message) {
-                toast({ variant: 'destructive', title: 'Error', description: result.message });
-            } else {
-                toast({ title: 'Success', description: 'Label removed successfully.' });
-            }
-            setItemToDelete(null);
-        }
-    };
+export interface Transaction {
+    id: string;
+    date: string;
+    type: 'Deposit' | 'Withdraw';
+    clientId: string;
+    clientName?: string; // For display
+    bankAccountId?: string;
+    bankAccountName?: string; // for display
+    cryptoWalletId?: string;
+    cryptoWalletName?: string; // for display
+    amount: number;
+    currency: 'YER' | 'USD' | 'SAR' | 'USDT';
+    amount_usd: number;
+    fee_usd: number;
+    expense_usd?: number;
+    amount_usdt: number;
+    attachment_url?: string;
+    notes?: string;
+    remittance_number?: string;
+    hash?: string;
+    client_wallet_address?: string;
+    status: 'Pending' | 'Confirmed' | 'Cancelled';
+    createdAt: string;
+    linkedSmsId?: string;
+}
 
-    return (
-        <div className="space-y-6">
-            <Card>
-                <form action={handleFormSubmit} ref={formRef}>
-                    <CardHeader>
-                        <CardTitle>Add New Label</CardTitle>
-                        <CardDescription>Create a new label with a custom name and color.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="name">Label Name</Label>
-                            <Input id="name" name="name" placeholder="e.g., High Risk" required />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="color">Color Code</Label>
-                            <div className="flex items-center gap-2">
-                                <Input id="color" name="color" type="color" className="p-1 h-10 w-14" defaultValue="#cccccc" />
-                                <Input name="color-text" placeholder="#cccccc" onChange={(e) => {
-                                    const colorInput = formRef.current?.querySelector('input[type="color"]') as HTMLInputElement;
-                                    if(colorInput) colorInput.value = e.target.value;
-                                }} className="font-mono" />
-                            </div>
-                        </div>
-                    </CardContent>
-                    <CardFooter className="flex justify-end">
-                        <SubmitButton />
-                    </CardFooter>
-                </form>
-            </Card>
+export interface Account {
+    id: string;
+    name: string;
+    type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
+    isGroup: boolean;
+    parentId?: string | null;
+    currency?: 'YER' | 'USD' | 'SAR' | 'USDT';
+    priority?: number;
+    // Balance fields will be calculated properties, not stored directly
+}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Existing Labels</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Preview</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Color Code</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {labels.length > 0 ? (
-                                    labels.map(item => (
-                                        <TableRow key={item.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2 rounded-full border py-1 px-3 text-sm" style={{ backgroundColor: `${item.color}20`}}>
-                                                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                                                    <span>{item.name}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>{item.name}</TableCell>
-                                            <TableCell className="font-mono">{item.color}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(item)}>
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No custom labels created yet.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+export interface JournalEntry {
+  id: string;
+  date: string;
+  description: string;
+  debit_account: string; // Account ID
+  credit_account: string; // Account ID
+  debit_amount: number;
+  credit_amount: number;
+  amount_usd: number;
+  createdAt: string;
+  debit_account_name?: string; // For display
+  credit_account_name?: string; // For display
+}
 
-            <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will permanently remove the "{itemToDelete?.name}" label from the system and from any clients or transactions it's assigned to.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteConfirm}>Continue</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
-    );
+export interface Settings {
+    yer_usd: number;
+    sar_usd: number;
+    usdt_usd: number;
+    deposit_fee_percent: number;
+    withdraw_fee_percent: number;
+    minimum_fee_usd: number;
+    bsc_api_key?: string;
+    bsc_wallet_address?: string;
+    gemini_api_key?: string;
+}
+
+export interface BlacklistItem {
+    id: string;
+    type: 'Name' | 'Phone' | 'Address';
+    value: string;
+    reason?: string;
+    createdAt: string;
+}
+
+export interface IncomingSms {
+    [pushId: string]: string;
+}
+
+export interface SmsTransaction {
+    id: string;
+    client_name: string; // Name parsed from the SMS
+    account_id: string;
+    account_name?: string; // for display
+    amount: number | null;
+    currency: string | null;
+    type: 'credit' | 'debit' | null;
+    status: 'pending' | 'parsed' | 'matched' | 'used' | 'rejected';
+    parsed_at: string;
+    raw_sms: string;
+    transaction_id?: string; // To store the linked transaction ID
+    matched_client_id?: string;
+    matched_client_name?: string;
+}
+
+export interface ParsedSms {
+  parsed: boolean;
+  type?: 'credit' | 'debit';
+  amount?: number;
+  person?: string;
+}
+
+export type NameMatchingRule = 'phone_number' | 'first_and_second' | 'first_and_last' | 'full_name' | 'part_of_full_name';
+
+export interface SmsEndpoint {
+    id: string;
+    accountId: string;
+    accountName: string;
+    createdAt: string;
+    nameMatchingRules?: NameMatchingRule[];
+}
+
+export interface SmsParsingRule {
+    id: string;
+    name: string;
+    type: 'credit' | 'debit';
+    amountStartsAfter: string;
+    amountEndsBefore: string;
+    personStartsAfter: string;
+    personEndsBefore: string;
+    createdAt: string;
 }

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -11,7 +12,7 @@ import { createClient, manageClient, type ClientFormState } from '@/lib/actions'
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, Account, Transaction, TransactionFlag } from '@/lib/types';
+import type { Client, Account, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -27,9 +28,8 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue } from 'database';
 import { cn } from '@/lib/utils';
-import { LabelSelector } from './label-selector';
 
 
 export function ClientForm({ client, bankAccounts, transactions, otherClientsWithSameName }: { client?: Client, bankAccounts?: Account[], transactions?: Transaction[], otherClientsWithSameName?: Client[] }) {
@@ -39,7 +39,6 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
 
     const [state, setState] = React.useState<ClientFormState>();
     const [isSaving, setIsSaving] = React.useState(false);
-    const [labels, setLabels] = React.useState<TransactionFlag[]>([]);
     
     const [formData, setFormData] = React.useState({
         name: client?.name || '',
@@ -65,14 +64,6 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
         description: string;
         intent: string;
     } | null>(null);
-
-    React.useEffect(() => {
-        const labelsRef = ref(db, 'labels');
-        const unsubscribe = onValue(labelsRef, (snapshot) => {
-            setLabels(snapshot.val() ? Object.values(snapshot.val()) : []);
-        });
-        return () => unsubscribe();
-    }, []);
 
     const usedBankAccounts = React.useMemo(() => {
         if (!transactions) return [];
@@ -283,14 +274,6 @@ export function ClientForm({ client, bankAccounts, transactions, otherClientsWit
                                 disabled
                             />
                             <p className="text-xs text-muted-foreground">This is automatically set by the last confirmed transaction.</p>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Labels</Label>
-                            <LabelSelector
-                                labels={labels}
-                                selectedLabels={formData.review_flags}
-                                onLabelChange={handleFlagChange}
-                            />
                         </div>
                         <div className="space-y-2 pt-2">
                             <div className="flex items-center space-x-2">

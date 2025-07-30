@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -25,7 +26,6 @@ import {
   Contact,
   Bot,
   Info,
-  Tags,
 } from 'lucide-react';
 
 const menuItems = [
@@ -38,7 +38,6 @@ const menuItems = [
   { type: 'divider' },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
-  { href: '/labels', label: 'Labels', icon: Tags },
   { type: 'divider' },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
