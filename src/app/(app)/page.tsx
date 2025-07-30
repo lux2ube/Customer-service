@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, linkAllUnassignedTransactions, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
+import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -119,14 +119,6 @@ function MergeClientsForm() {
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Merge Failed' : 'Merge Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={Users2} text="Merge Duplicates" pendingText="Merging..." /></form>;
 }
-
-function LinkAllUnassignedForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<AutoProcessState, FormData>(linkAllUnassignedTransactions, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Linking Failed' : 'Linking Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={Link2} text="Link Unassigned Txs" pendingText="Linking..." /></form>;
-}
-
 
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
@@ -296,9 +288,6 @@ export default function DashboardPage() {
                          <div className="flex flex-wrap gap-2">
                            <MergeClientsForm />
                            <HistoricalSyncForm />
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                           <LinkAllUnassignedForm />
                         </div>
                     </CardContent>
                 </Card>
