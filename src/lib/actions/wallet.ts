@@ -43,10 +43,7 @@ const SendRequestSchema = z.object({
 });
 
 function getRpcUrl() {
-    const baseUrl = process.env.ANKR_RPC_BASE_URL;
-    const apiKey = process.env.ANKR_API_KEY;
-    if (!baseUrl) return null;
-    return apiKey ? `${baseUrl}/${apiKey}` : baseUrl;
+    return process.env.BSC_RPC_URL || null;
 }
 
 export async function getWalletDetails(): Promise<WalletDetailsState> {
@@ -57,10 +54,6 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
         return { loading: false, error: 'Server environment variables for wallet mnemonic or RPC URL are not set.' };
     }
     
-    if (rpcUrl.includes('YOUR_ANKR_API_KEY_HERE')) {
-        return { loading: false, error: 'ANKR_API_KEY is not set in environment variables. Please get a key from ankr.com/rpc/.' };
-    }
-
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
@@ -156,10 +149,6 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         return { error: true, message: 'Server environment variables for wallet are not configured.' };
     }
     
-    if (rpcUrl.includes('YOUR_ANKR_API_KEY_HERE')) {
-        return { error: true, message: 'ANKR_API_KEY is not set in environment variables. Please get a key from ankr.com/rpc/.' };
-    }
-
     const newRequestRef = push(ref(db, 'send_requests'));
     const requestId = newRequestRef.key;
     if (!requestId) {
