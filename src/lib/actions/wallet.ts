@@ -41,16 +41,16 @@ const SendRequestSchema = z.object({
 });
 
 export async function getWalletDetails(): Promise<WalletDetailsState> {
-    const privateKey = process.env.TRUST_WALLET_PRIVATE_KEY;
+    const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
     const rpcUrl = process.env.ANKR_HTTPS_ENDPOINT;
 
-    if (!privateKey || !rpcUrl) {
-        return { loading: false, error: 'Server environment variables for wallet are not set.' };
+    if (!mnemonic || !rpcUrl) {
+        return { loading: false, error: 'Server environment variables for wallet mnemonic or RPC URL are not set.' };
     }
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
-        const wallet = new ethers.Wallet(privateKey, provider);
+        const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
         const address = wallet.address;
 
         const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, provider);
