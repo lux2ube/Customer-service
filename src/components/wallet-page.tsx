@@ -8,9 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown } from 'lucide-react';
+import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getWalletDetails, createSendRequest, searchClients, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
+import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
 import type { SendRequest, Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild } from 'firebase/database';
@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { cn } from '@/lib/utils';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { ethers } from 'ethers';
 
 function SendButton() {
     const { pending } = useFormStatus();
@@ -104,6 +105,7 @@ function SendForm() {
     
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
+    const [addressInput, setAddressInput] = React.useState('');
 
     React.useEffect(() => {
         if (state?.error) {
@@ -121,19 +123,62 @@ function SendForm() {
             formRef.current?.reset();
             setSelectedClient(null);
             setSelectedAddress(undefined);
+            setAddressInput('');
         }
     }, [state, toast]);
+    
+    React.useEffect(() => {
+        const handleAddressChange = async () => {
+            if (ethers.isAddress(addressInput)) {
+                const foundClient = await findClientByAddress(addressInput);
+                if (foundClient) {
+                    setSelectedClient(foundClient);
+                    setSelectedAddress(addressInput);
+                } else {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Client Not Found',
+                        description: 'No client is associated with this address.',
+                    });
+                }
+            }
+        };
+        const timerId = setTimeout(() => {
+            if (addressInput) handleAddressChange();
+        }, 500); // Debounce to avoid too many requests
+        return () => clearTimeout(timerId);
+    }, [addressInput, toast]);
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
-        setSelectedAddress(client?.bep20_addresses?.[0]);
+        if (client) {
+            const primaryAddress = client.bep20_addresses?.[0];
+            setSelectedAddress(primaryAddress);
+            setAddressInput(primaryAddress || '');
+        } else {
+            setSelectedAddress(undefined);
+            setAddressInput('');
+        }
+    };
+    
+    const handlePaste = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (ethers.isAddress(text)) {
+                setAddressInput(text);
+            } else {
+                toast({ variant: 'destructive', title: 'Invalid Address', description: 'The pasted text is not a valid BSC address.'});
+            }
+        } catch (err) {
+            toast({ variant: 'destructive', title: 'Paste Failed', description: 'Could not read from clipboard.'});
+        }
     };
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Send USDT</CardTitle>
-                <CardDescription>Select a client, choose their address, and enter the amount to send.</CardDescription>
+                <CardDescription>Select a client or paste an address, then enter the amount to send.</CardDescription>
             </CardHeader>
             <form ref={formRef} action={formAction}>
                 <CardContent className="space-y-4">
@@ -141,29 +186,45 @@ function SendForm() {
                         <Label htmlFor="client">Client</Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                     </div>
-                    {selectedClient && (
-                         <div className="space-y-2">
-                             <Label>Recipient Address</Label>
-                             {selectedClient.bep20_addresses && selectedClient.bep20_addresses.length > 0 ? (
-                                <RadioGroup
-                                    name="recipientAddress"
-                                    value={selectedAddress}
-                                    onValueChange={setSelectedAddress}
-                                    className="space-y-2"
-                                >
-                                    {selectedClient.bep20_addresses.map(address => (
-                                        <div key={address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
-                                            <RadioGroupItem value={address} id={address} />
-                                            <Label htmlFor={address} className="font-mono text-xs break-all">{address}</Label>
-                                        </div>
-                                    ))}
-                                </RadioGroup>
-                             ) : (
-                                 <p className="text-sm text-muted-foreground p-2 border rounded-md">This client has no saved BEP20 addresses.</p>
-                             )}
-                            {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
+
+                    <div className="space-y-2">
+                        <Label>Recipient Address</Label>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                name="recipientAddress"
+                                placeholder="Or paste address here..."
+                                value={addressInput}
+                                onChange={(e) => setAddressInput(e.target.value)}
+                                className="font-mono text-xs"
+                            />
+                             <Button type="button" variant="outline" size="icon" onClick={handlePaste}>
+                                <ClipboardPaste className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
+                    </div>
+
+                    {selectedClient && selectedClient.bep20_addresses && selectedClient.bep20_addresses.length > 1 && (
+                         <div className="space-y-2 pl-2">
+                             <Label>Choose from saved addresses:</Label>
+                             <RadioGroup
+                                onValueChange={(value) => {
+                                    setSelectedAddress(value);
+                                    setAddressInput(value);
+                                }}
+                                value={selectedAddress}
+                                className="space-y-2"
+                             >
+                                 {selectedClient.bep20_addresses.map(address => (
+                                     <div key={address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
+                                         <RadioGroupItem value={address} id={address} />
+                                         <Label htmlFor={address} className="font-mono text-xs break-all">{address}</Label>
+                                     </div>
+                                 ))}
+                             </RadioGroup>
                          </div>
                     )}
+                    
                     <div className="space-y-2">
                         <Label htmlFor="amount">Amount (USDT)</Label>
                         <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />

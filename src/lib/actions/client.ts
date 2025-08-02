@@ -284,6 +284,38 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
     }
 }
 
+export async function findClientByAddress(address: string): Promise<Client | null> {
+    if (!address) return null;
+    const lowercasedAddress = address.toLowerCase();
+    
+    try {
+        const clientsRef = ref(db, 'clients');
+        const snapshot = await get(clientsRef);
+
+        if (!snapshot.exists()) {
+            return null;
+        }
+        
+        const allClientsData: Record<string, Client> = snapshot.val();
+
+        for (const clientId in allClientsData) {
+            const client = allClientsData[clientId];
+            if (client.bep20_addresses) {
+                for (const clientAddress of client.bep20_addresses) {
+                    if (clientAddress.toLowerCase() === lowercasedAddress) {
+                        return { id: clientId, ...client };
+                    }
+                }
+            }
+        }
+        return null; // No client found
+    } catch (error) {
+        console.error("Error finding client by address:", error);
+        return null;
+    }
+}
+
+
 export type ImportState = { message?: string; error?: boolean; } | undefined;
 
 const ImportedClientSchema = z.object({
