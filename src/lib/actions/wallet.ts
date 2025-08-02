@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { push, ref, set, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
+import { findClientByAddress } from './client';
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const USDT_ABI = [
@@ -76,6 +77,34 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
     }
 }
 
+async function sendTelegramNotification(message: string) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+        console.error("Telegram bot token or chat ID is not configured in environment variables.");
+        return;
+    }
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: message,
+                parse_mode: 'Markdown',
+            }),
+        });
+    } catch (error) {
+        console.error("Failed to send Telegram notification:", error);
+    }
+}
+
 export async function createSendRequest(prevState: SendRequestState, formData: FormData): Promise<SendRequestState> {
     const validatedFields = SendRequestSchema.safeParse({
         recipientAddress: formData.get('recipientAddress'),
@@ -136,6 +165,20 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         // Update DB with final status
         await update(ref(db, `send_requests/${requestId}`), { status: 'sent' });
+        
+        // --- Send Telegram Notification ---
+        const client = await findClientByAddress(recipientAddress);
+        const clientName = client ? client.name : 'Unknown Client';
+        const message = `
+✅ *USDT Sent Successfully*
+        
+*To Client:* \`${clientName}\`
+*Address:* \`${recipientAddress}\`
+*Amount:* \`${amount.toFixed(2)} USDT\`
+*Tx Hash:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
+        `;
+        await sendTelegramNotification(message);
+        // ---------------------------------
 
         revalidatePath('/wallet');
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
