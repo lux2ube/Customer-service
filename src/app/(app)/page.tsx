@@ -4,7 +4,7 @@
 import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2 } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
@@ -132,6 +132,9 @@ export default function DashboardPage() {
     const [totalVolumeThisWeek, setTotalVolumeThisWeek] = React.useState(0);
     const [weekOverWeekChange, setWeekOverWeekChange] = React.useState<string | null>(null);
     
+    const [totalDeposits, setTotalDeposits] = React.useState(0);
+    const [totalWithdrawals, setTotalWithdrawals] = React.useState(0);
+
     const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string, value: number }[]>([]);
 
 
@@ -160,6 +163,18 @@ export default function DashboardPage() {
             if (data) {
                 const allTxs: Transaction[] = Object.values(data);
                 const confirmedTxs = allTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
+
+                // --- Global Deposit/Withdrawal Stats ---
+                const deposits = confirmedTxs
+                    .filter(tx => tx.type === 'Deposit')
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+
+                const withdrawals = confirmedTxs
+                    .filter(tx => tx.type === 'Withdraw')
+                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+
+                setTotalDeposits(deposits);
+                setTotalWithdrawals(withdrawals);
 
                 // --- Daily Stats ---
                 const todayStart = startOfDay(new Date());
@@ -256,8 +271,10 @@ export default function DashboardPage() {
     return (
         <div className="space-y-6">
 
-             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <StatCard title="Total Clients" value={clientCount.toLocaleString()} icon={Users} loading={loading} />
+                <StatCard title="Total Deposits" value={`$${totalDeposits.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowDownToLine} loading={loading} />
+                <StatCard title="Total Withdrawals" value={`$${totalWithdrawals.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowUpFromLine} loading={loading} />
                 <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
                 <StatCard title="Volume Today" value={`$${totalVolumeToday.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={dayOverDayChange || ''} />
                 <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
