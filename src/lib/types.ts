@@ -172,4 +172,13 @@ export interface AuditLog {
   entityName?: string;
   details?: Record<string, any> | string;
 }
-    
+
+export interface SendRequest {
+    id: string;
+    to: string;
+    amount: number;
+    status: 'pending' | 'sent' | 'failed';
+    timestamp: number;
+    txHash?: string;
+    error?: string;
+}

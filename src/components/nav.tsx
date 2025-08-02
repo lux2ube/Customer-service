@@ -26,13 +26,16 @@ import {
   Contact,
   Bot,
   Info,
-  History
+  History,
+  Wallet,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
+  { type: 'divider' },
+  { href: '/wallet', label: 'Wallet', icon: Wallet },
   { type: 'divider' },
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },

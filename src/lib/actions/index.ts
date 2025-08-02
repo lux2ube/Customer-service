@@ -7,3 +7,4 @@ export * from './integration';
 export * from './sms';
 export * from './transaction';
 export * from './utility';
+export * from './wallet';
