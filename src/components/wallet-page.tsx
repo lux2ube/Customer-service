@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -95,7 +96,7 @@ function WalletInfoCard({ details, onRefresh }: { details: WalletDetailsState, o
 function SendForm() {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [state, formAction] = useFormState<SendRequestState, FormData>(createSendRequest, undefined);
+    const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
 
     React.useEffect(() => {
         if (state?.error) {
