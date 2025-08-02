@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -77,38 +78,43 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
     }
 }
 
-async function sendNotification(message: string) {
-    const botUrl = process.env.WHATSAPP_BOT_URL;
-    const botToken = process.env.WHATSAPP_BOT_TOKEN;
+function escapeTelegramMarkdown(text: string): string {
+  // Escape characters for MarkdownV2
+  const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+  return text.replace(new RegExp(`[${charsToEscape.join('\\')}]`, 'g'), '\\$&');
+}
 
-    if (!botUrl) {
-        console.error("WhatsApp bot URL is not configured in environment variables.");
+async function sendTelegramNotification(message: string) {
+    const botUrl = process.env.TELEGRAM_BOT_URL;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botUrl || !chatId) {
+        console.error("Telegram bot URL or Chat ID is not configured in environment variables.");
         return;
     }
 
-    // A common pattern is to include the token in the URL or as a Bearer token.
-    // This implementation assumes the URL might need the token.
-    // Adjust the `payload` structure based on your specific WhatsApp bot API's requirements.
-    const fullUrl = botUrl.includes('[TOKEN]') ? botUrl.replace('[TOKEN]', botToken || '') : botUrl;
-
     const payload = {
-        // This is a generic payload. You might need to change this based on your WhatsApp API provider.
-        // For example, it might be { to: "...", body: "..." } or similar.
+        chat_id: chatId,
         text: message,
+        parse_mode: 'MarkdownV2',
     };
 
     try {
-        await fetch(fullUrl, {
+        const response = await fetch(botUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                // Some APIs might require an Authorization header, e.g.:
-                // 'Authorization': `Bearer ${botToken}`
             },
             body: JSON.stringify(payload),
         });
+
+        if (!response.ok) {
+            const errorBody = await response.json();
+            console.error("Failed to send Telegram notification:", errorBody);
+        }
+
     } catch (error) {
-        console.error("Failed to send WhatsApp notification:", error);
+        console.error("Error sending notification to Telegram:", error);
     }
 }
 
@@ -134,7 +140,6 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         return { error: true, message: 'Server environment variables for wallet are not configured.' };
     }
 
-    // Create the initial request in the database
     const newRequestRef = push(ref(db, 'send_requests'));
     const requestId = newRequestRef.key;
     if (!requestId) {
@@ -155,7 +160,6 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         const amountToSend = ethers.parseUnits(amount.toString(), 18);
         
-        // Check for sufficient balance before sending
         const balance = await usdtContract.balanceOf(wallet.address);
         if (balance < amountToSend) {
             await update(ref(db, `send_requests/${requestId}`), { status: 'failed', error: 'Insufficient USDT balance.' });
@@ -164,28 +168,24 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         const tx = await usdtContract.transfer(recipientAddress, amountToSend);
         
-        // Update DB with transaction hash immediately
         await update(ref(db, `send_requests/${requestId}`), { txHash: tx.hash });
 
-        // Wait for the transaction to be mined
         await tx.wait();
 
-        // Update DB with final status
         await update(ref(db, `send_requests/${requestId}`), { status: 'sent' });
         
-        // --- Send Notification ---
         const client = await findClientByAddress(recipientAddress);
         const clientName = client ? client.name : 'Unknown Client';
+        
         const message = `
 ✅ *USDT Sent Successfully*
-        
-*To Client:* ${clientName}
-*Address:* ${recipientAddress}
-*Amount:* ${amount.toFixed(2)} USDT
-*Tx Hash:* https://bscscan.com/tx/${tx.hash}
+
+*To Client:* ${escapeTelegramMarkdown(clientName)}
+*Address:* \`${recipientAddress}\`
+*Amount:* ${escapeTelegramMarkdown(amount.toFixed(2))} USDT
+*Tx Link:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
         `;
-        await sendNotification(message);
-        // ---------------------------------
+        await sendTelegramNotification(message);
 
         revalidatePath('/wallet');
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
@@ -193,7 +193,6 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     } catch (e: any) {
         console.error("Error sending transaction:", e);
         const errorMessage = e.reason || e.message || "An unknown error occurred.";
-        // Update DB with failure status
         await update(ref(db, `send_requests/${requestId}`), { status: 'failed', error: errorMessage });
         
         revalidatePath('/wallet');
