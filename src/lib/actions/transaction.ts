@@ -1,6 +1,7 @@
 
 
 
+
 'use server';
 
 import { z } from 'zod';
@@ -9,7 +10,7 @@ import { push, ref, set, update, get, query, orderByChild, equalTo } from 'fireb
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem } from '../types';
-import { stripUndefined } from './helpers';
+import { stripUndefined, sendTelegramNotification, sendTelegramPhoto } from './helpers';
 import { redirect } from 'next/navigation';
 
 const PROFIT_ACCOUNT_ID = '4001';
@@ -44,6 +45,7 @@ const TransactionSchema = z.object({
     expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
+    invoice_image_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),
     remittance_number: z.string().optional(),
     hash: z.string().optional(),
@@ -77,10 +79,26 @@ export async function createTransaction(transactionId: string | null, formData: 
             return { message: 'File upload failed. Please try again.' };
         }
     }
+    
+    const invoiceImageFile = formData.get('invoice_image') as File | null;
+    let invoiceImageUrlString: string | undefined = undefined;
+
+    if (invoiceImageFile && invoiceImageFile.size > 0) {
+        try {
+            const filePath = `transaction_invoices/${newId}.png`;
+            const fileRef = storageRef(storage, filePath);
+            const snapshot = await uploadBytes(fileRef, invoiceImageFile, { contentType: 'image/png' });
+            invoiceImageUrlString = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("Invoice image upload failed:", error);
+            // Don't fail the whole transaction, just log the error.
+        }
+    }
 
     const dataToValidate = {
         ...Object.fromEntries(formData.entries()),
         attachment_url: attachmentUrlString,
+        invoice_image_url: invoiceImageUrlString,
     };
     
     const validatedFields = TransactionSchema.safeParse(dataToValidate);
@@ -126,11 +144,16 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
     dataToSave.clientId = finalClientId;
     
-    if (transactionId && !dataToSave.attachment_url) {
+    if (transactionId) {
         const transactionRef = ref(db, `transactions/${transactionId}`);
         const snapshot = await get(transactionRef);
         const existingData = snapshot.val();
-        dataToSave.attachment_url = existingData?.attachment_url;
+        if (!dataToSave.attachment_url) {
+            dataToSave.attachment_url = existingData?.attachment_url;
+        }
+         if (!dataToSave.invoice_image_url) {
+            dataToSave.invoice_image_url = existingData?.invoice_image_url;
+        }
     }
 
 
@@ -194,6 +217,11 @@ export async function createTransaction(transactionId: string | null, formData: 
         return {
             message: 'Database Error: Failed to create transaction.'
         }
+    }
+    
+    if (finalData.status === 'Confirmed' && finalData.invoice_image_url) {
+        const caption = `Invoice for transaction: \`${newId}\``;
+        await sendTelegramPhoto(finalData.invoice_image_url, caption);
     }
 
     if (finalData.clientId && finalData.client_wallet_address) {

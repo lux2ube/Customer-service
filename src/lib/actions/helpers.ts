@@ -44,11 +44,12 @@ export async function logAction(
 
 // --- Notification Helper ---
 
-function escapeTelegramMarkdown(text: string): string {
-  if (!text) return '';
-  // Escape characters for MarkdownV2
-  const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-  return String(text).replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
+function escapeTelegramMarkdown(text: string | number | null | undefined): string {
+    if (text === null || text === undefined) return '';
+    const textStr = String(text);
+    // Escape characters for MarkdownV2
+    const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+    return textStr.replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
 export async function sendTelegramNotification(message: string) {
@@ -79,11 +80,46 @@ export async function sendTelegramNotification(message: string) {
         
         const responseData = await response.json();
         if (!response.ok) {
-            console.error("Failed to send Telegram notification:", responseData);
+            console.error("Failed to send Telegram text notification:", responseData);
         }
 
     } catch (error) {
-        console.error("Error sending notification to Telegram:", error);
+        console.error("Error sending text notification to Telegram:", error);
     }
 }
 
+export async function sendTelegramPhoto(photoUrl: string, caption: string) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+        console.error("Telegram bot token or Chat ID is not configured in environment variables.");
+        return;
+    }
+
+    const url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
+    
+    const payload = {
+        chat_id: chatId,
+        photo: photoUrl,
+        caption: escapeTelegramMarkdown(caption),
+        parse_mode: 'MarkdownV2',
+    };
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const responseData = await response.json();
+        if (!response.ok) {
+            console.error("Failed to send Telegram photo notification:", responseData);
+        }
+    } catch (error) {
+        console.error("Error sending photo notification to Telegram:", error);
+    }
+}

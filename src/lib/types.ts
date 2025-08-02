@@ -60,6 +60,7 @@ export interface Transaction {
     expense_usd?: number;
     amount_usdt: number;
     attachment_url?: string;
+    invoice_image_url?: string;
     notes?: string;
     remittance_number?: string;
     hash?: string;

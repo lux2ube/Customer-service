@@ -1,6 +1,7 @@
 
 
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -55,7 +56,6 @@ const initialFormData: Transaction = {
     hash: '',
     client_wallet_address: '',
     status: 'Pending',
-    flags: [],
     createdAt: '',
     linkedSmsId: '',
 };
@@ -377,7 +377,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         setBatchUpdateInfo(null);
     };
     
-    const handleFieldChange = (field: keyof Omit<Transaction, 'amount' | 'flags'>, value: any) => {
+    const handleFieldChange = (field: keyof Transaction, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
@@ -403,7 +403,21 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         }
         
         if(attachmentToUpload) {
-            actionFormData.set('attachment_url', attachmentToUpload);
+            actionFormData.set('attachment_url_input', attachmentToUpload);
+        }
+
+        if (formData.status === 'Confirmed' && invoiceRef.current) {
+            try {
+                const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: null });
+                const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+                if (blob) {
+                    const invoiceFile = new File([blob], 'invoice.png', { type: 'image/png' });
+                    actionFormData.set('invoice_image', invoiceFile);
+                }
+            } catch (error) {
+                console.error("Failed to generate invoice image:", error);
+                toast({ variant: 'destructive', title: 'Invoice Generation Failed', description: 'Could not create invoice image. The transaction will be saved without it.' });
+            }
         }
 
         const result = await createTransaction(transaction?.id || null, actionFormData);
@@ -468,13 +482,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     return (
         <>
-            {transaction && (
-                <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1 }}>
-                    <div className="w-[420px]">
-                        <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={selectedClient} />
-                    </div>
+            <div style={{ position: 'absolute', left: '-9999px', top: 0, zIndex: -1 }}>
+                <div className="w-[420px]">
+                    <Invoice ref={invoiceRef} transaction={{...formData, date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString() }} client={selectedClient} />
                 </div>
-            )}
+            </div>
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 space-y-3">
@@ -755,5 +767,6 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
 
 
