@@ -2,6 +2,7 @@
 
 
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -21,7 +22,6 @@ import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
-import { Invoice } from '@/components/invoice';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
@@ -35,7 +35,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import dynamic from 'next/dynamic';
+
+const Invoice = dynamic(() => import('@/components/invoice').then(mod => mod.Invoice), { ssr: false });
 
 
 const initialFormData: Transaction = {
@@ -767,6 +770,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
 
 
 
