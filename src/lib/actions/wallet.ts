@@ -77,31 +77,38 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
     }
 }
 
-async function sendTelegramNotification(message: string) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+async function sendNotification(message: string) {
+    const botUrl = process.env.WHATSAPP_BOT_URL;
+    const botToken = process.env.WHATSAPP_BOT_TOKEN;
 
-    if (!botToken || !chatId) {
-        console.error("Telegram bot token or chat ID is not configured in environment variables.");
+    if (!botUrl) {
+        console.error("WhatsApp bot URL is not configured in environment variables.");
         return;
     }
 
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    // A common pattern is to include the token in the URL or as a Bearer token.
+    // This implementation assumes the URL might need the token.
+    // Adjust the `payload` structure based on your specific WhatsApp bot API's requirements.
+    const fullUrl = botUrl.includes('[TOKEN]') ? botUrl.replace('[TOKEN]', botToken || '') : botUrl;
+
+    const payload = {
+        // This is a generic payload. You might need to change this based on your WhatsApp API provider.
+        // For example, it might be { to: "...", body: "..." } or similar.
+        text: message,
+    };
 
     try {
-        await fetch(url, {
+        await fetch(fullUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                // Some APIs might require an Authorization header, e.g.:
+                // 'Authorization': `Bearer ${botToken}`
             },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: message,
-                parse_mode: 'Markdown',
-            }),
+            body: JSON.stringify(payload),
         });
     } catch (error) {
-        console.error("Failed to send Telegram notification:", error);
+        console.error("Failed to send WhatsApp notification:", error);
     }
 }
 
@@ -166,18 +173,18 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         // Update DB with final status
         await update(ref(db, `send_requests/${requestId}`), { status: 'sent' });
         
-        // --- Send Telegram Notification ---
+        // --- Send Notification ---
         const client = await findClientByAddress(recipientAddress);
         const clientName = client ? client.name : 'Unknown Client';
         const message = `
 ✅ *USDT Sent Successfully*
         
-*To Client:* \`${clientName}\`
-*Address:* \`${recipientAddress}\`
-*Amount:* \`${amount.toFixed(2)} USDT\`
-*Tx Hash:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
+*To Client:* ${clientName}
+*Address:* ${recipientAddress}
+*Amount:* ${amount.toFixed(2)} USDT
+*Tx Hash:* https://bscscan.com/tx/${tx.hash}
         `;
-        await sendTelegramNotification(message);
+        await sendNotification(message);
         // ---------------------------------
 
         revalidatePath('/wallet');
