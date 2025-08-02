@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set } from 'firebase/database';
+import { push, ref, set, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 
@@ -91,21 +91,62 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     }
     
     const { recipientAddress, amount } = validatedFields.data;
+    const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
+    const rpcUrl = process.env.ANKR_HTTPS_ENDPOINT;
+
+    if (!mnemonic || !rpcUrl) {
+        return { error: true, message: 'Server environment variables for wallet are not configured.' };
+    }
+
+    // Create the initial request in the database
+    const newRequestRef = push(ref(db, 'send_requests'));
+    const requestId = newRequestRef.key;
+    if (!requestId) {
+        return { error: true, message: 'Could not generate request ID.' };
+    }
+
+    await set(newRequestRef, {
+        to: recipientAddress,
+        amount: amount,
+        status: 'pending',
+        timestamp: Date.now(),
+    });
 
     try {
-        const newRequestRef = push(ref(db, 'send_requests'));
-        await set(newRequestRef, {
-            to: recipientAddress,
-            amount: amount,
-            status: 'pending',
-            timestamp: Date.now(),
-        });
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
+        const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, wallet);
+
+        const amountToSend = ethers.parseUnits(amount.toString(), 18);
+        
+        // Check for sufficient balance before sending
+        const balance = await usdtContract.balanceOf(wallet.address);
+        if (balance < amountToSend) {
+            await update(ref(db, `send_requests/${requestId}`), { status: 'failed', error: 'Insufficient USDT balance.' });
+            return { error: true, message: 'Insufficient USDT balance to complete the transaction.' };
+        }
+
+        const tx = await usdtContract.transfer(recipientAddress, amountToSend);
+        
+        // Update DB with transaction hash immediately
+        await update(ref(db, `send_requests/${requestId}`), { txHash: tx.hash });
+
+        // Wait for the transaction to be mined
+        await tx.wait();
+
+        // Update DB with final status
+        await update(ref(db, `send_requests/${requestId}`), { status: 'sent' });
 
         revalidatePath('/wallet');
-        return { success: true, message: 'Send request created successfully. It will be processed shortly.' };
+        return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
 
     } catch (e: any) {
-        console.error("Error creating send request:", e);
-        return { error: true, message: 'Database error: Could not create send request.' };
+        console.error("Error sending transaction:", e);
+        const errorMessage = e.reason || e.message || "An unknown error occurred.";
+        // Update DB with failure status
+        await update(ref(db, `send_requests/${requestId}`), { status: 'failed', error: errorMessage });
+        
+        revalidatePath('/wallet');
+        return { error: true, message: `Transaction failed: ${errorMessage}` };
     }
 }
