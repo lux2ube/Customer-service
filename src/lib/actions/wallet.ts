@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -81,17 +80,19 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
 function escapeTelegramMarkdown(text: string): string {
   // Escape characters for MarkdownV2
   const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-  return text.replace(new RegExp(`[${charsToEscape.join('\\')}]`, 'g'), '\\$&');
+  return String(text).replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
 async function sendTelegramNotification(message: string) {
-    const botUrl = process.env.TELEGRAM_BOT_URL;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
-    if (!botUrl || !chatId) {
-        console.error("Telegram bot URL or Chat ID is not configured in environment variables.");
+    if (!botToken || !chatId) {
+        console.error("Telegram bot token or Chat ID is not configured in environment variables.");
         return;
     }
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
     const payload = {
         chat_id: chatId,
@@ -100,17 +101,19 @@ async function sendTelegramNotification(message: string) {
     };
 
     try {
-        const response = await fetch(botUrl, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload),
         });
-
+        
+        const responseData = await response.json();
         if (!response.ok) {
-            const errorBody = await response.json();
-            console.error("Failed to send Telegram notification:", errorBody);
+            console.error("Failed to send Telegram notification:", responseData);
+        } else {
+            console.log("Telegram notification sent successfully:", responseData);
         }
 
     } catch (error) {
