@@ -8,6 +8,8 @@ import { push, ref, set, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
+import { sendTelegramNotification } from './helpers';
+
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const USDT_ABI = [
@@ -43,18 +45,22 @@ const SendRequestSchema = z.object({
 });
 
 function getRpcUrl() {
-    return process.env.BSC_RPC_URL || null;
+    const rpcUrl = process.env.BSC_RPC_URL;
+    if (!rpcUrl) {
+        throw new Error("BSC_RPC_URL is not set in environment variables.");
+    }
+    return rpcUrl;
 }
 
 export async function getWalletDetails(): Promise<WalletDetailsState> {
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
-    const rpcUrl = getRpcUrl();
-
-    if (!mnemonic || !rpcUrl) {
-        return { loading: false, error: 'Server environment variables for wallet mnemonic or RPC URL are not set.' };
+    
+    if (!mnemonic) {
+        return { loading: false, error: 'Server environment variable for wallet mnemonic is not set.' };
     }
     
     try {
+        const rpcUrl = getRpcUrl();
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
         const address = wallet.address;
@@ -83,47 +89,10 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
 }
 
 function escapeTelegramMarkdown(text: string): string {
+  if (!text) return '';
   // Escape characters for MarkdownV2
   const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
   return String(text).replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
-}
-
-async function sendTelegramNotification(message: string) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-
-    if (!botToken || !chatId) {
-        console.error("Telegram bot token or Chat ID is not configured in environment variables.");
-        return;
-    }
-
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
-    const payload = {
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'MarkdownV2',
-    };
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        });
-        
-        const responseData = await response.json();
-        if (!response.ok) {
-            console.error("Failed to send Telegram notification:", responseData);
-        } else {
-            console.log("Telegram notification sent successfully:", responseData);
-        }
-
-    } catch (error) {
-        console.error("Error sending notification to Telegram:", error);
-    }
 }
 
 export async function createSendRequest(prevState: SendRequestState, formData: FormData): Promise<SendRequestState> {
@@ -142,11 +111,9 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     
     const { recipientAddress, amount } = validatedFields.data;
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
-    const rpcUrl = getRpcUrl();
 
-
-    if (!mnemonic || !rpcUrl) {
-        return { error: true, message: 'Server environment variables for wallet are not configured.' };
+    if (!mnemonic) {
+        return { error: true, message: 'Server environment variable for wallet is not configured.' };
     }
     
     const newRequestRef = push(ref(db, 'send_requests'));
@@ -163,6 +130,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     });
 
     try {
+        const rpcUrl = getRpcUrl();
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
         const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, wallet);

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -9,6 +10,8 @@ import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms,
 import { parseSmsWithCustomRules } from '../custom-sms-parser';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
+import { sendTelegramNotification } from './helpers';
+import { format } from 'date-fns';
 
 
 // --- SMS Processing Actions ---
@@ -379,6 +382,12 @@ const scoreAndSelectBestMatch = (
     return null;
 };
 
+const escapeTelegramMarkdown = (text: string | number | null | undefined): string => {
+  if (text === null || text === undefined) return '';
+  const textStr = String(text);
+  const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+  return textStr.replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
+};
 
 // --- The main matching algorithm ---
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
@@ -453,6 +462,24 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                     updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
                     updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
                     matchedCount++;
+                    
+                    // Send notification on successful match
+                    const message = `
+*إستلام حوالة*
+*كوين كاش*
+لكم حوالة ${escapeTelegramMarkdown(sms.amount)} ${escapeTelegramMarkdown(sms.currency)}
+
+مقابل حوالة واردة عن طريق: ${escapeTelegramMarkdown(sms.account_name)}
+مبلغ الحوالة: ${escapeTelegramMarkdown(sms.amount)}
+عملة الحوالة: ${escapeTelegramMarkdown(sms.currency)}
+المستلم: ${escapeTelegramMarkdown(sms.account_name)}
+المرسل: ${escapeTelegramMarkdown(finalMatch.name)}
+
+رقم الحوالة: \`${sms.id}\`
+
+${escapeTelegramMarkdown(format(new Date(), 'Pp'))}
+                    `;
+                    await sendTelegramNotification(message);
                 }
             }
         }
