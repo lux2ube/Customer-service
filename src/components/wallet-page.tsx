@@ -8,16 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
+import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getWalletDetails, createSendRequest, type WalletDetailsState, type SendRequestState } from '@/lib/actions/wallet';
-import type { SendRequest } from '@/lib/types';
+import { getWalletDetails, createSendRequest, searchClients, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
+import type { SendRequest, Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from './ui/table';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from './ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { cn } from '@/lib/utils';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 
 function SendButton() {
     const { pending } = useFormStatus();
@@ -97,6 +101,9 @@ function SendForm() {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
     const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
+    
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
 
     React.useEffect(() => {
         if (state?.error) {
@@ -112,22 +119,51 @@ function SendForm() {
                 description: state.message,
             });
             formRef.current?.reset();
+            setSelectedClient(null);
+            setSelectedAddress(undefined);
         }
     }, [state, toast]);
+
+    const handleClientSelect = (client: Client | null) => {
+        setSelectedClient(client);
+        setSelectedAddress(client?.bep20_addresses?.[0]);
+    };
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Send USDT</CardTitle>
-                <CardDescription>Enter recipient address and amount to send.</CardDescription>
+                <CardDescription>Select a client, choose their address, and enter the amount to send.</CardDescription>
             </CardHeader>
             <form ref={formRef} action={formAction}>
                 <CardContent className="space-y-4">
                      <div className="space-y-2">
-                        <Label htmlFor="recipientAddress">Recipient Address</Label>
-                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required className="font-mono" />
-                        {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
+                        <Label htmlFor="client">Client</Label>
+                        <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                     </div>
+                    {selectedClient && (
+                         <div className="space-y-2">
+                             <Label>Recipient Address</Label>
+                             {selectedClient.bep20_addresses && selectedClient.bep20_addresses.length > 0 ? (
+                                <RadioGroup
+                                    name="recipientAddress"
+                                    value={selectedAddress}
+                                    onValueChange={setSelectedAddress}
+                                    className="space-y-2"
+                                >
+                                    {selectedClient.bep20_addresses.map(address => (
+                                        <div key={address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
+                                            <RadioGroupItem value={address} id={address} />
+                                            <Label htmlFor={address} className="font-mono text-xs break-all">{address}</Label>
+                                        </div>
+                                    ))}
+                                </RadioGroup>
+                             ) : (
+                                 <p className="text-sm text-muted-foreground p-2 border rounded-md">This client has no saved BEP20 addresses.</p>
+                             )}
+                            {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
+                         </div>
+                    )}
                     <div className="space-y-2">
                         <Label htmlFor="amount">Amount (USDT)</Label>
                         <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
@@ -139,6 +175,90 @@ function SendForm() {
                 </CardFooter>
             </form>
         </Card>
+    );
+}
+
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [isOpen, setIsOpen] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        if (inputValue.trim().length < 2) {
+            setSearchResults([]);
+            if (inputValue.trim().length === 0 && selectedClient) {
+                onSelect(null);
+            }
+            return;
+        }
+
+        setIsLoading(true);
+        const timerId = setTimeout(async () => {
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
+            setIsLoading(false);
+        }, 300);
+
+        return () => clearTimeout(timerId);
+    }, [inputValue, isOpen, onSelect, selectedClient]);
+    
+    React.useEffect(() => {
+        setInputValue(selectedClient?.name || "");
+    }, [selectedClient]);
+
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        setIsOpen(false);
+        setInputValue(client.name);
+    };
+
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isOpen}
+                    className="w-full justify-between font-normal"
+                >
+                    {selectedClient ? selectedClient.name : "Select client..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                    <CommandInput 
+                        placeholder="Search by name or phone..."
+                        value={inputValue}
+                        onValueChange={setInputValue}
+                    />
+                    <CommandList>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        <CommandGroup>
+                            {searchResults.map(client => (
+                                <CommandItem
+                                    key={client.id}
+                                    value={`${client.name} ${getPhone(client.phone)}`}
+                                    onSelect={() => handleSelect(client)}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
     );
 }
 
