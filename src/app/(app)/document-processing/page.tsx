@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -8,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, UploadCloud, FileJson } from 'lucide-react';
+import { Loader2, UploadCloud, FileText } from 'lucide-react';
 import { processDocument, type DocumentParsingState } from '@/lib/actions/document';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -31,24 +33,25 @@ function SubmitButton() {
     );
 }
 
-function ParsedDataDisplay({ data }: { data: any }) {
-    if (!data || !data.details) return null;
-
+function RawTextDisplay({ text }: { text: string }) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <FileJson className="h-5 w-5 text-primary" />
-                    Extracted Information
+                    <FileText className="h-5 w-5 text-primary" />
+                    Extracted Raw Text
                 </CardTitle>
                 <CardDescription>
-                    Document Type: <span className="font-semibold text-primary">{data.documentType.replace('_', ' ')}</span>
+                    This is the full text extracted from the document by OCR.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <pre className="p-4 bg-muted rounded-md text-sm overflow-x-auto">
-                    {JSON.stringify(data.details, null, 2)}
-                </pre>
+                <Textarea
+                    readOnly
+                    value={text}
+                    className="min-h-[300px] font-mono text-sm"
+                    dir="rtl"
+                />
             </CardContent>
         </Card>
     );
@@ -131,8 +134,8 @@ export default function DocumentProcessingPage() {
                             <AlertDescription>{state.message}</AlertDescription>
                         </Alert>
                     )}
-                    {state?.success && state.data && (
-                        <ParsedDataDisplay data={state.data} />
+                    {state?.success && state.data?.rawText && (
+                        <RawTextDisplay text={state.data.rawText} />
                     )}
                 </div>
             </div>
