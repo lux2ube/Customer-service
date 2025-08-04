@@ -103,7 +103,7 @@ export default function SettingsPage() {
                                 <CardDescription>
                                     <Skeleton className="h-4 w-full" />
                                 </CardDescription>
-                            </CardHeader>
+                            </Header>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
@@ -116,7 +116,7 @@ export default function SettingsPage() {
                                 <CardDescription>
                                     <Skeleton className="h-4 w-full" />
                                 </CardDescription>
-                            </CardHeader>
+                            </Header>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
@@ -187,6 +187,10 @@ export default function SettingsPage() {
                         <CardDescription>Manage API keys for external services.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="gemini_api_key">Gemini API Key</Label>
+                            <Input id="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" value={settings.gemini_api_key || ''} onChange={handleInputChange} />
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="bsc_api_key">BscScan API Key</Label>
                             <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />
