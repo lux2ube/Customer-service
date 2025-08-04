@@ -4,28 +4,28 @@ import { z } from 'zod';
 import { db, storage } from '../firebase';
 import { get, ref } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { v4 as uuidv4 } from 'uuid'; // To generate unique filenames
+import { v4 as uuidv4 } from 'uuid';
+import type { Settings } from '../types';
+import { parseDocumentText, type ParseDocumentOutput } from '@/ai/flows/parse-document-flow';
 
-// Schema for the API response from OCR.space
 const OcrSpaceResponseSchema = z.object({
   ParsedResults: z.array(z.object({
     ParsedText: z.string(),
-    ErrorMessage: z.string(),
-    ErrorDetails: z.string(),
-  })),
+    ErrorMessage: z.string().optional(),
+    ErrorDetails: z.string().optional(),
+  })).optional(),
   OCRExitCode: z.number(),
   IsErroredOnProcessing: z.boolean(),
-  ErrorMessage: z.array(z.string()).optional(),
+  ErrorMessage: z.union([z.string(), z.array(z.string())]).optional(),
   ErrorDetails: z.string().optional(),
 });
 
-
-// We only need the raw text for now
 export type DocumentParsingState = {
   success?: boolean;
   error?: boolean;
   message?: string;
   rawText?: string;
+  parsedData?: ParseDocumentOutput;
 } | undefined;
 
 
@@ -56,8 +56,8 @@ export async function processDocument(
   }
 
   const { documentImage } = validatedFields.data;
-  const apiKey = 'K87110746488957'; // As requested
   
+  // Step 1: Upload image to get a public URL for the OCR service
   let publicUrl = '';
   try {
     const fileExtension = documentImage.name.split('.').pop();
@@ -75,9 +75,11 @@ export async function processDocument(
     return { error: true, message: userMessage };
   }
 
+  // Step 2: Call OCR.space API to get raw text
+  let rawText = '';
   try {
     const ocrFormData = new URLSearchParams();
-    ocrFormData.append('apikey', apiKey);
+    ocrFormData.append('apikey', 'K87110746488957');
     ocrFormData.append('url', publicUrl);
     ocrFormData.append('language', 'ara');
     ocrFormData.append('isOverlayRequired', 'false');
@@ -96,27 +98,37 @@ export async function processDocument(
     const result = await response.json();
     const parsedResult = OcrSpaceResponseSchema.safeParse(result);
 
-    if (!parsedResult.success || parsedResult.data.IsErroredOnProcessing) {
-      console.error("OCR API Parsing Error:", parsedResult.data?.ErrorMessage);
-      return { error: true, message: parsedResult.data?.ErrorMessage?.join(', ') || 'Failed to process image with OCR API.' };
+    if (!parsedResult.success || parsedResult.data.IsErroredOnProcessing || !parsedResult.data.ParsedResults) {
+      const apiError = Array.isArray(parsedResult.data?.ErrorMessage) ? parsedResult.data.ErrorMessage.join(', ') : parsedResult.data.ErrorMessage;
+      console.error("OCR API Processing Error:", apiError || parsedResult.data?.ErrorDetails);
+      return { error: true, message: apiError || 'Failed to process image with OCR API.' };
     }
     
-    const rawText = parsedResult.data.ParsedResults[0]?.ParsedText || '';
+    rawText = parsedResult.data.ParsedResults[0]?.ParsedText || '';
 
     if (!rawText) {
         return { error: true, message: 'OCR process completed, but no text was extracted.' };
     }
-    
-    return {
-        success: true,
-        rawText: rawText
-    };
 
   } catch (error: any) {
-    console.error("OCR Processing Error:", error);
+    console.error("OCR API Call Error:", error);
+    return { error: true, message: error.message || 'An unexpected error occurred during OCR processing.' };
+  }
+
+  // Step 3: Call AI to parse the raw text
+  try {
+    const parsedData = await parseDocumentText({ rawText });
+    return {
+      success: true,
+      rawText: rawText,
+      parsedData: parsedData,
+    };
+  } catch (error: any) {
+    console.error("AI Parsing Error:", error);
     return {
       error: true,
-      message: error.message || 'An unexpected error occurred during OCR processing.',
+      message: error.message || 'An unexpected error occurred during AI parsing.',
+      rawText: rawText, // Still return the raw text on parsing failure
     };
   }
 }
