@@ -16,18 +16,13 @@ interface ParsedID {
     birthPlace?: string;
 }
 
-interface ParsedPassport {
-    documentType: 'passport';
-    // Define passport fields here later
-}
-
 export type DocumentParsingState = {
   success?: boolean;
   error?: boolean;
   message?: string;
   data?: {
     rawText: string;
-    parsedData?: ParsedID | ParsedPassport | { documentType: 'unknown' };
+    parsedData?: ParsedID | { documentType: 'unknown' };
   };
 } | undefined;
 
@@ -40,10 +35,8 @@ const DocumentSchema = z.object({
     .refine((file) => ALLOWED_FILE_TYPES.includes(file.type), 'Only .jpg and .png files are allowed.'),
 });
 
-// A simple parsing function for Yemeni National ID
 function parseNationalId(text: string): ParsedID | null {
-    // A simple check to see if it's likely a Yemeni ID
-    if (!text.includes('الجمهورية اليمنية') || !text.includes('بطاقة شخصية')) {
+    if (!text.includes('الجمهورية اليمنية') && !text.includes('بطاقة شخصية')) {
         return null;
     }
 
@@ -54,19 +47,17 @@ function parseNationalId(text: string): ParsedID | null {
         for (const line of lines) {
             const match = line.match(labelRegex);
             if (match && match[1]) {
-                return match[1].trim();
+                return match[1].trim().replace(/L/g, ' ').replace(/:/g, '').trim();
             }
         }
         return undefined;
     };
     
-    // Attempt to extract fields
-    result.name = findValueAfterLabel(/(?:الاسم|الاسـم)\s*:\s*(.+)/);
-    result.idNumber = findValueAfterLabel(/(?:الرقم الوطني|الرقم)\s*:\s*(\d+)/);
-    result.birthPlace = findValueAfterLabel(/(?:محل الميلاد|محلالميلاد)\s*:\s*(.+)/);
-    result.birthDate = findValueAfterLabel(/(?:تاريخ الميلاد|تاريخالميلاد)\s*:\s*([\d\/]+)/);
+    result.name = findValueAfterLabel(/(?:الاسم|الاسـم)\s*[:\sL]*(.+)/);
+    result.idNumber = findValueAfterLabel(/(?:الرقم الوطني|الرقم)\s*[:\sL]*(\d+)/);
+    result.birthPlace = findValueAfterLabel(/(?:محل الميلاد|محلالميلاد)\s*[:\sL]*(.+)/);
+    result.birthDate = findValueAfterLabel(/(?:تاريخ الميلاد|تاريخالميلاد)\s*[:\sL]*([\d\/]+)/);
 
-    // If we extracted at least the ID number, we consider it a success.
     if (result.idNumber) {
         return result;
     }
@@ -95,11 +86,10 @@ export async function processDocument(
   
   let worker;
   try {
-    const tessDataPath = path.join(process.cwd(), 'node_modules', 'tesseract.js-core', 'tessdata');
-
-    worker = await createWorker('ara+eng', 1, {
-      langPath: tessDataPath,
-      gzip: false,
+    // Using a CDN for language data is more reliable in some server environments
+    worker = await createWorker('ara', 1, {
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0', // Using a reliable CDN
+        cacheMethod: 'none',
     });
     
     const { data: { text } } = await worker.recognize(imageBuffer);
@@ -108,13 +98,15 @@ export async function processDocument(
 
     if (!text || text.trim().length === 0) {
         return {
-            error: true,
-            message: "Could not extract any text from the image. It might be blank or too blurry."
+            success: true, // It's a successful OCR run, even if it found nothing
+            data: { 
+                rawText: "OCR did not extract any text from the image. It might be blank or too blurry.",
+                parsedData: { documentType: 'unknown' }
+            }
         };
     }
     
-    // Now, try to parse the extracted text
-    const parsedData = parseNationalId(text); // For now, only trying to parse as National ID
+    const parsedData = parseNationalId(text);
 
     return { 
         success: true, 
