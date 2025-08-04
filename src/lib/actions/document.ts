@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -78,30 +79,33 @@ function parsePassport(text: string): ParsedPassport {
     const details: ParsedPassport = {};
     
     // Passport Number
-    let match = text.match(/([A-Z0-9]{8,10})\s*(?:<<|<|\s)*\n/);
+    let match = text.match(/PASSPORT No\s*(\d+)/i);
     if (match) details.passportNumber = match[1].trim();
 
-    // Full Name
-    match = text.match(/Name\s*:\s*([A-Z\s]+)/i);
-    if (match) details.fullName = match[1].trim().replace(/\s+/g, ' ');
-
+    // Full Name from GIVEN NAMES and SURNAME
+    const givenNamesMatch = text.match(/GIVEN NAMES\s*([A-Z\s]+)/i);
+    const surnameMatch = text.match(/SURNAME\s*([A-Z\s-]+)/i);
+    if (givenNamesMatch && surnameMatch) {
+        details.fullName = `${givenNamesMatch[1].trim()} ${surnameMatch[1].trim()}`.replace(/\s+/g, ' ');
+    }
+    
     // Nationality
-    match = text.match(/Nationality\s*:\s*(YEMENI)/i);
-    if (match) details.nationality = match[1].trim();
+    match = text.match(/COUNTRY CODE\s*([A-Z]{3})/i);
+    if (match && match[1] === 'YEM') details.nationality = "YEMENI";
 
     // Date of Birth
-    match = text.match(/Date of Birth\s*:\s*(\d{2}\s[A-Z]{3}\s\d{4})/i);
+    match = text.match(/DATE OF BIRTH\s*(\d{2}\/\d{2}\/\d{4})/i);
     if (match) details.dateOfBirth = match[1].trim();
 
     // Date of Expiry
-    match = text.match(/Date of Expiry\s*:\s*(\d{2}\s[A-Z]{3}\s\d{4})/i);
+    match = text.match(/DATE OF EXPIRY\s*(\d{2}\/\d{2}\/\d{4})/i);
     if (match) details.dateOfExpiry = match[1].trim();
 
     // MRZ (Machine Readable Zone)
-    const mrzMatch = text.match(/(P<[A-Z0-9<]{39})\n([A-Z0-9<]{44})/i);
+    const mrzMatch = text.match(/(P[<A-Z0-9]{30,43})\n([A-Z0-9<]{30,43})/i);
     if (mrzMatch) {
-        details.mrzLine1 = mrzMatch[1];
-        details.mrzLine2 = mrzMatch[2];
+        details.mrzLine1 = mrzMatch[1].replace(/\s/g, '');
+        details.mrzLine2 = mrzMatch[2].replace(/\s/g, '');
     }
     
     return details;
@@ -136,10 +140,10 @@ export async function processDocument(
     let docType: 'national_id' | 'passport' | 'unknown' = 'unknown';
     let parsedDetails: ParsedID | ParsedPassport | {} = {};
 
-    if (text.includes('الجمهورية اليمنية') && text.includes('بطاقة شخصية')) {
+    if (text.includes('الجمهورية اليمنية') && (text.includes('بطاقة شخصية') || text.includes('الرقم الوطني'))) {
         docType = 'national_id';
         parsedDetails = parseNationalId(text);
-    } else if (text.match(/Republic of Yemen/i) && text.match(/Passport/i)) {
+    } else if (text.match(/PASSPORT/i) && text.match(/REPUBLIC OF YEMEN/i)) {
         docType = 'passport';
         parsedDetails = parsePassport(text);
     }
