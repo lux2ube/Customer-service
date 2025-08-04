@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -13,7 +14,6 @@ import { processDocument, type DocumentParsingState } from '@/lib/actions/docume
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -40,7 +40,7 @@ function ParsedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['p
             <Alert>
                 <BadgeInfo className="h-4 w-4" />
                 <AlertTitle>Could Not Identify Document</AlertTitle>
-                <AlertDescription>The AI could not confidently determine the document type from the text.</AlertDescription>
+                <AlertDescription>The OCR text could not be reliably parsed into known fields.</AlertDescription>
             </Alert>
         );
     }
@@ -50,20 +50,21 @@ function ParsedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['p
     const fields = isPassport ?
         [
             { label: "Full Name", value: data.details.fullName, icon: User },
+            { label: "Surname", value: data.details.surname, icon: User },
             { label: "Passport No.", value: data.details.passportNumber, icon: Fingerprint },
             { label: "Nationality", value: data.details.nationality, icon: ShieldAlert },
             { label: "Date of Birth", value: data.details.dateOfBirth, icon: Calendar },
+            { label: "Date of Issue", value: data.details.dateOfIssue, icon: Calendar },
             { label: "Date of Expiry", value: data.details.expiryDate, icon: Calendar },
             { label: "Place of Birth", value: data.details.placeOfBirth, icon: Building },
             { label: "Sex", value: data.details.sex, icon: User },
             { label: "Issuing Authority", value: data.details.issuingAuthority, icon: Building },
         ] :
-        [
+        [ // For National ID, can be expanded later
             { label: "Name", value: data.details.name, icon: User },
             { label: "ID Number", value: data.details.idNumber, icon: Fingerprint },
             { label: "Date of Birth", value: data.details.birthDate, icon: Calendar },
             { label: "Place of Birth", value: data.details.birthPlace, icon: Building },
-            { label: "Marital Status", value: data.details.maritalStatus, icon: User },
         ];
 
 
@@ -173,7 +174,7 @@ export default function DocumentProcessingPage() {
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <FileText className="h-5 w-5 text-primary" />
-                                    Extracted OCR Text
+                                    Extracted & Corrected Text
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -181,7 +182,6 @@ export default function DocumentProcessingPage() {
                                     readOnly
                                     value={state.rawText}
                                     className="min-h-[200px] font-mono text-xs bg-muted"
-                                    dir="rtl"
                                 />
                             </CardContent>
                         </Card>
