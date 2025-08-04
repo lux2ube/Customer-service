@@ -77,33 +77,41 @@ function parseNationalId(text: string): ParsedID {
 // Parser for Yemeni Passport
 function parsePassport(text: string): ParsedPassport {
     const details: ParsedPassport = {};
+    const lines = text.split('\n');
+
+    const getValue = (labelRegex: RegExp): string | undefined => {
+        for (const line of lines) {
+            const match = line.match(labelRegex);
+            if (match && match[1]) {
+                return match[1].replace(/</g, '').trim();
+            }
+        }
+        return undefined;
+    };
     
     // Passport Number
-    let match = text.match(/PASSPORT No\s*(\d+)/i);
-    if (match) details.passportNumber = match[1].trim();
+    details.passportNumber = getValue(/PASSPORT\s*No\.?\s*([A-Z0-9]+)/i);
 
-    // Full Name from GIVEN NAMES and SURNAME
-    const givenNamesMatch = text.match(/GIVEN NAMES\s*([A-Z\s]+)/i);
-    const surnameMatch = text.match(/SURNAME\s*([A-Z\s-]+)/i);
-    if (givenNamesMatch && surnameMatch) {
-        details.fullName = `${givenNamesMatch[1].trim()} ${surnameMatch[1].trim()}`.replace(/\s+/g, ' ');
+    // Full Name from SURNAME and GIVEN NAMES
+    const surname = getValue(/SURNAME\s*([A-Z\s-]+)/i);
+    const givenNames = getValue(/GIVEN\s*NAMES\s*([A-Z\s]+)/i);
+    if (surname && givenNames) {
+        details.fullName = `${givenNames} ${surname}`.replace(/\s+/g, ' ');
     }
     
     // Nationality
-    match = text.match(/COUNTRY CODE\s*([A-Z]{3})/i);
-    if (match && match[1] === 'YEM') details.nationality = "YEMENI";
+    const countryCode = getValue(/COUNTRY\s*CODE\s*([A-Z]{3})/i);
+    if (countryCode === 'YEM') {
+        details.nationality = "YEMENI";
+    }
 
-    // Date of Birth
-    match = text.match(/DATE OF BIRTH\s*(\d{2}\/\d{2}\/\d{4})/i);
-    if (match) details.dateOfBirth = match[1].trim();
+    // Dates
+    details.dateOfBirth = getValue(/DATE\s*OF\s*BIRTH\s*(\d{2}\/\d{2}\/\d{4})/i);
+    details.dateOfExpiry = getValue(/DATE\s*OF\s*EXPIRY\s*(\d{2}\/\d{2}\/\d{4})/i);
 
-    // Date of Expiry
-    match = text.match(/DATE OF EXPIRY\s*(\d{2}\/\d{2}\/\d{4})/i);
-    if (match) details.dateOfExpiry = match[1].trim();
-
-    // MRZ (Machine Readable Zone)
-    const mrzMatch = text.match(/(P[<A-Z0-9]{30,43})\n([A-Z0-9<]{30,43})/i);
-    if (mrzMatch) {
+    // MRZ (Machine Readable Zone) - a more robust regex
+    const mrzMatch = text.match(/(P[A-Z<][A-Z0-9<]{30,})\n([A-Z0-9<]{30,})/i);
+     if (mrzMatch) {
         details.mrzLine1 = mrzMatch[1].replace(/\s/g, '');
         details.mrzLine2 = mrzMatch[2].replace(/\s/g, '');
     }
@@ -148,7 +156,7 @@ export async function processDocument(
         parsedDetails = parsePassport(text);
     }
 
-    if (docType === 'unknown' || Object.keys(parsedDetails).length === 0) {
+    if (docType === 'unknown' || Object.keys(parsedDetails).filter(k => !!(parsedDetails as any)[k]).length === 0) {
         return {
             error: true,
             message: "Could not identify document type or extract any details from the image."
