@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, UploadCloud, FileText } from 'lucide-react';
+import { Loader2, UploadCloud, FileText, UserSquare2, AlertTriangle } from 'lucide-react';
 import { processDocument, type DocumentParsingState } from '@/lib/actions/document';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,6 +31,54 @@ function SubmitButton() {
             )}
         </Button>
     );
+}
+
+function ExtractedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['data']> }) {
+    if (!data.parsedData || data.parsedData.documentType === 'unknown') {
+        return (
+            <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Parsing Failed</AlertTitle>
+                <AlertDescription>
+                    Could not recognize the document type or extract structured fields. Check the raw text below.
+                </AlertDescription>
+            </Alert>
+        );
+    }
+    
+    if (data.parsedData.documentType === 'national_id') {
+        const idData = data.parsedData;
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <UserSquare2 className="h-5 w-5 text-primary" />
+                        Extracted National ID Data
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 font-mono text-sm">
+                    <div className="flex justify-between border-b pb-2">
+                        <span className="text-muted-foreground">Name:</span>
+                        <span className="font-semibold text-right" dir="rtl">{idData.name || 'Not Found'}</span>
+                    </div>
+                     <div className="flex justify-between border-b pb-2">
+                        <span className="text-muted-foreground">ID Number:</span>
+                        <span className="font-semibold">{idData.idNumber || 'Not Found'}</span>
+                    </div>
+                     <div className="flex justify-between border-b pb-2">
+                        <span className="text-muted-foreground">Birth Place:</span>
+                        <span className="font-semibold text-right" dir="rtl">{idData.birthPlace || 'Not Found'}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-muted-foreground">Birth Date:</span>
+                        <span className="font-semibold">{idData.birthDate || 'Not Found'}</span>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return null;
 }
 
 function RawTextDisplay({ text }: { text: string }) {
@@ -91,7 +139,7 @@ export default function DocumentProcessingPage() {
                 title="Document Processing"
                 description="Upload a Yemeni ID or Passport to automatically extract information using local OCR."
             />
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
                     <form action={formAction}>
                         <Card>
@@ -133,6 +181,9 @@ export default function DocumentProcessingPage() {
                             <AlertTitle>Processing Error</AlertTitle>
                             <AlertDescription>{state.message}</AlertDescription>
                         </Alert>
+                    )}
+                    {state?.success && state.data?.parsedData && (
+                        <ExtractedDataDisplay data={state.data} />
                     )}
                     {state?.success && state.data?.rawText && (
                         <RawTextDisplay text={state.data.rawText} />
