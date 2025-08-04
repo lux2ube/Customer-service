@@ -1,21 +1,36 @@
 'use server';
 
 import { z } from 'zod';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { get, ref } from 'firebase/database';
-import { parseDocument, ParseDocumentOutputSchema } from '@/ai/flows/parse-document-flow';
-import type { Settings } from '../types';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid'; // To generate unique filenames
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png'];
+// Schema for the API response from OCR.space
+const OcrSpaceResponseSchema = z.object({
+  ParsedResults: z.array(z.object({
+    ParsedText: z.string(),
+    ErrorMessage: z.string(),
+    ErrorDetails: z.string(),
+  })),
+  OCRExitCode: z.number(),
+  IsErroredOnProcessing: z.boolean(),
+  ErrorMessage: z.array(z.string()).optional(),
+  ErrorDetails: z.string().optional(),
+});
 
+
+// We only need the raw text for now
 export type DocumentParsingState = {
   success?: boolean;
   error?: boolean;
   message?: string;
-  data?: z.infer<typeof ParseDocumentOutputSchema>;
+  rawText?: string;
 } | undefined;
 
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png'];
 
 const DocumentSchema = z.object({
   documentImage: z
@@ -24,12 +39,6 @@ const DocumentSchema = z.object({
     .refine((file) => file.size <= MAX_FILE_SIZE, `File size must be less than 10MB.`)
     .refine((file) => ALLOWED_FILE_TYPES.includes(file.type), 'Only .jpg and .png files are allowed.'),
 });
-
-const toDataUri = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    return `data:${file.type};base64,${buffer.toString('base64')}`;
-}
 
 export async function processDocument(
   prevState: DocumentParsingState,
@@ -45,33 +54,69 @@ export async function processDocument(
       message: validatedFields.error.flatten().fieldErrors.documentImage?.[0] || 'Invalid file.',
     };
   }
-  
-  const settingsSnapshot = await get(ref(db, 'settings'));
-  const settings: Settings = settingsSnapshot.val();
-  
-  if (!settings?.gemini_api_key) {
-      return {
-          error: true,
-          message: "Gemini API key is not configured in the main settings. Please add it to enable document processing.",
-      }
-  }
 
   const { documentImage } = validatedFields.data;
+  const apiKey = 'K87110746488957'; // As requested
   
+  let publicUrl = '';
   try {
-    const photoDataUri = await toDataUri(documentImage);
-    const result = await parseDocument({ photoDataUri });
+    const fileExtension = documentImage.name.split('.').pop();
+    const uniqueFilename = `${uuidv4()}.${fileExtension}`;
+    const fileRef = storageRef(storage, `ocr_uploads/${uniqueFilename}`);
+    
+    await uploadBytes(fileRef, documentImage);
+    publicUrl = await getDownloadURL(fileRef);
+  } catch (error: any) {
+    console.error("Firebase Storage Upload Error:", error);
+    let userMessage = 'Failed to upload image to storage.';
+    if (error.code === 'storage/unauthorized') {
+        userMessage = 'Upload failed due to permissions. Please update your Firebase Storage Rules to allow public writes to the `ocr_uploads/` path.';
+    }
+    return { error: true, message: userMessage };
+  }
+
+  try {
+    const ocrFormData = new URLSearchParams();
+    ocrFormData.append('apikey', apiKey);
+    ocrFormData.append('url', publicUrl);
+    ocrFormData.append('language', 'ara');
+    ocrFormData.append('isOverlayRequired', 'false');
+
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: ocrFormData,
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("OCR API Error Response:", errorText);
+        return { error: true, message: `OCR API request failed with status: ${response.status}.` };
+    }
+
+    const result = await response.json();
+    const parsedResult = OcrSpaceResponseSchema.safeParse(result);
+
+    if (!parsedResult.success || parsedResult.data.IsErroredOnProcessing) {
+      console.error("OCR API Parsing Error:", parsedResult.data?.ErrorMessage);
+      return { error: true, message: parsedResult.data?.ErrorMessage?.join(', ') || 'Failed to process image with OCR API.' };
+    }
+    
+    const rawText = parsedResult.data.ParsedResults[0]?.ParsedText || '';
+
+    if (!rawText) {
+        return { error: true, message: 'OCR process completed, but no text was extracted.' };
+    }
     
     return {
         success: true,
-        data: result
+        rawText: rawText
     };
 
   } catch (error: any) {
-    console.error("Document processing error:", error);
+    console.error("OCR Processing Error:", error);
     return {
       error: true,
-      message: error.message || 'An unexpected error occurred during AI processing.',
+      message: error.message || 'An unexpected error occurred during OCR processing.',
     };
   }
 }

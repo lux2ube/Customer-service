@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, UploadCloud, UserSquare2, AlertTriangle, BadgeHelp } from 'lucide-react';
+import { Loader2, UploadCloud, FileText } from 'lucide-react';
 import { processDocument, type DocumentParsingState } from '@/lib/actions/document';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -31,91 +32,6 @@ function SubmitButton() {
     );
 }
 
-function ExtractedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['data']> }) {
-    if (!data.details || data.documentType === 'unknown') {
-        return (
-            <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Parsing Failed</AlertTitle>
-                <AlertDescription>
-                    Could not recognize the document type or extract structured fields.
-                </AlertDescription>
-            </Alert>
-        );
-    }
-    
-    if (data.documentType === 'national_id') {
-        const idData = data.details;
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <UserSquare2 className="h-5 w-5 text-primary" />
-                        Extracted National ID Data
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 font-mono text-sm">
-                    <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Name:</span>
-                        <span className="font-semibold text-right" dir="rtl">{idData.name || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">ID Number:</span>
-                        <span className="font-semibold">{idData.idNumber || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Birth Place:</span>
-                        <span className="font-semibold text-right" dir="rtl">{idData.birthPlace || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between">
-                        <span className="text-muted-foreground">Birth Date:</span>
-                        <span className="font-semibold">{idData.birthDate || 'Not Found'}</span>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    if (data.documentType === 'passport') {
-        const passportData = data.details;
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <BadgeHelp className="h-5 w-5 text-primary" />
-                        Extracted Passport Data
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 font-mono text-sm">
-                    <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Passport No:</span>
-                        <span className="font-semibold">{passportData.passportNumber || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Full Name:</span>
-                        <span className="font-semibold text-right">{passportData.fullName || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Nationality:</span>
-                        <span className="font-semibold">{passportData.nationality || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between border-b pb-2">
-                        <span className="text-muted-foreground">Birth Date:</span>
-                        <span className="font-semibold">{passportData.birthDate || 'Not Found'}</span>
-                    </div>
-                     <div className="flex justify-between">
-                        <span className="text-muted-foreground">Expiry Date:</span>
-                        <span className="font-semibold">{passportData.expiryDate || 'Not Found'}</span>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return null;
-}
-
-
 export default function DocumentProcessingPage() {
     const [state, formAction] = useActionState<DocumentParsingState, FormData>(processDocument, undefined);
     const [preview, setPreview] = React.useState<string | null>(null);
@@ -135,7 +51,6 @@ export default function DocumentProcessingPage() {
     };
     
     React.useEffect(() => {
-        // Reset form and preview when a new result comes in
         if (state?.success) {
             if (fileInputRef.current) {
                 fileInputRef.current.value = "";
@@ -148,7 +63,7 @@ export default function DocumentProcessingPage() {
         <div className="space-y-6">
             <PageHeader
                 title="Document Processing"
-                description="Upload a Yemeni ID or Passport to automatically extract information using AI."
+                description="Upload a Yemeni ID or Passport to automatically extract information."
             />
             <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
@@ -193,8 +108,23 @@ export default function DocumentProcessingPage() {
                             <AlertDescription>{state.message}</AlertDescription>
                         </Alert>
                     )}
-                    {state?.success && state.data && (
-                        <ExtractedDataDisplay data={state.data} />
+                    {state?.success && state.rawText && (
+                        <Card>
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <FileText className="h-5 w-5 text-primary" />
+                                    Extracted OCR Text
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Textarea 
+                                    readOnly
+                                    value={state.rawText}
+                                    className="min-h-[300px] font-mono text-sm bg-muted"
+                                    dir="rtl"
+                                />
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             </div>
