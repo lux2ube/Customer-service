@@ -8,6 +8,7 @@
  */
 
 import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'zod';
 
 const ParseDocumentInputSchema = z.object({
@@ -54,6 +55,7 @@ export async function parseDocument(input: ParseDocumentInput): Promise<ParseDoc
 
 const prompt = ai.definePrompt({
   name: 'parseDocumentPrompt',
+  model: googleAI.model('gemini-1.5-flash-preview'),
   input: { schema: ParseDocumentInputSchema },
   output: { schema: ParseDocumentOutputSchema },
   prompt: `You are an expert document processing agent specializing in Yemeni identity documents.
