@@ -2,6 +2,8 @@
 'use server';
 
 import { z } from 'zod';
+import { db, storage } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const OcrSpaceResponseSchema = z.object({
   ParsedResults: z.array(z.object({
@@ -75,10 +77,10 @@ function parsePassport(text: string) {
             surname: surname,
             passportNumber: passportNo || mrzLine2?.match(/^(\w{8,9})/)?.[1] || null,
             nationality: getVal(/COUNTRY CODE\s*([A-Z]{3})/),
-            dateOfBirth: birthDate || mrzLine2?.match(/(\d{2})(\d{2})(\d{2})/)?.slice(1).reverse().join('/') || null,
+            dateOfBirth: birthDate,
             sex: getVal(/SEX\s*([MF])/i),
             dateOfIssue: issueDate,
-            expiryDate: expiryDate || mrzLine2?.match(/(\d{2})(\d{2})(\d{2})</g)?.[1] ? `${mrzLine2?.match(/(\d{2})(\d{2})(\d{2})/g)?.[1]?.match(/(\d{2})(\d{2})(\d{2})/)?.slice(1).reverse().join('/')}` : null,
+            expiryDate: expiryDate,
             placeOfBirth: getVal(/PLACE OF BIRTH\s*([A-Z\s'-]+)/),
             issuingAuthority: getVal(/ISSUING AUTHORITY\s*([A-Z.\s'-]+)/),
         },
@@ -108,57 +110,39 @@ export async function processDocument(
   }
   
   const { documentImage } = validatedFields.data;
-
-  // Since there are no settings for ocr.space key, we can't upload.
-  // We'll simulate the OCR response with the provided text for now.
-  // This allows building and testing the parsing logic.
-  const sampleOcrText = `REPUBLIC OF YEMEN
-جواز سفر PASSPORT
-هورية اليمنية
-PR
-SURNAME
-النوع COUNTRY CODE
-AL-KEBSI
-GIVEN NAMES
-YEM
-MUNEER MOHAMMED AHMED
-PROFESSION
-EMPLOYEE
-PLACE OF BIRTH
-SANA'A - YEM
-DATE OF BIRTH
-29/07/1987
-SEX
-M
-DATE OF ISSUE DATE OF EXPIRY
-02/04/2013
-ISSUING AUTHORITY
-SANA'A-H.O
-02/04/2019
-الجمهورية اليمنية
-رقم جواز السفر
-الاسم
-رمز البلد PASSPORT No
-00000000
-منير محمد احمد
-اللقب
-الكبسي
-المهنة
-موظف
-محل الميلاد
-الأمانه - صنعاء
-تاريخ الميلاد
-الجنس
-ذكر
-1987/07/29
-تاريخ الإنتهاء
-2019/04/02 2013/04/02
-رئاسة المصلحة
-PRYEMALKEBSI<<MUNEER<MOHAMMED<AHMED<<<<<<<<<
-00000000<OYEM8707291M1904024<<<<<<<<<<<<<<08`;
+  const ocrApiKey = 'K87110746488957'; // As provided by user
 
   try {
-    const rawText = sampleOcrText; // In a real scenario, this comes from the OCR API
+     // 1. Upload file to get a URL
+    const fileRef = storageRef(storage, `document_uploads/${Date.now()}-${documentImage.name}`);
+    await uploadBytes(fileRef, documentImage);
+    const imageUrl = await getDownloadURL(fileRef);
+
+    // 2. Call OCR.space API
+    const ocrFormData = new FormData();
+    ocrFormData.append('apikey', ocrApiKey);
+    ocrFormData.append('url', imageUrl);
+    ocrFormData.append('language', 'ara');
+    ocrFormData.append('isOverlayRequired', 'false');
+
+    const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: ocrFormData,
+    });
+
+    if (!ocrResponse.ok) {
+      throw new Error(`OCR API failed with status: ${ocrResponse.statusText}`);
+    }
+
+    const ocrData = await ocrResponse.json();
+    const validatedOcr = OcrSpaceResponseSchema.safeParse(ocrData);
+
+    if (!validatedOcr.success || validatedOcr.data.IsErroredOnProcessing || !validatedOcr.data.ParsedResults?.[0]?.ParsedText) {
+      console.error("OCR Error:", validatedOcr.data?.ErrorMessage);
+      throw new Error(validatedOcr.data.ErrorMessage?.[0] || 'Failed to extract text from the document.');
+    }
+    
+    const rawText = validatedOcr.data.ParsedResults[0].ParsedText;
     const treatedText = treatOcrText(rawText);
     
     // Attempt to parse as a passport
@@ -171,10 +155,6 @@ PRYEMALKEBSI<<MUNEER<MOHAMMED<AHMED<<<<<<<<<
             parsedData: parsedData,
         };
     }
-
-    // If passport parsing fails, you could add national ID parsing here
-    // const parsedId = parseNationalId(treatedText);
-    // if (parsedId) { ... }
 
     return {
       success: true,
