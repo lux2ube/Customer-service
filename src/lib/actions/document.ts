@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { createWorker } from 'tesseract.js';
+import path from 'path';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png'];
@@ -46,8 +47,14 @@ export async function processDocument(
   
   let worker;
   try {
-    // Initialize the worker to recognize both Arabic and English
-    worker = await createWorker('ara+eng');
+    // Explicitly define the path to the language data files.
+    // This is crucial for server-side execution where network requests might fail.
+    const tessDataPath = path.join(process.cwd(), 'node_modules', 'tesseract.js-core', 'tessdata');
+
+    worker = await createWorker('ara+eng', 1, {
+      langPath: tessDataPath,
+      gzip: false,
+    });
     
     // Perform OCR to get all text at once
     const { data: { text } } = await worker.recognize(imageBuffer);
