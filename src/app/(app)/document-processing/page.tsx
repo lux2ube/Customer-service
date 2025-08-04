@@ -32,7 +32,7 @@ function SubmitButton() {
 }
 
 function ParsedDataDisplay({ data }: { data: any }) {
-    if (!data) return null;
+    if (!data || !data.details) return null;
 
     return (
         <Card>
@@ -42,12 +42,12 @@ function ParsedDataDisplay({ data }: { data: any }) {
                     Extracted Information
                 </CardTitle>
                 <CardDescription>
-                    Document Type: <span className="font-semibold text-primary">{data.documentType}</span>
+                    Document Type: <span className="font-semibold text-primary">{data.documentType.replace('_', ' ')}</span>
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <pre className="p-4 bg-muted rounded-md text-sm overflow-x-auto">
-                    {JSON.stringify(data, null, 2)}
+                    {JSON.stringify(data.details, null, 2)}
                 </pre>
             </CardContent>
         </Card>
@@ -75,7 +75,9 @@ export default function DocumentProcessingPage() {
     React.useEffect(() => {
         // Reset form and preview when a new result comes in
         if (state?.success) {
-            fileInputRef.current!.value = "";
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
             setPreview(null);
         }
     }, [state]);
@@ -84,7 +86,7 @@ export default function DocumentProcessingPage() {
         <div className="space-y-6">
             <PageHeader
                 title="Document Processing"
-                description="Upload a Yemeni ID or Passport to automatically extract information."
+                description="Upload a Yemeni ID or Passport to automatically extract information using local OCR."
             />
             <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-6">

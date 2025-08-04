@@ -1,16 +1,40 @@
 'use server';
 
 import { z } from 'zod';
-import { parseDocument, type ParseDocumentOutput } from '@/ai/flows/parse-document-flow';
+import { createWorker } from 'tesseract.js';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png'];
+
+interface ParsedID {
+    name?: string;
+    idNumber?: string;
+    birthDate?: string;
+    birthPlace?: string;
+    issueDate?: string;
+}
+
+interface ParsedPassport {
+    passportNumber?: string;
+    fullName?: string;
+    nationality?: string;
+    dateOfBirth?: string;
+    dateOfExpiry?: string;
+    mrzLine1?: string;
+    mrzLine2?: string;
+}
+
+export type CustomOcrOutput = {
+  documentType: 'national_id' | 'passport' | 'unknown';
+  details: ParsedID | ParsedPassport | {};
+};
+
 
 export type DocumentParsingState = {
   success?: boolean;
   error?: boolean;
   message?: string;
-  data?: ParseDocumentOutput;
+  data?: CustomOcrOutput;
 } | undefined;
 
 
@@ -22,11 +46,65 @@ const DocumentSchema = z.object({
     .refine((file) => ALLOWED_FILE_TYPES.includes(file.type), 'Only .jpg and .png files are allowed.'),
 });
 
+// Parser for Yemeni National ID
+function parseNationalId(text: string): ParsedID {
+    const details: ParsedID = {};
+    
+    // Name (الاسم)
+    let match = text.match(/(?:الاسم|الاســم)\s*:\s*([\u0600-\u06FF\s]+)/);
+    if (match) details.name = match[1].trim();
 
-async function fileToDataUri(file: File): Promise<string> {
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    return `data:${file.type};base64,${buffer.toString('base64')}`;
+    // National ID Number (الرقم الوطني)
+    match = text.match(/(?:الرقم الوطني|الرقم الوطنـي)\s*[:\s]*(\d{12,})/);
+    if (match) details.idNumber = match[1].trim();
+
+    // Birth Date (تاريخ الميلاد)
+    match = text.match(/(?:تاريخ الميلاد|تاريخ الميـلاد)\s*[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/);
+    if (match) details.birthDate = match[1].trim();
+    
+    // Place of Birth (محل الميلاد)
+    match = text.match(/(?:محل الميلاد|محل الميـلاد)\s*[:\s]*([\u0600-\u06FF\s]+)/);
+    if (match) details.birthPlace = match[1].trim();
+    
+    // Issue Date (تاريخ الإصدار)
+    match = text.match(/(?:تاريخ الإصدار|تاريخ الإصـدار)\s*[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/);
+    if (match) details.issueDate = match[1].trim();
+
+    return details;
+}
+
+// Parser for Yemeni Passport
+function parsePassport(text: string): ParsedPassport {
+    const details: ParsedPassport = {};
+    
+    // Passport Number
+    let match = text.match(/([A-Z0-9]{8,10})\s*(?:<<|<|\s)*\n/);
+    if (match) details.passportNumber = match[1].trim();
+
+    // Full Name
+    match = text.match(/Name\s*:\s*([A-Z\s]+)/i);
+    if (match) details.fullName = match[1].trim().replace(/\s+/g, ' ');
+
+    // Nationality
+    match = text.match(/Nationality\s*:\s*(YEMENI)/i);
+    if (match) details.nationality = match[1].trim();
+
+    // Date of Birth
+    match = text.match(/Date of Birth\s*:\s*(\d{2}\s[A-Z]{3}\s\d{4})/i);
+    if (match) details.dateOfBirth = match[1].trim();
+
+    // Date of Expiry
+    match = text.match(/Date of Expiry\s*:\s*(\d{2}\s[A-Z]{3}\s\d{4})/i);
+    if (match) details.dateOfExpiry = match[1].trim();
+
+    // MRZ (Machine Readable Zone)
+    const mrzMatch = text.match(/(P<[A-Z0-9<]{39})\n([A-Z0-9<]{44})/i);
+    if (mrzMatch) {
+        details.mrzLine1 = mrzMatch[1];
+        details.mrzLine2 = mrzMatch[2];
+    }
+    
+    return details;
 }
 
 
@@ -46,26 +124,43 @@ export async function processDocument(
   }
 
   const { documentImage } = validatedFields.data;
-
+  const imageBuffer = Buffer.from(await documentImage.arrayBuffer());
+  
+  let worker;
   try {
-    const photoDataUri = await fileToDataUri(documentImage);
+    worker = await createWorker('ara+eng');
+    const { data: { text } } = await worker.recognize(imageBuffer);
+    await worker.terminate();
 
-    const result = await parseDocument({ photoDataUri });
-    
-    if (result.documentType === 'unknown' || !result.isClear) {
+    // Determine document type and parse
+    let docType: 'national_id' | 'passport' | 'unknown' = 'unknown';
+    let parsedDetails: ParsedID | ParsedPassport | {} = {};
+
+    if (text.includes('الجمهورية اليمنية') && text.includes('بطاقة شخصية')) {
+        docType = 'national_id';
+        parsedDetails = parseNationalId(text);
+    } else if (text.match(/Republic of Yemen/i) && text.match(/Passport/i)) {
+        docType = 'passport';
+        parsedDetails = parsePassport(text);
+    }
+
+    if (docType === 'unknown' || Object.keys(parsedDetails).length === 0) {
         return {
             error: true,
-            message: "Could not identify the document type or the image was not clear enough to read.",
+            message: "Could not identify document type or extract any details from the image."
         };
     }
 
-    return { success: true, data: result };
+    return { success: true, data: { documentType: docType, details: parsedDetails }};
 
   } catch (error: any) {
-    console.error("Document processing error:", error);
+    console.error("OCR processing error:", error);
+    if (worker) {
+        await worker.terminate();
+    }
     return {
       error: true,
-      message: error.message || 'An unexpected error occurred while processing the document.',
+      message: 'An unexpected error occurred during OCR processing.',
     };
   }
 }
