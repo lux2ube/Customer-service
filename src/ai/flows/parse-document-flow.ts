@@ -43,7 +43,7 @@ const PassportSchema = z.object({
 const ParseDocumentOutputSchema = z.object({
   documentType: z.enum(['national_id', 'passport', 'unknown']).describe("The type of document identified."),
   isClear: z.boolean().describe("Whether the document image is clear and legible."),
-  details: z.union([NationalIdSchema, PassportSchema, z.object({})]).describe("The extracted details, structured according to the document type. Returns an empty object if the type is unknown or unclear."),
+  details: z.union([NationalIdSchema, PassportSchema]).optional().describe("The extracted details, structured according to the document type. This field is omitted if the type is unknown or unclear."),
 });
 export type ParseDocumentOutput = z.infer<typeof ParseDocumentOutputSchema>;
 
@@ -83,7 +83,7 @@ If the document is clear, set isClear to true and extract the following informat
 - mrzLine2: The second line of the Machine Readable Zone (MRZ) at the bottom.
 
 Analyze the image carefully. Pay close attention to both Arabic and English text. For dates, return them in the format seen on the document.
-If a field is not present or is unreadable, omit it from the response.
+If a field is not present or is unreadable, omit it from the response. If the document type is unknown or the image is unclear, omit the entire 'details' object.
 
 Image to analyze: {{media url=photoDataUri}}
 `,
