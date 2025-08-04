@@ -74,50 +74,65 @@ function parseNationalId(text: string): ParsedID {
     return details;
 }
 
-// Parser for Yemeni Passport
+// Parser for Yemeni Passport - updated with more robust regex
 function parsePassport(text: string): ParsedPassport {
     const details: ParsedPassport = {};
-    const lines = text.split('\n');
-
-    const getValue = (labelRegex: RegExp): string | undefined => {
-        for (const line of lines) {
-            const match = line.match(labelRegex);
-            if (match && match[1]) {
-                return match[1].replace(/</g, '').trim();
-            }
-        }
-        return undefined;
+    
+    const getValue = (label: string) => {
+        // This regex looks for the label and captures the rest of the line, ignoring Arabic text in between
+        const pattern = new RegExp(`${label}\\s*(?:[\\u0600-\\u06FF\\s]*[:\\s]*)?([A-Z0-9\\s/\\-]+)`, 'im');
+        const match = text.match(pattern);
+        return match ? match[1].trim() : undefined;
     };
     
-    // Passport Number
-    details.passportNumber = getValue(/PASSPORT\s*No\.?\s*([A-Z0-9]+)/i);
-
-    // Full Name from SURNAME and GIVEN NAMES
-    const surname = getValue(/SURNAME\s*([A-Z\s-]+)/i);
-    const givenNames = getValue(/GIVEN\s*NAMES\s*([A-Z\s]+)/i);
-    if (surname && givenNames) {
-        details.fullName = `${givenNames} ${surname}`.replace(/\s+/g, ' ');
+    const getDate = (label: string) => {
+        const pattern = new RegExp(`${label}\\s*(\\d{2}\\/\\d{2}\\/\\d{4})`, 'im');
+        const match = text.match(pattern);
+        return match ? match[1] : undefined;
     }
-    
-    // Nationality
-    const countryCode = getValue(/COUNTRY\s*CODE\s*([A-Z]{3})/i);
-    if (countryCode === 'YEM') {
-        details.nationality = "YEMENI";
+
+    // Passport Number
+    details.passportNumber = getValue('PASSPORT No');
+
+    // Full Name
+    const surname = getValue('SURNAME');
+    const givenNames = getValue('GIVEN NAMES');
+    if (surname && givenNames) {
+        details.fullName = `${givenNames} ${surname}`.replace(/\s+/g, ' ').trim();
+    } else {
+        details.fullName = getValue('Name');
     }
 
     // Dates
-    details.dateOfBirth = getValue(/DATE\s*OF\s*BIRTH\s*(\d{2}\/\d{2}\/\d{4})/i);
-    details.dateOfExpiry = getValue(/DATE\s*OF\s*EXPIRY\s*(\d{2}\/\d{2}\/\d{4})/i);
+    details.dateOfBirth = getDate('DATE OF BIRTH');
+    details.dateOfExpiry = getDate('DATE OF EXPIRY');
 
-    // MRZ (Machine Readable Zone) - a more robust regex
-    const mrzMatch = text.match(/(P[A-Z<][A-Z0-9<]{30,})\n([A-Z0-9<]{30,})/i);
-     if (mrzMatch) {
+    // Nationality
+    if (text.match(/YEM|YEMENI/i)) {
+        details.nationality = 'YEMENI';
+    }
+
+    // MRZ (Machine Readable Zone)
+    const mrzMatch = text.match(/(P[A-Z<]{1}YEM[A-Z0-9<]{39})\s*\n\s*([A-Z0-9<]{44})/i);
+    if (mrzMatch) {
         details.mrzLine1 = mrzMatch[1].replace(/\s/g, '');
         details.mrzLine2 = mrzMatch[2].replace(/\s/g, '');
+
+        // Extract from MRZ as a fallback
+        if (!details.passportNumber) details.passportNumber = details.mrzLine2.substring(0, 9).replace(/</g, '');
+        if (!details.dateOfBirth) {
+            const dobMRZ = details.mrzLine2.substring(13, 19);
+            details.dateOfBirth = `${dobMRZ.substring(4, 6)}/${dobMRZ.substring(2, 4)}/19${dobMRZ.substring(0, 2)}`;
+        }
+        if (!details.dateOfExpiry) {
+            const doeMRZ = details.mrzLine2.substring(21, 27);
+            details.dateOfExpiry = `${doeMRZ.substring(4, 6)}/${doeMRZ.substring(2, 4)}/20${doeMRZ.substring(0, 2)}`;
+        }
     }
     
     return details;
 }
+
 
 
 export async function processDocument(
