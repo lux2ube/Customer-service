@@ -8,3 +8,4 @@ export * from './sms';
 export * from './transaction';
 export * from './utility';
 export * from './wallet';
+export * from './document';

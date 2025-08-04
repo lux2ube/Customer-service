@@ -28,6 +28,7 @@ import {
   Info,
   History,
   Wallet,
+  FileScan,
 } from 'lucide-react';
 
 const menuItems = [
@@ -36,6 +37,7 @@ const menuItems = [
   { href: '/transactions', label: 'Transactions', icon: Banknote },
   { type: 'divider' },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
+  { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { type: 'divider' },
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
