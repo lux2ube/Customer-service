@@ -1,7 +1,5 @@
 
 
-
-
 'use server';
 
 import { z } from 'zod';
@@ -12,6 +10,7 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto } from './helpers';
 import { redirect } from 'next/navigation';
+import { format } from 'date-fns';
 
 const PROFIT_ACCOUNT_ID = '4001';
 const EXPENSE_ACCOUNT_ID = '5001';
@@ -219,10 +218,30 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
     
-    if (finalData.status === 'Confirmed' && finalData.invoice_image_url) {
-        const caption = `Invoice for transaction: \`${newId}\``;
-        await sendTelegramPhoto(finalData.invoice_image_url, caption);
+    // --- Telegram Notification Logic ---
+    if (finalData.status === 'Confirmed') {
+        let title = '';
+        let message = '';
+
+        if (finalData.type === 'Deposit') {
+            title = '📥 Customer Receipt Voucher';
+            message = `Amount of *${finalData.amount_usdt.toFixed(2)} USDT* received from customer *${finalData.clientName}* on ${format(new Date(finalData.date), 'yyyy-MM-dd')}.`;
+        } else if (finalData.type === 'Withdraw') {
+             title = '📤 Customer Withdrawal Voucher';
+             message = `Withdrawal of *${finalData.amount_usdt.toFixed(2)} USDT* processed for customer *${finalData.clientName}* to wallet \`${finalData.client_wallet_address}\`.`;
+        }
+        
+        if (title && message) {
+            const fullNotification = `*${title}*\n\n${message}`;
+            await sendTelegramNotification(fullNotification);
+        }
+
+        if (finalData.invoice_image_url) {
+            const caption = `Invoice for transaction: \`${newId}\``;
+            await sendTelegramPhoto(finalData.invoice_image_url, caption);
+        }
     }
+
 
     if (finalData.clientId && finalData.client_wallet_address) {
         try {
@@ -330,13 +349,23 @@ export async function createTransaction(transactionId: string | null, formData: 
                 credit_account_name: creditAccount.name,
                 createdAt: new Date().toISOString(),
             });
+            
+            // Telegram for Journal Entry
+            const notificationMessage = `
+*🔄 Journal Entry: ${description}*
+*Amount:* ${amountUsd.toFixed(2)} USD
+*From:* ${debitAccount.name}
+*To:* ${creditAccount.name}
+            `;
+            await sendTelegramNotification(notificationMessage);
+
         } catch (e) {
             console.error("Failed to create automated journal entry:", e);
         }
     };
     
     if (finalData.fee_usd && finalData.fee_usd > 0) {
-        const description = `Profit from transaction ${newId}`;
+        const description = `Commission Income Journal: Transaction ${newId}`;
         if (finalData.type === 'Deposit' && finalData.bankAccountId) {
             await _createFeeExpenseJournalEntry(finalData.bankAccountId, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
         } else if (finalData.type === 'Withdraw' && finalData.cryptoWalletId) {
@@ -345,7 +374,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
     
     if (finalData.expense_usd && finalData.expense_usd > 0) {
-        const description = `Expense from transaction ${newId}`;
+        const description = `Commission Expense Journal: Transaction ${newId}`;
         if (finalData.type === 'Deposit' && finalData.cryptoWalletId) {
             await _createFeeExpenseJournalEntry(EXPENSE_ACCOUNT_ID, finalData.cryptoWalletId, finalData.expense_usd, description);
         } else if (finalData.type === 'Withdraw' && finalData.bankAccountId) {

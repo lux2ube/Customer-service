@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -7,7 +6,7 @@ import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Account, BankAccount } from '../types';
-import { stripUndefined, logAction } from './helpers';
+import { stripUndefined, logAction, sendTelegramNotification } from './helpers';
 import { redirect } from 'next/navigation';
 
 // --- Chart of Accounts Actions ---
@@ -380,6 +379,17 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
             credit_account_name,
             createdAt: new Date().toISOString(),
         });
+        
+        // Telegram Notification for Journal Entry
+        const notificationMessage = `
+*🔄 Journal Entry Created*
+*Description:* ${description}
+*Amount:* ${amount_usd.toFixed(2)} USD
+*From (Debit):* ${debit_account_name}
+*To (Credit):* ${credit_account_name}
+        `;
+        await sendTelegramNotification(notificationMessage);
+
     } catch (error) {
         return {
             message: 'Database Error: Failed to create journal entry.'

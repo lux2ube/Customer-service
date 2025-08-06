@@ -183,3 +183,10 @@ export interface SendRequest {
     txHash?: string;
     error?: string;
 }
+
+export interface TransactionFlag {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+}

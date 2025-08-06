@@ -62,11 +62,14 @@ export async function sendTelegramNotification(message: string) {
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    
+    // We remove the backticks from the markdown escape because they are used for code blocks
+    const safeMessage = message.replace(/`/g, "'");
 
     const payload = {
         chat_id: chatId,
-        text: message,
-        parse_mode: 'MarkdownV2',
+        text: safeMessage,
+        parse_mode: 'Markdown', // Use regular Markdown for better compatibility
     };
 
     try {
@@ -99,11 +102,13 @@ export async function sendTelegramPhoto(photoUrl: string, caption: string) {
 
     const url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
     
+    const safeCaption = caption.replace(/`/g, "'");
+
     const payload = {
         chat_id: chatId,
         photo: photoUrl,
-        caption: escapeTelegramMarkdown(caption),
-        parse_mode: 'MarkdownV2',
+        caption: safeCaption,
+        parse_mode: 'Markdown',
     };
     
     try {
