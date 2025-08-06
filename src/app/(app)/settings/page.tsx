@@ -103,7 +103,7 @@ export default function SettingsPage() {
                                 <CardDescription>
                                     <Skeleton className="h-4 w-full" />
                                 </CardDescription>
-                            </Header>
+                            </CardHeader>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
@@ -116,7 +116,7 @@ export default function SettingsPage() {
                                 <CardDescription>
                                     <Skeleton className="h-4 w-full" />
                                 </CardDescription>
-                            </Header>
+                            </CardHeader>
                             <CardContent className="space-y-4">
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
