@@ -43,12 +43,14 @@ import { cn } from '@/lib/utils';
 import { updateSmsTransactionStatus, linkSmsToClient } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CashReceiptBulkActions } from './cash-receipt-bulk-actions';
 
 const statuses: SmsTransaction['status'][] = ['pending', 'parsed', 'matched', 'used', 'rejected'];
 const sources = ['Manual', 'SMS'];
 
 // A unified type for the table
-type UnifiedReceipt = {
+export type UnifiedReceipt = {
     id: string;
     date: string;
     clientName: string; // The credited client (matched_client_name for SMS)
@@ -135,6 +137,8 @@ export function CashReceiptsTable() {
   
   const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
   const [manualLinkSms, setManualLinkSms] = React.useState<UnifiedReceipt | null>(null);
+
+  const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
   const { toast } = useToast();
 
@@ -272,6 +276,18 @@ export function CashReceiptsTable() {
             default: return 'secondary';
         }
     }
+  
+    const selectedReceipts = Object.keys(rowSelection).filter(id => rowSelection[id]);
+
+    const handleSelectAll = (checked: boolean) => {
+        const newSelection: Record<string, boolean> = {};
+        if (checked) {
+            filteredReceipts.forEach(tx => {
+                newSelection[tx.id] = true;
+            });
+        }
+        setRowSelection(newSelection);
+    };
 
   return (
     <div className="space-y-4">
@@ -310,10 +326,25 @@ export function CashReceiptsTable() {
             </PopoverContent>
             </Popover>
         </div>
+        
+        {selectedReceipts.length > 0 && (
+            <CashReceiptBulkActions 
+                selectedReceipts={receipts.filter(r => selectedReceipts.includes(r.id))}
+                onActionComplete={() => setRowSelection({})}
+            />
+        )}
+
         <div className="rounded-md border bg-card">
             <Table>
             <TableHeader>
                 <TableRow>
+                    <TableHead className="w-10 px-2">
+                        <Checkbox
+                            checked={Object.keys(rowSelection).length > 0 && filteredReceipts.length > 0 && Object.keys(rowSelection).length === filteredReceipts.length}
+                            onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                            aria-label="Select all"
+                        />
+                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead>Sender</TableHead>
@@ -325,10 +356,17 @@ export function CashReceiptsTable() {
             </TableHeader>
             <TableBody>
                 {loading ? (
-                    <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading receipts...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading receipts...</TableCell></TableRow>
                 ) : filteredReceipts.length > 0 ? (
                 filteredReceipts.map((receipt) => (
-                    <TableRow key={`${receipt.source}-${receipt.id}`}>
+                    <TableRow key={`${receipt.source}-${receipt.id}`} data-state={rowSelection[receipt.id] && "selected"}>
+                        <TableCell className="px-2">
+                            <Checkbox
+                                checked={rowSelection[receipt.id] || false}
+                                onCheckedChange={(checked) => setRowSelection(prev => ({...prev, [receipt.id]: !!checked}))}
+                                aria-label="Select row"
+                            />
+                        </TableCell>
                         <TableCell>{receipt.date && !isNaN(new Date(receipt.date).getTime()) ? format(new Date(receipt.date), 'Pp') : 'N/A'}</TableCell>
                         <TableCell className="font-medium">{receipt.clientName}</TableCell>
                         <TableCell>{receipt.senderName}</TableCell>
@@ -359,7 +397,7 @@ export function CashReceiptsTable() {
                     </TableRow>
                 ))
                 ) : (
-                    <TableRow><TableCell colSpan={7} className="h-24 text-center">No cash receipts found for the selected criteria.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="h-24 text-center">No cash receipts found for the selected criteria.</TableCell></TableRow>
                 )}
             </TableBody>
             </Table>
@@ -381,4 +419,3 @@ export function CashReceiptsTable() {
     </div>
   );
 }
-

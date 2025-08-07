@@ -23,6 +23,7 @@ export async function updateSmsTransactionStatus(id: string, status: SmsTransact
         const txRef = ref(db, `sms_transactions/${id}`);
         await update(txRef, { status });
         revalidatePath('/sms/transactions');
+        revalidatePath('/cash-receipts');
         return { success: true };
     } catch (error) {
         return { success: false, message: 'Database error: Failed to update status.' };
@@ -49,6 +50,7 @@ export async function linkSmsToClient(smsId: string, clientId: string): Promise<
         };
         await update(smsTxRef, updateData);
         revalidatePath('/sms/transactions');
+        revalidatePath('/cash-receipts');
         return { success: true, message: 'SMS linked to client successfully.' };
     } catch (error) {
         console.error('Error linking SMS to client:', error);
@@ -273,6 +275,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/sms/transactions');
+        revalidatePath('/cash-receipts');
         let message = `Processed ${processedCount} message(s): ${successCount} successfully parsed, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;
@@ -489,6 +492,7 @@ ${escapeTelegramMarkdown(format(new Date(), 'Pp'))}
         }
 
         revalidatePath('/sms/transactions');
+        revalidatePath('/cash-receipts');
         return { message: `Matching complete. Successfully matched ${matchedCount} SMS record(s).`, error: false };
 
      } catch(error: any) {
@@ -582,5 +586,31 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
     } catch (error: any) {
         console.error("Client Merge Error:", error);
         return { message: error.message || "An unknown error occurred during the merge.", error: true };
+    }
+}
+
+export type BulkUpdateState = { message?: string; error?: boolean } | undefined;
+
+export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+    const smsIds = formData.getAll('smsIds') as string[];
+    const status = formData.get('status') as SmsTransaction['status'];
+
+    if (!smsIds || smsIds.length === 0 || !status) {
+        return { message: 'No SMS records or status selected.', error: true };
+    }
+
+    const updates: { [key: string]: any } = {};
+    for (const id of smsIds) {
+        updates[`/sms_transactions/${id}/status`] = status;
+    }
+
+    try {
+        await update(ref(db), updates);
+        revalidatePath('/sms/transactions');
+        revalidatePath('/cash-receipts');
+        return { message: `Successfully updated ${smsIds.length} SMS records to "${status}".`, error: false };
+    } catch (error) {
+        console.error('Bulk SMS update error:', error);
+        return { message: 'Database error: Failed to update SMS records.', error: true };
     }
 }
