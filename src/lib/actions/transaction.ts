@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import { z } from 'zod';
@@ -602,7 +603,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         const rate = getRate(bankAccount.currency);
         if (rate <= 0) return { message: `Conversion rate for ${bankAccount.currency} is not valid.`, success: false };
         
-        const amountUsd = amount * rate;
+        const amountUsd = amount / rate;
 
         const newReceipt: Omit<CashReceipt, 'id' | 'createdAt'> = {
             date: new Date().toISOString(),
@@ -628,7 +629,18 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         });
         
         // Create the journal entry
-        const clientLedgerId = `6000-${clientId.substring(0, 8)}`; // Assume client ledger account exists
+        const clientLedgerId = `6001-${client.name.replace(/\s/g, '_').substring(0,10)}`;
+        const clientLedgerAccountRef = ref(db, `accounts/${clientLedgerId}`);
+        const clientLedgerSnapshot = await get(clientLedgerAccountRef);
+
+        if (!clientLedgerSnapshot.exists()) {
+            await set(clientLedgerAccountRef, {
+                name: `Client - ${client.name}`,
+                type: 'Liabilities',
+                isGroup: false,
+                parentId: '6000'
+            });
+        }
         
         const journalDescription = `Cash receipt from ${senderName || client.name}`;
         
@@ -653,7 +665,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             { receiptId: newReceiptRef.key, amount: `${amount} ${bankAccount.currency}` }
         );
 
-        revalidatePath('/cash-receipts');
+        revalidatePath('/cash-receipts/add');
         revalidatePath('/accounting/journal');
 
         return { success: true, message: 'Cash receipt recorded successfully.' };
