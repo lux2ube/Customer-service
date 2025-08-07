@@ -8,7 +8,6 @@ import type { Client, Account, Settings, Transaction } from '../types';
 import { stripUndefined } from './helpers';
 
 export type SyncState = { message?: string; error?: boolean; } | undefined;
-export type AutoProcessState = { message?: string; error?: boolean; } | undefined;
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const USDT_DECIMALS = 18;

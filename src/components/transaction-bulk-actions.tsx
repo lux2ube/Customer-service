@@ -7,7 +7,7 @@ import { useFormStatus } from 'react-dom';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 import { updateBulkTransactions, type BulkUpdateState } from '@/lib/actions';
-import { ChevronDown, Tag, Pencil } from 'lucide-react';
+import { ChevronDown, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
     AlertDialog,

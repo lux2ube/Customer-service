@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, autoProcessSyncedTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, type SyncState, type AutoProcessState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -90,13 +90,6 @@ function HistoricalSyncForm() {
     const [state, formAction] = useActionState<SyncState, FormData>(syncHistoricalBscTransactions, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={History} text="Sync (Before 25 May)" pendingText="Syncing History..." /></form>;
-}
-
-function AutoProcessForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<AutoProcessState, FormData>(autoProcessSyncedTransactions, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Processing Failed' : 'Processing Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={Bot} text="Auto-Process Deposits" pendingText="Processing..." /></form>;
 }
 
 function ProcessSmsForm() {
@@ -296,7 +289,6 @@ export default function DashboardPage() {
                     <CardContent className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
                            <SyncForm />
-                           <AutoProcessForm />
                         </div>
                          <div className="flex flex-wrap gap-2">
                            <ProcessSmsForm />

@@ -13,43 +13,6 @@ import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import type { Transaction } from '@/lib/types';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { useToast } from '@/hooks/use-toast';
-import { autoProcessSyncedTransactions, type AutoProcessState } from '@/lib/actions';
-
-
-function AutoProcessButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button variant="outline" type="submit" disabled={pending}>
-            <Bot className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
-            {pending ? 'Processing...' : 'Auto-Process Deposits'}
-        </Button>
-    )
-}
-
-function AutoProcessForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<AutoProcessState, FormData>(autoProcessSyncedTransactions, undefined);
-
-    React.useEffect(() => {
-        if (state?.message) {
-            toast({
-                title: state.error ? 'Processing Failed' : 'Processing Complete',
-                description: state.message,
-                variant: state.error ? 'destructive' : 'default',
-            });
-        }
-    }, [state, toast]);
-
-    return (
-        <form action={formAction}>
-            <AutoProcessButton />
-        </form>
-    );
-}
-
 
 export default function TransactionsPage() {
     const [transactions, setTransactions] = React.useState<Transaction[]>([]);
@@ -100,7 +63,6 @@ export default function TransactionsPage() {
                 description="Manage all financial transactions."
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    <AutoProcessForm />
                     <SyncButton />
                     <ExportButton 
                         data={exportableData} 

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from '../firebase';
-import { push, ref, set, update, get, query, orderByChild, equalTo } from 'firebase/database';
+import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt } from '../types';
@@ -345,7 +345,7 @@ export async function createTransaction(transactionId: string | null, formData: 
                 credit_amount: creditAmount,
                 amount_usd: amountUsd,
                 debit_account_name: debitAccount.name,
-                credit_account_name: CreditAccount.name,
+                credit_account_name: creditAccount.name,
                 createdAt: new Date().toISOString(),
             });
             
@@ -354,7 +354,7 @@ export async function createTransaction(transactionId: string | null, formData: 
 *🔄 Journal Entry: ${description}*
 *Amount:* ${amountUsd.toFixed(2)} USD
 *From:* ${debitAccount.name}
-*To:* ${CreditAccount.name}
+*To:* ${creditAccount.name}
             `;
             await sendTelegramNotification(notificationMessage);
 
@@ -409,267 +409,5 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     } catch (error) {
         console.error('Bulk update error:', error);
         return { message: 'Database error: Failed to update transactions.', error: true };
-    }
-}
-
-export async function findUnassignedTransactionsByAddress(address: string): Promise<number> {
-    if (!address) return 0;
-    try {
-        const txsRef = ref(db, 'transactions');
-        const q = query(txsRef, orderByChild('client_wallet_address'), equalTo(address));
-        const snapshot = await get(q);
-        if (!snapshot.exists()) return 0;
-        
-        const transactions = snapshot.val();
-        let count = 0;
-        for (const txId in transactions) {
-            const tx = transactions[txId];
-            if (tx.clientId === 'unassigned-bscscan') {
-                count++;
-            }
-        }
-        return count;
-    } catch (error) {
-        console.error('Error finding unassigned transactions:', error);
-        return 0;
-    }
-}
-
-export async function batchUpdateClientForTransactions(clientId: string, address: string): Promise<{error?: boolean, message: string}> {
-    if (!clientId || !address) {
-        return { error: true, message: 'Client ID and address are required.' };
-    }
-
-    try {
-        const [clientSnapshot, txsSnapshot] = await Promise.all([
-            get(ref(db, `clients/${clientId}`)),
-            get(query(ref(db, 'transactions'), orderByChild('client_wallet_address'), equalTo(address)))
-        ]);
-
-        if (!clientSnapshot.exists()) {
-            return { error: true, message: 'Client not found.' };
-        }
-        if (!txsSnapshot.exists()) {
-            return { message: 'No transactions found for this address.', error: false };
-        }
-        
-        const client = clientSnapshot.val() as Client;
-        const transactions = txsSnapshot.val();
-        const updates: { [key: string]: any } = {};
-        let updatedCount = 0;
-
-        for (const txId in transactions) {
-            const tx = transactions[txId];
-            if (tx.clientId === 'unassigned-bscscan') {
-                updates[`/transactions/${txId}/clientId`] = clientId;
-                updates[`/transactions/${txId}/clientName`] = client.name;
-                updatedCount++;
-            }
-        }
-
-        if (updatedCount > 0) {
-            await update(ref(db), updates);
-            return { message: `Successfully assigned ${client.name} to ${updatedCount} transaction(s).`, error: false };
-        } else {
-            return { message: 'No unassigned transactions needed updating.', error: false };
-        }
-
-    } catch (error) {
-        console.error('Error in batch update:', error);
-        return { error: true, message: 'A database error occurred during the batch update.' };
-    }
-}
-
-export type AutoProcessState = { message?: string; error?: boolean; } | undefined;
-
-export async function autoProcessSyncedTransactions(prevState: AutoProcessState, formData: FormData): Promise<AutoProcessState> {
-     try {
-        const [transactionsSnapshot, smsTransactionsSnapshot] = await Promise.all([
-            get(ref(db, 'transactions')),
-            get(ref(db, 'sms_transactions'))
-        ]);
-
-        if (!transactionsSnapshot.exists() || !smsTransactionsSnapshot.exists()) {
-            return { message: "No transactions or SMS records found to process.", error: false };
-        }
-
-        const allTransactions: Record<string, Transaction> = transactionsSnapshot.val();
-        const allSmsTransactions: Record<string, SmsTransaction> = smsTransactionsSnapshot.val();
-        
-        const pendingBscTxs = Object.values(allTransactions).filter(tx => tx.clientId === 'unassigned-bscscan' && tx.type === 'Deposit');
-        const matchedSmsTxs = Object.values(allSmsTransactions).filter(sms => sms.status === 'matched');
-
-        if (pendingBscTxs.length === 0) {
-            return { message: "No unassigned BscScan deposits to process.", error: false };
-        }
-
-        const updates: { [key: string]: any } = {};
-        let processedCount = 0;
-
-        for (const bscTx of pendingBscTxs) {
-            // Find a matched SMS for the same amount (+/- a small tolerance for fees)
-            // This is a naive approach and could be improved with more sophisticated matching logic
-            const matchedSms = matchedSmsTxs.find(sms => 
-                Math.abs(sms.amount! - bscTx.amount_usd) < 1 // tolerance of $1
-            );
-            
-            if (matchedSms && matchedSms.matched_client_id) {
-                // Found a match, update the BscScan transaction with the client details
-                updates[`/transactions/${bscTx.id}/clientId`] = matchedSms.matched_client_id;
-                updates[`/transactions/${bscTx.id}/clientName`] = matchedSms.matched_client_name;
-                updates[`/transactions/${bscTx.id}/linkedSmsId`] = matchedSms.id;
-                
-                // Mark the SMS as used
-                updates[`/sms_transactions/${matchedSms.id}/status`] = 'used';
-                updates[`/sms_transactions/${matchedSms.id}/transaction_id`] = bscTx.id;
-                
-                processedCount++;
-            }
-        }
-        
-        if (processedCount > 0) {
-            await update(ref(db), updates);
-        }
-
-        revalidatePath('/transactions');
-        revalidatePath('/sms/transactions');
-        return { message: `Auto-processing complete. Successfully linked ${processedCount} deposit(s).`, error: false };
-
-    } catch (error: any) {
-        console.error("Auto-Process Error:", error);
-        return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
-    }
-}
-
-
-// --- Cash Receipt Actions ---
-export type CashReceiptFormState = {
-    errors?: {
-        bankAccountId?: string[];
-        clientId?: string[];
-        amount?: string[];
-    };
-    message?: string;
-    success?: boolean;
-} | undefined;
-
-const CashReceiptSchema = z.object({
-    bankAccountId: z.string().min(1, "Please select a bank account."),
-    clientId: z.string().min(1, "Please select a client."),
-    amount: z.coerce.number().gt(0, "Amount must be positive."),
-    senderName: z.string().optional(),
-    remittanceNumber: z.string().optional(),
-    note: z.string().optional(),
-});
-
-export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
-
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to record receipt. Please check the fields.',
-        };
-    }
-    
-    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
-
-    try {
-        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
-            get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'settings'))
-        ]);
-
-        if (!bankAccountSnapshot.exists()) return { message: 'Selected bank account not found.', success: false };
-        if (!clientSnapshot.exists()) return { message: 'Selected client not found.', success: false };
-        if (!settingsSnapshot.exists()) return { message: 'System settings not found.', success: false };
-        
-        const bankAccount = bankAccountSnapshot.val() as Account;
-        const client = clientSnapshot.val() as Client;
-        const settings = settingsSnapshot.val() as Settings;
-
-        const getRate = (currency?: string) => {
-            if (!currency || !settings) return 1;
-            switch (currency) {
-                case 'YER': return settings.yer_usd || 1;
-                case 'SAR': return settings.sar_usd || 1;
-                default: return 1;
-            }
-        };
-
-        const rate = getRate(bankAccount.currency);
-        if (rate <= 0) return { message: `Conversion rate for ${bankAccount.currency} is not valid.`, success: false };
-        
-        const amountUsd = amount / rate;
-
-        const newReceipt: Omit<CashReceipt, 'id' | 'createdAt'> = {
-            date: new Date().toISOString(),
-            bankAccountId: bankAccountId,
-            bankAccountName: bankAccount.name,
-            clientId: clientId,
-            clientName: client.name,
-            senderName: senderName || client.name,
-            amount: amount,
-            currency: bankAccount.currency!,
-            amountUsd: amountUsd,
-            remittanceNumber: remittanceNumber,
-            note: note,
-            status: 'Confirmed'
-        };
-
-        // Create the record in a new `cash_receipts` node
-        const newReceiptRef = push(ref(db, 'cash_receipts'));
-        await set(newReceiptRef, {
-            ...newReceipt,
-            id: newReceiptRef.key,
-            createdAt: new Date().toISOString()
-        });
-        
-        // Create the journal entry
-        const clientLedgerId = `6001-${client.name.replace(/\s/g, '_').substring(0,10)}`;
-        const clientLedgerAccountRef = ref(db, `accounts/${clientLedgerId}`);
-        const clientLedgerSnapshot = await get(clientLedgerAccountRef);
-
-        if (!clientLedgerSnapshot.exists()) {
-            await set(clientLedgerAccountRef, {
-                name: `Client - ${client.name}`,
-                type: 'Liabilities',
-                isGroup: false,
-                parentId: '6000'
-            });
-        }
-        
-        const journalDescription = `Cash receipt from ${senderName || client.name}`;
-        
-        const journalEntry = {
-            date: new Date().toISOString(),
-            description: journalDescription,
-            debit_account: bankAccountId,
-            credit_account: clientLedgerId,
-            debit_amount: amount,
-            credit_amount: amount, // Assuming same currency for simplicity
-            amount_usd: amountUsd,
-            debit_account_name: bankAccount.name,
-            credit_account_name: `Client - ${client.name}`,
-            createdAt: new Date().toISOString(),
-        };
-        const newJournalRef = push(ref(db, 'journal_entries'));
-        await set(newJournalRef, journalEntry);
-
-        await logAction(
-            'create_cash_receipt', 
-            { type: 'client', id: clientId, name: client.name },
-            { receiptId: newReceiptRef.key, amount: `${amount} ${bankAccount.currency}` }
-        );
-
-        revalidatePath('/cash-receipts/add');
-        revalidatePath('/accounting/journal');
-
-        return { success: true, message: 'Cash receipt recorded successfully.' };
-
-    } catch (error: any) {
-        console.error("Error creating cash receipt:", error);
-        return { message: error.message || 'An unknown database error occurred.', success: false };
     }
 }
