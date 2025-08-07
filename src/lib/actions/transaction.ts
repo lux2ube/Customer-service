@@ -7,8 +7,8 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, orderByChild, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem } from '../types';
-import { stripUndefined, sendTelegramNotification, sendTelegramPhoto } from './helpers';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt } from '../types';
+import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 
@@ -539,5 +539,127 @@ export async function autoProcessSyncedTransactions(prevState: AutoProcessState,
     } catch (error: any) {
         console.error("Auto-Process Error:", error);
         return { message: error.message || "An unknown error occurred during auto-processing.", error: true };
+    }
+}
+
+
+// --- Cash Receipt Actions ---
+export type CashReceiptFormState = {
+    errors?: {
+        bankAccountId?: string[];
+        clientId?: string[];
+        amount?: string[];
+    };
+    message?: string;
+    success?: boolean;
+} | undefined;
+
+const CashReceiptSchema = z.object({
+    bankAccountId: z.string().min(1, "Please select a bank account."),
+    clientId: z.string().min(1, "Please select a client."),
+    amount: z.coerce.number().gt(0, "Amount must be positive."),
+    senderName: z.string().optional(),
+    remittanceNumber: z.string().optional(),
+    note: z.string().optional(),
+});
+
+export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to record receipt. Please check the fields.',
+        };
+    }
+    
+    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
+
+    try {
+        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+            get(ref(db, 'settings'))
+        ]);
+
+        if (!bankAccountSnapshot.exists()) return { message: 'Selected bank account not found.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Selected client not found.', success: false };
+        if (!settingsSnapshot.exists()) return { message: 'System settings not found.', success: false };
+        
+        const bankAccount = bankAccountSnapshot.val() as Account;
+        const client = clientSnapshot.val() as Client;
+        const settings = settingsSnapshot.val() as Settings;
+
+        const getRate = (currency?: string) => {
+            if (!currency || !settings) return 1;
+            switch (currency) {
+                case 'YER': return settings.yer_usd || 1;
+                case 'SAR': return settings.sar_usd || 1;
+                default: return 1;
+            }
+        };
+
+        const rate = getRate(bankAccount.currency);
+        if (rate <= 0) return { message: `Conversion rate for ${bankAccount.currency} is not valid.`, success: false };
+        
+        const amountUsd = amount * rate;
+
+        const newReceipt: Omit<CashReceipt, 'id' | 'createdAt'> = {
+            date: new Date().toISOString(),
+            bankAccountId: bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId: clientId,
+            clientName: client.name,
+            senderName: senderName || client.name,
+            amount: amount,
+            currency: bankAccount.currency!,
+            amountUsd: amountUsd,
+            remittanceNumber: remittanceNumber,
+            note: note,
+            status: 'Confirmed'
+        };
+
+        // Create the record in a new `cash_receipts` node
+        const newReceiptRef = push(ref(db, 'cash_receipts'));
+        await set(newReceiptRef, {
+            ...newReceipt,
+            id: newReceiptRef.key,
+            createdAt: new Date().toISOString()
+        });
+        
+        // Create the journal entry
+        const clientLedgerId = `6000-${clientId.substring(0, 8)}`; // Assume client ledger account exists
+        
+        const journalDescription = `Cash receipt from ${senderName || client.name}`;
+        
+        const journalEntry = {
+            date: new Date().toISOString(),
+            description: journalDescription,
+            debit_account: bankAccountId,
+            credit_account: clientLedgerId,
+            debit_amount: amount,
+            credit_amount: amount, // Assuming same currency for simplicity
+            amount_usd: amountUsd,
+            debit_account_name: bankAccount.name,
+            credit_account_name: `Client - ${client.name}`,
+            createdAt: new Date().toISOString(),
+        };
+        const newJournalRef = push(ref(db, 'journal_entries'));
+        await set(newJournalRef, journalEntry);
+
+        await logAction(
+            'create_cash_receipt', 
+            { type: 'client', id: clientId, name: client.name },
+            { receiptId: newReceiptRef.key, amount: `${amount} ${bankAccount.currency}` }
+        );
+
+        revalidatePath('/cash-receipts');
+        revalidatePath('/accounting/journal');
+
+        return { success: true, message: 'Cash receipt recorded successfully.' };
+
+    } catch (error: any) {
+        console.error("Error creating cash receipt:", error);
+        return { message: error.message || 'An unknown database error occurred.', success: false };
     }
 }

@@ -29,12 +29,14 @@ import {
   History,
   Wallet,
   FileScan,
+  HandCoins,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
+  { href: '/cash-receipts', label: 'Cash Receipts', icon: HandCoins },
   { type: 'divider' },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
