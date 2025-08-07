@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { CashPaymentsTable } from "@/components/cash-payments-table";
 
 export default async function CashPaymentsPage() {
     return (
         <>
             <PageHeader
                 title="Cash Payments"
-                description="View and manage all recorded cash payments."
+                description="View and manage all recorded cash payments and outgoing SMS transactions."
             >
                 <Button asChild>
                     <Link href="/cash-payments/add">
@@ -21,11 +21,7 @@ export default async function CashPaymentsPage() {
                 </Button>
             </PageHeader>
             <Suspense fallback={<div>Loading payments...</div>}>
-                 <Card>
-                    <CardContent className="p-6">
-                        <p className="text-muted-foreground">Payment history will be displayed here in a future update.</p>
-                    </CardContent>
-                </Card>
+                 <CashPaymentsTable />
             </Suspense>
         </>
     );

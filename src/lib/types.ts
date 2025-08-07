@@ -87,6 +87,23 @@ export interface CashReceipt {
     createdAt: string;
 }
 
+export interface CashPayment {
+    id: string;
+    date: string;
+    bankAccountId: string;
+    bankAccountName: string;
+    clientId: string;
+    clientName: string;
+    recipientName: string;
+    amount: number;
+    currency: 'YER' | 'USD' | 'SAR';
+    amountUsd: number;
+    remittanceNumber?: string;
+    note?: string;
+    status: 'Confirmed' | 'Cancelled';
+    createdAt: string;
+}
+
 export interface Account {
     id: string;
     name: string;

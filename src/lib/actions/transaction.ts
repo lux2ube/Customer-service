@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -553,7 +553,7 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
     const validatedFields = CashReceiptSchema.safeParse({
         bankAccountId: formData.get('bankAccountId'),
         clientId: formData.get('clientId'),
-        senderName: formData.get('recipientName'), // Re-using this field for recipient
+        senderName: formData.get('recipientName'), // Re-using senderName field for recipient
         amount: formData.get('amount'),
         remittanceNumber: formData.get('remittanceNumber'),
         note: formData.get('note'),
@@ -607,8 +607,27 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
         if (!clientAccountId) {
             return { message: `Error: Client account for ${client.name} not found. Cannot record payment.`, success: false };
         }
+
+        // 1. Create the CashPayment record
+        const newPaymentRef = push(ref(db, 'cash_payments'));
+        const paymentData: Omit<CashPayment, 'id'> = {
+            date: new Date().toISOString(),
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName: client.name,
+            recipientName: recipientName || 'N/A',
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            remittanceNumber,
+            note,
+            status: 'Confirmed',
+            createdAt: new Date().toISOString(),
+        };
+        await set(newPaymentRef, paymentData);
         
-        // Create the Journal Entry for payment
+        // 2. Create the Journal Entry for payment
         const description = `Cash payment to ${recipientName || client.name}`;
         const newJournalRef = push(ref(db, 'journal_entries'));
         await set(newJournalRef, {
@@ -616,8 +635,8 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
             description,
             debit_account: clientAccountId,
             credit_account: bankAccountId,
-            debit_amount: amountUsd, // Debit client in USD
-            credit_amount: amount,   // Credit bank in its native currency
+            debit_amount: amountUsd,   // Debit client in USD
+            credit_amount: amount,     // Credit bank in its native currency
             amount_usd: amountUsd,
             debit_account_name: client.name,
             credit_account_name: bankAccount.name,
