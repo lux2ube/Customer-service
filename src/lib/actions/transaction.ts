@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -409,5 +410,228 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     } catch (error) {
         console.error('Bulk update error:', error);
         return { message: 'Database error: Failed to update transactions.', error: true };
+    }
+}
+
+
+export type CashReceiptFormState = {
+  errors?: {
+    bankAccountId?: string[];
+    clientId?: string[];
+    amount?: string[];
+  };
+  message?: string;
+  success?: boolean;
+} | undefined;
+
+
+const CashReceiptSchema = z.object({
+    bankAccountId: z.string().min(1, 'Please select a bank account.'),
+    clientId: z.string().min(1, 'Please select a client to credit.'),
+    senderName: z.string().optional(),
+    amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+    remittanceNumber: z.string().optional(),
+    note: z.string().optional(),
+});
+
+export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to record receipt. Please check the fields.',
+        };
+    }
+
+    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
+
+    try {
+        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+            get(ref(db, 'settings')),
+        ]);
+
+        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account, client, or settings.', success: false };
+        }
+
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+        const settings = settingsSnapshot.val() as Settings;
+
+        const getRate = (currency?: string) => {
+            if (!currency || !settings) return 1;
+            switch(currency) {
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                case 'USDT': return settings.usdt_usd || 1;
+                case 'USD': default: return 1;
+            }
+        };
+
+        const rate = getRate(bankAccount.currency);
+        if (rate <= 0) {
+            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
+        }
+        const amountUsd = amount * rate;
+        
+        // 1. Create the CashReceipt record
+        const newReceiptRef = push(ref(db, 'cash_receipts'));
+        const receiptData: Omit<CashReceipt, 'id'> = {
+            date: new Date().toISOString(),
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName: client.name,
+            senderName: senderName || 'N/A',
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            remittanceNumber,
+            note,
+            status: 'Confirmed',
+            createdAt: new Date().toISOString(),
+        };
+        await set(newReceiptRef, receiptData);
+
+        // 2. Create the Journal Entry
+        const clientAccountRef = ref(db, 'accounts');
+        const clientAccountSnapshot = await get(clientAccountRef);
+        const allAccounts = clientAccountSnapshot.val();
+        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
+
+        if (!clientAccountId) {
+            // Find the highest existing client account ID to create a new one
+            const clientSubAccounts = Object.keys(allAccounts)
+                .filter(key => key.startsWith('6001'))
+                .map(key => parseInt(key, 10))
+                .sort((a,b) => b - a);
+            const nextId = clientSubAccounts.length > 0 ? clientSubAccounts[0] + 1 : 6001;
+            clientAccountId = String(nextId);
+            
+            await set(ref(db, `accounts/${clientAccountId}`), {
+                name: client.name,
+                type: 'Liabilities',
+                isGroup: false,
+                parentId: '6000',
+                currency: 'USD',
+            });
+        }
+        
+        const description = `Cash receipt from ${senderName || client.name}`;
+        const newJournalRef = push(ref(db, 'journal_entries'));
+        await set(newJournalRef, {
+            date: new Date().toISOString(),
+            description,
+            debit_account: bankAccountId,
+            credit_account: clientAccountId,
+            debit_amount: amount,
+            credit_amount: amountUsd,
+            amount_usd: amountUsd,
+            debit_account_name: bankAccount.name,
+            credit_account_name: client.name,
+            createdAt: new Date().toISOString(),
+        });
+        
+        revalidatePath('/cash-receipts');
+        revalidatePath('/accounting/journal');
+        revalidatePath('/accounting/chart-of-accounts');
+
+        return { success: true, message: 'Cash receipt recorded successfully.' };
+
+    } catch (e: any) {
+        console.error("Error creating cash receipt:", e);
+        return { message: 'Database Error: Could not record cash receipt.', success: false };
+    }
+}
+
+export type CashPaymentFormState = CashReceiptFormState; // Can reuse the same state type
+
+export async function createCashPayment(prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
+    const validatedFields = CashReceiptSchema.safeParse({
+        bankAccountId: formData.get('bankAccountId'),
+        clientId: formData.get('clientId'),
+        senderName: formData.get('recipientName'), // Re-using this field for recipient
+        amount: formData.get('amount'),
+        remittanceNumber: formData.get('remittanceNumber'),
+        note: formData.get('note'),
+    });
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to record payment. Please check the fields.',
+        };
+    }
+
+    const { bankAccountId, clientId, amount, senderName: recipientName, remittanceNumber, note } = validatedFields.data;
+
+    try {
+        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+            get(ref(db, 'settings')),
+        ]);
+
+        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account, client, or settings.', success: false };
+        }
+
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+        const settings = settingsSnapshot.val() as Settings;
+
+        const getRate = (currency?: string) => {
+            if (!currency || !settings) return 1;
+            switch(currency) {
+                case 'YER': return settings.yer_usd || 0;
+                case 'SAR': return settings.sar_usd || 0;
+                case 'USDT': return settings.usdt_usd || 1;
+                case 'USD': default: return 1;
+            }
+        };
+
+        const rate = getRate(bankAccount.currency);
+        if (rate <= 0) {
+            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
+        }
+        const amountUsd = amount * rate;
+        
+        // Find client's sub-account
+        const clientAccountSnapshot = await get(ref(db, 'accounts'));
+        const allAccounts = clientAccountSnapshot.val();
+        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
+
+        if (!clientAccountId) {
+            return { message: `Error: Client account for ${client.name} not found. Cannot record payment.`, success: false };
+        }
+        
+        // Create the Journal Entry for payment
+        const description = `Cash payment to ${recipientName || client.name}`;
+        const newJournalRef = push(ref(db, 'journal_entries'));
+        await set(newJournalRef, {
+            date: new Date().toISOString(),
+            description,
+            debit_account: clientAccountId,
+            credit_account: bankAccountId,
+            debit_amount: amountUsd, // Debit client in USD
+            credit_amount: amount,   // Credit bank in its native currency
+            amount_usd: amountUsd,
+            debit_account_name: client.name,
+            credit_account_name: bankAccount.name,
+            createdAt: new Date().toISOString(),
+        });
+        
+        revalidatePath('/cash-payments');
+        revalidatePath('/accounting/journal');
+        revalidatePath('/accounting/chart-of-accounts');
+
+        return { success: true, message: 'Cash payment recorded successfully.' };
+
+    } catch (e: any) {
+        console.error("Error creating cash payment:", e);
+        return { message: 'Database Error: Could not record cash payment.', success: false };
     }
 }

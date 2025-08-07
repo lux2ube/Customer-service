@@ -30,6 +30,7 @@ import {
   Wallet,
   FileScan,
   HandCoins,
+  ArrowLeftRight,
 } from 'lucide-react';
 
 const menuItems = [
@@ -37,6 +38,7 @@ const menuItems = [
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
   { href: '/cash-receipts', label: 'Cash Receipts', icon: HandCoins },
+  { href: '/cash-payments', label: 'Cash Payments', icon: ArrowLeftRight },
   { type: 'divider' },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
