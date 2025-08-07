@@ -1,7 +1,4 @@
 
-
-
-
 'use server';
 
 import { z } from 'zod';
@@ -348,7 +345,7 @@ export async function createTransaction(transactionId: string | null, formData: 
                 credit_amount: creditAmount,
                 amount_usd: amountUsd,
                 debit_account_name: debitAccount.name,
-                credit_account_name: creditAccount.name,
+                credit_account_name: CreditAccount.name,
                 createdAt: new Date().toISOString(),
             });
             
@@ -357,7 +354,7 @@ export async function createTransaction(transactionId: string | null, formData: 
 *🔄 Journal Entry: ${description}*
 *Amount:* ${amountUsd.toFixed(2)} USD
 *From:* ${debitAccount.name}
-*To:* ${creditAccount.name}
+*To:* ${CreditAccount.name}
             `;
             await sendTelegramNotification(notificationMessage);
 
