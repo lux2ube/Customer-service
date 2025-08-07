@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, BlacklistItem, KycDocument } from '../types';
+import type { Client, BlacklistItem, KycDocument, Transaction } from '../types';
 import { normalizeArabic } from '../utils';
 import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
@@ -404,5 +404,75 @@ export async function importClients(prevState: ImportState, formData: FormData):
     } catch (error: any) {
         console.error("Client Import Error:", error);
         return { message: error.message || "An unknown error occurred during import.", error: true };
+    }
+}
+
+export async function findUnassignedTransactionsByAddress(walletAddress: string): Promise<number> {
+    if (!walletAddress) return 0;
+    
+    try {
+        const transactionsSnapshot = await get(ref(db, 'transactions'));
+        if (!transactionsSnapshot.exists()) return 0;
+
+        const allTxs: Record<string, Transaction> = transactionsSnapshot.val();
+        let count = 0;
+
+        for (const txId in allTxs) {
+            const tx = allTxs[txId];
+            if (
+                tx.clientId === 'unassigned-bscscan' &&
+                tx.client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
+            ) {
+                count++;
+            }
+        }
+        return count;
+    } catch (error) {
+        console.error("Error finding unassigned transactions:", error);
+        return 0;
+    }
+}
+
+export async function batchUpdateClientForTransactions(clientId: string, walletAddress: string): Promise<{error?: boolean, message: string}> {
+     if (!clientId || !walletAddress) {
+        return { error: true, message: "Client ID and wallet address are required." };
+    }
+    
+    try {
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        if (!clientSnapshot.exists()) {
+            return { error: true, message: "Client not found." };
+        }
+        const clientName = clientSnapshot.val().name;
+
+        const transactionsSnapshot = await get(ref(db, 'transactions'));
+        if (!transactionsSnapshot.exists()) return { message: "No transactions to update."};
+
+        const allTxs: Record<string, Transaction> = transactionsSnapshot.val();
+        const updates: Record<string, any> = {};
+        let updatedCount = 0;
+
+        for (const txId in allTxs) {
+            const tx = allTxs[txId];
+            if (
+                tx.clientId === 'unassigned-bscscan' &&
+                tx.client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
+            ) {
+                updates[`/transactions/${txId}/clientId`] = clientId;
+                updates[`/transactions/${txId}/clientName`] = clientName;
+                updatedCount++;
+            }
+        }
+        
+        if (updatedCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/transactions');
+        return { message: `Successfully updated ${updatedCount} transaction(s) for client ${clientName}.`};
+
+    } catch(error) {
+        console.error("Error during batch update:", error);
+        return { error: true, message: "A database error occurred during the batch update." };
     }
 }
