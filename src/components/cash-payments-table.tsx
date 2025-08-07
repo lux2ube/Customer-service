@@ -33,20 +33,21 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MessageSquareText, MoreHorizontal, Calendar as CalendarIcon, X, Check, ChevronsUpDown } from 'lucide-react';
+import { MessageSquareText, MoreHorizontal, Calendar as CalendarIcon, X, Check, ChevronsUpDown, Pencil, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
-import { updateSmsTransactionStatus, linkSmsToClient } from '@/lib/actions';
+import { updateSmsTransactionStatus, linkSmsToClient, cancelCashPayment } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CashReceiptBulkActions } from './cash-receipt-bulk-actions'; // Can be reused for SMS actions
+import Link from 'next/link';
 
-const statuses: SmsTransaction['status'][] = ['pending', 'parsed', 'matched', 'used', 'rejected'];
+const statuses: (SmsTransaction['status'] | CashPayment['status'])[] = ['pending', 'parsed', 'matched', 'used', 'rejected', 'Confirmed', 'Cancelled'];
 const sources = ['Manual', 'SMS'];
 
 // A unified type for the table
@@ -137,6 +138,7 @@ export function CashPaymentsTable() {
   
   const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
   const [manualLinkSms, setManualLinkSms] = React.useState<UnifiedPayment | null>(null);
+  const [paymentToCancel, setPaymentToCancel] = React.useState<UnifiedPayment | null>(null);
 
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
@@ -263,6 +265,17 @@ export function CashPaymentsTable() {
       }
       setManualLinkSms(null);
   }
+
+  const handleCancelPayment = async () => {
+      if (!paymentToCancel) return;
+      const result = await cancelCashPayment(paymentToCancel.id);
+      if (result?.success) {
+          toast({ title: "Payment Cancelled", description: "The payment has been successfully cancelled and the journal entry reversed." });
+      } else {
+          toast({ variant: "destructive", title: "Error", description: result.message });
+      }
+      setPaymentToCancel(null);
+  };
   
   const getStatusVariant = (status: UnifiedPayment['status']) => {
         switch(status) {
@@ -310,8 +323,6 @@ export function CashPaymentsTable() {
                 <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
                     {statuses.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                    <SelectItem value="Confirmed">Confirmed</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
                 </SelectContent>
             </Select>
             <Popover>
@@ -385,10 +396,16 @@ export function CashPaymentsTable() {
                                             <DropdownMenuItem onClick={() => setRawSmsToShow(payment.rawSms || 'No raw SMS content found.')}>View Raw SMS</DropdownMenuItem>
                                         </>
                                     )}
-                                    {payment.source === 'Manual' && (
+                                    {payment.source === 'Manual' && payment.status === 'Confirmed' && (
                                         <>
-                                            <DropdownMenuItem disabled>Edit Payment</DropdownMenuItem>
-                                            <DropdownMenuItem disabled>Cancel Payment</DropdownMenuItem>
+                                            <DropdownMenuItem asChild>
+                                                <Link href={`/cash-payments/${payment.id}/edit`}>
+                                                    <Pencil className="mr-2 h-4 w-4" /> Edit Payment
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setPaymentToCancel(payment)}>
+                                                <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Cancel Payment
+                                            </DropdownMenuItem>
                                         </>
                                     )}
                                 </DropdownMenuContent>
@@ -411,6 +428,19 @@ export function CashPaymentsTable() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogAction onClick={() => setRawSmsToShow(null)}>Close</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!paymentToCancel} onOpenChange={(open) => !open && setPaymentToCancel(null)}>
+             <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure you want to cancel this payment?</AlertDialogTitle>
+                    <AlertDialogDescription>This action will mark the payment as "Cancelled" and attempt to reverse the corresponding journal entry. This cannot be undone.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Close</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleCancelPayment}>Confirm Cancellation</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

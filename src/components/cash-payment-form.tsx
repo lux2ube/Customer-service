@@ -14,37 +14,37 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, CashPayment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashPayment, type CashPaymentFormState } from '@/lib/actions';
+import { useRouter } from 'next/navigation';
 
-
-function SubmitButton() {
+function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending}>
             {pending ? (
                 <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Recording...
+                    Saving...
                 </>
             ) : (
                 <>
                     <Save className="mr-2 h-4 w-4" />
-                    Record Payment
+                    {isEditing ? 'Save Changes' : 'Record Payment'}
                 </>
             )}
         </Button>
     );
 }
 
-function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void }) {
+function ClientSelector({ clients, selectedClientId, onSelect, disabled }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void, disabled?: boolean }) {
     const [open, setOpen] = React.useState(false);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
                     {selectedClientId ? clients.find(c => c.id === selectedClientId)?.name : "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -76,23 +76,29 @@ function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Clie
     );
 }
 
-export function CashPaymentForm({ clients, bankAccounts }: { clients: Client[], bankAccounts: Account[] }) {
+export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: Client[], bankAccounts: Account[], payment?: CashPayment }) {
     const { toast } = useToast();
+    const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [state, formAction] = useActionState<CashPaymentFormState, FormData>(createCashPayment, undefined);
+    const actionWithId = createCashPayment.bind(null, payment?.id || null);
+    const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [selectedClientId, setSelectedClientId] = React.useState('');
-    const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
-
+    const [selectedClientId, setSelectedClientId] = React.useState(payment?.clientId || '');
+    const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(payment?.bankAccountId || '');
+    
     React.useEffect(() => {
         if (state?.success) {
             toast({
                 title: 'Success',
                 description: state.message,
             });
-            formRef.current?.reset();
-            setSelectedClientId('');
-            setSelectedBankAccountId('');
+            if (payment?.id) {
+                router.push('/cash-payments');
+            } else {
+                formRef.current?.reset();
+                setSelectedClientId('');
+                setSelectedBankAccountId('');
+            }
         } else if (state?.message) {
             toast({
                 title: 'Error',
@@ -100,20 +106,22 @@ export function CashPaymentForm({ clients, bankAccounts }: { clients: Client[], 
                 variant: 'destructive',
             });
         }
-    }, [state, toast]);
+    }, [state, toast, payment, router]);
+
+    const isEditing = !!payment;
 
     return (
         <form action={formAction} ref={formRef}>
              <Card>
                 <CardHeader>
-                    <CardTitle>Cash Payment Details</CardTitle>
+                    <CardTitle>{isEditing ? 'Edit' : 'New'} Cash Payment</CardTitle>
                     <CardDescription>Fill in the details of the cash payment.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
-                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
+                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={isEditing}>
                                 <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
                                 <SelectContent>
                                     {bankAccounts.map(account => (
@@ -127,36 +135,36 @@ export function CashPaymentForm({ clients, bankAccounts }: { clients: Client[], 
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount Paid</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" defaultValue={payment?.amount} disabled={isEditing} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="clientId">Debit from Client Account</Label>
-                         <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} />
+                         <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} disabled={isEditing} />
                         <input type="hidden" name="clientId" value={selectedClientId} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="recipientName">Recipient Name (if not a client)</Label>
-                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" />
+                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" defaultValue={payment?.recipientName} />
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="remittanceNumber">Remittance Number</Label>
-                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
+                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" defaultValue={payment?.remittanceNumber} />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="note">Note</Label>
-                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" />
+                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" defaultValue={payment?.note} />
                         </div>
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <SubmitButton />
+                    <SubmitButton isEditing={isEditing} />
                 </CardFooter>
             </Card>
         </form>

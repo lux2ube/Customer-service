@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -7,7 +6,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -184,7 +183,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     if (dataToSave.cryptoWalletId) {
         try {
             const cryptoWalletRef = ref(db, `accounts/${dataToSave.cryptoWalletId}`);
-            const snapshot = await get(cryptoWalletRef);
+            const snapshot = await get(snapshot.ref);
             if (snapshot.exists()) {
                 cryptoWalletName = (snapshot.val() as Account).name;
             }
@@ -549,15 +548,19 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
 
 export type CashPaymentFormState = CashReceiptFormState; // Can reuse the same state type
 
-export async function createCashPayment(prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
-    const validatedFields = CashReceiptSchema.safeParse({
-        bankAccountId: formData.get('bankAccountId'),
-        clientId: formData.get('clientId'),
-        senderName: formData.get('recipientName'), // Re-using senderName field for recipient
-        amount: formData.get('amount'),
-        remittanceNumber: formData.get('remittanceNumber'),
-        note: formData.get('note'),
-    });
+const CashPaymentSchema = z.object({
+    bankAccountId: z.string().min(1, 'Please select a bank account.'),
+    clientId: z.string().min(1, 'Please select a client to debit.'),
+    recipientName: z.string().optional(),
+    amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+    remittanceNumber: z.string().optional(),
+    note: z.string().optional(),
+});
+
+export async function createCashPayment(paymentId: string | null, prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
+    const isEditing = !!paymentId;
+
+    const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
         return {
@@ -566,7 +569,7 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, amount, senderName: recipientName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, amount, recipientName, remittanceNumber, note } = validatedFields.data;
 
     try {
         const [bankAccountSnapshot, clientSnapshot, settingsSnapshot, accountsSnapshot] = await Promise.all([
@@ -602,11 +605,6 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
                 parentId: '6000',
                 currency: 'USD',
             });
-             // Re-fetch all accounts after potential creation
-            const updatedAccountsSnapshot = await get(ref(db, 'accounts'));
-            if (updatedAccountsSnapshot.exists()) {
-                Object.assign(allAccounts, updatedAccountsSnapshot.val());
-            }
         }
         
         const getRate = (currency?: string) => {
@@ -624,50 +622,117 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
             return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
         }
         const amountUsd = amount * rate;
-        
-        // 1. Create the CashPayment record
-        const newPaymentRef = push(ref(db, 'cash_payments'));
-        const paymentData: Omit<CashPayment, 'id'> = {
-            date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
-            clientId,
-            clientName: client.name,
-            recipientName: recipientName || 'N/A',
-            amount,
-            currency: bankAccount.currency!,
-            amountUsd,
-            remittanceNumber,
-            note,
-            status: 'Confirmed',
-            createdAt: new Date().toISOString(),
-        };
-        await set(newPaymentRef, paymentData);
-        
-        // 2. Create the Journal Entry for payment
-        const description = `Cash payment to ${recipientName || client.name}`;
-        const newJournalRef = push(ref(db, 'journal_entries'));
-        await set(newJournalRef, {
-            date: new Date().toISOString(),
-            description,
-            debit_account: clientAccountId,
-            credit_account: bankAccountId,
-            debit_amount: amountUsd,   // Debit client in USD
-            credit_amount: amount,     // Credit bank in its native currency
-            amount_usd: amountUsd,
-            debit_account_name: client.name,
-            credit_account_name: bankAccount.name,
-            createdAt: new Date().toISOString(),
-        });
+
+        if (isEditing) {
+            const paymentRef = ref(db, `cash_payments/${paymentId}`);
+            const paymentUpdates = { recipientName, remittanceNumber, note };
+            await update(paymentRef, paymentUpdates);
+        } else {
+             // 1. Create the CashPayment record
+            const newPaymentRef = push(ref(db, 'cash_payments'));
+            const paymentData: Omit<CashPayment, 'id'> = {
+                date: new Date().toISOString(),
+                bankAccountId,
+                bankAccountName: bankAccount.name,
+                clientId,
+                clientName: client.name,
+                recipientName: recipientName || 'N/A',
+                amount,
+                currency: bankAccount.currency!,
+                amountUsd,
+                remittanceNumber,
+                note,
+                status: 'Confirmed',
+                createdAt: new Date().toISOString(),
+                journalEntryId: '', // placeholder
+            };
+            
+            // 2. Create the Journal Entry for payment
+            const description = `Cash payment to ${recipientName || client.name}`;
+            const newJournalRef = push(ref(db, 'journal_entries'));
+            const journalEntryId = newJournalRef.key!;
+            
+            await set(newJournalRef, {
+                date: paymentData.date,
+                description,
+                debit_account: clientAccountId,
+                credit_account: bankAccountId,
+                debit_amount: amountUsd,   // Debit client in USD
+                credit_amount: amount,     // Credit bank in its native currency
+                amount_usd: amountUsd,
+                debit_account_name: client.name,
+                credit_account_name: bankAccount.name,
+                createdAt: new Date().toISOString(),
+            });
+
+            paymentData.journalEntryId = journalEntryId;
+            await set(newPaymentRef, paymentData);
+        }
         
         revalidatePath('/cash-payments');
         revalidatePath('/accounting/journal');
         revalidatePath('/accounting/chart-of-accounts');
 
-        return { success: true, message: 'Cash payment recorded successfully.' };
+        return { success: true, message: isEditing ? 'Cash payment updated successfully.' : 'Cash payment recorded successfully.' };
 
     } catch (e: any) {
-        console.error("Error creating cash payment:", e);
+        console.error("Error creating/updating cash payment:", e);
         return { message: 'Database Error: Could not record cash payment.', success: false };
+    }
+}
+
+
+export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean, message?: string }> {
+    if (!paymentId) {
+        return { success: false, message: "Payment ID is missing." };
+    }
+    
+    try {
+        const paymentRef = ref(db, `cash_payments/${paymentId}`);
+        const paymentSnapshot = await get(paymentRef);
+        if (!paymentSnapshot.exists()) {
+            return { success: false, message: "Payment not found." };
+        }
+        
+        const payment = paymentSnapshot.val() as CashPayment;
+        if (payment.status === 'Cancelled') {
+            return { success: false, message: "This payment has already been cancelled." };
+        }
+        
+        const { journalEntryId } = payment;
+
+        if (journalEntryId) {
+            const journalEntryRef = ref(db, `journal_entries/${journalEntryId}`);
+            const journalSnapshot = await get(journalEntryRef);
+            if (journalSnapshot.exists()) {
+                const originalEntry = journalSnapshot.val() as JournalEntry;
+                const reversalDescription = `Reversal of payment ID: ${paymentId}. Original: ${originalEntry.description}`;
+                
+                const newJournalRef = push(ref(db, 'journal_entries'));
+                await set(newJournalRef, {
+                    date: new Date().toISOString(),
+                    description: reversalDescription,
+                    debit_account: originalEntry.credit_account,
+                    credit_account: originalEntry.debit_account,
+                    debit_amount: originalEntry.credit_amount,
+                    credit_amount: originalEntry.debit_amount,
+                    amount_usd: originalEntry.amount_usd,
+                    debit_account_name: originalEntry.credit_account_name,
+                    credit_account_name: originalEntry.debit_account_name,
+                    createdAt: new Date().toISOString(),
+                });
+            }
+        }
+        
+        await update(paymentRef, { status: 'Cancelled' });
+
+        revalidatePath('/cash-payments');
+        revalidatePath('/accounting/journal');
+        
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error cancelling cash payment:", error);
+        return { success: false, message: "Database error while cancelling payment." };
     }
 }

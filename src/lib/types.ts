@@ -102,6 +102,7 @@ export interface CashPayment {
     note?: string;
     status: 'Confirmed' | 'Cancelled';
     createdAt: string;
+    journalEntryId?: string;
 }
 
 export interface Account {
