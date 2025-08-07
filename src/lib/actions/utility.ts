@@ -6,7 +6,82 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings } from '../types';
+import { logAction } from './helpers';
+
+// --- Rate & Fee Actions ---
+export type RateFormState = { message?: string; error?: boolean, success?: boolean } | undefined;
+
+export async function updateFiatRates(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
+    const data = Object.fromEntries(formData.entries());
+    const rates: FiatRate[] = [];
+    let i = 0;
+    while(data[`currency_${i}`]) {
+        rates.push({
+            currency: data[`currency_${i}`] as string,
+            systemBuy: parseFloat(data[`systemBuy_${i}`] as string),
+            systemSell: parseFloat(data[`systemSell_${i}`] as string),
+            clientBuy: parseFloat(data[`clientBuy_${i}`] as string),
+            clientSell: parseFloat(data[`clientSell_${i}`] as string),
+        });
+        i++;
+    }
+
+    try {
+        await set(ref(db, 'settings/fiat_rates'), rates);
+        revalidatePath('/settings');
+        return { success: true, message: 'Fiat rates updated successfully.' };
+    } catch (error) {
+        console.error("Error updating fiat rates:", error);
+        return { error: true, message: 'Database error while updating fiat rates.' };
+    }
+}
+
+const CryptoFeeSchema = z.object({
+    buy_fee_percent: z.coerce.number().min(0),
+    sell_fee_percent: z.coerce.number().min(0),
+    minimum_buy_fee: z.coerce.number().min(0),
+    minimum_sell_fee: z.coerce.number().min(0),
+});
+
+export async function updateCryptoFees(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
+    const validatedFields = CryptoFeeSchema.safeParse(Object.fromEntries(formData.entries()));
+    if(!validatedFields.success) {
+        return { error: true, message: 'Invalid data provided for crypto fees.' };
+    }
+    
+    try {
+        await set(ref(db, 'settings/crypto_fees'), validatedFields.data);
+        revalidatePath('/settings');
+        return { success: true, message: 'Crypto fees updated successfully.' };
+    } catch (error) {
+        console.error("Error updating crypto fees:", error);
+        return { error: true, message: 'Database error while updating crypto fees.' };
+    }
+}
+
+const ApiSettingsSchema = z.object({
+    gemini_api_key: z.string().optional(),
+    bsc_api_key: z.string().optional(),
+    bsc_wallet_address: z.string().optional(),
+});
+
+export async function updateApiSettings(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
+     const validatedFields = ApiSettingsSchema.safeParse(Object.fromEntries(formData.entries()));
+    if(!validatedFields.success) {
+        return { error: true, message: 'Invalid data provided for API settings.' };
+    }
+    
+    try {
+        await set(ref(db, 'settings/api'), validatedFields.data);
+        revalidatePath('/settings');
+        return { success: true, message: 'API settings updated successfully.' };
+    } catch (error) {
+        console.error("Error updating API settings:", error);
+        return { error: true, message: 'Database error while updating API settings.' };
+    }
+}
+
 
 // --- Blacklist Actions ---
 export type BlacklistFormState = { message?: string } | undefined;

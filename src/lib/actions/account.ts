@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -31,6 +32,34 @@ const AccountSchema = z.object({
   parentId: z.string().optional().nullable(),
   currency: z.enum(['USD', 'YER', 'SAR', 'USDT', 'none']).optional().nullable(),
 });
+
+async function ensureDefaultAccounts() {
+    const accountsRef = ref(db, 'accounts');
+    const snapshot = await get(accountsRef);
+    const existingAccounts = snapshot.val() || {};
+    const updates: { [key: string]: any } = {};
+
+    const defaultAccounts: Omit<Account, 'id'>[] = [
+        { name: 'Crypto Transaction Fees', type: 'Income', isGroup: false, parentId: '4000', currency: 'USD', id: '4001' },
+        { name: 'Exchange Rate Commission', type: 'Income', isGroup: false, parentId: '4000', currency: 'USD', id: '4002' },
+        { name: 'Discounts & Expenses', type: 'Expenses', isGroup: false, parentId: '5000', currency: 'USD', id: '5001' },
+    ];
+    
+    let priority = snapshot.exists() ? snapshot.size : 0;
+    
+    for (const acc of defaultAccounts) {
+        const accountId = acc.id!;
+         if (!existingAccounts[accountId]) {
+            updates[`/accounts/${accountId}`] = { ...acc, priority };
+            priority++;
+        }
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await update(ref(db), updates);
+        console.log("Default profit/expense accounts ensured in Chart of Accounts.");
+    }
+}
 
 export async function createAccount(accountId: string | null, formData: FormData) {
     const parentIdValue = formData.get('parentId');
@@ -68,6 +97,7 @@ export async function createAccount(accountId: string | null, formData: FormData
     let oldData = null;
 
     try {
+        await ensureDefaultAccounts();
         const accountRef = ref(db, `accounts/${id}`);
         if(isEditing) {
              const snapshot = await get(accountRef);

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -12,6 +13,7 @@ import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 
 const PROFIT_ACCOUNT_ID = '4001';
+const COMMISSION_ACCOUNT_ID = '4002';
 const EXPENSE_ACCOUNT_ID = '5001';
 
 export type TransactionFormState =
@@ -35,13 +37,14 @@ const TransactionSchema = z.object({
     clientId: z.string().optional(),
     type: z.enum(['Deposit', 'Withdraw']),
     amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
-    currency: z.enum(['USD', 'YER', 'SAR', 'USDT']),
+    currency: z.enum(['YER', 'USD', 'SAR', 'USDT']),
     bankAccountId: z.string().optional().nullable(),
     cryptoWalletId: z.string().optional().nullable(),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number(),
     expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
+    exchange_rate_commission: z.coerce.number().optional(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     invoice_image_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),
@@ -290,7 +293,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    const _createFeeExpenseJournalEntry = async (
+    const _createJournalEntry = async (
         debitAccountId: string,
         creditAccountId: string,
         amountUsd: number,
@@ -299,41 +302,18 @@ export async function createTransaction(transactionId: string | null, formData: 
         if (amountUsd <= 0) return;
 
         try {
-            const [debitSnapshot, creditSnapshot, settingsSnapshot] = await Promise.all([
+            const [debitSnapshot, creditSnapshot] = await Promise.all([
                 get(ref(db, `accounts/${debitAccountId}`)),
                 get(ref(db, `accounts/${creditAccountId}`)),
-                get(ref(db, 'settings')),
             ]);
             
-            if (!debitSnapshot.exists() || !creditSnapshot.exists() || !settingsSnapshot.exists()) {
-                console.error("Could not create journal entry: one or more accounts or settings not found.");
+            if (!debitSnapshot.exists() || !creditSnapshot.exists()) {
+                console.error("Could not create journal entry: one or more accounts not found.");
                 return;
             }
 
             const debitAccount = { id: debitAccountId, ...debitSnapshot.val() } as Account;
             const creditAccount = { id: creditAccountId, ...creditSnapshot.val() } as Account;
-            const settings = settingsSnapshot.val() as Settings;
-
-            const getRate = (currency?: string) => {
-                if (!currency || !settings) return 1;
-                switch(currency) {
-                    case 'YER': return settings.yer_usd || 0;
-                    case 'SAR': return settings.sar_usd || 0;
-                    case 'USDT': return settings.usdt_usd || 1;
-                    case 'USD': default: return 1;
-                }
-            };
-
-            const debitRate = getRate(debitAccount.currency);
-            const creditRate = getRate(creditAccount.currency);
-            
-            if (debitRate === 0 || creditRate === 0) {
-                 console.error("Could not create journal entry: zero conversion rate.");
-                 return;
-            }
-
-            const debitAmount = amountUsd / debitRate;
-            const creditAmount = amountUsd / creditRate;
 
             const newEntryRef = push(ref(db, 'journal_entries'));
             await set(newEntryRef, {
@@ -341,44 +321,31 @@ export async function createTransaction(transactionId: string | null, formData: 
                 description,
                 debit_account: debitAccountId,
                 credit_account: creditAccountId,
-                debit_amount: debitAmount,
-                credit_amount: creditAmount,
                 amount_usd: amountUsd,
-                debit_account_name: debitAccount.name,
-                credit_account_name: creditAccount.name,
                 createdAt: new Date().toISOString(),
             });
-            
-            // Telegram for Journal Entry
-            const notificationMessage = `
-*🔄 Journal Entry: ${description}*
-*Amount:* ${amountUsd.toFixed(2)} USD
-*From:* ${debitAccount.name}
-*To:* ${creditAccount.name}
-            `;
-            await sendTelegramNotification(notificationMessage);
 
         } catch (e) {
             console.error("Failed to create automated journal entry:", e);
         }
     };
     
+    // Fee Income Journal
     if (finalData.fee_usd && finalData.fee_usd > 0) {
-        const description = `Commission Income Journal: Transaction ${newId}`;
-        if (finalData.type === 'Deposit' && finalData.bankAccountId) {
-            await _createFeeExpenseJournalEntry(finalData.bankAccountId, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
-        } else if (finalData.type === 'Withdraw' && finalData.cryptoWalletId) {
-            await _createFeeExpenseJournalEntry(finalData.cryptoWalletId, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
-        }
+        const description = `Crypto Fee: Tx ${newId}`;
+        await _createJournalEntry(finalData.bankAccountId!, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
+    }
+
+    // Exchange Rate Commission Journal
+    if (finalData.exchange_rate_commission && finalData.exchange_rate_commission > 0) {
+        const description = `Exchange Rate Commission: Tx ${newId}`;
+        await _createJournalEntry(finalData.bankAccountId!, COMMISSION_ACCOUNT_ID, finalData.exchange_rate_commission, description);
     }
     
+    // Discount/Expense Journal
     if (finalData.expense_usd && finalData.expense_usd > 0) {
-        const description = `Commission Expense Journal: Transaction ${newId}`;
-        if (finalData.type === 'Deposit' && finalData.cryptoWalletId) {
-            await _createFeeExpenseJournalEntry(EXPENSE_ACCOUNT_ID, finalData.cryptoWalletId, finalData.expense_usd, description);
-        } else if (finalData.type === 'Withdraw' && finalData.bankAccountId) {
-            await _createFeeExpenseJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId, finalData.expense_usd, description);
-        }
+        const description = `Discount/Expense: Tx ${newId}`;
+        await _createJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId!, finalData.expense_usd, description);
     }
     
     revalidatePath('/transactions');
@@ -460,21 +427,15 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
         const settings = settingsSnapshot.val() as Settings;
 
-        const getRate = (currency?: string) => {
-            if (!currency || !settings) return 1;
-            switch(currency) {
-                case 'YER': return settings.yer_usd || 0;
-                case 'SAR': return settings.sar_usd || 0;
-                case 'USDT': return settings.usdt_usd || 1;
-                case 'USD': default: return 1;
-            }
-        };
-
-        const rate = getRate(bankAccount.currency);
+        // Note: this part needs to be updated with new fiat_rates structure
+        const fiatRates: FiatRate[] = settings.fiat_rates ? Object.values(settings.fiat_rates) : [];
+        const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
+        const rate = rateInfo ? rateInfo.clientSell : 1; // Assuming sell rate for receipt
+        
         if (rate <= 0) {
             return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
         }
-        const amountUsd = amount * rate;
+        const amountUsd = amount / rate;
         
         // 1. Create the CashReceipt record
         const newReceiptRef = push(ref(db, 'cash_receipts'));
@@ -607,21 +568,14 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             });
         }
         
-        const getRate = (currency?: string) => {
-            if (!currency || !settings) return 1;
-            switch(currency) {
-                case 'YER': return settings.yer_usd || 0;
-                case 'SAR': return settings.sar_usd || 0;
-                case 'USDT': return settings.usdt_usd || 1;
-                case 'USD': default: return 1;
-            }
-        };
+        const fiatRates: FiatRate[] = settings.fiat_rates ? Object.values(settings.fiat_rates) : [];
+        const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
+        const rate = rateInfo ? rateInfo.clientBuy : 1; // Assuming buy rate for payment
 
-        const rate = getRate(bankAccount.currency);
         if (rate <= 0) {
             return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
         }
-        const amountUsd = amount * rate;
+        const amountUsd = amount / rate;
 
         if (isEditing) {
             const paymentRef = ref(db, `cash_payments/${paymentId}`);

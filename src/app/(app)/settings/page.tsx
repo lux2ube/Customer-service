@@ -1,132 +1,230 @@
 
-
 'use client';
 
 import * as React from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
-import { ref, onValue, update } from 'firebase/database';
-import type { Settings, Account } from '@/lib/types';
+import { ref, onValue } from 'firebase/database';
+import type { Settings, FiatRate, CryptoFee } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, Link as LinkIcon } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import Link from 'next/link';
+import { Save, PlusCircle, Trash2 } from 'lucide-react';
+import { updateFiatRates, updateCryptoFees, updateApiSettings, type RateFormState } from '@/lib/actions';
 
+function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending || disabled}>
+            {pending ? 'Saving...' : children}
+        </Button>
+    );
+}
 
-export default function SettingsPage() {
-    const [settings, setSettings] = React.useState<Settings>({
-        yer_usd: 0,
-        sar_usd: 0,
-        usdt_usd: 1,
-        deposit_fee_percent: 0,
-        withdraw_fee_percent: 0,
-        minimum_fee_usd: 0
-    });
-    const [usdtWallets, setUsdtWallets] = React.useState<Account[]>([]);
-    const [loading, setLoading] = React.useState(true);
-    const [saving, setSaving] = React.useState(false);
+function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
     const { toast } = useToast();
+    const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
+    const [rates, setRates] = React.useState<FiatRate[]>(initialRates);
 
     React.useEffect(() => {
-        const settingsRef = ref(db, 'settings');
-        const accountsRef = ref(db, 'accounts');
-        
-        const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                setSettings(prev => ({...prev, ...data}));
-            }
+        if (state?.success) {
+            toast({ title: "Fiat Rates Saved", description: state.message });
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: "Error", description: state.message });
+        }
+    }, [state, toast]);
+
+    const handleAddRate = () => {
+        setRates([...rates, { currency: '', systemBuy: 0, systemSell: 0, clientBuy: 0, clientSell: 0 }]);
+    };
+
+    const handleRemoveRate = (index: number) => {
+        setRates(rates.filter((_, i) => i !== index));
+    };
+
+    return (
+        <form action={formAction}>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Fiat Exchange Rates</CardTitle>
+                    <CardDescription>Define buy/sell rates for Fiat currencies against USD for both system and client sides.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {rates.map((rate, index) => (
+                        <div key={index} className="space-y-3 p-3 border rounded-md relative bg-muted/50">
+                            <div className="grid grid-cols-5 gap-2">
+                                <div className="space-y-1 col-span-5">
+                                    <Label>Currency Code</Label>
+                                    <Input name={`currency_${index}`} placeholder="e.g., YER" defaultValue={rate.currency} required />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>System Buy</Label>
+                                    <Input name={`systemBuy_${index}`} type="number" step="any" defaultValue={rate.systemBuy} required />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>System Sell</Label>
+                                    <Input name={`systemSell_${index}`} type="number" step="any" defaultValue={rate.systemSell} required />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>Client Buy</Label>
+                                    <Input name={`clientBuy_${index}`} type="number" step="any" defaultValue={rate.clientBuy} required />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>Client Sell</Label>
+                                    <Input name={`clientSell_${index}`} type="number" step="any" defaultValue={rate.clientSell} required />
+                                </div>
+                                <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1" onClick={() => handleRemoveRate(index)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                    <Button type="button" variant="outline" onClick={handleAddRate}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add Fiat Currency
+                    </Button>
+                </CardContent>
+                <CardFooter>
+                    <SubmitButton><Save className="mr-2 h-4 w-4"/>Save Fiat Rates</SubmitButton>
+                </CardFooter>
+            </Card>
+        </form>
+    );
+}
+
+function CryptoFeesForm({ initialFees }: { initialFees: CryptoFee }) {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<RateFormState, FormData>(updateCryptoFees, undefined);
+    
+     React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: "Crypto Fees Saved", description: state.message });
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: "Error", description: state.message });
+        }
+    }, [state, toast]);
+
+    return (
+        <form action={formAction}>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Crypto Transaction Fees</CardTitle>
+                    <CardDescription>Configure percentage-based fees and minimums for USDT transactions.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="buy_fee_percent">Buy Fee (%)</Label>
+                            <Input id="buy_fee_percent" name="buy_fee_percent" type="number" step="any" defaultValue={initialFees?.buy_fee_percent || 0} />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="sell_fee_percent">Sell Fee (%)</Label>
+                            <Input id="sell_fee_percent" name="sell_fee_percent" type="number" step="any" defaultValue={initialFees?.sell_fee_percent || 0} />
+                        </div>
+                    </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="minimum_buy_fee">Min. Buy Fee (USD)</Label>
+                            <Input id="minimum_buy_fee" name="minimum_buy_fee" type="number" step="any" defaultValue={initialFees?.minimum_buy_fee || 0} />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="minimum_sell_fee">Min. Sell Fee (USD)</Label>
+                            <Input id="minimum_sell_fee" name="minimum_sell_fee" type="number" step="any" defaultValue={initialFees?.minimum_sell_fee || 0} />
+                        </div>
+                    </div>
+                </CardContent>
+                 <CardFooter>
+                    <SubmitButton><Save className="mr-2 h-4 w-4"/>Save Crypto Fees</SubmitButton>
+                </CardFooter>
+            </Card>
+        </form>
+    );
+}
+
+function ApiSettingsForm({ initialSettings }: { initialSettings: Settings }) {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<RateFormState, FormData>(updateApiSettings, undefined);
+    
+     React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: "API Settings Saved", description: state.message });
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: "Error", description: state.message });
+        }
+    }, [state, toast]);
+
+    return (
+        <form action={formAction}>
+            <Card>
+                <CardHeader>
+                    <CardTitle>API Integrations</CardTitle>
+                    <CardDescription>Manage API keys for external services.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="gemini_api_key">Gemini API Key</Label>
+                        <Input id="gemini_api_key" name="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" defaultValue={initialSettings?.gemini_api_key || ''} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="bsc_api_key">BscScan API Key</Label>
+                        <Input id="bsc_api_key" name="bsc_api_key" type="password" placeholder="Your BscScan API Key" defaultValue={initialSettings?.bsc_api_key || ''} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="bsc_wallet_address">USDT Wallet Address (BSC)</Label>
+                        <Input id="bsc_wallet_address" name="bsc_wallet_address" type="text" placeholder="0x..." defaultValue={initialSettings?.bsc_wallet_address || ''} />
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <SubmitButton><Save className="mr-2 h-4 w-4"/>Save API Settings</SubmitButton>
+                </CardFooter>
+            </Card>
+        </form>
+    )
+}
+
+export default function SettingsPage() {
+    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee>({ buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
+    const [apiSettings, setApiSettings] = React.useState<Settings>({} as Settings);
+    const [loading, setLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+        const fiatRatesRef = ref(db, 'settings/fiat_rates');
+        const cryptoFeesRef = ref(db, 'settings/crypto_fees');
+        const apiSettingsRef = ref(db, 'settings/api');
+
+        const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
+            setFiatRates(snapshot.val() ? Object.values(snapshot.val()) : []);
             setLoading(false);
         });
-
-        const unsubscribeAccounts = onValue(accountsRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                const allAccounts: Account[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-                setUsdtWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
-            }
+        const unsubCrypto = onValue(cryptoFeesRef, (snapshot) => {
+            setCryptoFees(snapshot.val() || { buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
+        });
+         const unsubApi = onValue(apiSettingsRef, (snapshot) => {
+            setApiSettings(snapshot.val() || {});
         });
 
-
         return () => {
-            unsubscribeSettings();
-            unsubscribeAccounts();
-        }
+            unsubFiat();
+            unsubCrypto();
+            unsubApi();
+        };
     }, []);
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { id, value, type } = e.target;
-        setSettings(prev => ({ ...prev, [id]: type === 'number' ? Number(value) : value }));
-    };
-
-    const handleSelectChange = (id: string, value: string) => {
-        setSettings(prev => ({ ...prev, [id]: value }));
-    }
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await update(ref(db, 'settings'), settings);
-            toast({
-                title: "Settings Saved",
-                description: "Your changes have been saved successfully.",
-            });
-        } catch (error) {
-            console.error("Failed to save settings: ", error);
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Failed to save settings. Please try again.",
-            });
-        } finally {
-            setSaving(false);
-        }
-    };
 
     if (loading) {
         return (
             <>
                 <PageHeader 
-                    title="Settings"
-                    description="Manage currencies, exchange rates, fees, and other system preferences."
+                    title="Exchange Rates & Fees"
+                    description="Manage exchange rates, fees, and API keys."
                 />
-                <div className="space-y-8">
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle><Skeleton className="h-7 w-48" /></CardTitle>
-                                <CardDescription>
-                                    <Skeleton className="h-4 w-full" />
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                            </CardContent>
-                        </Card>
-                         <Card>
-                            <CardHeader>
-                                <CardTitle><Skeleton className="h-7 w-48" /></CardTitle>
-                                <CardDescription>
-                                    <Skeleton className="h-4 w-full" />
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
-                            </CardContent>
-                        </Card>
-                    </div>
-                     <div className="flex justify-start">
-                        <Skeleton className="h-11 w-48" />
-                    </div>
+                <div className="space-y-6">
+                   <Skeleton className="h-64 w-full" />
+                   <Skeleton className="h-64 w-full" />
                 </div>
             </>
         );
@@ -135,78 +233,16 @@ export default function SettingsPage() {
     return (
         <>
             <PageHeader 
-                title="Settings"
-                description="Manage currencies, exchange rates, fees, and other system preferences."
+                title="Exchange Rates & Fees"
+                description="Manage currencies, exchange rates, transaction fees, and API keys for system integrations."
             />
-            <div className="space-y-8">
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Exchange Rates</CardTitle>
-                            <CardDescription>Set the conversion rates relative to USD.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="yer_usd">YER / USD</Label>
-                                <Input id="yer_usd" type="number" step="any" value={settings.yer_usd || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="sar_usd">SAR / USD</Label>
-                                <Input id="sar_usd" type="number" step="any" value={settings.sar_usd || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="usdt_usd">USDT / USD</Label>
-                                <Input id="usdt_usd" type="number" value={settings.usdt_usd || ''} disabled />
-                            </div>
-                        </CardContent>
-                    </Card>
-                     <Card>
-                        <CardHeader>
-                            <CardTitle>Transaction Fees</CardTitle>
-                            <CardDescription>Configure the fees for deposits and withdrawals.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="deposit_fee_percent">Deposit Fee (%)</Label>
-                                <Input id="deposit_fee_percent" type="number" value={settings.deposit_fee_percent || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="withdraw_fee_percent">Withdraw Fee (%)</Label>
-                                <Input id="withdraw_fee_percent" type="number" value={settings.withdraw_fee_percent || ''} onChange={handleInputChange} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="minimum_fee_usd">Minimum Fee (USD)</Label>
-                                <Input id="minimum_fee_usd" type="number" value={settings.minimum_fee_usd || ''} onChange={handleInputChange} />
-                            </div>
-                        </CardContent>
-                    </Card>
+            <div className="grid lg:grid-cols-2 gap-6 items-start">
+                <div className="space-y-6">
+                    <FiatRatesForm initialRates={fiatRates} />
                 </div>
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>API Integrations</CardTitle>
-                        <CardDescription>Manage API keys for external services.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="gemini_api_key">Gemini API Key</Label>
-                            <Input id="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" value={settings.gemini_api_key || ''} onChange={handleInputChange} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="bsc_api_key">BscScan API Key</Label>
-                            <Input id="bsc_api_key" type="password" placeholder="Your BscScan API Key" value={settings.bsc_api_key || ''} onChange={handleInputChange} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="bsc_wallet_address">USDT Wallet Address (BSC)</Label>
-                            <Input id="bsc_wallet_address" type="text" placeholder="0x..." value={settings.bsc_wallet_address || ''} onChange={handleInputChange} />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <div className="flex justify-start">
-                     <Button onClick={handleSave} disabled={saving}>
-                        <Save className="mr-2 h-4 w-4" />
-                        {saving ? 'Saving...' : 'Save All Settings'}
-                    </Button>
+                <div className="space-y-6">
+                    <CryptoFeesForm initialFees={cryptoFees} />
+                    <ApiSettingsForm initialSettings={apiSettings} />
                 </div>
             </div>
         </>

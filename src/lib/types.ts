@@ -68,6 +68,7 @@ export interface Transaction {
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     createdAt: string;
     linkedSmsId?: string;
+    exchange_rate_commission?: number;
 }
 
 export interface CashReceipt {
@@ -131,16 +132,27 @@ export interface JournalEntry {
 }
 
 export interface Settings {
-    yer_usd: number;
-    sar_usd: number;
-    usdt_usd: number;
-    deposit_fee_percent: number;
-    withdraw_fee_percent: number;
-    minimum_fee_usd: number;
+    // These are now under /api
     bsc_api_key?: string;
     bsc_wallet_address?: string;
     gemini_api_key?: string;
 }
+
+export interface FiatRate {
+    currency: string;
+    systemBuy: number;
+    systemSell: number;
+    clientBuy: number;
+    clientSell: number;
+}
+
+export interface CryptoFee {
+    buy_fee_percent: number;
+    sell_fee_percent: number;
+    minimum_buy_fee: number;
+    minimum_sell_fee: number;
+}
+
 
 export interface BlacklistItem {
     id: string;

@@ -1,8 +1,4 @@
 
-
-
-
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -11,7 +7,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
 import React from 'react';
-import { createTransaction, type TransactionFormState, searchClients, findUnassignedTransactionsByAddress, batchUpdateClientForTransactions } from '@/lib/actions';
+import { createTransaction, type TransactionFormState, searchClients, findUnassignedTransactionsByAddress } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -19,7 +15,7 @@ import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, Transaction, Settings, SmsTransaction } from '@/lib/types';
+import type { Client, Account, Transaction, Settings, SmsTransaction, FiatRate, CryptoFee } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 import html2canvas from 'html2canvas';
@@ -37,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import dynamic from 'next/dynamic';
+import { Alert, AlertTitle } from './ui/alert';
 
 const Invoice = dynamic(() => import('@/components/invoice').then(mod => mod.Invoice), { ssr: false });
 
@@ -61,6 +58,7 @@ const initialFormData: Transaction = {
     status: 'Pending',
     createdAt: '',
     linkedSmsId: '',
+    exchange_rate_commission: 0,
 };
 
 function BankAccountSelector({
@@ -123,7 +121,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
     const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
     const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
-    const [settings, setSettings] = React.useState<Settings | null>(null);
+    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     
     const [isSaving, setIsSaving] = React.useState(false);
@@ -142,16 +141,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     
     const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
 
-    const getRate = React.useCallback((currency?: string) => {
-        if (!currency || !settings) return 1;
-        switch(currency) {
-            case 'YER': return settings.yer_usd || 0;
-            case 'SAR': return settings.sar_usd || 0;
-            case 'USDT': return settings.usdt_usd || 1;
-            case 'USD': default: return 1;
-        }
-    }, [settings]);
-
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const settingsRef = ref(db, 'settings');
@@ -161,7 +150,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
             setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'));
         });
-        const unsubSettings = onValue(settingsRef, (snap) => setSettings(snap.val() || null));
+        const unsubSettings = onValue(settingsRef, (snap) => {
+            const settingsData = snap.val();
+            if(settingsData) {
+                setFiatRates(settingsData.fiat_rates ? Object.values(settingsData.fiat_rates) : []);
+                setCryptoFees(settingsData.crypto_fees || null);
+            }
+        });
         
         Promise.all([ get(accountsRef), get(settingsRef) ]).then(() => {
             setIsDataLoading(false);
@@ -216,65 +211,73 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         const num = parseFloat(String(value));
         return isNaN(num) ? 0 : num;
     };
+    
+    const recalculateFinancials = React.useCallback((
+        localAmount: number,
+        type: Transaction['type'],
+        currency: Transaction['currency'],
+        manualUsdtAmount?: number
+    ): Partial<Transaction> => {
 
-    const recalculateFinancials = React.useCallback((amount: number, type: Transaction['type'], currency: Transaction['currency'], hash: string | undefined, usdtFromSync: number | undefined): Partial<Transaction> => {
-        const result: Partial<Pick<Transaction, 'amount_usd' | 'fee_usd' | 'expense_usd' | 'amount_usdt'>> = {};
-        if (!settings || !currency) return result;
+        const result: Partial<Transaction> = {};
+
+        if (!cryptoFees || fiatRates.length === 0) return result;
+
+        const rateInfo = fiatRates.find(r => r.currency === currency);
+        if (!rateInfo && currency !== 'USD') return result;
+
+        const systemRate = currency === 'USD' ? 1 : (type === 'Deposit' ? rateInfo!.systemBuy : rateInfo!.systemSell);
+        const clientRate = currency === 'USD' ? 1 : (type === 'Deposit' ? rateInfo!.clientBuy : rateInfo!.clientSell);
+
+        if (systemRate <= 0 || clientRate <= 0) return result;
+
+        const systemAmountUSD = localAmount / systemRate;
+        const clientAmountUSD = localAmount / clientRate;
         
-        const rate = getRate(currency);
-        if (rate <= 0) return result;
+        result.amount_usd = parseFloat(clientAmountUSD.toFixed(2));
+        result.exchange_rate_commission = parseFloat((clientAmountUSD - systemAmountUSD).toFixed(2));
         
-        const newAmountUSD = amount * rate;
-        result.amount_usd = parseFloat(newAmountUSD.toFixed(2));
-        
-        if (hash && usdtFromSync) {
-            let newFeeUSD = 0;
-            let newExpenseUSD = 0;
-            
-            if (type === 'Deposit') {
-                const difference = newAmountUSD - usdtFromSync;
-                if (difference >= 0) newFeeUSD = difference;
-                else newExpenseUSD = -difference;
-            } else { // Withdraw
-                const difference = usdtFromSync - newAmountUSD;
-                if (difference >= 0) newFeeUSD = difference;
-                else newExpenseUSD = -difference;
-            }
-            result.fee_usd = parseFloat(newFeeUSD.toFixed(2));
-            result.expense_usd = parseFloat(newExpenseUSD.toFixed(2));
-            result.amount_usdt = usdtFromSync;
+        let feePercent = 0;
+        let minFee = 0;
+        if(type === 'Deposit') {
+            feePercent = cryptoFees.buy_fee_percent / 100;
+            minFee = cryptoFees.minimum_buy_fee;
         } else {
-            let finalFee = 0;
-            let newUsdtAmount = 0;
-            
-            if (type === 'Deposit') {
-                const feePercent = (settings.deposit_fee_percent || 0) / 100;
-                const calculatedFee = newAmountUSD * feePercent;
-                finalFee = Math.max(calculatedFee, settings.minimum_fee_usd || 0);
-                newUsdtAmount = newAmountUSD - finalFee;
-            } else {
-                const feePercent = (settings.withdraw_fee_percent || 0) / 100;
-                if (feePercent < 0 || feePercent >= 1) {
-                    finalFee = 0;
-                } else {
-                    const grossAmount = newAmountUSD / (1 - feePercent);
-                    finalFee = grossAmount - newAmountUSD;
-                    newUsdtAmount = grossAmount;
-                }
-            }
-            result.fee_usd = parseFloat(finalFee.toFixed(2));
-            result.expense_usd = 0;
-            result.amount_usdt = parseFloat(newUsdtAmount.toFixed(2));
+            feePercent = cryptoFees.sell_fee_percent / 100;
+            minFee = cryptoFees.minimum_sell_fee;
         }
+
+        const calculatedFee = clientAmountUSD * feePercent;
+        const cryptoFee = Math.max(calculatedFee, minFee);
         
+        const initialUsdtAmount = clientAmountUSD - cryptoFee;
+
+        if(manualUsdtAmount !== undefined) {
+             const difference = manualUsdtAmount - initialUsdtAmount;
+             if(difference > 0) { // Gave a discount
+                result.expense_usd = parseFloat(difference.toFixed(2));
+                result.fee_usd = parseFloat(cryptoFee.toFixed(2));
+             } else { // Charged extra
+                result.expense_usd = 0;
+                result.fee_usd = parseFloat((cryptoFee - difference).toFixed(2));
+             }
+            result.amount_usdt = manualUsdtAmount;
+        } else {
+            result.fee_usd = parseFloat(cryptoFee.toFixed(2));
+            result.expense_usd = 0;
+            result.amount_usdt = parseFloat(initialUsdtAmount.toFixed(2));
+        }
+
         return result;
-    }, [settings, getRate]);
+
+    }, [fiatRates, cryptoFees]);
+
 
     const handleManualAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newAmountNum = getNumberValue(e.target.value);
 
         setFormData(prev => {
-            const updates = recalculateFinancials(newAmountNum, prev.type, prev.currency, prev.hash, prev.amount_usdt);
+            const updates = recalculateFinancials(newAmountNum, prev.type, prev.currency);
             return {
                 ...prev,
                 amount: newAmountNum,
@@ -282,49 +285,23 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             };
         });
     };
-
+    
     const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newUsdtAmount = getNumberValue(e.target.value);
-
         setFormData(prev => {
-            if (!settings || prev.hash) return { ...prev, amount_usdt: newUsdtAmount };
-            const amountUSD = getNumberValue(prev.amount_usd);
-            let newFeeUSD = 0;
-            let newExpenseUSD = 0;
-
-            if (prev.type === 'Deposit') {
-                const difference = amountUSD - newUsdtAmount;
-                if (difference >= 0) {
-                    newFeeUSD = difference;
-                    newExpenseUSD = 0;
-                } else {
-                    newFeeUSD = 0;
-                    newExpenseUSD = -difference;
-                }
-            } else { // Withdraw
-                const difference = newUsdtAmount - amountUSD;
-                if (difference >= 0) {
-                    newFeeUSD = difference;
-                    newExpenseUSD = 0;
-                } else {
-                    newFeeUSD = 0;
-                    newExpenseUSD = -difference;
-                }
-            }
-            return {
-                ...prev,
-                amount_usdt: newUsdtAmount,
-                fee_usd: parseFloat(newFeeUSD.toFixed(2)),
-                expense_usd: parseFloat(newExpenseUSD.toFixed(2)),
-            };
+            const updates = recalculateFinancials(prev.amount, prev.type, prev.currency, newUsdtAmount);
+            return { ...prev, ...updates, amount_usdt: newUsdtAmount };
         });
     };
-
     
     const handleBankAccountSelect = (accountId: string, data = formData) => {
         const selectedAccount = bankAccounts.find(acc => acc.id === accountId);
         if (!selectedAccount) return;
-        setFormData({ ...data, bankAccountId: accountId, currency: selectedAccount.currency || 'USD' });
+
+        const newCurrency = selectedAccount.currency || 'USD';
+        const updates = recalculateFinancials(data.amount, data.type, newCurrency as Transaction['currency']);
+        
+        setFormData({ ...data, bankAccountId: accountId, currency: newCurrency as Transaction['currency'], ...updates });
     };
 
     const handleClientSelect = async (client: Client | null) => {
@@ -334,12 +311,13 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         if (client) {
             const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
-            newFormData = {
-                ...newFormData,
-                clientId: client.id,
-                bankAccountId: favoriteAccount?.id || '',
-                currency: favoriteAccount?.currency || 'USD',
-            };
+            if(favoriteAccount) {
+                 const newCurrency = favoriteAccount.currency || 'USD';
+                 const updates = recalculateFinancials(newFormData.amount, newFormData.type, newCurrency as Transaction['currency']);
+                 newFormData = { ...newFormData, ...updates, bankAccountId: favoriteAccount.id, currency: newCurrency as Transaction['currency'] };
+            }
+           
+            newFormData.clientId = client.id;
             
             if (formData.type === 'Deposit' && formData.client_wallet_address) {
                 const count = await findUnassignedTransactionsByAddress(formData.client_wallet_address);
@@ -373,7 +351,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         });
 
         if (!result.error) {
-            // Re-fetching transactions might be complex, so we'll just revalidate the path
             router.refresh();
         }
 
@@ -381,7 +358,12 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
     
     const handleFieldChange = (field: keyof Transaction, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        let newFormData = { ...formData, [field]: value };
+        if(field === 'type') {
+            const updates = recalculateFinancials(newFormData.amount, value, newFormData.currency);
+            newFormData = { ...newFormData, ...updates };
+        }
+        setFormData(newFormData);
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -401,6 +383,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         actionFormData.set('fee_usd', String(formData.fee_usd));
         actionFormData.set('expense_usd', String(formData.expense_usd || 0));
         actionFormData.set('amount_usdt', String(formData.amount_usdt));
+        actionFormData.set('exchange_rate_commission', String(formData.exchange_rate_commission || 0));
+
         if (formData.linkedSmsId) {
             actionFormData.set('linkedSmsId', formData.linkedSmsId);
         }
@@ -516,8 +500,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                     <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)}>
                                         <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Deposit">Deposit</SelectItem>
-                                            <SelectItem value="Withdraw">Withdraw</SelectItem>
+                                            <SelectItem value="Deposit">Deposit (Buy USDT)</SelectItem>
+                                            <SelectItem value="Withdraw">Withdraw (Sell USDT)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -552,42 +536,39 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     <Card>
                         <CardHeader>
                             <CardTitle>Financial Details</CardTitle>
-                            <CardDescription className="text-xs">
-                                {formData.hash 
-                                ? "This was synced from BscScan. Please enter the local currency Amount." 
-                                : "Enter local Amount or Final USDT to auto-calculate."}
-                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                              <div className="flex items-center gap-2">
-                                <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Amount ({formData.currency})</Label>
+                                <Label htmlFor="amount" className="w-1/3 shrink-0 text-right text-xs">Local Amount ({formData.currency})</Label>
                                 <Input id="amount" name="amount" type="number" step="any" required value={amountToDisplay} onChange={handleManualAmountChange}/>
                             </div>
                              {formErrors?.amount && <p className="text-sm text-destructive text-right">{formErrors.amount[0]}</p>}
-                            <div className="flex items-center gap-2">
-                                <Label htmlFor="amount_usd" className="w-1/3 shrink-0 text-right text-xs">Amount (USD)</Label>
-                                <Input id="amount_usd" name="amount_usd" type="number" step="any" required value={formData.amount_usd} readOnly />
+                            
+                             <div className="flex items-center gap-2">
+                                <Label className="w-1/3 shrink-0 text-right text-xs">Amount (USD)</Label>
+                                <Input type="number" step="any" value={formData.amount_usd} readOnly disabled className="bg-muted/50"/>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <Label htmlFor="fee_usd" className="w-1/3 shrink-0 text-right text-xs">Fee (USD)</Label>
-                                <Input id="fee_usd" name="fee_usd" type="number" step="any" required value={formData.fee_usd} readOnly />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Label htmlFor="expense_usd" className="w-1/3 shrink-0 text-right text-xs">Expense / Loss (USD)</Label>
-                                <Input id="expense_usd" name="expense_usd" type="number" step="any" value={formData.expense_usd || 0} readOnly />
-                            </div>
+
+                             <Alert variant="default" className="p-3">
+                                <AlertDescription className="text-xs space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span>Exchange Rate Commission:</span>
+                                        <span className="font-mono">{formData.exchange_rate_commission?.toFixed(2) || '0.00'} USD</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span>Crypto Fee:</span>
+                                        <span className="font-mono">{formData.fee_usd?.toFixed(2) || '0.00'} USD</span>
+                                    </div>
+                                     <div className="flex justify-between items-center text-red-600">
+                                        <span>Discount / Expense:</span>
+                                        <span className="font-mono">{formData.expense_usd?.toFixed(2) || '0.00'} USD</span>
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
+
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input
-                                    id="amount_usdt"
-                                    name="amount_usdt"
-                                    type="number"
-                                    step="any"
-                                    required
-                                    value={formData.amount_usdt}
-                                    onChange={handleManualUsdtAmountChange}
-                                    readOnly={!!formData.hash}
-                                />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} />
                             </div>
                         </CardContent>
                         <CardFooter>
@@ -770,7 +751,3 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
-
-
-
-

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '../firebase';
@@ -14,7 +15,7 @@ const USDT_DECIMALS = 18;
 
 export async function syncBscTransactions(prevState: SyncState, formData: FormData): Promise<SyncState> {
     try {
-        const settingsSnapshot = await get(ref(db, 'settings'));
+        const settingsSnapshot = await get(ref(db, 'settings/api'));
         if (!settingsSnapshot.exists()) {
             return { message: 'Settings not found. Please configure API key and wallet address.', error: true };
         }
@@ -129,7 +130,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
 export async function syncHistoricalBscTransactions(prevState: SyncState, formData: FormData): Promise<SyncState> {
     try {
-        const settingsSnapshot = await get(ref(db, 'settings'));
+        const settingsSnapshot = await get(ref(db, 'settings/api'));
         if (!settingsSnapshot.exists()) {
             return { message: 'Settings not found. Please configure API key and wallet address.', error: true };
         }
