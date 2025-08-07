@@ -569,20 +569,46 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
     const { bankAccountId, clientId, amount, senderName: recipientName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot, accountsSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'settings')),
+            get(ref(db, 'accounts')),
         ]);
 
-        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account, client, or settings.', success: false };
+        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists() || !accountsSnapshot.exists()) {
+            return { message: 'Error: Could not find required data (bank account, client, settings, or chart of accounts).', success: false };
         }
 
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
         const settings = settingsSnapshot.val() as Settings;
+        const allAccounts = accountsSnapshot.val();
 
+        // Find or create the client's sub-account
+        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
+        if (!clientAccountId) {
+            const clientSubAccounts = Object.keys(allAccounts)
+                .filter(key => key.startsWith('6001'))
+                .map(key => parseInt(key, 10))
+                .sort((a,b) => b-a);
+            const nextId = clientSubAccounts.length > 0 ? clientSubAccounts[0] + 1 : 6001;
+            clientAccountId = String(nextId);
+            
+            await set(ref(db, `accounts/${clientAccountId}`), {
+                name: client.name,
+                type: 'Liabilities',
+                isGroup: false,
+                parentId: '6000',
+                currency: 'USD',
+            });
+             // Re-fetch all accounts after potential creation
+            const updatedAccountsSnapshot = await get(ref(db, 'accounts'));
+            if (updatedAccountsSnapshot.exists()) {
+                Object.assign(allAccounts, updatedAccountsSnapshot.val());
+            }
+        }
+        
         const getRate = (currency?: string) => {
             if (!currency || !settings) return 1;
             switch(currency) {
@@ -599,15 +625,6 @@ export async function createCashPayment(prevState: CashPaymentFormState, formDat
         }
         const amountUsd = amount * rate;
         
-        // Find client's sub-account
-        const clientAccountSnapshot = await get(ref(db, 'accounts'));
-        const allAccounts = clientAccountSnapshot.val();
-        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
-
-        if (!clientAccountId) {
-            return { message: `Error: Client account for ${client.name} not found. Cannot record payment.`, success: false };
-        }
-
         // 1. Create the CashPayment record
         const newPaymentRef = push(ref(db, 'cash_payments'));
         const paymentData: Omit<CashPayment, 'id'> = {
