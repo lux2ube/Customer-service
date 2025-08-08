@@ -320,9 +320,10 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
-    clientName: z.string().min(1, 'Client name is required.'),
-    senderName: z.string().optional(),
+    clientName: z.string().optional(),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+    amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
+    senderName: z.string().optional(),
     remittanceNumber: z.string().optional(),
     note: z.string().optional(),
 });
@@ -332,10 +333,9 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 }
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-     const rawData = {
-        ...Object.fromEntries(formData.entries()),
-    };
+    const rawData = { ...Object.fromEntries(formData.entries()) };
     
+    // Fetch client name if only ID is provided
     if (!rawData.clientName && rawData.clientId) {
         try {
             const clientSnapshot = await get(ref(db, `clients/${rawData.clientId}`));
@@ -354,7 +354,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, clientName, amount, amountUsd, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
         const [bankAccountSnapshot, allAccountsSnapshot] = await Promise.all([
@@ -368,40 +368,14 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
-        const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
-        const fiatHistorySnapshot = await get(fiatHistoryRef);
-        let rate = 1;
-
-        if (bankAccount.currency && bankAccount.currency !== 'USD') {
-            if (fiatHistorySnapshot.exists()) {
-                const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
-                const lastEntry = fiatHistorySnapshot.val()[lastEntryKey];
-                const fiatRates: FiatRate[] = lastEntry.rates || [];
-                const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-                if (rateInfo) {
-                    rate = rateInfo.clientBuy;
-                } else {
-                     return { message: `Error: Exchange rate for ${bankAccount.currency} not found.`, success: false };
-                }
-            } else {
-                return { message: `Error: Exchange rates are not set up.`, success: false };
-            }
-        }
-        
-        if (rate <= 0) {
-            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or invalid.`, success: false };
-        }
-        
-        const amountUsd = amount / rate;
-        
         const newReceiptRef = push(ref(db, 'cash_receipts'));
         const receiptData: Omit<CashReceipt, 'id'> = {
             date: new Date().toISOString(),
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName: clientName,
-            senderName: senderName || clientName,
+            clientName: clientName!,
+            senderName: senderName || clientName!,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
@@ -465,6 +439,7 @@ const CashPaymentSchema = z.object({
     clientId: z.string().min(1, 'Please select a client to debit.'),
     recipientName: z.string().optional(),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+    amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
     remittanceNumber: z.string().optional(),
     note: z.string().optional(),
 });
@@ -481,7 +456,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
         };
     }
 
-    const { bankAccountId, clientId, amount, recipientName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, amount, amountUsd, recipientName, remittanceNumber, note } = validatedFields.data;
 
     try {
         const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
@@ -511,7 +486,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
                 recipientName: recipientName || client.name,
                 amount,
                 currency: bankAccount.currency!,
-                amountUsd: 0, 
+                amountUsd: amountUsd, 
                 remittanceNumber,
                 note,
                 status: 'Confirmed',

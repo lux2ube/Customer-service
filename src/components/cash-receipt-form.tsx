@@ -15,9 +15,11 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, FiatRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { db } from '@/lib/firebase';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 
 
 function SubmitButton() {
@@ -84,6 +86,49 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
     
     const [selectedClientId, setSelectedClientId] = React.useState('');
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
+    const [amount, setAmount] = React.useState('');
+    const [amountUsd, setAmountUsd] = React.useState(0);
+
+    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+
+    React.useEffect(() => {
+        const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+        const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const lastEntryKey = Object.keys(data)[0];
+                const lastEntry = data[lastEntryKey];
+                setFiatRates(lastEntry.rates || []);
+            }
+        });
+        return () => unsubFiat();
+    }, []);
+
+    React.useEffect(() => {
+        const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
+        if (!selectedAccount || !selectedAccount.currency) {
+            setAmountUsd(0);
+            return;
+        }
+
+        const numericAmount = parseFloat(amount);
+        if (isNaN(numericAmount)) {
+            setAmountUsd(0);
+            return;
+        }
+        
+        if (selectedAccount.currency === 'USD') {
+            setAmountUsd(numericAmount);
+            return;
+        }
+
+        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        if (rateInfo && rateInfo.clientBuy > 0) {
+            setAmountUsd(numericAmount / rateInfo.clientBuy);
+        } else {
+            setAmountUsd(0);
+        }
+    }, [amount, selectedBankAccountId, bankAccounts, fiatRates]);
 
     React.useEffect(() => {
         if (state?.success) {
@@ -94,6 +139,7 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
             formRef.current?.reset();
             setSelectedClientId('');
             setSelectedBankAccountId('');
+            setAmount('');
         } else if (state?.message) {
             toast({
                 title: 'Error',
@@ -102,6 +148,8 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
             });
         }
     }, [state, toast]);
+    
+    const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
     return (
         <form action={formAction} ref={formRef}>
@@ -111,25 +159,31 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
                     <CardDescription>Fill in the details of the cash transaction.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
-                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
-                                <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
-                                <SelectContent>
-                                    {bankAccounts.map(account => (
-                                        <SelectItem key={account.id} value={account.id}>
-                                            {account.name} ({account.currency})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
-                        </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
+                        <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
+                            <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
+                            <SelectContent>
+                                {bankAccounts.map(account => (
+                                    <SelectItem key={account.id} value={account.id}>
+                                        {account.name} ({account.currency})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+                    </div>
+                    
+                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
-                            <Label htmlFor="amount">Amount Received</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" />
+                            <Label htmlFor="amount">Amount Received ({selectedAccount?.currency || '...'})</Label>
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Equivalent Amount (USD)</Label>
+                            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
+                            <input type="hidden" name="amountUsd" value={amountUsd} />
                         </div>
                     </div>
 
