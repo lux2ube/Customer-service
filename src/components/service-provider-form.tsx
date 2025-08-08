@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useFormStatus } from 'react-dom';
-import { useActionState } from 'react';
+import { useActionState } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
+import { useRouter } from 'next/navigation';
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -87,6 +88,7 @@ function AccountMultiSelect({ accounts, selectedAccountIds, onSelectionChange }:
 
 export function ServiceProviderForm({ provider, accounts }: { provider?: ServiceProvider, accounts: Account[] }) {
     const { toast } = useToast();
+    const router = useRouter();
     const actionWithId = createServiceProvider.bind(null, provider?.id || null);
     const [state, formAction] = useActionState<ServiceProviderFormState, FormData>(actionWithId, undefined);
 
@@ -99,6 +101,9 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
     React.useEffect(() => {
         if (state?.message && state.errors) {
             toast({ variant: 'destructive', title: 'Error Saving Provider', description: state.message });
+        }
+        if (state?.success === false && !state.errors) {
+             toast({ variant: 'destructive', title: 'Error Saving Provider', description: state.message });
         }
     }, [state, toast]);
 

@@ -72,7 +72,7 @@ export function Nav() {
           <SidebarMenuItem key={item.href}>
             <SidebarMenuButton
               asChild
-              isActive={pathname.startsWith(item.href) && (item.href !== '/' || pathname === '/')}
+              isActive={pathname.startsWith(item.href!) && (item.href !== '/' || pathname === '/')}
               tooltip={item.label}
             >
               <Link href={item.href!}>

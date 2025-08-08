@@ -27,6 +27,8 @@ import Link from 'next/link';
 import { Pencil, Trash2 } from 'lucide-react';
 import { deleteServiceProvider } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { onValue, ref } from 'firebase/database';
 
 export function ServiceProvidersTable({ initialProviders, allAccounts }: { initialProviders: ServiceProvider[], allAccounts: Account[] }) {
     const [providers, setProviders] = React.useState<ServiceProvider[]>(initialProviders);
@@ -34,9 +36,15 @@ export function ServiceProvidersTable({ initialProviders, allAccounts }: { initi
     const { toast } = useToast();
 
     React.useEffect(() => {
-        const sortedProviders = [...initialProviders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setProviders(sortedProviders);
-    }, [initialProviders]);
+        const providersRef = ref(db, 'service_providers');
+        const unsubscribe = onValue(providersRef, (snapshot) => {
+            const data = snapshot.val();
+            const list: ServiceProvider[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setProviders(list);
+        });
+        return () => unsubscribe();
+    }, []);
 
     const handleDelete = async () => {
         if (!itemToDelete) return;

@@ -25,7 +25,7 @@ const ServiceProviderSchema = z.object({
   accountIds: z.array(z.string()).min(1, { message: 'At least one account must be selected.' }),
 });
 
-export async function createServiceProvider(providerId: string | null, formData: FormData) {
+export async function createServiceProvider(providerId: string | null, prevState: ServiceProviderFormState, formData: FormData) {
     const dataToValidate = {
         name: formData.get('name'),
         type: formData.get('type'),
