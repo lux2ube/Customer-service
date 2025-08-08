@@ -215,7 +215,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const recalculateFinancials = React.useCallback((
         localAmount: number,
         type: Transaction['type'],
-        currency: Transaction['currency'],
+        currency: string,
         manualUsdtAmount?: number
     ): Partial<Transaction> => {
 
@@ -299,9 +299,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
         if (!selectedAccount) return;
 
         const newCurrency = selectedAccount.currency || 'USD';
-        const updates = recalculateFinancials(data.amount, data.type, newCurrency as Transaction['currency']);
+        const updates = recalculateFinancials(data.amount, data.type, newCurrency);
         
-        setFormData({ ...data, bankAccountId: accountId, currency: newCurrency as Transaction['currency'], ...updates });
+        setFormData({ ...data, bankAccountId: accountId, currency: newCurrency, ...updates });
     };
 
     const handleClientSelect = async (client: Client | null) => {
@@ -313,8 +313,8 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             const favoriteAccount = bankAccounts.find(acc => acc.id === client.favoriteBankAccountId);
             if(favoriteAccount) {
                  const newCurrency = favoriteAccount.currency || 'USD';
-                 const updates = recalculateFinancials(newFormData.amount, newFormData.type, newCurrency as Transaction['currency']);
-                 newFormData = { ...newFormData, ...updates, bankAccountId: favoriteAccount.id, currency: newCurrency as Transaction['currency'] };
+                 const updates = recalculateFinancials(newFormData.amount, newFormData.type, newCurrency);
+                 newFormData = { ...newFormData, ...updates, bankAccountId: favoriteAccount.id, currency: newCurrency };
             }
            
             newFormData.clientId = client.id;

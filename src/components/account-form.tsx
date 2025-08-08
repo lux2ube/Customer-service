@@ -13,7 +13,7 @@ import { createAccount, type AccountFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Checkbox } from './ui/checkbox';
-import type { Account } from '@/lib/types';
+import type { Account, Currency } from '@/lib/types';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -24,7 +24,7 @@ function SubmitButton() {
     );
 }
 
-export function AccountForm({ account, parentAccounts }: { account?: Account, parentAccounts: Account[] }) {
+export function AccountForm({ account, parentAccounts, currencies }: { account?: Account, parentAccounts: Account[], currencies: Currency[] }) {
     const { toast } = useToast();
     
     const action = createAccount.bind(null, account?.id || null);
@@ -144,10 +144,10 @@ export function AccountForm({ account, parentAccounts }: { account?: Account, pa
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
-                                    <SelectItem value="USD">USD</SelectItem>
-                                    <SelectItem value="YER">YER</SelectItem>
-                                    <SelectItem value="SAR">SAR</SelectItem>
                                     <SelectItem value="USDT">USDT</SelectItem>
+                                    {currencies.map(c => (
+                                        <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                             {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}

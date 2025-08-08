@@ -41,7 +41,7 @@ export interface Transaction {
     cryptoWalletId?: string;
     cryptoWalletName?: string; // for display
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR' | 'USDT' | string; // Allow dynamic currencies
+    currency: string;
     amount_usd: number;
     fee_usd: number;
     expense_usd?: number;
@@ -67,7 +67,7 @@ export interface CashReceipt {
     clientName: string;
     senderName: string;
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR' | string; // Allow dynamic currencies
+    currency: string;
     amountUsd: number;
     remittanceNumber?: string;
     note?: string;
@@ -84,7 +84,7 @@ export interface CashPayment {
     clientName: string;
     recipientName: string;
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR' | string; // Allow dynamic currencies
+    currency: string;
     amountUsd: number;
     remittanceNumber?: string;
     note?: string;
@@ -99,7 +99,7 @@ export interface Account {
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
     parentId?: string | null;
-    currency?: string; // Allow dynamic currencies, not just a fixed enum
+    currency?: string;
     priority?: number;
     // Balance fields will be calculated properties, not stored directly
 }
@@ -207,7 +207,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;
