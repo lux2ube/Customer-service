@@ -18,12 +18,12 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, FiatRate } from '@/lib/types';
 import { createQuickCashReceipt, type CashReceiptFormState } from '@/lib/actions/transaction';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 
 interface QuickCashReceiptFormProps {
   client: Client | null;
@@ -56,14 +56,20 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
   const formRef = React.useRef<HTMLFormElement>(null);
   
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+  const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   const [state, formAction] = useActionState<CashReceiptFormState, FormData>(createQuickCashReceipt, undefined);
+  
+  const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
+  const [amount, setAmount] = React.useState('');
+  const [amountUsd, setAmountUsd] = React.useState(0);
 
   React.useEffect(() => {
     if (!isOpen) return;
+
     const accountsRef = ref(db, 'accounts');
-    const unsubscribe = onValue(accountsRef, (snapshot) => {
+    const unsubAccounts = onValue(accountsRef, (snapshot) => {
       if (snapshot.exists()) {
         const allAccountsData: Record<string, Account> = snapshot.val();
         const allAccountsList = Object.keys(allAccountsData).map(key => ({ id: key, ...allAccountsData[key] }));
@@ -71,7 +77,21 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+    const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            const lastEntryKey = Object.keys(data)[0];
+            const lastEntry = data[lastEntryKey];
+            setFiatRates(lastEntry.rates || []);
+        }
+    });
+
+    return () => {
+      unsubAccounts();
+      unsubFiat();
+    }
   }, [isOpen]);
 
   React.useEffect(() => {
@@ -84,6 +104,32 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       toast({ title: 'Error', variant: 'destructive', description: state.message });
     }
   }, [state, toast, onReceiptCreated, setIsOpen]);
+  
+  React.useEffect(() => {
+        const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
+        if (!selectedAccount || !selectedAccount.currency) {
+            setAmountUsd(0);
+            return;
+        }
+
+        const numericAmount = parseFloat(amount);
+        if (isNaN(numericAmount)) {
+            setAmountUsd(0);
+            return;
+        }
+        
+        if (selectedAccount.currency === 'USD') {
+            setAmountUsd(numericAmount);
+            return;
+        }
+
+        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        if (rateInfo && rateInfo.clientBuy > 0) {
+            setAmountUsd(numericAmount / rateInfo.clientBuy);
+        } else {
+            setAmountUsd(0);
+        }
+    }, [amount, selectedBankAccountId, bankAccounts, fiatRates]);
 
   if (!client) return null;
 
@@ -99,10 +145,11 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
         <form action={formAction} ref={formRef}>
           <input type="hidden" name="clientId" value={client.id} />
           <input type="hidden" name="clientName" value={client.name} />
+          <input type="hidden" name="amountUsd" value={amountUsd} />
           <div className="space-y-4 py-4">
              <div className="space-y-2">
                 <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
-                <Select name="bankAccountId" required>
+                <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
                     <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
                     <SelectContent>
                         {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
@@ -117,8 +164,12 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
             </div>
              <div className="space-y-2">
                 <Label htmlFor="amount">Amount Received</Label>
-                <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" />
+                <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+            </div>
+            <div className="space-y-2">
+                <Label>Equivalent Amount (USD)</Label>
+                <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
             </div>
              <div className="space-y-2">
                 <Label htmlFor="remittanceNumber">Remittance Number</Label>
