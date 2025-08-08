@@ -54,6 +54,7 @@ const menuItems = [
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
   { type: 'divider' },
+  { href: '/bank-accounts', label: 'Bank Accounts', icon: Landmark },
   { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/about', label: 'About', icon: Info },
