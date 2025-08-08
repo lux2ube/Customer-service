@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { db, storage } from '../firebase';
-import { push, ref, set, update, get } from 'firebase/database';
+import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate, UnifiedReceipt } from '../types';
@@ -338,20 +338,16 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
     const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot, settingsSnapshot] = await Promise.all([
+        const [bankAccountSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, 'settings'))
         ]);
 
-        if (!bankAccountSnapshot.exists() || !settingsSnapshot.exists()) {
+        if (!bankAccountSnapshot.exists()) {
             return { message: 'Error: Could not find bank account or settings.', success: false };
         }
 
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
-        const settingsData = settingsSnapshot.val();
         
-        // This logic seems incorrect. We should get rates from history.
-        // Assuming we need to find the latest rate.
         const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
         const fiatHistorySnapshot = await get(fiatHistoryRef);
         let rate = 1;
@@ -362,7 +358,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             const fiatRates: FiatRate[] = lastEntry.rates || [];
             const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
             if (rateInfo) {
-                rate = rateInfo.clientSell;
+                rate = rateInfo.clientSell; // When client gives us cash, we are "selling" them USD credit
             }
         }
         
@@ -506,10 +502,9 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
     if (!clientId) return [];
     
     try {
-        const [cashReceiptsSnapshot, smsTransactionsSnapshot, settingsSnapshot] = await Promise.all([
+        const [cashReceiptsSnapshot, smsTransactionsSnapshot] = await Promise.all([
             get(ref(db, 'cash_receipts')),
             get(ref(db, 'sms_transactions')),
-            get(ref(db, 'settings'))
         ]);
         
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
