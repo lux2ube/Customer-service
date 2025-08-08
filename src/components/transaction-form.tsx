@@ -27,13 +27,13 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
+  AlertDialogDescription as AlertDialogDescriptionComponent, // Renaming to avoid conflict
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle as AlertDialogTitleComponent, // Renaming to avoid conflict
 } from "@/components/ui/alert-dialog";
 import dynamic from 'next/dynamic';
-import { Alert, AlertTitle } from './ui/alert';
+import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 
 const Invoice = dynamic(() => import('@/components/invoice').then(mod => mod.Invoice), { ssr: false });
 
@@ -648,14 +648,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
             </form>
             
             {batchUpdateInfo && (
-                 <AlertDialog open={!!batchUpdateInfo} onOpenChange={() => setBatchUpdateInfo(null)}>
+                 <AlertDialog>
                     <AlertDialogContent>
                         <AlertDialogHeader>
-                            <AlertDialogTitle>Assign Client to Other Transactions?</AlertDialogTitle>
-                            <AlertDialogDescription>
+                            <AlertDialogTitleComponent>Assign Client to Other Transactions?</AlertDialogTitleComponent>
+                            <AlertDialogDescriptionComponent>
                                 We found {batchUpdateInfo.count} other unassigned transaction(s) from this same wallet address.
                                 Do you want to assign them all to "{batchUpdateInfo.client.name}"?
-                            </AlertDialogDescription>
+                            </AlertDialogDescriptionComponent>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel onClick={() => setBatchUpdateInfo(null)}>No, Just This One</AlertDialogCancel>
