@@ -357,8 +357,9 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
     const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, allAccountsSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, 'accounts'))
         ]);
 
         if (!bankAccountSnapshot.exists()) {
@@ -378,7 +379,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
                 const fiatRates: FiatRate[] = lastEntry.rates || [];
                 const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
                 if (rateInfo) {
-                    rate = rateInfo.clientBuy; // Correctly use clientBuy rate
+                    rate = rateInfo.clientBuy;
                 } else {
                      return { message: `Error: Exchange rate for ${bankAccount.currency} not found.`, success: false };
                 }
@@ -413,23 +414,23 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         await set(newReceiptRef, receiptData);
 
         // --- Create Journal Entry for the receipt ---
-        const allAccountsSnapshot = await get(ref(db, 'accounts'));
         const allAccounts = allAccountsSnapshot.val() || {};
 
         const clientSubAccountName = `${CLIENT_PARENT_ACCOUNT_ID} - ${clientName}`;
         let clientSubAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === clientSubAccountName && allAccounts[key].parentId === CLIENT_PARENT_ACCOUNT_ID);
 
         if (!clientSubAccountId) {
-            const clientAccountsCount = Object.keys(allAccounts).filter(key => allAccounts[key].parentId === CLIENT_PARENT_ACCOUNT_ID).length;
-            clientSubAccountId = `${CLIENT_PARENT_ACCOUNT_ID}${String(clientAccountsCount + 1).padStart(3, '0')}`;
+            const newClientAccountRef = push(ref(db, 'accounts'));
+            clientSubAccountId = newClientAccountRef.key!;
             const newAccountData: Partial<Account> = {
+                id: clientSubAccountId,
                 name: clientSubAccountName,
                 type: 'Liabilities',
                 isGroup: false,
                 parentId: CLIENT_PARENT_ACCOUNT_ID,
                 currency: 'USD',
             };
-            await set(ref(db, `accounts/${clientSubAccountId}`), newAccountData);
+            await set(newClientAccountRef, newAccountData);
         }
 
         const journalEntryRef = push(ref(db, 'journal_entries'));
