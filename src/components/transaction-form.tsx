@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -27,7 +28,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as AlertDialogDescriptionComponent, // Renaming to avoid conflict
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle as AlertDialogTitleComponent, // Renaming to avoid conflict
@@ -466,6 +467,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const amountToDisplay = formData.hash && formData.amount === 0 ? '' : (formData.amount || '');
+    const isSyncedTx = !!formData.hash;
 
     return (
         <>
@@ -568,7 +570,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx} className={cn(isSyncedTx && "bg-muted/50")} />
                             </div>
                         </CardContent>
                         <CardFooter>
@@ -652,10 +654,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitleComponent>Assign Client to Other Transactions?</AlertDialogTitleComponent>
-                            <AlertDialogDescriptionComponent>
+                            <AlertDialogDescription>
                                 We found {batchUpdateInfo.count} other unassigned transaction(s) from this same wallet address.
                                 Do you want to assign them all to "{batchUpdateInfo.client.name}"?
-                            </AlertDialogDescriptionComponent>
+                            </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel onClick={() => setBatchUpdateInfo(null)}>No, Just This One</AlertDialogCancel>

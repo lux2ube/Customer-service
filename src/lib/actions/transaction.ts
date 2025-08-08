@@ -68,6 +68,15 @@ export async function createTransaction(transactionId: string | null, formData: 
     const newId = transactionId || push(ref(db, 'transactions')).key;
     if (!newId) throw new Error("Could not generate a transaction ID.");
 
+    // Fetch previous state if editing
+    let previousTxState: Transaction | null = null;
+    if (transactionId) {
+        const txSnapshot = await get(ref(db, `transactions/${transactionId}`));
+        if (txSnapshot.exists()) {
+            previousTxState = txSnapshot.val();
+        }
+    }
+
     const attachmentFile = formData.get('attachment_url_input') as File | null;
     let attachmentUrlString: string | undefined = undefined;
     
@@ -146,9 +155,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     dataToSave.clientId = finalClientId;
     
     if (transactionId) {
-        const transactionRef = ref(db, `transactions/${transactionId}`);
-        const snapshot = await get(transactionRef);
-        const existingData = snapshot.val();
+        const existingData = previousTxState;
         if (!dataToSave.attachment_url) {
             dataToSave.attachment_url = existingData?.attachment_url;
         }
@@ -221,7 +228,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
     
     // --- Telegram Notification Logic ---
-    if (finalData.status === 'Confirmed') {
+    if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
         let title = '';
         let message = '';
 
@@ -293,59 +300,53 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    const _createJournalEntry = async (
-        debitAccountId: string,
-        creditAccountId: string,
-        amountUsd: number,
-        description: string
-    ) => {
-        if (amountUsd <= 0) return;
+    // --- Journal Entry Logic ---
+    // Only create journal entries if the transaction is being confirmed for the first time
+    if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
+        const _createJournalEntry = async (
+            debitAccountId: string,
+            creditAccountId: string,
+            amountUsd: number,
+            description: string
+        ) => {
+            if (amountUsd <= 0) return;
 
-        try {
-            const [debitSnapshot, creditSnapshot] = await Promise.all([
-                get(ref(db, `accounts/${debitAccountId}`)),
-                get(ref(db, `accounts/${creditAccountId}`)),
-            ]);
-            
-            if (!debitSnapshot.exists() || !creditSnapshot.exists()) {
-                console.error("Could not create journal entry: one or more accounts not found.");
-                return;
+            try {
+                const newEntryRef = push(ref(db, 'journal_entries'));
+                await set(newEntryRef, {
+                    date: finalData.date,
+                    description,
+                    debit_account: debitAccountId,
+                    credit_account: creditAccountId,
+                    amount_usd: amountUsd,
+                    createdAt: new Date().toISOString(),
+                });
+
+            } catch (e) {
+                console.error("Failed to create automated journal entry:", e);
             }
-
-            const debitAccount = { id: debitAccountId, ...debitSnapshot.val() } as Account;
-            const creditAccount = { id: creditAccountId, ...creditSnapshot.val() } as Account;
-
-            const newEntryRef = push(ref(db, 'journal_entries'));
-            await set(newEntryRef, {
-                date: finalData.date,
-                description,
-                debit_account: debitAccountId,
-                credit_account: creditAccountId,
-                amount_usd: amountUsd,
-                createdAt: new Date().toISOString(),
-            });
-
-        } catch (e) {
-            console.error("Failed to create automated journal entry:", e);
+        };
+        
+        // Fee Income Journal
+        const fee = Math.abs(finalData.fee_usd);
+        if (fee > 0 && finalData.bankAccountId) {
+            const description = `Crypto Fee: Tx ${newId}`;
+            await _createJournalEntry(finalData.bankAccountId, PROFIT_ACCOUNT_ID, fee, description);
         }
-    };
-    
-    // Fee Income Journal
-    if (finalData.fee_usd && finalData.fee_usd > 0) {
-        const description = `Crypto Fee: Tx ${newId}`;
-        await _createJournalEntry(finalData.bankAccountId!, PROFIT_ACCOUNT_ID, finalData.fee_usd, description);
-    }
 
-    // Exchange Rate Commission Journal
-    if (finalData.exchange_rate_commission && finalData.exchange_rate_commission > 0) {
-        const description = `Exchange Rate Commission: Tx ${newId}`;
-        await _createJournalEntry(finalData.bankAccountId!, COMMISSION_ACCOUNT_ID, finalData.exchange_rate_commission, description);
-    }
-    
-    // Discount/Expense Journal
-    if (finalData.expense_usd && finalData.expense_usd > 0) {
-        const description = `Discount/Expense: Tx ${newId}`;
-        await _createJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId!, finalData.expense_usd, description);
+        // Exchange Rate Commission Journal
+        const commission = Math.abs(finalData.exchange_rate_commission || 0);
+        if (commission > 0 && finalData.bankAccountId) {
+            const description = `Exchange Rate Commission: Tx ${newId}`;
+            await _createJournalEntry(finalData.bankAccountId, COMMISSION_ACCOUNT_ID, commission, description);
+        }
+        
+        // Discount/Expense Journal
+        const expense = Math.abs(finalData.expense_usd || 0);
+        if (expense > 0 && finalData.bankAccountId) {
+            const description = `Discount/Expense: Tx ${newId}`;
+            await _createJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId, expense, description);
+        }
     }
     
     revalidatePath('/transactions');
