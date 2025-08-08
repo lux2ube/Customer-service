@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -28,7 +29,19 @@ export interface ServiceProvider {
     type: 'Bank' | 'Crypto';
     accountIds: string[];
     createdAt: string;
+    // Optional overrides for global settings
+    fiatRates?: {
+        YER?: { clientBuy: number; clientSell: number; };
+        SAR?: { clientBuy: number; clientSell: number; };
+    };
+    cryptoFees?: {
+        buy_fee_percent: number;
+        sell_fee_percent: number;
+        minimum_buy_fee: number;
+        minimum_sell_fee: number;
+    };
 }
+
 
 export interface Transaction {
     id: string;

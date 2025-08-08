@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -30,18 +29,14 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
     }
 
     try {
-        // We use update here to not wipe other potential currencies if they exist
-        const updates: { [key: string]: FiatRate } = {};
-        const snapshot = await get(ref(db, 'settings/fiat_rates'));
-        const existingRates: FiatRate[] = snapshot.val() || [];
-        
-        const finalRates = existingRates.filter(r => !currencies.includes(r.currency));
-        finalRates.push(...rates);
-
-        await set(ref(db, 'settings/fiat_rates'), finalRates);
+        const historyRef = push(ref(db, 'rate_history/fiat_rates'));
+        await set(historyRef, {
+            rates: rates,
+            timestamp: new Date().toISOString()
+        });
         
         revalidatePath('/exchange-rates');
-        return { success: true, message: 'Fiat rates updated successfully.' };
+        return { success: true, message: 'Fiat rates saved to history.' };
     } catch (error) {
         console.error("Error updating fiat rates:", error);
         return { error: true, message: 'Database error while updating fiat rates.' };
@@ -62,9 +57,13 @@ export async function updateCryptoFees(prevState: RateFormState, formData: FormD
     }
     
     try {
-        await set(ref(db, 'settings/crypto_fees'), validatedFields.data);
+        const historyRef = push(ref(db, 'rate_history/crypto_fees'));
+        await set(historyRef, {
+            ...validatedFields.data,
+            timestamp: new Date().toISOString()
+        });
         revalidatePath('/exchange-rates');
-        return { success: true, message: 'Crypto fees updated successfully.' };
+        return { success: true, message: 'Crypto fees saved to history.' };
     } catch (error) {
         console.error("Error updating crypto fees:", error);
         return { error: true, message: 'Database error while updating crypto fees.' };

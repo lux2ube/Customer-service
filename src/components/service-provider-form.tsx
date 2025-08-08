@@ -1,8 +1,8 @@
+
 'use client';
 
 import * as React from 'react';
-import { useFormStatus } from 'react-dom';
-import { useActionState } from 'react';
+import { useFormStatus, useActionState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -18,6 +18,7 @@ import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -159,10 +160,82 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
                          {state?.errors?.accountIds && <p className="text-sm text-destructive">{state.errors.accountIds[0]}</p>}
                     </div>
                 </CardContent>
-                <CardFooter className="flex justify-end">
+                 <CardFooter className="flex justify-end">
                     <SubmitButton isEditing={!!provider} />
                 </CardFooter>
             </Card>
+
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="item-1">
+                    <AccordionTrigger>Optional: Rate & Fee Overrides</AccordionTrigger>
+                    <AccordionContent>
+                       <div className="space-y-6 p-1">
+                            <Card className="bg-muted/30">
+                                <CardHeader>
+                                    <CardTitle className="text-base">Fiat Rate Overrides</CardTitle>
+                                    <CardDescription className="text-xs">Set custom client buy/sell rates for this provider only. Leave blank to use global rates.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                     <div>
+                                        <h4 className="font-semibold text-sm mb-2">YER to USD</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Client Buy</Label>
+                                                <Input name="fiatRates_YER_clientBuy" type="number" step="any" placeholder="e.g., 538" defaultValue={provider?.fiatRates?.YER?.clientBuy} />
+                                            </div>
+                                             <div className="space-y-1">
+                                                <Label className="text-xs">Client Sell</Label>
+                                                <Input name="fiatRates_YER_clientSell" type="number" step="any" placeholder="e.g., 533" defaultValue={provider?.fiatRates?.YER?.clientSell}/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-sm mb-2">SAR to USD</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Client Buy</Label>
+                                                <Input name="fiatRates_SAR_clientBuy" type="number" step="any" placeholder="e.g., 3.75" defaultValue={provider?.fiatRates?.SAR?.clientBuy}/>
+                                            </div>
+                                             <div className="space-y-1">
+                                                <Label className="text-xs">Client Sell</Label>
+                                                <Input name="fiatRates_SAR_clientSell" type="number" step="any" placeholder="e.g., 3.75" defaultValue={provider?.fiatRates?.SAR?.clientSell}/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-muted/30">
+                                <CardHeader>
+                                    <CardTitle className="text-base">Crypto Fee Overrides</CardTitle>
+                                     <CardDescription className="text-xs">Set custom USDT fees for this provider only. Leave blank to use global fees.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                     <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="buy_fee_percent">Buy Fee (%)</Label>
+                                            <Input id="buy_fee_percent" name="cryptoFees_buy_fee_percent" type="number" step="any" defaultValue={provider?.cryptoFees?.buy_fee_percent} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sell_fee_percent">Sell Fee (%)</Label>
+                                            <Input id="sell_fee_percent" name="cryptoFees_sell_fee_percent" type="number" step="any" defaultValue={provider?.cryptoFees?.sell_fee_percent} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="minimum_buy_fee">Min. Buy Fee (USD)</Label>
+                                            <Input id="minimum_buy_fee" name="cryptoFees_minimum_buy_fee" type="number" step="any" defaultValue={provider?.cryptoFees?.minimum_buy_fee} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="minimum_sell_fee">Min. Sell Fee (USD)</Label>
+                                            <Input id="minimum_sell_fee" name="cryptoFees_minimum_sell_fee" type="number" step="any" defaultValue={provider?.cryptoFees?.minimum_sell_fee} />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                       </div>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
         </form>
     );
 }

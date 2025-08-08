@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import type { FiatRate, CryptoFee } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save } from 'lucide-react';
+import { Save, History } from 'lucide-react';
 import { updateFiatRates, updateCryptoFees, type RateFormState } from '@/lib/actions';
+import { format } from 'date-fns';
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
     const { pending } = useFormStatus();
@@ -33,19 +34,19 @@ function FiatRateFields({ currency, rate }: { currency: string, rate?: FiatRate 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                  <div className="space-y-1">
                     <Label>System Buy</Label>
-                    <Input name={`${currency}_systemBuy`} type="number" step="any" defaultValue={rate?.systemBuy || 0} required />
+                    <Input name={`${currency}_systemBuy`} type="number" step="any" defaultValue={rate?.systemBuy || ''} required />
                 </div>
                 <div className="space-y-1">
                     <Label>System Sell</Label>
-                    <Input name={`${currency}_systemSell`} type="number" step="any" defaultValue={rate?.systemSell || 0} required />
+                    <Input name={`${currency}_systemSell`} type="number" step="any" defaultValue={rate?.systemSell || ''} required />
                 </div>
                 <div className="space-y-1">
                     <Label>Client Buy</Label>
-                    <Input name={`${currency}_clientBuy`} type="number" step="any" defaultValue={rate?.clientBuy || 0} required />
+                    <Input name={`${currency}_clientBuy`} type="number" step="any" defaultValue={rate?.clientBuy || ''} required />
                 </div>
                 <div className="space-y-1">
                     <Label>Client Sell</Label>
-                    <Input name={`${currency}_clientSell`} type="number" step="any" defaultValue={rate?.clientSell || 0} required />
+                    <Input name={`${currency}_clientSell`} type="number" step="any" defaultValue={rate?.clientSell || ''} required />
                 </div>
             </div>
         </div>
@@ -71,7 +72,7 @@ function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
         <form action={formAction}>
             <Card>
                 <CardHeader>
-                    <CardTitle>Fiat Exchange Rates</CardTitle>
+                    <CardTitle>Global Fiat Exchange Rates</CardTitle>
                     <CardDescription>Define buy/sell rates for Fiat currencies against USD for both system and client sides.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -86,7 +87,7 @@ function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
     );
 }
 
-function CryptoFeesForm({ initialFees }: { initialFees: CryptoFee }) {
+function CryptoFeesForm({ initialFees }: { initialFees?: CryptoFee }) {
     const { toast } = useToast();
     const [state, formAction] = useActionState<RateFormState, FormData>(updateCryptoFees, undefined);
     
@@ -102,28 +103,28 @@ function CryptoFeesForm({ initialFees }: { initialFees: CryptoFee }) {
         <form action={formAction}>
             <Card>
                 <CardHeader>
-                    <CardTitle>USDT Transaction Fees</CardTitle>
+                    <CardTitle>Global USDT Transaction Fees</CardTitle>
                     <CardDescription>Configure percentage-based fees and minimums for USDT transactions.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="buy_fee_percent">Buy Fee (%)</Label>
-                            <Input id="buy_fee_percent" name="buy_fee_percent" type="number" step="any" defaultValue={initialFees?.buy_fee_percent || 0} />
+                            <Input id="buy_fee_percent" name="buy_fee_percent" type="number" step="any" defaultValue={initialFees?.buy_fee_percent || ''} />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="sell_fee_percent">Sell Fee (%)</Label>
-                            <Input id="sell_fee_percent" name="sell_fee_percent" type="number" step="any" defaultValue={initialFees?.sell_fee_percent || 0} />
+                            <Input id="sell_fee_percent" name="sell_fee_percent" type="number" step="any" defaultValue={initialFees?.sell_fee_percent || ''} />
                         </div>
                     </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="minimum_buy_fee">Min. Buy Fee (USD)</Label>
-                            <Input id="minimum_buy_fee" name="minimum_buy_fee" type="number" step="any" defaultValue={initialFees?.minimum_buy_fee || 0} />
+                            <Input id="minimum_buy_fee" name="minimum_buy_fee" type="number" step="any" defaultValue={initialFees?.minimum_buy_fee || ''} />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="minimum_sell_fee">Min. Sell Fee (USD)</Label>
-                            <Input id="minimum_sell_fee" name="minimum_sell_fee" type="number" step="any" defaultValue={initialFees?.minimum_sell_fee || 0} />
+                            <Input id="minimum_sell_fee" name="minimum_sell_fee" type="number" step="any" defaultValue={initialFees?.minimum_sell_fee || ''} />
                         </div>
                     </div>
                 </CardContent>
@@ -137,19 +138,33 @@ function CryptoFeesForm({ initialFees }: { initialFees: CryptoFee }) {
 
 export default function ExchangeRatesPage() {
     const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
-    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee>({ buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
+    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | undefined>(undefined);
     const [loading, setLoading] = React.useState(true);
     
     React.useEffect(() => {
-        const fiatRatesRef = ref(db, 'settings/fiat_rates');
-        const cryptoFeesRef = ref(db, 'settings/crypto_fees');
+        const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+        const cryptoFeesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
 
         const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
-            setFiatRates(snapshot.val() ? Object.values(snapshot.val()) : []);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const lastEntryKey = Object.keys(data)[0];
+                const lastEntry = data[lastEntryKey];
+                setFiatRates(lastEntry.rates || []);
+            } else {
+                setFiatRates([]);
+            }
             setLoading(false);
         });
+
         const unsubCrypto = onValue(cryptoFeesRef, (snapshot) => {
-            setCryptoFees(snapshot.val() || { buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const lastEntryKey = Object.keys(data)[0];
+                setCryptoFees(data[lastEntryKey]);
+            } else {
+                setCryptoFees(undefined);
+            }
         });
 
         return () => {
@@ -163,7 +178,7 @@ export default function ExchangeRatesPage() {
             <>
                 <PageHeader 
                     title="Exchange Rates & Fees"
-                    description="Manage currencies, exchange rates, and transaction fees."
+                    description="Manage global currencies, exchange rates, and transaction fees."
                 />
                 <div className="space-y-6">
                    <Skeleton className="h-64 w-full" />
@@ -177,7 +192,7 @@ export default function ExchangeRatesPage() {
         <>
             <PageHeader 
                 title="Exchange Rates & Fees"
-                description="Manage currencies, exchange rates, and transaction fees."
+                description="Manage global currencies, exchange rates, and transaction fees. Every change is logged with a timestamp."
             />
             <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
