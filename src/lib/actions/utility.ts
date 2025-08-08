@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -14,23 +15,31 @@ export type RateFormState = { message?: string; error?: boolean, success?: boole
 export async function updateFiatRates(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
     const data = Object.fromEntries(formData.entries());
     const rates: FiatRate[] = [];
-    let i = 0;
-    while(data[`currency_${i}`]) {
-        rates.push({
-            currency: data[`currency_${i}`] as string,
-            systemBuy: parseFloat(data[`systemBuy_${i}`] as string || '0'),
-            systemSell: parseFloat(data[`systemSell_${i}`] as string || '0'),
-            clientBuy: parseFloat(data[`clientBuy_${i}`] as string || '0'),
-            clientSell: parseFloat(data[`clientSell_${i}`] as string || '0'),
-        });
-        i++;
+
+    const currencies = ['YER', 'SAR'];
+    for (const currency of currencies) {
+        if (data[`${currency}_systemBuy`]) {
+            rates.push({
+                currency: currency,
+                systemBuy: parseFloat(data[`${currency}_systemBuy`] as string || '0'),
+                systemSell: parseFloat(data[`${currency}_systemSell`] as string || '0'),
+                clientBuy: parseFloat(data[`${currency}_clientBuy`] as string || '0'),
+                clientSell: parseFloat(data[`${currency}_clientSell`] as string || '0'),
+            });
+        }
     }
 
-    // Filter out any empty rows that might have been added in the UI
-    const validRates = rates.filter(rate => rate.currency);
-
     try {
-        await set(ref(db, 'settings/fiat_rates'), validRates);
+        // We use update here to not wipe other potential currencies if they exist
+        const updates: { [key: string]: FiatRate } = {};
+        const snapshot = await get(ref(db, 'settings/fiat_rates'));
+        const existingRates: FiatRate[] = snapshot.val() || [];
+        
+        const finalRates = existingRates.filter(r => !currencies.includes(r.currency));
+        finalRates.push(...rates);
+
+        await set(ref(db, 'settings/fiat_rates'), finalRates);
+        
         revalidatePath('/exchange-rates');
         return { success: true, message: 'Fiat rates updated successfully.' };
     } catch (error) {
