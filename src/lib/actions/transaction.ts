@@ -336,7 +336,6 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         ...Object.fromEntries(formData.entries()),
     };
     
-    // If clientName is not on the form, we'll fetch it.
     if (!rawData.clientName && rawData.clientId) {
         try {
             const clientSnapshot = await get(ref(db, `clients/${rawData.clientId}`));
@@ -379,7 +378,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
                 const fiatRates: FiatRate[] = lastEntry.rates || [];
                 const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
                 if (rateInfo) {
-                    rate = rateInfo.clientSell; // Use client sell rate for conversion
+                    rate = rateInfo.clientBuy; // Correctly use clientBuy rate
                 } else {
                      return { message: `Error: Exchange rate for ${bankAccount.currency} not found.`, success: false };
                 }
@@ -635,4 +634,3 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         return [];
     }
 }
-
