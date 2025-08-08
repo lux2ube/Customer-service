@@ -14,9 +14,10 @@ import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/databas
 import type { FiatRate, CryptoFee } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, History } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { updateFiatRates, updateCryptoFees, type RateFormState } from '@/lib/actions';
-import { format } from 'date-fns';
+import { RateHistory } from '@/components/rate-history';
+
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
     const { pending } = useFormStatus();
@@ -33,19 +34,19 @@ function FiatRateFields({ currency, rate }: { currency: string, rate?: FiatRate 
             <h4 className="font-semibold">{currency} to USD</h4>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                  <div className="space-y-1">
-                    <Label>System Buy</Label>
+                    <Label className="text-xs">System Buy</Label>
                     <Input name={`${currency}_systemBuy`} type="number" step="any" defaultValue={rate?.systemBuy || ''} required />
                 </div>
                 <div className="space-y-1">
-                    <Label>System Sell</Label>
+                    <Label className="text-xs">System Sell</Label>
                     <Input name={`${currency}_systemSell`} type="number" step="any" defaultValue={rate?.systemSell || ''} required />
                 </div>
                 <div className="space-y-1">
-                    <Label>Client Buy</Label>
+                    <Label className="text-xs">Client Buy</Label>
                     <Input name={`${currency}_clientBuy`} type="number" step="any" defaultValue={rate?.clientBuy || ''} required />
                 </div>
                 <div className="space-y-1">
-                    <Label>Client Sell</Label>
+                    <Label className="text-xs">Client Sell</Label>
                     <Input name={`${currency}_clientSell`} type="number" step="any" defaultValue={rate?.clientSell || ''} required />
                 </div>
             </div>
@@ -201,6 +202,9 @@ export default function ExchangeRatesPage() {
                 <div className="space-y-6">
                      <CryptoFeesForm initialFees={cryptoFees} />
                 </div>
+            </div>
+            <div className="mt-8">
+                <RateHistory />
             </div>
         </>
     );
