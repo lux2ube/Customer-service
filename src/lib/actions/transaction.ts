@@ -25,6 +25,7 @@ export type TransactionFormState =
         amount?: string[];
         currency?: string[];
         attachment_url?: string[];
+        linkedReceiptIds?: string[];
       };
       message?: string;
       success?: boolean;
@@ -314,7 +315,6 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
-    clientName: z.string().optional(),
     senderName: z.string().optional(),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     remittanceNumber: z.string().optional(),
@@ -335,17 +335,19 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`))
         ]);
 
-        if (!bankAccountSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account or settings.', success: false };
+        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account or client.', success: false };
         }
-
+        
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
         const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
@@ -373,8 +375,8 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName: clientName || 'Unknown',
-            senderName: senderName || clientName || 'Unknown',
+            clientName: client.name,
+            senderName: senderName || client.name,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
