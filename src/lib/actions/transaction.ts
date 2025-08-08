@@ -354,12 +354,13 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, clientName, amount, amountUsd, senderName, remittanceNumber, note } = validatedFields.data;
-
+    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    
     try {
-        const [bankAccountSnapshot, allAccountsSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, allAccountsSnapshot, fiatHistorySnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, 'accounts'))
+            get(ref(db, 'accounts')),
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
         ]);
 
         if (!bankAccountSnapshot.exists()) {
@@ -368,6 +369,21 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
+        let amountUsd = validatedFields.data.amountUsd;
+        if(bankAccount.currency && bankAccount.currency !== 'USD') {
+            if (!fiatHistorySnapshot.exists()) {
+                return { message: 'Error: No exchange rates found to perform conversion.', success: false };
+            }
+            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
+            const fiatRates: FiatRate[] = fiatHistorySnapshot.val()[lastEntryKey].rates || [];
+            const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
+            const rate = rateInfo?.clientBuy; // Use clientBuy rate when receiving cash
+            if (!rate || rate <= 0) {
+                return { message: `Error: No valid "Client Buy" rate for ${bankAccount.currency}.`, success: false };
+            }
+            amountUsd = amount / rate;
+        }
+
         const newReceiptRef = push(ref(db, 'cash_receipts'));
         const receiptData: Omit<CashReceipt, 'id'> = {
             date: new Date().toISOString(),
@@ -390,9 +406,16 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         // --- Create Journal Entry for the receipt ---
         const allAccounts = allAccountsSnapshot.val() || {};
 
-        const clientSubAccountName = `${CLIENT_PARENT_ACCOUNT_ID} - ${clientName}`;
-        let clientSubAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === clientSubAccountName && allAccounts[key].parentId === CLIENT_PARENT_ACCOUNT_ID);
-
+        const clientSubAccountName = `${clientName}`;
+        let clientSubAccountId: string | null = null;
+        
+        for (const accId in allAccounts) {
+            if (allAccounts[accId].name === clientSubAccountName && allAccounts[accId].parentId === CLIENT_PARENT_ACCOUNT_ID) {
+                clientSubAccountId = accId;
+                break;
+            }
+        }
+        
         if (!clientSubAccountId) {
             const newClientAccountRef = push(ref(db, 'accounts'));
             clientSubAccountId = newClientAccountRef.key!;
@@ -404,7 +427,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
                 parentId: CLIENT_PARENT_ACCOUNT_ID,
                 currency: 'USD',
             };
-            await set(newClientAccountRef, newAccountData);
+            await set(ref(db, `accounts/${clientSubAccountId}`), newAccountData);
         }
 
         const journalEntryRef = push(ref(db, 'journal_entries'));
@@ -412,9 +435,9 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             date: receiptData.date,
             description: `Cash receipt from ${clientName}`,
             debit_account: bankAccountId,
-            credit_account: clientSubAccountId,
+            credit_account: clientSubAccountId!,
             debit_amount: amount,
-            credit_amount: amountUsd, // Always credit USD equivalent to liability
+            credit_amount: amountUsd,
             amount_usd: amountUsd,
             createdAt: new Date().toISOString(),
             debit_account_name: bankAccount.name,
