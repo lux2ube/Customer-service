@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -84,7 +85,7 @@ export interface CashReceipt {
     amountUsd: number;
     remittanceNumber?: string;
     note?: string;
-    status: 'Confirmed' | 'Cancelled';
+    status: 'Pending' | 'Used' | 'Cancelled';
     createdAt: string;
 }
 
@@ -186,6 +187,23 @@ export interface SmsTransaction {
     matched_client_id?: string;
     matched_client_name?: string;
 }
+
+// For displaying combined funds in the new transaction form
+export type UnifiedReceipt = {
+    id: string;
+    date: string;
+    clientName: string;
+    senderName: string;
+    bankAccountName: string;
+    amount: number;
+    currency: string;
+    amountUsd: number;
+    remittanceNumber?: string;
+    source: 'Manual' | 'SMS';
+    status: CashReceipt['status'] | SmsTransaction['status'];
+    rawSms?: string;
+}
+
 
 export interface ParsedSms {
   parsed: boolean;

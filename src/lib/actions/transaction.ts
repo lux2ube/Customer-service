@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate, UnifiedReceipt } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -36,14 +36,12 @@ const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
     clientId: z.string().optional(),
     type: z.enum(['Deposit', 'Withdraw']),
-    amount: z.coerce.number().gt(0, { message: 'Amount must be greater than 0.' }),
-    currency: z.enum(['YER', 'USD', 'SAR', 'USDT']),
-    bankAccountId: z.string().optional().nullable(),
-    cryptoWalletId: z.string().optional().nullable(),
+    amount: z.coerce.number(),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number(),
     expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
+    cryptoWalletId: z.string().optional().nullable(),
     exchange_rate_commission: z.coerce.number().optional(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     invoice_image_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
@@ -52,15 +50,15 @@ const TransactionSchema = z.object({
     hash: z.string().optional(),
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
-    linkedSmsId: z.string().optional().nullable(),
+    linkedReceiptIds: z.array(z.string()).optional(),
 }).refine(data => {
     if (data.hash && data.status === 'Confirmed') {
-        return data.amount > 0;
+        return (data.linkedReceiptIds?.length || 0) > 0;
     }
     return true;
 }, {
-    message: "Amount must be filled in for a confirmed BscScan transaction.",
-    path: ["amount"],
+    message: "You must select at least one cash receipt to complete a synced transaction.",
+    path: ["linkedReceiptIds"],
 });
 
 
@@ -101,12 +99,12 @@ export async function createTransaction(transactionId: string | null, formData: 
             invoiceImageUrlString = await getDownloadURL(snapshot.ref);
         } catch (error) {
             console.error("Invoice image upload failed:", error);
-            // Don't fail the whole transaction, just log the error.
         }
     }
 
     const dataToValidate = {
         ...Object.fromEntries(formData.entries()),
+        linkedReceiptIds: formData.getAll('linkedReceiptIds'),
         attachment_url: attachmentUrlString,
         invoice_image_url: invoiceImageUrlString,
     };
@@ -114,7 +112,6 @@ export async function createTransaction(transactionId: string | null, formData: 
     const validatedFields = TransactionSchema.safeParse(dataToValidate);
     
     if (!validatedFields.success) {
-        console.log(validatedFields.error.flatten());
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',
@@ -124,31 +121,9 @@ export async function createTransaction(transactionId: string | null, formData: 
     let dataToSave = { ...validatedFields.data };
     let finalClientId = dataToSave.clientId;
 
-    if (!finalClientId && dataToSave.client_wallet_address) {
-        try {
-            const clientsSnapshot = await get(ref(db, 'clients'));
-            const clientsData: Record<string, Client> = clientsSnapshot.val() || {};
-            const addressToClientMap: Record<string, string> = {};
-            for (const clientId in clientsData) {
-                const client = clientsData[clientId];
-                if (client.bep20_addresses) {
-                    for (const address of client.bep20_addresses) {
-                        addressToClientMap[address.toLowerCase()] = clientId;
-                    }
-                }
-            }
-            const matchedClientId = addressToClientMap[dataToSave.client_wallet_address.toLowerCase()];
-            if (matchedClientId) {
-                finalClientId = matchedClientId;
-            }
-        } catch (e) {
-            console.error("Error looking up client by address:", e);
-        }
-    }
-
     if (!finalClientId) {
         return {
-            errors: { clientId: ["A client must be selected, or one must be found via a known wallet address."] },
+            errors: { clientId: ["A client must be selected."] },
             message: 'Failed to create transaction. Client is required.',
         };
     }
@@ -176,19 +151,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         console.error("Could not fetch client name for transaction");
     }
 
-    let bankAccountName = '';
-    if (dataToSave.bankAccountId) {
-        try {
-            const bankAccountRef = ref(db, `accounts/${dataToSave.bankAccountId}`);
-            const snapshot = await get(bankAccountRef);
-            if (snapshot.exists()) {
-                bankAccountName = (snapshot.val() as Account).name;
-            }
-        } catch (e) {
-            console.error("Could not fetch bank account name for transaction");
-        }
-    }
-
     let cryptoWalletName = '';
     if (dataToSave.cryptoWalletId) {
         try {
@@ -201,12 +163,31 @@ export async function createTransaction(transactionId: string | null, formData: 
             console.error("Could not fetch crypto wallet name for transaction");
         }
     }
+    
+    const linkedSmsIdString = dataToSave.linkedReceiptIds?.join(',');
 
-    const finalData = {
-        ...dataToSave,
+    const finalData: Omit<Transaction, 'currency' | 'bankAccountId'> = {
+        id: newId,
+        date: dataToSave.date,
+        type: dataToSave.type,
+        clientId: dataToSave.clientId,
         clientName,
-        bankAccountName,
+        cryptoWalletId: dataToSave.cryptoWalletId,
         cryptoWalletName,
+        amount: dataToSave.amount_usd, // `amount` now stores total USD value
+        amount_usd: dataToSave.amount_usd,
+        fee_usd: dataToSave.fee_usd,
+        expense_usd: dataToSave.expense_usd,
+        amount_usdt: dataToSave.amount_usdt,
+        attachment_url: dataToSave.attachment_url,
+        invoice_image_url: dataToSave.invoice_image_url,
+        notes: dataToSave.notes,
+        remittance_number: dataToSave.remittance_number,
+        hash: dataToSave.hash,
+        client_wallet_address: dataToSave.client_wallet_address,
+        status: dataToSave.status,
+        createdAt: previousTxState?.createdAt || new Date().toISOString(),
+        linkedSmsId: linkedSmsIdString,
     };
     
     let dataForFirebase = stripUndefined(finalData);
@@ -216,10 +197,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         if (transactionId) {
             await update(transactionRef, dataForFirebase);
         } else {
-            await set(transactionRef, {
-                ...dataForFirebase,
-                createdAt: new Date().toISOString(),
-            });
+            await set(transactionRef, dataForFirebase);
         }
     } catch (error) {
         return {
@@ -227,7 +205,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
     
-    // --- Telegram Notification Logic ---
     if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
         let title = '';
         let message = '';
@@ -247,7 +224,6 @@ export async function createTransaction(transactionId: string | null, formData: 
 
         if (finalData.invoice_image_url) {
             const caption = `Invoice for transaction: \`${newId}\``;
-            // No longer waiting for this to finish. It will run in the background.
             sendTelegramPhoto(finalData.invoice_image_url, caption);
         }
     }
@@ -272,82 +248,23 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
     
-    if (finalData.status === 'Confirmed' && finalData.bankAccountId && finalData.clientId) {
+    // Mark all linked receipts/sms as used
+    if (dataToSave.linkedReceiptIds && dataToSave.linkedReceiptIds.length > 0) {
+        const updates: {[key: string]: any} = {};
+        for (const id of dataToSave.linkedReceiptIds) {
+            // ID can belong to either cash_receipts or sms_transactions
+            updates[`/cash_receipts/${id}/status`] = 'Used';
+            updates[`/sms_transactions/${id}/status`] = 'used';
+        }
         try {
-            const clientRef = ref(db, `clients/${finalData.clientId}`);
-            await update(clientRef, { 
-                favoriteBankAccountId: finalData.bankAccountId,
-                favoriteBankAccountName: bankAccountName 
-            });
-        } catch (e) {
-            console.error(`Failed to update favorite bank account for client ${finalData.clientId}:`, e);
+            await update(ref(db), updates);
+        } catch(e) {
+            console.error(`Failed to update linked receipt statuses:`, e);
         }
     }
 
-    const { linkedSmsId } = finalData;
-    if (linkedSmsId) {
-        try {
-            const smsTxRef = ref(db, `sms_transactions/${linkedSmsId}`);
-             const smsSnapshot = await get(smsTxRef);
-            if (smsSnapshot.exists()) {
-                const smsUpdateData = {
-                    status: 'used' as const,
-                    transaction_id: newId,
-                };
-                await update(smsTxRef, smsUpdateData);
-            }
-        } catch (e) {
-            console.error(`Failed to update linked SMS transaction ${linkedSmsId}:`, e);
-        }
-    }
-
-    // --- Journal Entry Logic ---
-    // Only create journal entries if the transaction is being confirmed for the first time
     if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
-        const _createJournalEntry = async (
-            debitAccountId: string,
-            creditAccountId: string,
-            amountUsd: number,
-            description: string
-        ) => {
-            if (amountUsd <= 0) return;
-
-            try {
-                const newEntryRef = push(ref(db, 'journal_entries'));
-                await set(newEntryRef, {
-                    date: finalData.date,
-                    description,
-                    debit_account: debitAccountId,
-                    credit_account: creditAccountId,
-                    amount_usd: amountUsd,
-                    createdAt: new Date().toISOString(),
-                });
-
-            } catch (e) {
-                console.error("Failed to create automated journal entry:", e);
-            }
-        };
-        
-        // Fee Income Journal
-        const fee = Math.abs(finalData.fee_usd);
-        if (fee > 0 && finalData.bankAccountId) {
-            const description = `Crypto Fee: Tx ${newId}`;
-            await _createJournalEntry(finalData.bankAccountId, PROFIT_ACCOUNT_ID, fee, description);
-        }
-
-        // Exchange Rate Commission Journal
-        const commission = Math.abs(finalData.exchange_rate_commission || 0);
-        if (commission > 0 && finalData.bankAccountId) {
-            const description = `Exchange Rate Commission: Tx ${newId}`;
-            await _createJournalEntry(finalData.bankAccountId, COMMISSION_ACCOUNT_ID, commission, description);
-        }
-        
-        // Discount/Expense Journal
-        const expense = Math.abs(finalData.expense_usd || 0);
-        if (expense > 0 && finalData.bankAccountId) {
-            const description = `Discount/Expense: Tx ${newId}`;
-            await _createJournalEntry(EXPENSE_ACCOUNT_ID, finalData.bankAccountId, expense, description);
-        }
+      // No journal entries needed here as they are created with the cash receipts/payments
     }
     
     revalidatePath('/transactions');
@@ -427,19 +344,17 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
 
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
-        const settings = settingsSnapshot.val() as Settings;
-
-        // Note: this part needs to be updated with new fiat_rates structure
-        const fiatRates: FiatRate[] = settings.fiat_rates ? Object.values(settings.fiat_rates) : [];
+        const settingsData = settingsSnapshot.val();
+        
+        const fiatRates: FiatRate[] = settingsData.fiat_rates ? Object.values(settingsData.fiat_rates) : [];
         const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-        const rate = rateInfo ? rateInfo.clientSell : 1; // Assuming sell rate for receipt
+        const rate = rateInfo ? rateInfo.clientSell : 1;
         
         if (rate <= 0) {
             return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
         }
         const amountUsd = amount / rate;
         
-        // 1. Create the CashReceipt record
         const newReceiptRef = push(ref(db, 'cash_receipts'));
         const receiptData: Omit<CashReceipt, 'id'> = {
             date: new Date().toISOString(),
@@ -447,60 +362,18 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             bankAccountName: bankAccount.name,
             clientId,
             clientName: client.name,
-            senderName: senderName || 'N/A',
+            senderName: senderName || client.name,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
             remittanceNumber,
             note,
-            status: 'Confirmed',
+            status: 'Pending',
             createdAt: new Date().toISOString(),
         };
         await set(newReceiptRef, receiptData);
-
-        // 2. Create the Journal Entry
-        const clientAccountRef = ref(db, 'accounts');
-        const clientAccountSnapshot = await get(clientAccountRef);
-        const allAccounts = clientAccountSnapshot.val();
-        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
-
-        if (!clientAccountId) {
-            // Find the highest existing client account ID to create a new one
-            const clientSubAccounts = Object.keys(allAccounts)
-                .filter(key => key.startsWith('6001'))
-                .map(key => parseInt(key, 10))
-                .sort((a,b) => b - a);
-            const nextId = clientSubAccounts.length > 0 ? clientSubAccounts[0] + 1 : 6001;
-            clientAccountId = String(nextId);
-            
-            await set(ref(db, `accounts/${clientAccountId}`), {
-                name: client.name,
-                type: 'Liabilities',
-                isGroup: false,
-                parentId: '6000',
-                currency: 'USD',
-            });
-        }
-        
-        const description = `Cash receipt from ${senderName || client.name}`;
-        const newJournalRef = push(ref(db, 'journal_entries'));
-        await set(newJournalRef, {
-            date: new Date().toISOString(),
-            description,
-            debit_account: bankAccountId,
-            credit_account: clientAccountId,
-            debit_amount: amount,
-            credit_amount: amountUsd,
-            amount_usd: amountUsd,
-            debit_account_name: bankAccount.name,
-            credit_account_name: client.name,
-            createdAt: new Date().toISOString(),
-        });
         
         revalidatePath('/cash-receipts');
-        revalidatePath('/accounting/journal');
-        revalidatePath('/accounting/chart-of-accounts');
-
         return { success: true, message: 'Cash receipt recorded successfully.' };
 
     } catch (e: any) {
@@ -509,7 +382,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
     }
 }
 
-export type CashPaymentFormState = CashReceiptFormState; // Can reuse the same state type
+export type CashPaymentFormState = CashReceiptFormState; 
 
 const CashPaymentSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
@@ -535,56 +408,23 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
     const { bankAccountId, clientId, amount, recipientName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot, accountsSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
             get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'settings')),
-            get(ref(db, 'accounts')),
         ]);
 
-        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists() || !accountsSnapshot.exists()) {
-            return { message: 'Error: Could not find required data (bank account, client, settings, or chart of accounts).', success: false };
+        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists()) {
+            return { message: 'Error: Could not find required data (bank account, client).', success: false };
         }
 
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
-        const settings = settingsSnapshot.val() as Settings;
-        const allAccounts = accountsSnapshot.val();
-
-        // Find or create the client's sub-account
-        let clientAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === client.name && allAccounts[key].parentId === '6000');
-        if (!clientAccountId) {
-            const clientSubAccounts = Object.keys(allAccounts)
-                .filter(key => key.startsWith('6001'))
-                .map(key => parseInt(key, 10))
-                .sort((a,b) => b-a);
-            const nextId = clientSubAccounts.length > 0 ? clientSubAccounts[0] + 1 : 6001;
-            clientAccountId = String(nextId);
-            
-            await set(ref(db, `accounts/${clientAccountId}`), {
-                name: client.name,
-                type: 'Liabilities',
-                isGroup: false,
-                parentId: '6000',
-                currency: 'USD',
-            });
-        }
-        
-        const fiatRates: FiatRate[] = settings.fiat_rates ? Object.values(settings.fiat_rates) : [];
-        const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-        const rate = rateInfo ? rateInfo.clientBuy : 1; // Assuming buy rate for payment
-
-        if (rate <= 0) {
-            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
-        }
-        const amountUsd = amount / rate;
 
         if (isEditing) {
             const paymentRef = ref(db, `cash_payments/${paymentId}`);
             const paymentUpdates = { recipientName, remittanceNumber, note };
             await update(paymentRef, paymentUpdates);
         } else {
-             // 1. Create the CashPayment record
             const newPaymentRef = push(ref(db, 'cash_payments'));
             const paymentData: Omit<CashPayment, 'id'> = {
                 date: new Date().toISOString(),
@@ -592,42 +432,21 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
                 bankAccountName: bankAccount.name,
                 clientId,
                 clientName: client.name,
-                recipientName: recipientName || 'N/A',
+                recipientName: recipientName || client.name,
                 amount,
                 currency: bankAccount.currency!,
-                amountUsd,
+                amountUsd: 0, 
                 remittanceNumber,
                 note,
                 status: 'Confirmed',
                 createdAt: new Date().toISOString(),
-                journalEntryId: '', // placeholder
+                journalEntryId: '', 
             };
             
-            // 2. Create the Journal Entry for payment
-            const description = `Cash payment to ${recipientName || client.name}`;
-            const newJournalRef = push(ref(db, 'journal_entries'));
-            const journalEntryId = newJournalRef.key!;
-            
-            await set(newJournalRef, {
-                date: paymentData.date,
-                description,
-                debit_account: clientAccountId,
-                credit_account: bankAccountId,
-                debit_amount: amountUsd,   // Debit client in USD
-                credit_amount: amount,     // Credit bank in its native currency
-                amount_usd: amountUsd,
-                debit_account_name: client.name,
-                credit_account_name: bankAccount.name,
-                createdAt: new Date().toISOString(),
-            });
-
-            paymentData.journalEntryId = journalEntryId;
             await set(newPaymentRef, paymentData);
         }
         
         revalidatePath('/cash-payments');
-        revalidatePath('/accounting/journal');
-        revalidatePath('/accounting/chart-of-accounts');
 
         return { success: true, message: isEditing ? 'Cash payment updated successfully.' : 'Cash payment recorded successfully.' };
 
@@ -655,40 +474,83 @@ export async function cancelCashPayment(paymentId: string): Promise<{ success: b
             return { success: false, message: "This payment has already been cancelled." };
         }
         
-        const { journalEntryId } = payment;
-
-        if (journalEntryId) {
-            const journalEntryRef = ref(db, `journal_entries/${journalEntryId}`);
-            const journalSnapshot = await get(journalEntryRef);
-            if (journalSnapshot.exists()) {
-                const originalEntry = journalSnapshot.val() as JournalEntry;
-                const reversalDescription = `Reversal of payment ID: ${paymentId}. Original: ${originalEntry.description}`;
-                
-                const newJournalRef = push(ref(db, 'journal_entries'));
-                await set(newJournalRef, {
-                    date: new Date().toISOString(),
-                    description: reversalDescription,
-                    debit_account: originalEntry.credit_account,
-                    credit_account: originalEntry.debit_account,
-                    debit_amount: originalEntry.credit_amount,
-                    credit_amount: originalEntry.debit_amount,
-                    amount_usd: originalEntry.amount_usd,
-                    debit_account_name: originalEntry.credit_account_name,
-                    credit_account_name: originalEntry.debit_account_name,
-                    createdAt: new Date().toISOString(),
-                });
-            }
-        }
-        
         await update(paymentRef, { status: 'Cancelled' });
 
         revalidatePath('/cash-payments');
-        revalidatePath('/accounting/journal');
         
         return { success: true };
 
     } catch (error) {
         console.error("Error cancelling cash payment:", error);
         return { success: false, message: "Database error while cancelling payment." };
+    }
+}
+
+export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
+    if (!clientId) return [];
+    
+    try {
+        const [cashReceiptsSnapshot, smsTransactionsSnapshot, settingsSnapshot] = await Promise.all([
+            get(ref(db, 'cash_receipts')),
+            get(ref(db, 'sms_transactions')),
+            get(ref(db, 'settings'))
+        ]);
+        
+        const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
+        const allSms: Record<string, SmsTransaction> = smsTransactionsSnapshot.val() || {};
+        const settingsData = settingsSnapshot.val();
+        const fiatRates: FiatRate[] = settingsData?.fiat_rates ? Object.values(settingsData.fiat_rates) : [];
+
+        const funds: UnifiedReceipt[] = [];
+
+        // Process Manual Cash Receipts
+        for(const id in allCashReceipts) {
+            const receipt = allCashReceipts[id];
+            if (receipt.clientId === clientId && receipt.status === 'Pending') {
+                funds.push({
+                    id,
+                    date: receipt.date,
+                    clientName: receipt.clientName,
+                    senderName: receipt.senderName,
+                    bankAccountName: receipt.bankAccountName,
+                    amount: receipt.amount,
+                    currency: receipt.currency,
+                    amountUsd: receipt.amountUsd,
+                    remittanceNumber: receipt.remittanceNumber,
+                    source: 'Manual',
+                    status: receipt.status
+                });
+            }
+        }
+        
+        // Process Matched SMS Transactions
+        for(const id in allSms) {
+            const sms = allSms[id];
+            if (sms.matched_client_id === clientId && sms.status === 'matched' && sms.type === 'credit') {
+                 const rateInfo = fiatRates.find(r => r.currency === sms.currency);
+                 const rate = rateInfo ? rateInfo.clientSell : 1;
+                 const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
+                
+                funds.push({
+                    id,
+                    date: sms.parsed_at,
+                    clientName: sms.matched_client_name || '',
+                    senderName: sms.client_name,
+                    bankAccountName: sms.account_name || 'N/A',
+                    amount: sms.amount || 0,
+                    currency: sms.currency || '',
+                    amountUsd: amountUsd,
+                    remittanceNumber: sms.id.slice(-6),
+                    source: 'SMS',
+                    status: sms.status
+                });
+            }
+        }
+
+        return funds.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    } catch (error) {
+        console.error("Error fetching available client funds:", error);
+        return [];
     }
 }
