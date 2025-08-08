@@ -15,6 +15,9 @@ import { format } from 'date-fns';
 const PROFIT_ACCOUNT_ID = '4001';
 const COMMISSION_ACCOUNT_ID = '4002';
 const EXPENSE_ACCOUNT_ID = '5001';
+const UNMATCHED_FUNDS_ACCOUNT_ID = '7000';
+const CLIENT_PARENT_ACCOUNT_ID = '6000';
+
 
 export type TransactionFormState =
   | {
@@ -376,7 +379,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
                 const fiatRates: FiatRate[] = lastEntry.rates || [];
                 const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
                 if (rateInfo) {
-                    rate = rateInfo.clientSell;
+                    rate = rateInfo.clientSell; // Use client sell rate for conversion
                 } else {
                      return { message: `Error: Exchange rate for ${bankAccount.currency} not found.`, success: false };
                 }
@@ -409,6 +412,41 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
         
         await set(newReceiptRef, receiptData);
+
+        // --- Create Journal Entry for the receipt ---
+        const allAccountsSnapshot = await get(ref(db, 'accounts'));
+        const allAccounts = allAccountsSnapshot.val() || {};
+
+        const clientSubAccountName = `${CLIENT_PARENT_ACCOUNT_ID} - ${clientName}`;
+        let clientSubAccountId = Object.keys(allAccounts).find(key => allAccounts[key].name === clientSubAccountName && allAccounts[key].parentId === CLIENT_PARENT_ACCOUNT_ID);
+
+        if (!clientSubAccountId) {
+            const clientAccountsCount = Object.keys(allAccounts).filter(key => allAccounts[key].parentId === CLIENT_PARENT_ACCOUNT_ID).length;
+            clientSubAccountId = `${CLIENT_PARENT_ACCOUNT_ID}${String(clientAccountsCount + 1).padStart(3, '0')}`;
+            const newAccountData: Partial<Account> = {
+                name: clientSubAccountName,
+                type: 'Liabilities',
+                isGroup: false,
+                parentId: CLIENT_PARENT_ACCOUNT_ID,
+                currency: 'USD',
+            };
+            await set(ref(db, `accounts/${clientSubAccountId}`), newAccountData);
+        }
+
+        const journalEntryRef = push(ref(db, 'journal_entries'));
+        const journalEntryData: Omit<JournalEntry, 'id'> = {
+            date: receiptData.date,
+            description: `Cash receipt from ${clientName}`,
+            debit_account: bankAccountId,
+            credit_account: clientSubAccountId,
+            debit_amount: amount,
+            credit_amount: amountUsd, // Always credit USD equivalent to liability
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: bankAccount.name,
+            credit_account_name: clientSubAccountName,
+        };
+        await set(journalEntryRef, journalEntryData);
         
         revalidatePath('/cash-receipts');
         revalidatePath(`/transactions/add`);
@@ -597,3 +635,4 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         return [];
     }
 }
+
