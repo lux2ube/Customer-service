@@ -1,12 +1,11 @@
 
-
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency } from '../types';
 import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
@@ -19,17 +18,20 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
     while(data[`currency_${i}`]) {
         rates.push({
             currency: data[`currency_${i}`] as string,
-            systemBuy: parseFloat(data[`systemBuy_${i}`] as string),
-            systemSell: parseFloat(data[`systemSell_${i}`] as string),
-            clientBuy: parseFloat(data[`clientBuy_${i}`] as string),
-            clientSell: parseFloat(data[`clientSell_${i}`] as string),
+            systemBuy: parseFloat(data[`systemBuy_${i}`] as string || '0'),
+            systemSell: parseFloat(data[`systemSell_${i}`] as string || '0'),
+            clientBuy: parseFloat(data[`clientBuy_${i}`] as string || '0'),
+            clientSell: parseFloat(data[`clientSell_${i}`] as string || '0'),
         });
         i++;
     }
 
+    // Filter out any empty rows that might have been added in the UI
+    const validRates = rates.filter(rate => rate.currency);
+
     try {
-        await set(ref(db, 'settings/fiat_rates'), rates);
-        revalidatePath('/settings');
+        await set(ref(db, 'settings/fiat_rates'), validRates);
+        revalidatePath('/exchange-rates');
         return { success: true, message: 'Fiat rates updated successfully.' };
     } catch (error) {
         console.error("Error updating fiat rates:", error);
@@ -52,7 +54,7 @@ export async function updateCryptoFees(prevState: RateFormState, formData: FormD
     
     try {
         await set(ref(db, 'settings/crypto_fees'), validatedFields.data);
-        revalidatePath('/settings');
+        revalidatePath('/exchange-rates');
         return { success: true, message: 'Crypto fees updated successfully.' };
     } catch (error) {
         console.error("Error updating crypto fees:", error);
@@ -189,5 +191,50 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
     } catch (error: any) {
         console.error("Blacklist Scan Error:", error);
         return { message: error.message || "An unknown error occurred during the scan.", error: true };
+    }
+}
+
+// --- Currency Actions ---
+export type CurrencyFormState = { message?: string; error?: boolean } | undefined;
+
+const CurrencySchema = z.object({
+  code: z.string().min(3, "Code must be 3 letters").max(4, "Code must be 3-4 letters").transform(v => v.toUpperCase()),
+  name: z.string().min(2, "Name is required."),
+});
+
+export async function addCurrency(prevState: CurrencyFormState, formData: FormData): Promise<CurrencyFormState> {
+    const validatedFields = CurrencySchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return { error: true, message: validatedFields.error.flatten().fieldErrors.code?.[0] || 'Invalid data.' };
+    }
+    
+    const { code, name } = validatedFields.data;
+    
+    try {
+        const currenciesRef = ref(db, 'settings/currencies');
+        const snapshot = await get(currenciesRef);
+        const existingCurrencies: Currency[] = snapshot.val() ? Object.values(snapshot.val()) : [];
+        if(existingCurrencies.some(c => c.code === code)) {
+            return { error: true, message: `Currency with code ${code} already exists.` };
+        }
+
+        const newCurrency: Currency = { code, name };
+        await update(ref(db, `settings/currencies/${code}`), newCurrency);
+        
+        revalidatePath('/exchange-rates');
+        return { message: 'Currency added.' };
+    } catch(error) {
+        return { error: true, message: 'Database error: Failed to add currency.' };
+    }
+}
+
+export async function deleteCurrency(code: string): Promise<CurrencyFormState> {
+    try {
+        await remove(ref(db, `settings/currencies/${code}`));
+        revalidatePath('/exchange-rates');
+        return { message: 'Currency deleted.' };
+    } catch (error) {
+        return { error: true, message: 'Database error: Failed to delete currency.' };
     }
 }

@@ -41,7 +41,7 @@ export interface Transaction {
     cryptoWalletId?: string;
     cryptoWalletName?: string; // for display
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR' | 'USDT';
+    currency: 'YER' | 'USD' | 'SAR' | 'USDT' | string; // Allow dynamic currencies
     amount_usd: number;
     fee_usd: number;
     expense_usd?: number;
@@ -67,7 +67,7 @@ export interface CashReceipt {
     clientName: string;
     senderName: string;
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR';
+    currency: 'YER' | 'USD' | 'SAR' | string; // Allow dynamic currencies
     amountUsd: number;
     remittanceNumber?: string;
     note?: string;
@@ -84,7 +84,7 @@ export interface CashPayment {
     clientName: string;
     recipientName: string;
     amount: number;
-    currency: 'YER' | 'USD' | 'SAR';
+    currency: 'YER' | 'USD' | 'SAR' | string; // Allow dynamic currencies
     amountUsd: number;
     remittanceNumber?: string;
     note?: string;
@@ -99,7 +99,7 @@ export interface Account {
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
     parentId?: string | null;
-    currency?: 'YER' | 'USD' | 'SAR' | 'USDT';
+    currency?: string; // Allow dynamic currencies, not just a fixed enum
     priority?: number;
     // Balance fields will be calculated properties, not stored directly
 }
@@ -138,6 +138,11 @@ export interface CryptoFee {
     sell_fee_percent: number;
     minimum_buy_fee: number;
     minimum_sell_fee: number;
+}
+
+export interface Currency {
+    code: string;
+    name: string;
 }
 
 

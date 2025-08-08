@@ -11,11 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { FiatRate, CryptoFee } from '@/lib/types';
+import type { FiatRate, CryptoFee, Currency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save, PlusCircle, Trash2 } from 'lucide-react';
 import { updateFiatRates, updateCryptoFees, type RateFormState } from '@/lib/actions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CurrenciesManager } from '@/components/exchange-rates-currencies';
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
     const { pending } = useFormStatus();
@@ -26,7 +28,7 @@ function SubmitButton({ children, disabled }: { children: React.ReactNode, disab
     );
 }
 
-function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
+function FiatRatesForm({ initialRates, currencies }: { initialRates: FiatRate[], currencies: Currency[] }) {
     const { toast } = useToast();
     const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
     const [rates, setRates] = React.useState<FiatRate[]>(initialRates);
@@ -51,6 +53,12 @@ function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
         setRates(rates.filter((_, i) => i !== index));
     };
 
+    const handleRateChange = (index: number, field: keyof FiatRate, value: any) => {
+        const newRates = [...rates];
+        (newRates[index] as any)[field] = value;
+        setRates(newRates);
+    }
+
     return (
         <form action={formAction}>
             <Card>
@@ -63,24 +71,38 @@ function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
                         <div key={index} className="space-y-3 p-3 border rounded-md relative bg-muted/50">
                             <div className="grid grid-cols-5 gap-2">
                                 <div className="space-y-1 col-span-5">
-                                    <Label>Currency Code</Label>
-                                    <Input name={`currency_${index}`} placeholder="e.g., YER" defaultValue={rate.currency} required />
+                                    <Label>Currency</Label>
+                                    <Select 
+                                        name={`currency_${index}`} 
+                                        required 
+                                        value={rate.currency}
+                                        onValueChange={(value) => handleRateChange(index, 'currency', value)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select currency..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {currencies.map(c => (
+                                                <SelectItem key={c.code} value={c.code}>{c.code} - {c.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="space-y-1">
                                     <Label>System Buy</Label>
-                                    <Input name={`systemBuy_${index}`} type="number" step="any" defaultValue={rate.systemBuy} required />
+                                    <Input name={`systemBuy_${index}`} type="number" step="any" value={rate.systemBuy} onChange={(e) => handleRateChange(index, 'systemBuy', parseFloat(e.target.value) || 0)} required />
                                 </div>
                                 <div className="space-y-1">
                                     <Label>System Sell</Label>
-                                    <Input name={`systemSell_${index}`} type="number" step="any" defaultValue={rate.systemSell} required />
+                                    <Input name={`systemSell_${index}`} type="number" step="any" value={rate.systemSell} onChange={(e) => handleRateChange(index, 'systemSell', parseFloat(e.target.value) || 0)} required />
                                 </div>
                                 <div className="space-y-1">
                                     <Label>Client Buy</Label>
-                                    <Input name={`clientBuy_${index}`} type="number" step="any" defaultValue={rate.clientBuy} required />
+                                    <Input name={`clientBuy_${index}`} type="number" step="any" value={rate.clientBuy} onChange={(e) => handleRateChange(index, 'clientBuy', parseFloat(e.target.value) || 0)} required />
                                 </div>
                                 <div className="space-y-1">
                                     <Label>Client Sell</Label>
-                                    <Input name={`clientSell_${index}`} type="number" step="any" defaultValue={rate.clientSell} required />
+                                    <Input name={`clientSell_${index}`} type="number" step="any" value={rate.clientSell} onChange={(e) => handleRateChange(index, 'clientSell', parseFloat(e.target.value) || 0)} required />
                                 </div>
                                 <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1" onClick={() => handleRemoveRate(index)}>
                                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -152,23 +174,34 @@ function CryptoFeesForm({ initialFees }: { initialFees: CryptoFee }) {
 export default function ExchangeRatesPage() {
     const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee>({ buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
+    const [currencies, setCurrencies] = React.useState<Currency[]>([]);
     const [loading, setLoading] = React.useState(true);
     
     React.useEffect(() => {
         const fiatRatesRef = ref(db, 'settings/fiat_rates');
         const cryptoFeesRef = ref(db, 'settings/crypto_fees');
+        const currenciesRef = ref(db, 'settings/currencies');
 
         const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
             setFiatRates(snapshot.val() ? Object.values(snapshot.val()) : []);
-            setLoading(false);
         });
         const unsubCrypto = onValue(cryptoFeesRef, (snapshot) => {
             setCryptoFees(snapshot.val() || { buy_fee_percent: 0, sell_fee_percent: 0, minimum_buy_fee: 0, minimum_sell_fee: 0 });
         });
+        const unsubCurrencies = onValue(currenciesRef, (snapshot) => {
+            setCurrencies(snapshot.val() ? Object.values(snapshot.val()) : []);
+        });
+
+        Promise.all([
+            onValue(fiatRatesRef, () => {}),
+            onValue(cryptoFeesRef, () => {}),
+            onValue(currenciesRef, () => {}),
+        ]).finally(() => setLoading(false));
 
         return () => {
             unsubFiat();
             unsubCrypto();
+            unsubCurrencies();
         };
     }, []);
 
@@ -195,10 +228,11 @@ export default function ExchangeRatesPage() {
             />
             <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
-                    <FiatRatesForm initialRates={fiatRates} />
+                    <FiatRatesForm initialRates={fiatRates} currencies={currencies} />
                 </div>
                 <div className="space-y-6">
-                    <CryptoFeesForm initialFees={cryptoFees} />
+                     <CryptoFeesForm initialFees={cryptoFees} />
+                     <CurrenciesManager initialCurrencies={currencies} />
                 </div>
             </div>
         </>
