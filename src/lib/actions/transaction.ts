@@ -333,9 +333,8 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 }
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const rawData = { ...Object.fromEntries(formData.entries()) };
+    const rawData: Record<string, any> = { ...Object.fromEntries(formData.entries()) };
     
-    // Fetch client name if only ID is provided
     if (!rawData.clientName && rawData.clientId) {
         try {
             const clientSnapshot = await get(ref(db, `clients/${rawData.clientId}`));
@@ -357,32 +356,15 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
     const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
     
     try {
-        const [bankAccountSnapshot, allAccountsSnapshot, fiatHistorySnapshot] = await Promise.all([
-            get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, 'accounts')),
-            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
-        ]);
-
+        const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
         if (!bankAccountSnapshot.exists()) {
             return { message: 'Error: Could not find bank account.', success: false };
         }
         
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
+        // Use the amountUsd from the form directly, as it's pre-calculated.
         let amountUsd = validatedFields.data.amountUsd;
-        if(bankAccount.currency && bankAccount.currency !== 'USD') {
-            if (!fiatHistorySnapshot.exists()) {
-                return { message: 'Error: No exchange rates found to perform conversion.', success: false };
-            }
-            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
-            const fiatRates: FiatRate[] = fiatHistorySnapshot.val()[lastEntryKey].rates || [];
-            const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-            const rate = rateInfo?.clientBuy; // Use clientBuy rate when receiving cash
-            if (!rate || rate <= 0) {
-                return { message: `Error: No valid "Client Buy" rate for ${bankAccount.currency}.`, success: false };
-            }
-            amountUsd = amount / rate;
-        }
 
         const newReceiptRef = push(ref(db, 'cash_receipts'));
         const receiptData: Omit<CashReceipt, 'id'> = {
@@ -404,6 +386,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         await set(newReceiptRef, receiptData);
 
         // --- Create Journal Entry for the receipt ---
+        const allAccountsSnapshot = await get(ref(db, 'accounts'));
         const allAccounts = allAccountsSnapshot.val() || {};
 
         const clientSubAccountName = `${clientName}`;
@@ -417,8 +400,18 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         }
         
         if (!clientSubAccountId) {
-            const newClientAccountRef = push(ref(db, 'accounts'));
-            clientSubAccountId = newClientAccountRef.key!;
+            // Find the highest existing sub-account ID to create the next one
+            let maxSubId = 0;
+            for (const accId in allAccounts) {
+                if (allAccounts[accId].parentId === CLIENT_PARENT_ACCOUNT_ID) {
+                    const idNum = parseInt(accId.split('-')[1]);
+                    if (!isNaN(idNum) && idNum > maxSubId) {
+                        maxSubId = idNum;
+                    }
+                }
+            }
+            clientSubAccountId = `${CLIENT_PARENT_ACCOUNT_ID}-${maxSubId + 1}`;
+
             const newAccountData: Partial<Account> = {
                 id: clientSubAccountId,
                 name: clientSubAccountName,
@@ -607,7 +600,7 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
             const sms = allSms[id];
             if (sms.matched_client_id === clientId && sms.status === 'matched' && sms.type === 'credit') {
                  const rateInfo = fiatRates.find(r => r.currency === sms.currency);
-                 const rate = rateInfo ? rateInfo.clientSell : 1;
+                 const rate = rateInfo ? rateInfo.clientBuy : 1;
                  const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
                 
                 funds.push({
