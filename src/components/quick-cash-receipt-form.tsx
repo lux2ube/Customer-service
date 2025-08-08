@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus, useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -64,8 +65,9 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
     const accountsRef = ref(db, 'accounts');
     const unsubscribe = onValue(accountsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allAccounts: Account[] = Object.values(snapshot.val());
-        setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+        const allAccountsData: Record<string, Account> = snapshot.val();
+        const allAccountsList = Object.keys(allAccountsData).map(key => ({ id: key, ...allAccountsData[key] }));
+        setBankAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
       }
       setLoading(false);
     });
