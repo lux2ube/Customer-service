@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, MessageSquare, Check, ChevronsUpDown, UserCircle, ChevronDown, Bot } from 'lucide-react';
 import React from 'react';
 import { createTransaction, type TransactionFormState, searchClients, findUnassignedTransactionsByAddress } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -141,6 +141,9 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
     
     const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
+    
+    const isSyncedTx = !!formData.hash;
+
 
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
@@ -279,6 +282,10 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
         setFormData(prev => {
             const updates = recalculateFinancials(newAmountNum, prev.type, prev.currency);
+            // CRITICAL FIX: Do not overwrite amount_usdt if it's a synced transaction
+            if (isSyncedTx) {
+                delete updates.amount_usdt;
+            }
             return {
                 ...prev,
                 amount: newAmountNum,
@@ -467,7 +474,6 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     };
 
     const amountToDisplay = formData.hash && formData.amount === 0 ? '' : (formData.amount || '');
-    const isSyncedTx = !!formData.hash;
 
     return (
         <>
@@ -479,6 +485,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 space-y-3">
+                     {isSyncedTx && (
+                        <Alert variant="default" className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
+                            <Bot className="h-5 w-5 text-blue-600" />
+                            <AlertTitle className="text-blue-800 dark:text-blue-300">Synced Transaction</AlertTitle>
+                            <AlertDescription className="text-blue-700 dark:text-blue-400 text-xs">
+                                This transaction was synced from the blockchain. The USDT amount is locked. Fill in the local currency amount to calculate fees.
+                            </AlertDescription>
+                        </Alert>
+                    )}
                     <Card>
                         <CardHeader>
                             <CardTitle>Transaction Details</CardTitle>
@@ -570,7 +585,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
 
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx} className={cn(isSyncedTx && "bg-muted/50")} />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx} className={cn(isSyncedTx && "bg-muted/50 font-bold border-blue-400")} />
                             </div>
                         </CardContent>
                         <CardFooter>
