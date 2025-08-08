@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, Check, ChevronsUpDown, Bot, HandCoins } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Download, Loader2, Share2, Check, ChevronsUpDown, Bot, HandCoins, PlusCircle } from 'lucide-react';
 import React from 'react';
 import { createTransaction, type TransactionFormState, searchClients, getAvailableClientFunds } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +35,7 @@ import {
 import dynamic from 'next/dynamic';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 import { Checkbox } from './ui/checkbox';
+import { QuickCashReceiptForm } from './quick-cash-receipt-form';
 
 const Invoice = dynamic(() => import('@/components/invoice').then(mod => mod.Invoice), { ssr: false });
 
@@ -140,8 +141,14 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     const [selectedFundIds, setSelectedFundIds] = React.useState<string[]>(transaction?.linkedSmsId?.split(',') || []);
     
     const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
+    const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
     
     const isSyncedTx = !!formData.hash;
+    
+    const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
+        const funds = await getAvailableClientFunds(clientId);
+        setAvailableFunds(funds);
+    }, []);
 
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
@@ -183,13 +190,11 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     
     React.useEffect(() => {
         if (selectedClient?.id) {
-            getAvailableClientFunds(selectedClient.id).then(funds => {
-                setAvailableFunds(funds);
-            });
+            fetchAvailableFunds(selectedClient.id);
         } else {
             setAvailableFunds([]);
         }
-    }, [selectedClient]);
+    }, [selectedClient, fetchAvailableFunds]);
 
     const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -306,6 +311,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
     
     const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newUsdtAmount = getNumberValue(e.target.value);
+        if (isSyncedTx) return;
         setFormData(prev => {
             const updates = recalculateFinancials(prev.amount_usd, prev.type, newUsdtAmount);
             return { ...prev, ...updates, amount_usdt: newUsdtAmount };
@@ -423,6 +429,17 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                 </div>
             </div>
 
+            <QuickCashReceiptForm
+                client={selectedClient}
+                isOpen={isQuickAddOpen}
+                setIsOpen={setIsQuickAddOpen}
+                onReceiptCreated={() => {
+                    if (selectedClient?.id) {
+                        fetchAvailableFunds(selectedClient.id);
+                    }
+                }}
+            />
+
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 space-y-3">
                      {isSyncedTx && (
@@ -484,12 +501,15 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                     
                     {selectedClient && (
                          <Card>
-                             <CardHeader>
-                                <div className="flex items-center gap-2">
-                                    <HandCoins className="h-5 w-5 text-primary"/>
+                             <CardHeader className="flex flex-row items-center justify-between">
+                                <div className="space-y-1">
                                     <CardTitle>Available Client Funds</CardTitle>
+                                    <CardDescription>Select the cash receipts to be used for this USDT transaction.</CardDescription>
                                 </div>
-                                 <CardDescription>Select the cash receipts to be used for this USDT transaction.</CardDescription>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddOpen(true)}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Record New Receipt
+                                </Button>
                              </CardHeader>
                              <CardContent>
                                  <div className="space-y-2 max-h-60 overflow-y-auto pr-2">

@@ -38,11 +38,11 @@ const TransactionSchema = z.object({
     type: z.enum(['Deposit', 'Withdraw']),
     amount: z.coerce.number(),
     amount_usd: z.coerce.number(),
-    fee_usd: z.coerce.number(),
+    fee_usd: z.coerce.number().min(0, "Fee must be positive."),
     expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
     cryptoWalletId: z.string().optional().nullable(),
-    exchange_rate_commission: z.coerce.number().optional(),
+    exchange_rate_commission: z.coerce.number().min(0, "Commission must be positive.").optional(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     invoice_image_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),
@@ -224,6 +224,7 @@ export async function createTransaction(transactionId: string | null, formData: 
 
         if (finalData.invoice_image_url) {
             const caption = `Invoice for transaction: \`${newId}\``;
+            // Fire and forget
             sendTelegramPhoto(finalData.invoice_image_url, caption);
         }
     }
@@ -313,11 +314,16 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
+    clientName: z.string().optional(),
     senderName: z.string().optional(),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     remittanceNumber: z.string().optional(),
     note: z.string().optional(),
 });
+
+export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    return createCashReceipt(prevState, formData);
+}
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
     const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -329,26 +335,36 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot, clientSnapshot, settingsSnapshot] = await Promise.all([
+        const [bankAccountSnapshot, settingsSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'settings')),
+            get(ref(db, 'settings'))
         ]);
 
-        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists() || !settingsSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account, client, or settings.', success: false };
+        if (!bankAccountSnapshot.exists() || !settingsSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account or settings.', success: false };
         }
 
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
-        const client = { id: clientId, ...clientSnapshot.val() } as Client;
         const settingsData = settingsSnapshot.val();
         
-        const fiatRates: FiatRate[] = settingsData.fiat_rates ? Object.values(settingsData.fiat_rates) : [];
-        const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-        const rate = rateInfo ? rateInfo.clientSell : 1;
+        // This logic seems incorrect. We should get rates from history.
+        // Assuming we need to find the latest rate.
+        const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+        const fiatHistorySnapshot = await get(fiatHistoryRef);
+        let rate = 1;
+
+        if (fiatHistorySnapshot.exists()) {
+            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
+            const lastEntry = fiatHistorySnapshot.val()[lastEntryKey];
+            const fiatRates: FiatRate[] = lastEntry.rates || [];
+            const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
+            if (rateInfo) {
+                rate = rateInfo.clientSell;
+            }
+        }
         
         if (rate <= 0) {
             return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
@@ -361,8 +377,8 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName: client.name,
-            senderName: senderName || client.name,
+            clientName: clientName || 'Unknown',
+            senderName: senderName || clientName || 'Unknown',
             amount,
             currency: bankAccount.currency!,
             amountUsd,
@@ -498,8 +514,14 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
         const allSms: Record<string, SmsTransaction> = smsTransactionsSnapshot.val() || {};
-        const settingsData = settingsSnapshot.val();
-        const fiatRates: FiatRate[] = settingsData?.fiat_rates ? Object.values(settingsData.fiat_rates) : [];
+        
+        const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+        const fiatHistorySnapshot = await get(fiatHistoryRef);
+        let fiatRates: FiatRate[] = [];
+        if (fiatHistorySnapshot.exists()) {
+            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
+            fiatRates = fiatHistorySnapshot.val()[lastEntryKey].rates || [];
+        }
 
         const funds: UnifiedReceipt[] = [];
 
