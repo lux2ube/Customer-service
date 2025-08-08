@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -247,7 +247,8 @@ export async function createTransaction(transactionId: string | null, formData: 
 
         if (finalData.invoice_image_url) {
             const caption = `Invoice for transaction: \`${newId}\``;
-            await sendTelegramPhoto(finalData.invoice_image_url, caption);
+            // No longer waiting for this to finish. It will run in the background.
+            sendTelegramPhoto(finalData.invoice_image_url, caption);
         }
     }
 
