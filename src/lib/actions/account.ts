@@ -1,11 +1,10 @@
-
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Account, BankAccount } from '../types';
+import type { Account } from '../types';
 import { stripUndefined, logAction, sendTelegramNotification } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -217,122 +216,6 @@ export async function updateAccountPriority(accountId: string, parentId: string 
     }
     
     revalidatePath('/accounting/chart-of-accounts');
-}
-
-
-// --- Bank Account Actions ---
-export type BankAccountFormState =
-| {
-    errors?: {
-        name?: string[];
-        account_number?: string[];
-        currency?: string[];
-        status?: string[];
-    };
-    message?: string;
-    }
-| undefined;
-
-const BankAccountSchema = z.object({
-    name: z.string().min(1, { message: 'Name is required.' }),
-    account_number: z.string().optional(),
-    currency: z.enum(['USD', 'YER', 'SAR']),
-    status: z.enum(['Active', 'Inactive']),
-});
-
-export async function createBankAccount(accountId: string | null, formData: FormData) {
-    const validatedFields = BankAccountSchema.safeParse(Object.fromEntries(formData.entries()));
-
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to save bank account. Please check the fields.',
-        };
-    }
-
-    const data = validatedFields.data;
-    const dataForFirebase = stripUndefined(data);
-    const isEditing = !!accountId;
-    let finalId = accountId;
-
-    try {
-        if (isEditing) {
-            const accountRef = ref(db, `bank_accounts/${accountId}`);
-            await update(accountRef, dataForFirebase);
-        } else {
-            const newAccountRef = push(ref(db, 'bank_accounts'));
-            finalId = newAccountRef.key;
-            const snapshot = await get(ref(db, 'bank_accounts'));
-            const count = snapshot.exists() ? snapshot.size : 0;
-            
-            await set(newAccountRef, {
-                ...dataForFirebase,
-                priority: count,
-                createdAt: new Date().toISOString(),
-            });
-        }
-        
-        await logAction(
-            isEditing ? 'update_bank_account' : 'create_bank_account',
-            { type: 'bank_account', id: finalId!, name: data.name },
-            dataForFirebase
-        );
-
-    } catch (error) {
-        return { message: 'Database Error: Failed to save bank account.' }
-    }
-    
-    revalidatePath('/bank-accounts');
-    revalidatePath('/logs');
-    redirect('/bank-accounts');
-}
-
-export async function updateBankAccountPriority(accountId: string, direction: 'up' | 'down') {
-    const accountsRef = ref(db, 'bank_accounts');
-    const snapshot = await get(accountsRef);
-    if (!snapshot.exists()) return;
-
-    let accounts: BankAccount[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
-
-    accounts.forEach((acc, index) => {
-        if (acc.priority === undefined || acc.priority === null) {
-            acc.priority = index;
-        }
-    });
-
-    accounts.sort((a, b) => (a.priority || 0) - (b.priority || 0));
-
-    const currentIndex = accounts.findIndex(acc => acc.id === accountId);
-    if (currentIndex === -1) return;
-
-    let otherIndex = -1;
-    if (direction === 'up' && currentIndex > 0) {
-        otherIndex = currentIndex - 1;
-    } else if (direction === 'down' && currentIndex < accounts.length - 1) {
-        otherIndex = currentIndex + 1;
-    }
-    
-    if (otherIndex !== -1) {
-        const currentAccount = accounts[currentIndex];
-        const otherAccount = accounts[otherIndex];
-        
-        const updates: { [key: string]: any } = {};
-        updates[`/bank_accounts/${currentAccount.id}/priority`] = otherAccount.priority;
-        updates[`/bank_accounts/${otherAccount.id}/priority`] = currentAccount.priority;
-        
-        try {
-            await update(ref(db), updates);
-            await logAction(
-                'update_bank_account_priority',
-                { type: 'bank_account', id: accountId, name: currentAccount.name },
-                { direction, newPriority: otherAccount.priority }
-            );
-        } catch (error) {
-            console.error("Failed to update priority:", error);
-        }
-    }
-    
-    revalidatePath('/bank-accounts');
 }
 
 export type JournalEntryFormState =

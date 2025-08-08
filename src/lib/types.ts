@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -23,24 +22,13 @@ export interface Client {
     favoriteBankAccountName?: string;
 }
 
-export interface BankAccount {
+export interface ServiceProvider {
     id: string;
     name: string;
-    account_number?: string;
-    currency: 'USD' | 'YER' | 'SAR';
-    status: 'Active' | 'Inactive';
-    createdAt: string;
-    priority?: number;
-}
-
-export interface CryptoWallet {
-    id: string;
-    name: string;
-    currency: 'USDT';
-    address: string;
+    type: 'Bank' | 'Crypto';
+    accountIds: string[];
     createdAt: string;
 }
-
 
 export interface Transaction {
     id: string;
@@ -214,7 +202,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'bank_account';
+  entityType: 'client' | 'account' | 'service_provider';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;
