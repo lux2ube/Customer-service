@@ -156,7 +156,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     if (dataToSave.cryptoWalletId) {
         try {
             const cryptoWalletRef = ref(db, `accounts/${dataToSave.cryptoWalletId}`);
-            const snapshot = await get(snapshot.ref);
+            const snapshot = await get(cryptoWalletRef);
             if (snapshot.exists()) {
                 cryptoWalletName = (snapshot.val() as Account).name;
             }
@@ -177,7 +177,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         cryptoWalletName,
         amount: dataToSave.amount_usd, // `amount` now stores total USD value
         amount_usd: dataToSave.amount_usd,
-        fee_usd: dataToSave.fee_usd,
+        fee_usd: Math.abs(dataToSave.fee_usd),
         expense_usd: dataToSave.expense_usd,
         amount_usdt: dataToSave.amount_usdt,
         attachment_url: dataToSave.attachment_url,
@@ -189,6 +189,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         status: dataToSave.status,
         createdAt: previousTxState?.createdAt || new Date().toISOString(),
         linkedSmsId: linkedSmsIdString,
+        exchange_rate_commission: Math.abs(dataToSave.exchange_rate_commission || 0),
     };
     
     let dataForFirebase = stripUndefined(finalData);
@@ -306,6 +307,7 @@ export type CashReceiptFormState = {
     bankAccountId?: string[];
     clientId?: string[];
     amount?: string[];
+    clientName?: string[];
   };
   message?: string;
   success?: boolean;
@@ -315,6 +317,7 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
+    clientName: z.string().min(1, 'Client name is required.'),
     senderName: z.string().optional(),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     remittanceNumber: z.string().optional(),
@@ -326,7 +329,21 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 }
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+     const rawData = {
+        ...Object.fromEntries(formData.entries()),
+    };
+    
+    // If clientName is not on the form, we'll fetch it.
+    if (!rawData.clientName && rawData.clientId) {
+        try {
+            const clientSnapshot = await get(ref(db, `clients/${rawData.clientId}`));
+            if (clientSnapshot.exists()) {
+                rawData.clientName = (clientSnapshot.val() as Client).name;
+            }
+        } catch (e) { /* Let validation handle it if name isn't found */ }
+    }
+    
+    const validatedFields = CashReceiptSchema.safeParse(rawData);
 
     if (!validatedFields.success) {
         return {
@@ -335,38 +352,43 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
 
     try {
-        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+        const [bankAccountSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, `clients/${clientId}`))
         ]);
 
-        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account or client.', success: false };
+        if (!bankAccountSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account.', success: false };
         }
         
-        const client = { id: clientId, ...clientSnapshot.val() } as Client;
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
         const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
         const fiatHistorySnapshot = await get(fiatHistoryRef);
         let rate = 1;
 
-        if (fiatHistorySnapshot.exists()) {
-            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
-            const lastEntry = fiatHistorySnapshot.val()[lastEntryKey];
-            const fiatRates: FiatRate[] = lastEntry.rates || [];
-            const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
-            if (rateInfo) {
-                rate = rateInfo.clientSell; // When client gives us cash, we are "selling" them USD credit
+        if (bankAccount.currency && bankAccount.currency !== 'USD') {
+            if (fiatHistorySnapshot.exists()) {
+                const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
+                const lastEntry = fiatHistorySnapshot.val()[lastEntryKey];
+                const fiatRates: FiatRate[] = lastEntry.rates || [];
+                const rateInfo = fiatRates.find(r => r.currency === bankAccount.currency);
+                if (rateInfo) {
+                    rate = rateInfo.clientSell;
+                } else {
+                     return { message: `Error: Exchange rate for ${bankAccount.currency} not found.`, success: false };
+                }
+            } else {
+                return { message: `Error: Exchange rates are not set up.`, success: false };
             }
         }
         
         if (rate <= 0) {
-            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or not set.`, success: false };
+            return { message: `Error: Exchange rate for ${bankAccount.currency} is zero or invalid.`, success: false };
         }
+        
         const amountUsd = amount / rate;
         
         const newReceiptRef = push(ref(db, 'cash_receipts'));
@@ -375,8 +397,8 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName: client.name,
-            senderName: senderName || client.name,
+            clientName: clientName,
+            senderName: senderName || clientName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
@@ -385,9 +407,11 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             status: 'Pending',
             createdAt: new Date().toISOString(),
         };
+        
         await set(newReceiptRef, receiptData);
         
         revalidatePath('/cash-receipts');
+        revalidatePath(`/transactions/add`);
         return { success: true, message: 'Cash receipt recorded successfully.' };
 
     } catch (e: any) {
