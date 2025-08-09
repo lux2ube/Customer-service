@@ -30,15 +30,15 @@ async function getClientTransactions(clientId: string): Promise<Transaction[]> {
 
 async function getClientAuditLogs(clientId: string): Promise<AuditLog[]> {
     const logsRef = ref(db, 'logs');
-    const q = query(logsRef, orderByChild('entityId'), equalTo(clientId));
-    const snapshot = await get(q);
+    // Fetch all logs and filter in code to avoid indexing issues.
+    const snapshot = await get(logsRef);
     if (!snapshot.exists()) {
         return [];
     }
-    const logsData = snapshot.val();
-    return Object.keys(logsData)
-        .map(key => ({ id: key, ...logsData[key]}))
-        .filter(log => log.entityType === 'client')
+    const allLogs: Record<string, AuditLog> = snapshot.val();
+    return Object.keys(allLogs)
+        .map(key => ({ id: key, ...allLogs[key] }))
+        .filter(log => log.entityId === clientId && log.entityType === 'client')
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
