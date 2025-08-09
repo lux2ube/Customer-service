@@ -19,10 +19,10 @@ async function getClient(id: string): Promise<Client | null> {
 
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
     const [transactionsSnap, cashReceiptsSnap, cashPaymentsSnap, smsSnap] = await Promise.all([
-        get(query(ref(db, 'transactions'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'cash_receipts'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'cash_payments'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'sms_transactions'), orderByChild('matched_client_id'), equalTo(clientId)))
+        get(ref(db, 'transactions')),
+        get(ref(db, 'cash_receipts')),
+        get(ref(db, 'cash_payments')),
+        get(ref(db, 'sms_transactions'))
     ]);
 
     const history: ClientActivity[] = [];
@@ -31,17 +31,19 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
         const transactions: Record<string, Transaction> = transactionsSnap.val();
         Object.keys(transactions).forEach(key => {
             const tx = transactions[key];
-            history.push({
-                id: key,
-                date: tx.date,
-                type: tx.type,
-                description: tx.type === 'Deposit' ? `vs ${tx.amount} ${tx.currency}` : `vs ${tx.amount_usdt} USDT`,
-                amount: tx.amount_usd,
-                currency: 'USD',
-                status: tx.status,
-                source: 'Transaction',
-                link: `/transactions/${key}/edit`
-            });
+            if (tx.clientId === clientId) {
+                history.push({
+                    id: key,
+                    date: tx.date,
+                    type: tx.type,
+                    description: tx.type === 'Deposit' ? `vs ${tx.amount} ${tx.currency}` : `vs ${tx.amount_usdt} USDT`,
+                    amount: tx.amount_usd,
+                    currency: 'USD',
+                    status: tx.status,
+                    source: 'Transaction',
+                    link: `/transactions/${key}/edit`
+                });
+            }
         });
     }
     
@@ -49,16 +51,18 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
         const receipts: Record<string, CashReceipt> = cashReceiptsSnap.val();
         Object.keys(receipts).forEach(key => {
             const receipt = receipts[key];
-            history.push({
-                id: key,
-                date: receipt.date,
-                type: 'Cash Receipt',
-                description: `From ${receipt.senderName} via ${receipt.bankAccountName}`,
-                amount: receipt.amount,
-                currency: receipt.currency,
-                status: receipt.status,
-                source: 'Cash Receipt'
-            });
+            if (receipt.clientId === clientId) {
+                 history.push({
+                    id: key,
+                    date: receipt.date,
+                    type: 'Cash Receipt',
+                    description: `From ${receipt.senderName} via ${receipt.bankAccountName}`,
+                    amount: receipt.amount,
+                    currency: receipt.currency,
+                    status: receipt.status,
+                    source: 'Cash Receipt'
+                });
+            }
         });
     }
     
@@ -66,16 +70,18 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
         const payments: Record<string, CashPayment> = cashPaymentsSnap.val();
         Object.keys(payments).forEach(key => {
             const payment = payments[key];
-            history.push({
-                id: key,
-                date: payment.date,
-                type: 'Cash Payment',
-                description: `To ${payment.recipientName} via ${payment.bankAccountName}`,
-                amount: -payment.amount, // Negative for payment
-                currency: payment.currency,
-                status: payment.status,
-                source: 'Cash Payment'
-            });
+            if (payment.clientId === clientId) {
+                history.push({
+                    id: key,
+                    date: payment.date,
+                    type: 'Cash Payment',
+                    description: `To ${payment.recipientName} via ${payment.bankAccountName}`,
+                    amount: -payment.amount, // Negative for payment
+                    currency: payment.currency,
+                    status: payment.status,
+                    source: 'Cash Payment'
+                });
+            }
         });
     }
 
@@ -83,16 +89,18 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
         const smsTxs: Record<string, SmsTransaction> = smsSnap.val();
         Object.keys(smsTxs).forEach(key => {
             const sms = smsTxs[key];
-            history.push({
-                id: key,
-                date: sms.parsed_at,
-                type: sms.type === 'credit' ? 'SMS Credit' : 'SMS Debit',
-                description: `From ${sms.client_name} via ${sms.account_name}`,
-                amount: sms.type === 'credit' ? sms.amount || 0 : -(sms.amount || 0),
-                currency: sms.currency || '',
-                status: sms.status,
-                source: 'SMS'
-            });
+             if (sms.matched_client_id === clientId) {
+                history.push({
+                    id: key,
+                    date: sms.parsed_at,
+                    type: sms.type === 'credit' ? 'SMS Credit' : 'SMS Debit',
+                    description: `From ${sms.client_name} via ${sms.account_name}`,
+                    amount: sms.type === 'credit' ? sms.amount || 0 : -(sms.amount || 0),
+                    currency: sms.currency || '',
+                    status: sms.status,
+                    source: 'SMS'
+                });
+            }
         });
     }
 
