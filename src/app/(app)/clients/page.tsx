@@ -37,6 +37,13 @@ export default function ClientsPage() {
                 id: key,
                 ...data[key]
                 })).sort((a, b) => {
+                    const idA = parseInt(a.id);
+                    const idB = parseInt(b.id);
+                    
+                    if (!isNaN(idA) && !isNaN(idB)) {
+                        return idB - idA;
+                    }
+                    
                     const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     if (isNaN(dateA)) return 1;

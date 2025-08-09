@@ -4,7 +4,7 @@
 import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -111,6 +111,13 @@ function MergeClientsForm() {
     const [state, formAction] = useActionState<MergeState, FormData>(mergeDuplicateClients, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Merge Failed' : 'Merge Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={Users2} text="Merge Duplicates" pendingText="Merging..." /></form>;
+}
+
+function MigrateClientIdsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(setupInitialClientIdsAndAccounts, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Migrate Client IDs" pendingText="Migrating..." /></form>;
 }
 
 export default function DashboardPage() {
@@ -297,6 +304,9 @@ export default function DashboardPage() {
                          <div className="flex flex-wrap gap-2">
                            <MergeClientsForm />
                            <HistoricalSyncForm />
+                        </div>
+                         <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
+                           <MigrateClientIdsForm />
                         </div>
                     </CardContent>
                 </Card>
