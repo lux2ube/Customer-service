@@ -34,25 +34,24 @@ import {
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { type: 'divider', label: 'Operations' },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
   { href: '/cash-receipts', label: 'Cash Receipts', icon: HandCoins },
   { href: '/cash-payments', label: 'Cash Payments', icon: ArrowLeftRight },
-  { type: 'divider' },
-  { href: '/wallet', label: 'Wallet', icon: Wallet },
-  { href: '/document-processing', label: 'Document Processing', icon: FileScan },
-  { type: 'divider' },
+  { href: '/wallet', label: 'USDT Sender Wallet', icon: Wallet },
+  { type: 'divider', label: 'Accounting & Reports' },
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
-  { type: 'divider' },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/logs', label: 'Audit Log', icon: History },
-  { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
-  { type: 'divider' },
+  { type: 'divider', label: 'Management' },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
+  { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
+  { href: '/logs', label: 'Audit Log', icon: History },
+  { type: 'divider', label: 'System' },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
-  { type: 'divider' },
+  { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },
   { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
   { href: '/settings', label: 'Settings', icon: Settings },
@@ -66,7 +65,11 @@ export function Nav() {
     <SidebarMenu>
       {menuItems.map((item, index) => {
         if (item.type === 'divider') {
-          return <hr key={`divider-${index}`} className="my-2 border-sidebar-border" />;
+          return (
+            <li key={`divider-${index}`} className="px-2 pt-4 pb-1 text-xs font-semibold text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
+              {item.label}
+            </li>
+          );
         }
         return (
           <SidebarMenuItem key={item.href}>
