@@ -60,7 +60,6 @@ export default function ClientsPage() {
             setLoading(false);
         });
 
-        // After initial load, listen for realtime updates
         unsubs.push(onValue(clientsRef, (snapshot) => {
             const data = snapshot.val();
             const clientList: Client[] = [];
