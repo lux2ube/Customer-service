@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -276,7 +275,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
     
-    redirect(`/transactions/${newId}/edit`);
+    return { success: true, transactionId: newId, message: 'Transaction Saved' };
 }
 
 export type BulkUpdateState = { message?: string; error?: boolean } | undefined;
