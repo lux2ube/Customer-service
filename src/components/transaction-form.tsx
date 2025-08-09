@@ -121,141 +121,176 @@ function BankAccountSelector({
 
 export function TransactionForm({ transaction, client, onSuccess }: { transaction?: Transaction | null, client?: Client | null, onSuccess: (txId: string) => void }) {
     const { toast } = useToast();
+    
+    // UI State
     const [isEditMode, setIsEditMode] = React.useState(!transaction);
-
-    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
-    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
-    const [isDataLoading, setIsDataLoading] = React.useState(true);
-    
     const [isSaving, setIsSaving] = React.useState(false);
-    const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
-    
-    const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
-    const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
-    
+    const [isDataLoading, setIsDataLoading] = React.useState(true);
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isSharing, setIsSharing] = React.useState(false);
-    const invoiceRef = React.useRef<HTMLDivElement>(null);
-
-    const [formData, setFormData] = React.useState<Transaction>(transaction || initialFormData);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
-    const [availableFunds, setAvailableFunds] = React.useState<UnifiedReceipt[]>([]);
-    const [selectedFundIds, setSelectedFundIds] = React.useState<string[]>(transaction?.linkedSmsId?.split(',').filter(Boolean) || []);
-    
-    const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
     const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
+    
+    // Form Data & Errors
+    const [formData, setFormData] = React.useState<Transaction>(transaction || initialFormData);
+    const [formErrors, setFormErrors] = React.useState<TransactionFormState['errors']>();
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(client || null);
+    
+    // Attachments
+    const [attachmentToUpload, setAttachmentToUpload] = React.useState<File | null>(null);
+    const [attachmentPreview, setAttachmentPreview] = React.useState<string | null>(null);
+    const invoiceRef = React.useRef<HTMLDivElement>(null);
+    
+    // Fetched Data
+    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
+    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
+    const [availableFunds, setAvailableFunds] = React.useState<UnifiedReceipt[]>([]);
+    
+    // Selections
+    const [selectedFundIds, setSelectedFundIds] = React.useState<string[]>([]);
     
     // A synced transaction's USDT amount should be immutable.
     const isSyncedTx = !!transaction?.hash && transaction?.type === 'Withdraw';
-    
-    const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
-        const funds = await getAvailableClientFunds(clientId);
-        setAvailableFunds(funds);
-    }, []);
-    
-    const recalculateFinancials = React.useCallback((
-        usdAmount: number,
-        type: Transaction['type'],
-        manualUsdtAmount?: number
-    ): Partial<Transaction> => {
+    const readOnly = !isEditMode;
 
-        const result: Partial<Transaction> = {};
-
-        if (!cryptoFees) return result;
-
-        result.amount_usd = parseFloat(usdAmount.toFixed(2));
-        
-        let feePercent = 0;
-        let minFee = 0;
-        if(type === 'Deposit') {
-            feePercent = cryptoFees.buy_fee_percent / 100;
-            minFee = cryptoFees.minimum_buy_fee;
-        } else {
-            feePercent = cryptoFees.sell_fee_percent / 100;
-            minFee = cryptoFees.minimum_sell_fee;
-        }
-
-        const calculatedFee = usdAmount * feePercent;
-        const cryptoFee = Math.max(calculatedFee, minFee);
-        
-        const initialUsdtAmount = usdAmount - cryptoFee;
-
-        if(manualUsdtAmount !== undefined) {
-             const difference = manualUsdtAmount - initialUsdtAmount;
-             if(difference > 0) { // Gave a discount
-                result.expense_usd = parseFloat(difference.toFixed(2));
-                result.fee_usd = parseFloat(cryptoFee.toFixed(2));
-             } else { // Charged extra
-                result.expense_usd = 0;
-                result.fee_usd = parseFloat((cryptoFee - difference).toFixed(2));
-             }
-            result.amount_usdt = manualUsdtAmount;
-        } else {
-            result.fee_usd = parseFloat(cryptoFee.toFixed(2));
-            result.expense_usd = 0;
-            result.amount_usdt = parseFloat(initialUsdtAmount.toFixed(2));
-        }
-
-        return result;
-
-    }, [cryptoFees]);
-
+    // --- DATA FETCHING ---
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
-        const settingsRef = ref(db, 'settings');
+        const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
 
         const unsubAccounts = onValue(accountsRef, (snap) => {
             const allAccounts: Account[] = snap.val() ? Object.keys(snap.val()).map(key => ({ id: key, ...snap.val()[key] })) : [];
             setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency === 'USDT'));
         });
-        const unsubSettings = onValue(settingsRef, (snap) => {
-            const settingsData = snap.val();
-            if(settingsData) {
-                const feesRef = ref(db, 'rate_history/crypto_fees');
-                const lastFeeQuery = query(feesRef, orderByChild('timestamp'), limitToLast(1));
-                get(lastFeeQuery).then(snapshot => {
-                  if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    const lastEntryKey = Object.keys(data)[0];
-                    setCryptoFees(data[lastEntryKey]);
-                  }
-                });
+
+        const unsubFees = onValue(feesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const lastEntryKey = Object.keys(data)[0];
+                setCryptoFees(data[lastEntryKey]);
             }
         });
         
-        Promise.all([ get(accountsRef), get(settingsRef) ]).then(() => {
+        Promise.all([ get(accountsRef), get(feesRef) ]).then(() => {
             setIsDataLoading(false);
         });
 
-        return () => { unsubAccounts(); unsubSettings(); };
+        return () => { unsubAccounts(); unsubFees(); };
     }, []);
 
+    const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
+        const funds = await getAvailableClientFunds(clientId);
+        setAvailableFunds(funds);
+    }, []);
+
+    // --- FORM STATE HYDRATION & LOGIC ---
+
+    // Effect to initialize the form state when a transaction is passed in
     React.useEffect(() => {
-        if (transaction && !isDataLoading) {
-            const formState = { ...initialFormData, ...transaction };
+        if (transaction) {
+            setFormData({ ...initialFormData, ...transaction });
             setSelectedClient(client || null);
-            setFormData(formState);
-        } else if (!transaction) {
+            const initialFundIds = transaction.linkedSmsId?.split(',').filter(Boolean) || [];
+            setSelectedFundIds(initialFundIds);
+            if (client?.id) {
+                fetchAvailableFunds(client.id);
+            }
+        } else {
             setFormData(initialFormData);
             setSelectedClient(null);
+            setSelectedFundIds([]);
+            setAvailableFunds([]);
         }
-    }, [transaction, client, isDataLoading]);
-    
-    React.useEffect(() => {
-        return () => {
-            if (attachmentPreview) {
-                URL.revokeObjectURL(attachmentPreview);
-            }
+    }, [transaction, client, fetchAvailableFunds]);
+
+    // Recalculates fee and USDT amount based on a given USD amount.
+    const recalculateFinancials = React.useCallback((
+        usdAmount: number,
+        type: Transaction['type']
+    ): Partial<Pick<Transaction, 'fee_usd' | 'amount_usdt' | 'expense_usd'>> => {
+
+        if (!cryptoFees) return {};
+
+        const feePercent = type === 'Deposit' ? cryptoFees.buy_fee_percent / 100 : cryptoFees.sell_fee_percent / 100;
+        const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
+        
+        const calculatedFee = Math.max(usdAmount * feePercent, minFee);
+        const finalUsdtAmount = usdAmount - calculatedFee;
+
+        return {
+            fee_usd: parseFloat(calculatedFee.toFixed(2)),
+            amount_usdt: parseFloat(finalUsdtAmount.toFixed(2)),
+            expense_usd: 0,
         };
-    }, [attachmentPreview]);
-    
+    }, [cryptoFees]);
+
+    // Updates financial calculations when selected funds change
     React.useEffect(() => {
-        if (selectedClient?.id) {
-            fetchAvailableFunds(selectedClient.id);
+        if (isSyncedTx) return;
+
+        const totalUsdFromFunds = selectedFundIds.reduce((sum, id) => {
+            const fund = availableFunds.find(f => f.id === id);
+            // On initial load, fund might not be in the list yet, so check formData too
+            if (fund) return sum + (fund.amountUsd || 0);
+            return sum;
+        }, 0);
+        
+        setFormData(prev => {
+             const updates = recalculateFinancials(totalUsdFromFunds, prev.type);
+             return { ...prev, amount_usd: totalUsdFromFunds, ...updates };
+        });
+
+    }, [selectedFundIds, availableFunds, isSyncedTx, recalculateFinancials]);
+
+    const handleFieldChange = (field: keyof Transaction, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleManualUsdtChange = (newUsdtValue: number) => {
+        if (isSyncedTx) return;
+        setFormData(prev => {
+            if (!cryptoFees) return { ...prev, amount_usdt: newUsdtValue };
+
+            // Recalculate what the USDT *should* have been
+            const { fee_usd: originalFee, amount_usdt: originalUsdt } = recalculateFinancials(prev.amount_usd, prev.type);
+
+            const difference = newUsdtValue - (originalUsdt || 0);
+
+            let newFee = originalFee || 0;
+            let newExpense = 0;
+
+            if (difference > 0) { // Gave a discount
+                newExpense = difference;
+            } else { // Charged extra
+                newFee -= difference; // Subtracting a negative number adds to the fee
+            }
+            
+            return {
+                ...prev,
+                amount_usdt: newUsdtValue,
+                fee_usd: parseFloat(newFee.toFixed(2)),
+                expense_usd: parseFloat(newExpense.toFixed(2)),
+            };
+        });
+    };
+    
+    const handleClientSelect = async (newClient: Client | null) => {
+        setSelectedClient(newClient);
+        setFormData(prev => ({
+            ...prev,
+            clientId: newClient?.id || '',
+        }));
+        setSelectedFundIds([]); // Clear selected funds when client changes
+        if (newClient) {
+            fetchAvailableFunds(newClient.id);
         } else {
             setAvailableFunds([]);
         }
-    }, [selectedClient, fetchAvailableFunds]);
+    };
+    
+    const handleFundSelectionChange = (fundId: string, isSelected: boolean) => {
+        const newSelection = isSelected ? [...selectedFundIds, fundId] : selectedFundIds.filter(id => id !== fundId);
+        setSelectedFundIds(newSelection);
+    };
 
     const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -274,56 +309,8 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
             setAttachmentPreview(null);
         }
     };
-    
-    const handleClientSelect = async (client: Client | null) => {
-        setSelectedClient(client);
-        setFormData(prev => ({
-            ...prev,
-            clientId: client?.id || '',
-        }));
-        setSelectedFundIds([]);
-    };
-    
-    const handleFundSelectionChange = (fundId: string, isSelected: boolean) => {
-        const newSelection = isSelected ? [...selectedFundIds, fundId] : selectedFundIds.filter(id => id !== fundId);
-        setSelectedFundIds(newSelection);
-    };
 
-    // This effect runs whenever the selected funds change to update the form's financials
-    React.useEffect(() => {
-        if (isSyncedTx) return;
-
-        const totalUsd = selectedFundIds.reduce((sum, id) => {
-            const fund = availableFunds.find(f => f.id === id);
-            return sum + (fund?.amountUsd || 0);
-        }, 0);
-
-        setFormData(currentFormData => {
-            const updates = recalculateFinancials(totalUsd, currentFormData.type);
-            return { ...currentFormData, amount_usd: totalUsd, ...updates };
-        });
-    }, [selectedFundIds, availableFunds, recalculateFinancials, isSyncedTx]);
-    
-    const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newUsdtAmount = parseFloat(e.target.value) || 0;
-        if (isSyncedTx) return;
-        setFormData(prev => {
-            const updates = recalculateFinancials(prev.amount_usd, prev.type, newUsdtAmount);
-            return { ...prev, ...updates };
-        });
-    };
-
-    const handleFieldChange = (field: keyof Transaction, value: any) => {
-        setFormData(prev => {
-            let newFormData = { ...prev, [field]: value };
-            if(field === 'type' && !isSyncedTx) {
-                const updates = recalculateFinancials(newFormData.amount_usd, value);
-                newFormData = { ...newFormData, ...updates };
-            }
-            return newFormData;
-        });
-    };
-
+    // --- FORM SUBMISSION & ACTIONS ---
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsSaving(true);
@@ -332,6 +319,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         const formElement = e.target as HTMLFormElement;
         const actionFormData = new FormData(formElement);
         
+        // Append all crucial state data to FormData
         actionFormData.set('date', formData.date ? new Date(formData.date).toISOString() : new Date().toISOString());
         actionFormData.set('clientId', formData.clientId || '');
         actionFormData.set('cryptoWalletId', formData.cryptoWalletId || '');
@@ -339,6 +327,8 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         actionFormData.set('fee_usd', String(formData.fee_usd));
         actionFormData.set('expense_usd', String(formData.expense_usd || 0));
         actionFormData.set('amount_usdt', String(formData.amount_usdt));
+        actionFormData.set('type', formData.type);
+        actionFormData.set('status', formData.status);
         
         selectedFundIds.forEach(id => actionFormData.append('linkedReceiptIds', id));
 
@@ -419,8 +409,6 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
             setIsSharing(false);
         }
     };
-    
-    const readOnly = !isEditMode;
 
     return (
         <>
@@ -582,7 +570,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
 
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx || readOnly} className={cn((isSyncedTx || readOnly) && "bg-muted/50", isSyncedTx && "font-bold border-blue-400")} />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={(e) => handleManualUsdtChange(parseFloat(e.target.value))} readOnly={isSyncedTx || readOnly} className={cn((isSyncedTx || readOnly) && "bg-muted/50", isSyncedTx && "font-bold border-blue-400")} />
                             </div>
                         </CardContent>
                         <CardFooter>
@@ -666,24 +654,6 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                     </Card>
                 </div>
             </form>
-            
-            {batchUpdateInfo && (
-                 <AlertDialog>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitleComponent>Assign Client to Other Transactions?</AlertDialogTitleComponent>
-                            <AlertDialogDescription>
-                                We found {batchUpdateInfo.count} other unassigned transaction(s) from this same wallet address.
-                                Do you want to assign them all to "{batchUpdateInfo.client.name}"?
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setBatchUpdateInfo(null)}>No, Just This One</AlertDialogCancel>
-                            <AlertDialogAction>Yes, Assign All</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            )}
         </>
     );
 }
