@@ -10,7 +10,7 @@ import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'fi
 import type { Client, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { format, startOfDay, endOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
@@ -140,12 +140,7 @@ export default function DashboardPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
-        
-        // --- PERFORMANCE OPTIMIZATION ---
-        // Only fetch transactions from the last 30 days for dashboard stats.
-        const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
-        const transactionsRef = query(ref(db, 'transactions'), orderByChild('createdAt'), startAt(thirtyDaysAgo));
-        
+        const transactionsRef = ref(db, 'transactions');
         const recentTxQuery = query(ref(db, 'transactions'), limitToLast(5));
         
         const unsubs: (() => void)[] = [];
@@ -165,8 +160,11 @@ export default function DashboardPage() {
         unsubs.push(onValue(transactionsRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
+                const thirtyDaysAgo = subDays(new Date(), 30).getTime();
                 const allTxs: Transaction[] = Object.values(data);
-                const confirmedTxs = allTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
+                
+                const recentTxs = allTxs.filter(tx => tx.createdAt && parseISO(tx.createdAt).getTime() >= thirtyDaysAgo);
+                const confirmedTxs = recentTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
 
                 // --- Deposit/Withdrawal Stats (Last 30 Days) ---
                 const deposits = confirmedTxs
@@ -232,7 +230,7 @@ export default function DashboardPage() {
 
                 const dailyData = last7Days.map(day => {
                     const dayStart = startOfDay(day);
-                    const dayEnd = endOfDay(day);
+                    const dayEnd = endOfWeek(day);
                     const volume = confirmedTxs
                         .filter(tx => {
                             const txDate = parseISO(tx.date);
