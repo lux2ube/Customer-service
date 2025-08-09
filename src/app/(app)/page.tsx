@@ -6,11 +6,11 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap } from "lucide-react";
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, limitToLast, get } from 'firebase/database';
+import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { format, startOfWeek, endOfDay, subDays, startOfDay, subWeeks, parseISO, endOfWeek, eachDayOfInterval, sub } from 'date-fns';
+import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
@@ -139,10 +139,14 @@ export default function DashboardPage() {
 
 
     React.useEffect(() => {
-        const transactionsRef = ref(db, 'transactions');
         const clientsRef = ref(db, 'clients');
         
-        const recentTxQuery = query(transactionsRef, limitToLast(5));
+        // --- PERFORMANCE OPTIMIZATION ---
+        // Only fetch transactions from the last 30 days for dashboard stats.
+        const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
+        const transactionsRef = query(ref(db, 'transactions'), orderByChild('createdAt'), startAt(thirtyDaysAgo));
+        
+        const recentTxQuery = query(ref(db, 'transactions'), limitToLast(5));
         
         const unsubs: (() => void)[] = [];
 
@@ -164,7 +168,7 @@ export default function DashboardPage() {
                 const allTxs: Transaction[] = Object.values(data);
                 const confirmedTxs = allTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
 
-                // --- Global Deposit/Withdrawal Stats ---
+                // --- Deposit/Withdrawal Stats (Last 30 Days) ---
                 const deposits = confirmedTxs
                     .filter(tx => tx.type === 'Deposit')
                     .reduce((sum, tx) => sum + tx.amount_usd, 0);
@@ -178,16 +182,17 @@ export default function DashboardPage() {
 
                 // --- Daily Stats ---
                 const todayStart = startOfDay(new Date());
-                const todayEnd = endOfDay(new Date());
                 const yesterdayStart = startOfDay(subDays(new Date(), 1));
-                const yesterdayEnd = endOfDay(subDays(new Date(), 1));
 
                 const todayVolume = confirmedTxs
-                    .filter(tx => parseISO(tx.date) >= todayStart && parseISO(tx.date) <= todayEnd)
+                    .filter(tx => parseISO(tx.date) >= todayStart)
                     .reduce((sum, tx) => sum + tx.amount_usd, 0);
 
                 const yesterdayVolume = confirmedTxs
-                    .filter(tx => parseISO(tx.date) >= yesterdayStart && parseISO(tx.date) <= yesterdayEnd)
+                    .filter(tx => {
+                        const txDate = parseISO(tx.date);
+                        return txDate >= yesterdayStart && txDate < todayStart;
+                    })
                     .reduce((sum, tx) => sum + tx.amount_usd, 0);
 
                 setTotalVolumeToday(todayVolume);
@@ -219,7 +224,7 @@ export default function DashboardPage() {
                     setWeekOverWeekChange('vs $0 last week');
                 }
                 
-                // --- Daily Volume Chart Data ---
+                // --- Daily Volume Chart Data (Last 7 Days) ---
                 const last7Days = eachDayOfInterval({
                     start: sub(new Date(), { days: 6 }),
                     end: new Date()
@@ -273,8 +278,8 @@ export default function DashboardPage() {
 
              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <StatCard title="Total Clients" value={clientCount.toLocaleString()} icon={Users} loading={loading} />
-                <StatCard title="Total Deposits" value={`$${totalDeposits.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowDownToLine} loading={loading} />
-                <StatCard title="Total Withdrawals" value={`$${totalWithdrawals.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowUpFromLine} loading={loading} />
+                <StatCard title="Deposits (30d)" value={`$${totalDeposits.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowDownToLine} loading={loading} />
+                <StatCard title="Withdrawals (30d)" value={`$${totalWithdrawals.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowUpFromLine} loading={loading} />
                 <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
                 <StatCard title="Volume Today" value={`$${totalVolumeToday.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={dayOverDayChange || ''} />
                 <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
