@@ -17,6 +17,14 @@
     },
     "logs": {
       ".indexOn": ["entityId", "timestamp"]
+    },
+    "rate_history": {
+      "fiat_rates": {
+        ".indexOn": "timestamp"
+      },
+      "crypto_fees": {
+        ".indexOn": "timestamp"
+      }
     }
   }
 }
