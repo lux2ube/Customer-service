@@ -146,7 +146,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
     
     // A synced transaction's USDT amount should be immutable.
-    const isSyncedTx = !!transaction?.hash && transaction?.type === 'Deposit';
+    const isSyncedTx = !!transaction?.hash && transaction?.type === 'Withdraw';
     
     const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
         const funds = await getAvailableClientFunds(clientId);
@@ -291,6 +291,8 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
 
     // This effect runs whenever the selected funds change to update the form's financials
     React.useEffect(() => {
+        if (isSyncedTx) return;
+
         const totalUsd = selectedFundIds.reduce((sum, id) => {
             const fund = availableFunds.find(f => f.id === id);
             return sum + (fund?.amountUsd || 0);
@@ -300,7 +302,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
             const updates = recalculateFinancials(totalUsd, currentFormData.type);
             return { ...currentFormData, amount_usd: totalUsd, ...updates };
         });
-    }, [selectedFundIds, availableFunds, recalculateFinancials]);
+    }, [selectedFundIds, availableFunds, recalculateFinancials, isSyncedTx]);
     
     const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newUsdtAmount = parseFloat(e.target.value) || 0;
@@ -314,7 +316,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const handleFieldChange = (field: keyof Transaction, value: any) => {
         setFormData(prev => {
             let newFormData = { ...prev, [field]: value };
-            if(field === 'type') {
+            if(field === 'type' && !isSyncedTx) {
                 const updates = recalculateFinancials(newFormData.amount_usd, value);
                 newFormData = { ...newFormData, ...updates };
             }
@@ -446,7 +448,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                             <Bot className="h-5 w-5 text-blue-600" />
                             <AlertTitle className="text-blue-800 dark:text-blue-300">Synced Transaction</AlertTitle>
                             <AlertDescription className="text-blue-700 dark:text-blue-400 text-xs">
-                                This transaction was synced from the blockchain. The USDT amount is locked. Select the corresponding local cash receipts to complete it.
+                                This is an incoming withdrawal from the blockchain. The USDT amount is locked.
                             </AlertDescription>
                         </Alert>
                     )}
@@ -508,12 +510,12 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                         </CardContent>
                     </Card>
                     
-                    {selectedClient && formData.type === 'Deposit' && (
+                    {selectedClient && (
                          <Card>
                              <CardHeader className="flex flex-row items-center justify-between">
                                 <div className="space-y-1">
                                     <CardTitle>Available Client Funds</CardTitle>
-                                    <CardDescription>Select the cash receipts to be used for this USDT transaction.</CardDescription>
+                                    <CardDescription>Select cash receipts to fund this transaction.</CardDescription>
                                 </div>
                                 {!readOnly && (
                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddOpen(true)}>

@@ -38,7 +38,7 @@ export type TransactionFormState =
 
 const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
-    clientId: z.string().optional(),
+    clientId: z.string().min(1, 'A client must be selected for the transaction.'),
     type: z.enum(['Deposit', 'Withdraw']),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number().min(0, "Fee must be positive."),
@@ -55,13 +55,14 @@ const TransactionSchema = z.object({
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
     linkedReceiptIds: z.array(z.string()).optional(),
 }).refine(data => {
+    // For deposits, at least one funding source must be linked. This is checked by seeing if amount_usd is positive.
     if (data.type === 'Deposit') {
         return data.amount_usd > 0;
     }
     return true;
 }, {
     message: "For a deposit, you must select at least one cash receipt to fund the transaction.",
-    path: ["amount_usd"],
+    path: ["linkedReceiptIds"], // Point error to the funding source
 });
 
 
@@ -122,15 +123,6 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
     
     let dataToSave = { ...validatedFields.data };
-    let finalClientId = dataToSave.clientId;
-
-    if (!finalClientId) {
-        return {
-            errors: { clientId: ["A client must be selected."] },
-            message: 'Failed to create transaction. Client is required.',
-        };
-    }
-    dataToSave.clientId = finalClientId;
     
     if (transactionId) {
         const existingData = previousTxState;
@@ -282,6 +274,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
+    revalidatePath(`/clients/${finalData.clientId}/edit`);
     
     return { success: true, transactionId: newId, message: 'Transaction Saved' };
 }
@@ -363,7 +356,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         
         const newReceiptRef = push(ref(db, 'cash_receipts'));
 
-        const receiptData: Omit<CashReceipt, 'id'> = {
+        const receiptData = {
             date: new Date().toISOString(),
             bankAccountId,
             bankAccountName: bankAccount.name,
@@ -375,8 +368,8 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             amountUsd,
             status: 'Pending',
             createdAt: new Date().toISOString(),
-            ...(remittanceNumber && { remittanceNumber }),
-            ...(note && { note }),
+            remittanceNumber: remittanceNumber || undefined,
+            note: note || undefined,
         };
         
         await set(newReceiptRef, stripUndefined(receiptData));
