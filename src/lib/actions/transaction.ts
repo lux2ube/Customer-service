@@ -363,7 +363,6 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
-        // Use the amountUsd from the form directly, as it's pre-calculated.
         let amountUsd = validatedFields.data.amountUsd;
 
         const newReceiptRef = push(ref(db, 'cash_receipts'));
@@ -384,59 +383,6 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
         
         await set(newReceiptRef, receiptData);
-
-        // --- Create Journal Entry for the receipt ---
-        const allAccountsSnapshot = await get(ref(db, 'accounts'));
-        const allAccounts = allAccountsSnapshot.val() || {};
-
-        const clientSubAccountName = `${clientName}`;
-        let clientSubAccountId: string | null = null;
-        
-        for (const accId in allAccounts) {
-            if (allAccounts[accId].name === clientSubAccountName && allAccounts[accId].parentId === CLIENT_PARENT_ACCOUNT_ID) {
-                clientSubAccountId = accId;
-                break;
-            }
-        }
-        
-        if (!clientSubAccountId) {
-            // Find the highest existing sub-account ID to create the next one
-            let maxSubId = 0;
-            for (const accId in allAccounts) {
-                if (allAccounts[accId].parentId === CLIENT_PARENT_ACCOUNT_ID) {
-                    const idNum = parseInt(accId.split('-')[1]);
-                    if (!isNaN(idNum) && idNum > maxSubId) {
-                        maxSubId = idNum;
-                    }
-                }
-            }
-            clientSubAccountId = `${CLIENT_PARENT_ACCOUNT_ID}-${maxSubId + 1}`;
-
-            const newAccountData: Partial<Account> = {
-                id: clientSubAccountId,
-                name: clientSubAccountName,
-                type: 'Liabilities',
-                isGroup: false,
-                parentId: CLIENT_PARENT_ACCOUNT_ID,
-                currency: 'USD',
-            };
-            await set(ref(db, `accounts/${clientSubAccountId}`), newAccountData);
-        }
-
-        const journalEntryRef = push(ref(db, 'journal_entries'));
-        const journalEntryData: Omit<JournalEntry, 'id'> = {
-            date: receiptData.date,
-            description: `Cash receipt from ${clientName}`,
-            debit_account: bankAccountId,
-            credit_account: clientSubAccountId!,
-            debit_amount: amount,
-            credit_amount: amountUsd,
-            amount_usd: amountUsd,
-            createdAt: new Date().toISOString(),
-            debit_account_name: bankAccount.name,
-            credit_account_name: clientSubAccountName,
-        };
-        await set(journalEntryRef, journalEntryData);
         
         revalidatePath('/cash-receipts');
         revalidatePath(`/transactions/add`);

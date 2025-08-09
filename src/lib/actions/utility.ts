@@ -1,11 +1,12 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account } from '../types';
 import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
@@ -244,5 +245,105 @@ export async function deleteCurrency(code: string): Promise<CurrencyFormState> {
         return { message: 'Currency deleted.' };
     } catch (error) {
         return { error: true, message: 'Database error: Failed to delete currency.' };
+    }
+}
+
+// --- One-time Database Setup ---
+export type SetupState = { message?: string; error?: boolean; } | undefined;
+
+export async function setupInitialClientIdsAndAccounts(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const clientsRef = ref(db, 'clients');
+        const clientsSnapshot = await get(clientsRef);
+        if (!clientsSnapshot.exists()) {
+            return { message: 'No clients found to migrate.', error: false };
+        }
+
+        const oldClientsData: Record<string, Client> = clientsSnapshot.val();
+        const clientsArray: (Client & { id: string })[] = Object.keys(oldClientsData).map(key => ({
+            id: key,
+            ...oldClientsData[key],
+        }));
+
+        // Filter out clients that already have the new ID format and sort by creation date
+        const clientsToMigrate = clientsArray
+            .filter(c => !c.id.match(/^1\d{6,}$/))
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        if (clientsToMigrate.length === 0) {
+            return { message: "All clients already seem to have the new ID format.", error: false };
+        }
+
+        const accountsSnapshot = await get(ref(db, 'accounts'));
+        const allAccounts = accountsSnapshot.val() || {};
+
+        let lastClientId = 1000000;
+        const existingNewFormatIds = new Set(clientsArray.filter(c => c.id.match(/^1\d{6,}$/)).map(c => parseInt(c.id)));
+        if (existingNewFormatIds.size > 0) {
+            lastClientId = Math.max(...Array.from(existingNewFormatIds));
+        }
+
+        const updates: { [key: string]: any } = {};
+        const oldToNewIdMap: Record<string, string> = {};
+
+        for (const client of clientsToMigrate) {
+            lastClientId++;
+            const newClientId = String(lastClientId);
+            oldToNewIdMap[client.id] = newClientId;
+
+            // Prepare new client data
+            const newClientData = { ...client };
+            delete newClientData.id;
+            updates[`/clients/${newClientId}`] = newClientData;
+            updates[`/clients/${client.id}`] = null; // Delete old client record
+
+            // Prepare new account data for the client
+            const newAccountId = `6000${newClientId}`;
+            if (!allAccounts[newAccountId]) {
+                updates[`/accounts/${newAccountId}`] = {
+                    name: client.name || `Unnamed Client (${client.id})`,
+                    type: 'Liabilities',
+                    isGroup: false,
+                    parentId: '6000',
+                    currency: 'USD',
+                };
+            }
+        }
+        
+        // --- Update related records ---
+        const pathsToUpdate = ['transactions', 'cash_receipts', 'cash_payments', 'sms_transactions'];
+        const recordsToUpdateSnapshots = await Promise.all(pathsToUpdate.map(p => get(ref(db, p))));
+        
+        recordsToUpdateSnapshots.forEach((snapshot, index) => {
+            const path = pathsToUpdate[index];
+            if (snapshot.exists()) {
+                const records: Record<string, any> = snapshot.val();
+                for (const recordId in records) {
+                    const record = records[recordId];
+                    const oldIdKey = path === 'sms_transactions' ? 'matched_client_id' : 'clientId';
+                    
+                    if (record[oldIdKey] && oldToNewIdMap[record[oldIdKey]]) {
+                        const newId = oldToNewIdMap[record[oldIdKey]];
+                        updates[`/${path}/${recordId}/${oldIdKey}`] = newId;
+
+                        // Also update denormalized name if it exists
+                        const clientName = (clientsToMigrate.find(c => c.id === record[oldIdKey]))?.name || `Unnamed Client (${record[oldIdKey]})`;
+                        const nameKey = path === 'sms_transactions' ? 'matched_client_name' : 'clientName';
+                        updates[`/${path}/${recordId}/${nameKey}`] = clientName;
+                    }
+                }
+            }
+        });
+
+        await update(ref(db), updates);
+        
+        revalidatePath('/clients');
+        revalidatePath('/accounting/chart-of-accounts');
+
+        return { message: `Successfully migrated ${clientsToMigrate.length} clients to the new ID format.`, error: false };
+
+    } catch (e: any) {
+        console.error("Database setup error:", e);
+        return { message: e.message || 'An unknown error occurred during setup.', error: true };
     }
 }
