@@ -290,8 +290,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
               {loading ? (
                 <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
-                paginatedTransactions.map(tx => {
-                  return (
+                paginatedTransactions.map(tx => (
                     <TableRow key={tx.id} data-state={selectedTxId === tx.id && "selected"} onClick={() => onRowClick(tx.id)} className="cursor-pointer">
                         <TableCell className="px-2">
                             <Checkbox
@@ -314,8 +313,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
                         <TableCell className="font-mono">{formatCurrency(tx.amount_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                     </TableRow>
-                  )
-                })
+                ))
               ) : (
                 <TableRow><TableCell colSpan={7} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
