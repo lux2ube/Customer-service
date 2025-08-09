@@ -14,8 +14,7 @@ import type { Transaction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { Pencil, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
-import Link from 'next/link';
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -25,13 +24,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TransactionBulkActions } from './transaction-bulk-actions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
-
 type SortableKeys = keyof Transaction;
 
 interface TransactionsTableProps {
     transactions: Transaction[];
     loading: boolean;
     onFilteredDataChange: (data: Transaction[]) => void;
+    onRowClick: (txId: string) => void;
+    selectedTxId: string | null;
 }
 
 const ITEMS_PER_PAGE = 50;
@@ -40,8 +40,7 @@ const statuses: Transaction['status'][] = ['Pending', 'Confirmed', 'Cancelled'];
 const types: Transaction['type'][] = ['Deposit', 'Withdraw'];
 const currencies: Transaction['currency'][] = ['USD', 'YER', 'SAR', 'USDT'];
 
-export function TransactionsTable({ transactions, loading, onFilteredDataChange }: TransactionsTableProps) {
-  // Filter and sort state
+export function TransactionsTable({ transactions, loading, onFilteredDataChange, onRowClick, selectedTxId }: TransactionsTableProps) {
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
@@ -50,8 +49,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [currencyFilter, setCurrencyFilter] = React.useState('all');
 
-
-  // Selection state
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
   const handleSort = (key: SortableKeys) => {
@@ -65,7 +62,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   const filteredAndSortedTransactions = React.useMemo(() => {
     let filtered = [...transactions];
 
-    // Search filter
     if (search) {
         const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
         const searchTerms = normalizedSearch.split(' ').filter(Boolean);
@@ -108,7 +104,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
         filtered = filtered.filter(tx => tx.currency === currencyFilter);
     }
 
-    // Date range filter
     if (dateRange?.from) {
         filtered = filtered.filter(tx => {
             if (!tx.date) return false;
@@ -125,7 +120,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
         });
     }
 
-    // Sorting
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         const aVal = a[sortConfig.key as keyof Transaction] as any;
@@ -153,7 +147,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
   React.useEffect(() => {
     onFilteredDataChange(filteredAndSortedTransactions);
     setCurrentPage(1);
-    setRowSelection({}); // Reset selection when filters change
+    setRowSelection({});
   }, [filteredAndSortedTransactions, onFilteredDataChange]);
 
   const totalPages = Math.ceil(filteredAndSortedTransactions.length / ITEMS_PER_PAGE);
@@ -290,20 +284,20 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                 <SortableHeader sortKey="amount">Amount</SortableHeader>
                 <SortableHeader sortKey="amount_usd">Amount (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map(tx => {
                   return (
-                    <TableRow key={tx.id} data-state={rowSelection[tx.id] && "selected"}>
+                    <TableRow key={tx.id} data-state={selectedTxId === tx.id && "selected"} onClick={() => onRowClick(tx.id)} className="cursor-pointer">
                         <TableCell className="px-2">
                             <Checkbox
                                 checked={rowSelection[tx.id] || false}
                                 onCheckedChange={(checked) => setRowSelection(prev => ({...prev, [tx.id]: !!checked}))}
+                                onClick={(e) => e.stopPropagation()}
                                 aria-label="Select row"
                             />
                         </TableCell>
@@ -319,16 +313,11 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange 
                         </TableCell>
                         <TableCell className="font-mono">{formatCurrency(tx.amount_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
-                        <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="icon">
-                            <Link href={`/transactions/${tx.id}/edit`}><Pencil className="h-4 w-4" /></Link>
-                        </Button>
-                        </TableCell>
                     </TableRow>
                   )
                 })
               ) : (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

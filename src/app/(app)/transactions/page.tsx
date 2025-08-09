@@ -1,27 +1,40 @@
 
-
 'use client';
 
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Bot } from "lucide-react";
-import Link from "next/link";
+import { PlusCircle } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
-import { SyncButton } from "@/components/sync-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Transaction } from '@/lib/types';
+import type { Transaction, Client } from '@/lib/types';
+import { TransactionForm } from '@/components/transaction-form';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function TransactionsPage() {
     const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+    const [clients, setClients] = React.useState<Client[]>([]);
     const [loading, setLoading] = React.useState(true);
-    // This state will hold the filtered and sorted data from the table for export
     const [exportData, setExportData] = React.useState<Transaction[]>([]);
+
+    const [selectedTxId, setSelectedTxId] = React.useState<string | null>(null);
+    const [isCreatingNew, setIsCreatingNew] = React.useState(false);
+
+    const selectedTransaction = React.useMemo(() => {
+        if (!selectedTxId) return null;
+        return transactions.find(tx => tx.id === selectedTxId) || null;
+    }, [selectedTxId, transactions]);
+
+    const selectedClient = React.useMemo(() => {
+        if (!selectedTransaction || !selectedTransaction.clientId) return null;
+        return clients.find(c => c.id === selectedTransaction.clientId) || null;
+    }, [selectedTransaction, clients]);
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'transactions/');
+        const clientsRef = ref(db, 'clients/');
         
         const unsubs: (()=>void)[] = [];
 
@@ -38,9 +51,37 @@ export default function TransactionsPage() {
             }
             setLoading(false);
         }));
+        
+        unsubs.push(onValue(clientsRef, (snapshot) => {
+            const data = snapshot.val();
+             if (data) {
+                const list: Client[] = Object.keys(data).map(key => ({
+                id: key,
+                ...data[key]
+                }));
+                setClients(list);
+            } else {
+                setClients([]);
+            }
+        }));
 
         return () => unsubs.forEach(unsub => unsub());
     }, []);
+
+    const handleSelectTransaction = (txId: string) => {
+        setIsCreatingNew(false);
+        setSelectedTxId(txId);
+    };
+    
+    const handleCreateNew = () => {
+        setSelectedTxId(null);
+        setIsCreatingNew(true);
+    }
+    
+    const handleFormSuccess = (txId: string) => {
+        setIsCreatingNew(false);
+        setSelectedTxId(txId);
+    }
 
     const exportableData = exportData.map(tx => ({
         id: tx.id,
@@ -57,13 +98,12 @@ export default function TransactionsPage() {
     }));
 
     return (
-        <>
+        <div className="space-y-6">
             <PageHeader 
                 title="Transactions"
                 description="Manage all financial transactions."
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    <SyncButton />
                     <ExportButton 
                         data={exportableData} 
                         filename="transactions"
@@ -81,19 +121,31 @@ export default function TransactionsPage() {
                             notes: "Notes",
                         }}
                     />
-                    <Button asChild>
-                        <Link href="/transactions/add">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add Transaction
-                        </Link>
+                    <Button onClick={handleCreateNew}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Add New Transaction
                     </Button>
                 </div>
             </PageHeader>
+            
+            {(selectedTransaction || isCreatingNew) && (
+                <TransactionForm
+                    key={selectedTxId || 'new'}
+                    transaction={selectedTransaction}
+                    client={selectedClient}
+                    onSuccess={handleFormSuccess}
+                />
+            )}
+            
+            {loading && <Skeleton className="h-[200px] w-full" />}
+            
             <TransactionsTable 
                 transactions={transactions} 
                 loading={loading}
                 onFilteredDataChange={setExportData}
+                onRowClick={handleSelectTransaction}
+                selectedTxId={selectedTxId}
             />
-        </>
+        </div>
     );
 }
