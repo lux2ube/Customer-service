@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, FiatRate, CryptoFee, UnifiedReceipt } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -149,7 +149,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const [selectedFundIds, setSelectedFundIds] = React.useState<string[]>([]);
     
     // A synced transaction's USDT amount should be immutable.
-    const isSyncedTx = !!transaction?.hash && transaction?.type === 'Withdraw';
+    const isSyncedTx = !!(transaction?.hash && transaction?.type === 'Withdraw');
     const readOnly = !isEditMode;
 
     // --- DATA FETCHING ---
@@ -180,26 +180,36 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
         const funds = await getAvailableClientFunds(clientId);
         setAvailableFunds(funds);
+        return funds;
     }, []);
 
     // --- FORM STATE HYDRATION & LOGIC ---
 
     // Effect to initialize the form state when a transaction is passed in
     React.useEffect(() => {
-        if (transaction) {
-            setFormData({ ...initialFormData, ...transaction });
-            setSelectedClient(client || null);
-            const initialFundIds = transaction.linkedSmsId?.split(',').filter(Boolean) || [];
-            setSelectedFundIds(initialFundIds);
-            if (client?.id) {
-                fetchAvailableFunds(client.id);
+        const initializeForm = async () => {
+            if (transaction) {
+                setFormData({ ...initialFormData, ...transaction });
+                setSelectedClient(client || null);
+                const initialFundIds = transaction.linkedSmsId?.split(',').filter(Boolean) || [];
+                setSelectedFundIds(initialFundIds);
+                if (client?.id) {
+                    const funds = await fetchAvailableFunds(client.id);
+                    // Ensure the total USD amount reflects the saved state on initial load
+                    const totalUsdFromSavedFunds = initialFundIds.reduce((sum, id) => {
+                         const fund = funds.find(f => f.id === id);
+                         return sum + (fund?.amountUsd || 0);
+                    }, transaction.amount_usd); // Start with saved amount_usd as fallback
+                    setFormData(prev => ({...prev, amount_usd: totalUsdFromSavedFunds}));
+                }
+            } else {
+                setFormData(initialFormData);
+                setSelectedClient(null);
+                setSelectedFundIds([]);
+                setAvailableFunds([]);
             }
-        } else {
-            setFormData(initialFormData);
-            setSelectedClient(null);
-            setSelectedFundIds([]);
-            setAvailableFunds([]);
-        }
+        };
+        initializeForm();
     }, [transaction, client, fetchAvailableFunds]);
 
     // Recalculates fee and USDT amount based on a given USD amount.
@@ -229,9 +239,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
 
         const totalUsdFromFunds = selectedFundIds.reduce((sum, id) => {
             const fund = availableFunds.find(f => f.id === id);
-            // On initial load, fund might not be in the list yet, so check formData too
-            if (fund) return sum + (fund.amountUsd || 0);
-            return sum;
+            return sum + (fund?.amountUsd || 0);
         }, 0);
         
         setFormData(prev => {
@@ -246,7 +254,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     };
 
     const handleManualUsdtChange = (newUsdtValue: number) => {
-        if (isSyncedTx) return;
+        if (isSyncedTx || readOnly) return;
         setFormData(prev => {
             if (!cryptoFees) return { ...prev, amount_usdt: newUsdtValue };
 

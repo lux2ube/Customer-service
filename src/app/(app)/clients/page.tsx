@@ -1,4 +1,7 @@
 
+'use client';
+
+import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
@@ -7,45 +10,70 @@ import { ClientsTable } from "@/components/clients-table";
 import { ImportClientsButton } from "@/components/import-clients-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
-import { ref, get } from 'firebase/database';
+import { ref, get, onValue } from 'firebase/database';
 import type { Client, Account, Transaction } from '@/lib/types';
 import { MergeClientsButton } from '@/components/merge-clients-button';
 import { Suspense } from "react";
+import { Skeleton } from '@/components/ui/skeleton';
 
-async function getInitialData(): Promise<{
-    clients: Client[];
-    transactions: Transaction[];
-    bankAccounts: Account[];
-    cryptoWallets: Account[];
-}> {
-    const [clientsSnap, transactionsSnap, accountsSnap] = await Promise.all([
-        get(ref(db, 'clients/')),
-        get(ref(db, 'transactions/')),
-        get(ref(db, 'accounts/')),
-    ]);
-
-    const clients: Client[] = [];
-    if (clientsSnap.exists()) {
-        const data = clientsSnap.val();
-        Object.keys(data).forEach(key => clients.push({ id: key, ...data[key] }));
-    }
-
-    const transactions: Transaction[] = transactionsSnap.exists() ? Object.values(transactionsSnap.val()) : [];
-    
-    const bankAccounts: Account[] = [];
-    const cryptoWallets: Account[] = [];
-    if (accountsSnap.exists()) {
-        const allAccounts: Account[] = Object.values(accountsSnap.val());
-        bankAccounts.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
-        cryptoWallets.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
-    }
-
-    return { clients, transactions, bankAccounts, cryptoWallets };
-}
-
-export default async function ClientsPage() {
-    const { clients, transactions, bankAccounts, cryptoWallets } = await getInitialData();
+export default function ClientsPage() {
+    const [clients, setClients] = React.useState<Client[]>([]);
+    const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
+    const [loading, setLoading] = React.useState(true);
     const [exportData, setExportData] = React.useState<Client[]>([]);
+
+    React.useEffect(() => {
+        const clientsRef = ref(db, 'clients/');
+        const transactionsRef = ref(db, 'transactions/');
+        const accountsRef = ref(db, 'accounts/');
+
+        const unsubs: (() => void)[] = [];
+
+        setLoading(true);
+        Promise.all([
+            get(clientsRef),
+            get(transactionsRef),
+            get(accountsRef)
+        ]).then(([clientsSnap, transactionsSnap, accountsSnap]) => {
+            const clientList: Client[] = [];
+            if (clientsSnap.exists()) {
+                const data = clientsSnap.val();
+                Object.keys(data).forEach(key => clientList.push({ id: key, ...data[key] }));
+            }
+            setClients(clientList);
+
+            const transactionList: Transaction[] = transactionsSnap.exists() ? Object.values(transactionsSnap.val()) : [];
+            setTransactions(transactionList);
+            
+            const bankAccountList: Account[] = [];
+            const cryptoWalletList: Account[] = [];
+            if (accountsSnap.exists()) {
+                const allAccounts: Account[] = Object.values(accountsSnap.val());
+                bankAccountList.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+                cryptoWalletList.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+            }
+            setBankAccounts(bankAccountList);
+            setCryptoWallets(cryptoWalletList);
+            
+            setLoading(false);
+        });
+
+        // After initial load, listen for realtime updates
+        unsubs.push(onValue(clientsRef, (snapshot) => {
+            const data = snapshot.val();
+            const clientList: Client[] = [];
+            if (data) {
+                Object.keys(data).forEach(key => clientList.push({ id: key, ...data[key] }));
+            }
+            setClients(clientList);
+        }));
+
+        return () => unsubs.forEach(unsub => unsub());
+
+    }, []);
+
 
     const exportableData = exportData.map(client => ({
         id: client.id,
@@ -64,7 +92,7 @@ export default async function ClientsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                     <MergeClientsButton />
                     <ImportClientsButton />
-                    {/* The ExportButton is a client component and will be managed inside ClientsTableWrapper if needed */}
+                    <ExportButton data={exportableData} filename="clients" />
                     <Button asChild>
                         <Link href="/clients/add">
                             <PlusCircle className="mr-2 h-4 w-4" />
@@ -73,12 +101,13 @@ export default async function ClientsPage() {
                     </Button>
                 </div>
             </PageHeader>
-            <Suspense fallback={<div>Loading clients...</div>}>
+            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                 <ClientsTable
                     initialClients={clients}
                     initialTransactions={transactions}
                     initialBankAccounts={bankAccounts}
                     initialCryptoWallets={cryptoWallets}
+                    onFilteredDataChange={setExportData}
                 />
             </Suspense>
         </div>

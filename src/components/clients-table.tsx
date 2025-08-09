@@ -28,6 +28,7 @@ interface ClientsTableProps {
     initialTransactions: Transaction[];
     initialBankAccounts: Account[];
     initialCryptoWallets: Account[];
+    onFilteredDataChange: (data: Client[]) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
@@ -37,12 +38,13 @@ export function ClientsTable({
     initialTransactions,
     initialBankAccounts,
     initialCryptoWallets,
+    onFilteredDataChange,
 }: ClientsTableProps) {
   const [clients, setClients] = React.useState<Client[]>(initialClients);
   const [transactions, setTransactions] = React.useState<Transaction[]>(initialTransactions);
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>(initialBankAccounts);
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>(initialCryptoWallets);
-  const [loading, setLoading] = React.useState(false); // Initial load is done on server
+  const [loading, setLoading] = React.useState(true); // Initial load is done on server
   
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -51,33 +53,12 @@ export function ClientsTable({
 
   // Listen for real-time updates
   React.useEffect(() => {
-    const clientsRef = ref(db, 'clients/');
-    const transactionsRef = ref(db, 'transactions/');
-    const accountsRef = ref(db, 'accounts/');
-    
-    const unsubs: (()=>void)[] = [];
-
-    unsubs.push(onValue(clientsRef, (snapshot) => {
-        const data = snapshot.val();
-        setClients(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
-    }));
-    
-    unsubs.push(onValue(transactionsRef, (snapshot) => {
-        const data = snapshot.val();
-        setTransactions(data ? Object.values(data) : []);
-    }));
-    
-    unsubs.push(onValue(accountsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            const allAccounts: Account[] = Object.values(data);
-            setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
-            setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
-        }
-    }));
-
-    return () => unsubs.forEach(unsub => unsub());
-}, []);
+    setClients(initialClients);
+    setTransactions(initialTransactions);
+    setBankAccounts(initialBankAccounts);
+    setCryptoWallets(initialCryptoWallets);
+    setLoading(initialClients.length === 0);
+  }, [initialClients, initialTransactions, initialBankAccounts, initialCryptoWallets]);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -146,8 +127,9 @@ export function ClientsTable({
   }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientTransactionMap]);
 
   React.useEffect(() => {
+    onFilteredDataChange(filteredClients);
     setCurrentPage(1);
-  }, [search, bankAccountFilter, cryptoWalletFilter]);
+  }, [filteredClients, onFilteredDataChange]);
 
   const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
 
