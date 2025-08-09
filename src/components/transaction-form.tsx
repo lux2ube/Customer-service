@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, Transaction, Settings, FiatRate, CryptoFee, UnifiedReceipt } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue, get, query, limitToLast, orderByChild } from 'firebase/database';
 import html2canvas from 'html2canvas';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
