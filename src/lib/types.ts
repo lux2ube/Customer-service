@@ -24,6 +24,18 @@ export interface Client {
     favoriteBankAccountName?: string;
 }
 
+export interface ClientActivity {
+    id: string;
+    date: string;
+    type: string;
+    description: string;
+    amount: number;
+    currency: string;
+    status: string;
+    source: 'Transaction' | 'Cash Receipt' | 'Cash Payment' | 'SMS';
+    link?: string;
+}
+
 export interface ServiceProvider {
     id: string;
     name: string;

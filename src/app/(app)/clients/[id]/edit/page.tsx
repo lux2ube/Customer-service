@@ -5,7 +5,7 @@ import { ClientForm } from "@/components/client-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
 import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
-import type { Client, Account, Transaction, AuditLog } from '@/lib/types';
+import type { Client, Account, Transaction, AuditLog, CashReceipt, CashPayment, SmsTransaction, ClientActivity } from '@/lib/types';
 import { notFound } from "next/navigation";
 
 async function getClient(id: string): Promise<Client | null> {
@@ -17,16 +17,91 @@ async function getClient(id: string): Promise<Client | null> {
     return null;
 }
 
-async function getClientTransactions(clientId: string): Promise<Transaction[]> {
-    const transactionsRef = ref(db, 'transactions');
-    const snapshot = await get(transactionsRef);
-    if (!snapshot.exists()) {
-        return [];
+async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
+    const [transactionsSnap, cashReceiptsSnap, cashPaymentsSnap, smsSnap] = await Promise.all([
+        get(query(ref(db, 'transactions'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'cash_receipts'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'cash_payments'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'sms_transactions'), orderByChild('matched_client_id'), equalTo(clientId)))
+    ]);
+
+    const history: ClientActivity[] = [];
+
+    if (transactionsSnap.exists()) {
+        const transactions: Record<string, Transaction> = transactionsSnap.val();
+        Object.keys(transactions).forEach(key => {
+            const tx = transactions[key];
+            history.push({
+                id: key,
+                date: tx.date,
+                type: tx.type,
+                description: tx.type === 'Deposit' ? `vs ${tx.amount} ${tx.currency}` : `vs ${tx.amount_usdt} USDT`,
+                amount: tx.amount_usd,
+                currency: 'USD',
+                status: tx.status,
+                source: 'Transaction',
+                link: `/transactions/${key}/edit`
+            });
+        });
     }
-    const allTransactions: Transaction[] = Object.values(snapshot.val());
-    // Filter for transactions that are confirmed and belong to the specific client
-    return allTransactions.filter(tx => tx.clientId === clientId && tx.status === 'Confirmed');
+    
+    if (cashReceiptsSnap.exists()) {
+        const receipts: Record<string, CashReceipt> = cashReceiptsSnap.val();
+        Object.keys(receipts).forEach(key => {
+            const receipt = receipts[key];
+            history.push({
+                id: key,
+                date: receipt.date,
+                type: 'Cash Receipt',
+                description: `From ${receipt.senderName} via ${receipt.bankAccountName}`,
+                amount: receipt.amount,
+                currency: receipt.currency,
+                status: receipt.status,
+                source: 'Cash Receipt'
+            });
+        });
+    }
+    
+    if (cashPaymentsSnap.exists()) {
+        const payments: Record<string, CashPayment> = cashPaymentsSnap.val();
+        Object.keys(payments).forEach(key => {
+            const payment = payments[key];
+            history.push({
+                id: key,
+                date: payment.date,
+                type: 'Cash Payment',
+                description: `To ${payment.recipientName} via ${payment.bankAccountName}`,
+                amount: -payment.amount, // Negative for payment
+                currency: payment.currency,
+                status: payment.status,
+                source: 'Cash Payment'
+            });
+        });
+    }
+
+    if (smsSnap.exists()) {
+        const smsTxs: Record<string, SmsTransaction> = smsSnap.val();
+        Object.keys(smsTxs).forEach(key => {
+            const sms = smsTxs[key];
+            history.push({
+                id: key,
+                date: sms.parsed_at,
+                type: sms.type === 'credit' ? 'SMS Credit' : 'SMS Debit',
+                description: `From ${sms.client_name} via ${sms.account_name}`,
+                amount: sms.type === 'credit' ? sms.amount || 0 : -(sms.amount || 0),
+                currency: sms.currency || '',
+                status: sms.status,
+                source: 'SMS'
+            });
+        });
+    }
+
+    // Sort by date descending
+    history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    return history;
 }
+
 
 async function getClientAuditLogs(clientId: string): Promise<AuditLog[]> {
     const logsRef = ref(db, 'logs');
@@ -89,7 +164,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
     }
 
     const bankAccounts = await getBankAccounts();
-    const transactions = await getClientTransactions(id);
+    const activityHistory = await getClientActivityHistory(id);
     const otherClientsWithSameName = await getOtherClientsWithSameName(client);
     const auditLogs = await getClientAuditLogs(id);
 
@@ -100,7 +175,13 @@ export default async function EditClientPage({ params }: { params: { id: string 
                 description="Update the client's profile details."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ClientForm client={client} bankAccounts={bankAccounts} transactions={transactions} otherClientsWithSameName={otherClientsWithSameName} auditLogs={auditLogs} />
+                <ClientForm 
+                    client={client} 
+                    bankAccounts={bankAccounts} 
+                    activityHistory={activityHistory}
+                    otherClientsWithSameName={otherClientsWithSameName} 
+                    auditLogs={auditLogs} 
+                />
             </Suspense>
         </>
     );
