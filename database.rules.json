@@ -8,6 +8,10 @@
     },
     "transactions": {
       ".indexOn": ["createdAt"]
+    },
+    "logs": {
+      ".indexOn": "entityId"
     }
   }
 }
+
