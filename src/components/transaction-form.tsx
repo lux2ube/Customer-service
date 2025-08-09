@@ -163,7 +163,15 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         const unsubSettings = onValue(settingsRef, (snap) => {
             const settingsData = snap.val();
             if(settingsData) {
-                setCryptoFees(settingsData.crypto_fees || null);
+                const feesRef = ref(db, 'rate_history/crypto_fees');
+                const lastFeeQuery = query(feesRef, orderByChild('timestamp'), limitToLast(1));
+                get(lastFeeQuery).then(snapshot => {
+                  if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    const lastEntryKey = Object.keys(data)[0];
+                    setCryptoFees(data[lastEntryKey]);
+                  }
+                });
             }
         });
         
@@ -513,7 +521,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                         </CardContent>
                     </Card>
                     
-                    {selectedClient && (
+                    {selectedClient && formData.type === 'Deposit' && (
                          <Card>
                              <CardHeader className="flex flex-row items-center justify-between">
                                 <div className="space-y-1">
@@ -553,6 +561,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                                      ) : (
                                         <p className="text-sm text-muted-foreground text-center p-4">No available funds found for this client.</p>
                                      )}
+                                     {formErrors?.linkedReceiptIds && <p className="text-sm text-destructive mt-2">{formErrors.linkedReceiptIds[0]}</p>}
                                  </div>
                              </CardContent>
                          </Card>

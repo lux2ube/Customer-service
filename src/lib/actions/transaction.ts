@@ -56,12 +56,12 @@ const TransactionSchema = z.object({
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
     linkedReceiptIds: z.array(z.string()).optional(),
 }).refine(data => {
-    if (data.hash && data.status === 'Confirmed') {
+    if (data.type === 'Deposit') {
         return (data.linkedReceiptIds?.length || 0) > 0;
     }
     return true;
 }, {
-    message: "You must select at least one cash receipt to complete a synced transaction.",
+    message: "For a deposit, you must select at least one cash receipt to fund the transaction.",
     path: ["linkedReceiptIds"],
 });
 
