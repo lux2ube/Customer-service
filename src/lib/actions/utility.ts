@@ -347,3 +347,64 @@ export async function setupInitialClientIdsAndAccounts(prevState: SetupState, fo
         return { message: e.message || 'An unknown error occurred during setup.', error: true };
     }
 }
+
+export async function restructureRecordIds(prevState: SetupState, formData: FormData): Promise<SetupState> {
+     const recordTypes = ['transactions', 'cash_receipts', 'cash_payments'];
+    let totalRestructured = 0;
+
+    try {
+        for (const recordType of recordTypes) {
+            const snapshot = await get(ref(db, recordType));
+            if (!snapshot.exists()) {
+                continue;
+            }
+
+            const records: [string, any][] = Object.entries(snapshot.val());
+            
+            // Filter out records that already have a numeric ID
+            const recordsToMigrate = records.filter(([id, record]) => isNaN(parseInt(id)));
+
+            if (recordsToMigrate.length === 0) continue;
+
+            // Sort by creation date to ensure sequential order is meaningful
+            recordsToMigrate.sort(([, a], [, b]) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+
+            // Find the highest existing numeric ID to start from
+            const numericIds = records
+                .map(([id]) => parseInt(id))
+                .filter(id => !isNaN(id));
+            let counter = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+            
+            const updates: { [key: string]: any } = {};
+
+            for (const [oldId, recordData] of recordsToMigrate) {
+                counter++;
+                const newId = String(counter);
+                
+                // Update the ID field within the object itself
+                const newRecordData = { ...recordData, id: newId };
+
+                updates[`/${recordType}/${newId}`] = newRecordData;
+                updates[`/${recordType}/${oldId}`] = null; // Delete the old record
+            }
+            
+            if (Object.keys(updates).length > 0) {
+                await update(ref(db), updates);
+                totalRestructured += recordsToMigrate.length;
+            }
+        }
+        
+        if (totalRestructured > 0) {
+            revalidatePath('/transactions');
+            revalidatePath('/cash-receipts');
+            revalidatePath('/cash-payments');
+            return { message: `Successfully restructured IDs for ${totalRestructured} records across the system.`, error: false };
+        } else {
+            return { message: 'No records found that require ID restructuring.', error: false };
+        }
+
+    } catch(e: any) {
+        console.error("ID Restructuring Error:", e);
+        return { message: `An error occurred: ${e.message}`, error: true };
+    }
+}

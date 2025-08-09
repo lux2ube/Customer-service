@@ -4,7 +4,7 @@
 import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -68,10 +68,10 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
 
 // --- Action Button Components ---
 
-function ActionButton({ Icon, text, pendingText }: { Icon: React.ElementType, text: string, pendingText: string }) {
+function ActionButton({ Icon, text, pendingText, variant = "outline" }: { Icon: React.ElementType, text: string, pendingText: string, variant?: "outline" | "destructive" | "default" | "secondary" }) {
     const { pending } = useFormStatus();
     return (
-        <Button variant="outline" type="submit" disabled={pending} className="flex-1 min-w-[200px]">
+        <Button variant={variant} type="submit" disabled={pending} className="flex-1 min-w-[200px]">
             <Icon className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
             {pending ? pendingText : text}
         </Button>
@@ -113,11 +113,18 @@ function MergeClientsForm() {
     return <form action={formAction}><ActionButton Icon={Users2} text="Merge Duplicates" pendingText="Merging..." /></form>;
 }
 
+function RestructureIdsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(restructureRecordIds, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Restructure Failed' : 'Restructure Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={ListTree} text="Restructure IDs" pendingText="Restructuring..." variant="destructive" /></form>;
+}
+
 function MigrateClientIdsForm() {
     const { toast } = useToast();
     const [state, formAction] = useActionState<SetupState, FormData>(setupInitialClientIdsAndAccounts, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Migrate Client IDs" pendingText="Migrating..." /></form>;
+    return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Migrate Client IDs" pendingText="Migrating..." variant="destructive" /></form>;
 }
 
 export default function DashboardPage() {
@@ -311,6 +318,7 @@ export default function DashboardPage() {
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
                            <MigrateClientIdsForm />
+                           <RestructureIdsForm />
                         </div>
                     </CardContent>
                 </Card>

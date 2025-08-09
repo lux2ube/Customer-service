@@ -66,7 +66,10 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
         <form action={formAction} className="space-y-3">
             <Card>
                 <CardHeader>
-                    <CardTitle>{account ? 'Edit' : 'New'} Account Details</CardTitle>
+                    <CardTitle>{account ? 'Edit' : 'New'} Account</CardTitle>
+                    <CardDescription>
+                        {account ? `رقم السند: ${account.id}` : 'Create a new account for your chart of accounts.'}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="grid md:grid-cols-2 gap-4">

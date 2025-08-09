@@ -406,7 +406,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                         <CardHeader className="flex flex-row justify-between items-start">
                             <div>
                                 <CardTitle>Transaction Details</CardTitle>
-                                {transaction?.id && <p className="text-xs text-muted-foreground pt-1">ID: {transaction.id}</p>}
+                                {transaction?.id && <p className="text-xs text-muted-foreground pt-1">رقم السند: {transaction.id}</p>}
                             </div>
                              {!readOnly && transaction && (
                                 <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditMode(false)}>
