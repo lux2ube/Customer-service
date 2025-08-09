@@ -25,7 +25,7 @@ export type TransactionFormState =
         date?: string[];
         clientId?: string[];
         type?: string[];
-        amount?: string[];
+        amount_usd?: string[];
         currency?: string[];
         attachment_url?: string[];
         linkedReceiptIds?: string[];
@@ -40,7 +40,6 @@ const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
     clientId: z.string().optional(),
     type: z.enum(['Deposit', 'Withdraw']),
-    amount: z.coerce.number(),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number().min(0, "Fee must be positive."),
     expense_usd: z.coerce.number().optional(),
@@ -57,12 +56,12 @@ const TransactionSchema = z.object({
     linkedReceiptIds: z.array(z.string()).optional(),
 }).refine(data => {
     if (data.type === 'Deposit') {
-        return (data.linkedReceiptIds?.length || 0) > 0;
+        return data.amount_usd > 0;
     }
     return true;
 }, {
     message: "For a deposit, you must select at least one cash receipt to fund the transaction.",
-    path: ["linkedReceiptIds"],
+    path: ["amount_usd"],
 });
 
 
@@ -170,7 +169,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     
     const linkedSmsIdString = dataToSave.linkedReceiptIds?.join(',');
 
-    const finalData: Omit<Transaction, 'currency' | 'bankAccountId'> = {
+    const finalData: Omit<Transaction, 'amount' | 'currency' > & {amount?: number, currency?: string} = {
         id: newId,
         date: dataToSave.date,
         type: dataToSave.type,
@@ -178,7 +177,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         clientName,
         cryptoWalletId: dataToSave.cryptoWalletId,
         cryptoWalletName,
-        amount: dataToSave.amount_usd, // `amount` now stores total USD value
         amount_usd: dataToSave.amount_usd,
         fee_usd: Math.abs(dataToSave.fee_usd),
         expense_usd: dataToSave.expense_usd,
@@ -194,6 +192,15 @@ export async function createTransaction(transactionId: string | null, formData: 
         linkedSmsId: linkedSmsIdString,
         exchange_rate_commission: Math.abs(dataToSave.exchange_rate_commission || 0),
     };
+    
+    // For withdrawal, amount/currency are different
+    if (finalData.type === 'Withdraw') {
+        finalData.amount = dataToSave.amount_usdt;
+        finalData.currency = 'USDT';
+    } else {
+        delete finalData.amount;
+        delete finalData.currency;
+    }
     
     let dataForFirebase = stripUndefined(finalData);
 

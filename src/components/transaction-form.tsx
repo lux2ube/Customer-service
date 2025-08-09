@@ -145,12 +145,60 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
     const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
     
-    const isSyncedTx = !!formData.hash && formData.type === 'Withdraw';
+    // A synced transaction's USDT amount should be immutable.
+    const isSyncedTx = !!transaction?.hash && transaction?.type === 'Deposit';
     
     const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
         const funds = await getAvailableClientFunds(clientId);
         setAvailableFunds(funds);
     }, []);
+    
+    const recalculateFinancials = React.useCallback((
+        usdAmount: number,
+        type: Transaction['type'],
+        manualUsdtAmount?: number
+    ): Partial<Transaction> => {
+
+        const result: Partial<Transaction> = {};
+
+        if (!cryptoFees) return result;
+
+        result.amount_usd = parseFloat(usdAmount.toFixed(2));
+        
+        let feePercent = 0;
+        let minFee = 0;
+        if(type === 'Deposit') {
+            feePercent = cryptoFees.buy_fee_percent / 100;
+            minFee = cryptoFees.minimum_buy_fee;
+        } else {
+            feePercent = cryptoFees.sell_fee_percent / 100;
+            minFee = cryptoFees.minimum_sell_fee;
+        }
+
+        const calculatedFee = usdAmount * feePercent;
+        const cryptoFee = Math.max(calculatedFee, minFee);
+        
+        const initialUsdtAmount = usdAmount - cryptoFee;
+
+        if(manualUsdtAmount !== undefined) {
+             const difference = manualUsdtAmount - initialUsdtAmount;
+             if(difference > 0) { // Gave a discount
+                result.expense_usd = parseFloat(difference.toFixed(2));
+                result.fee_usd = parseFloat(cryptoFee.toFixed(2));
+             } else { // Charged extra
+                result.expense_usd = 0;
+                result.fee_usd = parseFloat((cryptoFee - difference).toFixed(2));
+             }
+            result.amount_usdt = manualUsdtAmount;
+        } else {
+            result.fee_usd = parseFloat(cryptoFee.toFixed(2));
+            result.expense_usd = 0;
+            result.amount_usdt = parseFloat(initialUsdtAmount.toFixed(2));
+        }
+
+        return result;
+
+    }, [cryptoFees]);
 
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
@@ -227,109 +275,51 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         }
     };
     
-    const getNumberValue = (value: string | number) => {
-        const num = parseFloat(String(value));
-        return isNaN(num) ? 0 : num;
-    };
-    
-    const recalculateFinancials = React.useCallback((
-        localAmountUsd: number,
-        type: Transaction['type'],
-        manualUsdtAmount?: number
-    ): Partial<Transaction> => {
-
-        const result: Partial<Transaction> = {};
-
-        if (!cryptoFees) return result;
-
-        result.amount_usd = parseFloat(localAmountUsd.toFixed(2));
-        
-        let feePercent = 0;
-        let minFee = 0;
-        if(type === 'Deposit') {
-            feePercent = cryptoFees.buy_fee_percent / 100;
-            minFee = cryptoFees.minimum_buy_fee;
-        } else {
-            feePercent = cryptoFees.sell_fee_percent / 100;
-            minFee = cryptoFees.minimum_sell_fee;
-        }
-
-        const calculatedFee = localAmountUsd * feePercent;
-        const cryptoFee = Math.max(calculatedFee, minFee);
-        
-        const initialUsdtAmount = localAmountUsd - cryptoFee;
-
-        if(manualUsdtAmount !== undefined) {
-             const difference = manualUsdtAmount - initialUsdtAmount;
-             if(difference > 0) { // Gave a discount
-                result.expense_usd = parseFloat(difference.toFixed(2));
-                result.fee_usd = parseFloat(cryptoFee.toFixed(2));
-             } else { // Charged extra
-                result.expense_usd = 0;
-                result.fee_usd = parseFloat((cryptoFee - difference).toFixed(2));
-             }
-            result.amount_usdt = manualUsdtAmount;
-        } else {
-            result.fee_usd = parseFloat(cryptoFee.toFixed(2));
-            result.expense_usd = 0;
-            result.amount_usdt = parseFloat(initialUsdtAmount.toFixed(2));
-        }
-
-        return result;
-
-    }, [cryptoFees]);
-
     const handleClientSelect = async (client: Client | null) => {
         setSelectedClient(client);
-        
-        let newFormData = { ...formData };
-
-        if (client) {
-            newFormData.clientId = client.id;
-        } else {
-             newFormData = {
-                ...newFormData,
-                clientId: '',
-                bankAccountId: '',
-                currency: 'USD',
-            };
-        }
-        
-        setFormData(newFormData);
+        setFormData(prev => ({
+            ...prev,
+            clientId: client?.id || '',
+        }));
         setSelectedFundIds([]);
     };
     
     const handleFundSelectionChange = (fundId: string, isSelected: boolean) => {
         const newSelection = isSelected ? [...selectedFundIds, fundId] : selectedFundIds.filter(id => id !== fundId);
         setSelectedFundIds(newSelection);
+    };
 
-        const totalUsd = newSelection.reduce((sum, id) => {
+    // This effect runs whenever the selected funds change to update the form's financials
+    React.useEffect(() => {
+        const totalUsd = selectedFundIds.reduce((sum, id) => {
             const fund = availableFunds.find(f => f.id === id);
             return sum + (fund?.amountUsd || 0);
         }, 0);
 
         setFormData(currentFormData => {
             const updates = recalculateFinancials(totalUsd, currentFormData.type);
-            return { ...currentFormData, amount: totalUsd, amount_usd: totalUsd, ...updates };
+            return { ...currentFormData, amount_usd: totalUsd, ...updates };
         });
-    };
+    }, [selectedFundIds, availableFunds, recalculateFinancials]);
     
     const handleManualUsdtAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newUsdtAmount = getNumberValue(e.target.value);
+        const newUsdtAmount = parseFloat(e.target.value) || 0;
         if (isSyncedTx) return;
         setFormData(prev => {
             const updates = recalculateFinancials(prev.amount_usd, prev.type, newUsdtAmount);
-            return { ...prev, ...updates, amount_usdt: newUsdtAmount };
+            return { ...prev, ...updates };
         });
     };
 
     const handleFieldChange = (field: keyof Transaction, value: any) => {
-        let newFormData = { ...formData, [field]: value };
-        if(field === 'type') {
-            const updates = recalculateFinancials(newFormData.amount_usd, value);
-            newFormData = { ...newFormData, ...updates };
-        }
-        setFormData(newFormData);
+        setFormData(prev => {
+            let newFormData = { ...prev, [field]: value };
+            if(field === 'type') {
+                const updates = recalculateFinancials(newFormData.amount_usd, value);
+                newFormData = { ...newFormData, ...updates };
+            }
+            return newFormData;
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -573,7 +563,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                                 <Label className="w-1/3 shrink-0 text-right text-xs">Total Amount (USD)</Label>
                                 <Input type="number" step="any" value={formData.amount_usd} readOnly disabled className="bg-muted/50"/>
                             </div>
-                             {formErrors?.amount && <p className="text-sm text-destructive text-right">{formErrors.amount[0]}</p>}
+                             {formErrors?.amount_usd && <p className="text-sm text-destructive text-right">{formErrors.amount_usd[0]}</p>}
 
                              <Alert variant="default" className="p-3">
                                 <AlertDescription className="text-xs space-y-2">
