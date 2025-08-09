@@ -144,15 +144,17 @@ export default function DashboardPage() {
         
         const unsubs: (() => void)[] = [];
 
-        unsubs.push(onValue(query(ref(db, 'transactions'), orderByChild('createdAt'), limitToLast(5)), (snapshot) => {
+        // Fetch last 5 transactions for display without relying on server-side sort
+        unsubs.push(onValue(query(ref(db, 'transactions'), limitToLast(20)), (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const list: Transaction[] = Object.keys(data).map(key => ({
                     id: key,
                     ...data[key]
                 }));
+                // Sort client-side now
                 list.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                setRecentTransactions(list);
+                setRecentTransactions(list.slice(0, 5));
             }
         }));
 
@@ -255,7 +257,7 @@ export default function DashboardPage() {
         
         // Mark loading as false after initial data load
         Promise.all([
-            get(query(ref(db, 'transactions'), orderByChild('createdAt'), limitToLast(5))), 
+            get(query(ref(db, 'transactions'), limitToLast(5))), 
             get(transactionsRef), 
             get(clientsRef)
         ]).then(() => setLoading(false));

@@ -4,19 +4,19 @@
     ".read": true,
     ".write": true,
     "sms_transactions": {
-      ".indexOn": ["parsed_at", "matched_client_id", "clientId"]
+      ".indexOn": ["parsed_at", "matched_client_id", "status"]
     },
     "transactions": {
-      ".indexOn": ["createdAt", "clientId"]
+      ".indexOn": ["createdAt", "clientId", "status"]
     },
     "cash_receipts": {
-      ".indexOn": "clientId"
+      ".indexOn": ["clientId", "status"]
     },
     "cash_payments": {
-      ".indexOn": "clientId"
+      ".indexOn": ["clientId"]
     },
     "logs": {
-      ".indexOn": "entityId"
+      ".indexOn": ["entityId", "timestamp"]
     }
   }
 }
