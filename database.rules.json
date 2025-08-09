@@ -1,8 +1,7 @@
-
 {
   "rules": {
-    ".read": "true",
-    ".write": "true",
+    ".read": "auth != null",
+    ".write": "auth != null",
     "sms_transactions": {
       ".indexOn": "parsed_at"
     },
@@ -14,4 +13,3 @@
     }
   }
 }
-
