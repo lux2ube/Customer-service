@@ -145,7 +145,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const [batchUpdateInfo, setBatchUpdateInfo] = React.useState<{ client: Client, count: number } | null>(null);
     const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
     
-    const isSyncedTx = !!formData.hash;
+    const isSyncedTx = !!formData.hash && formData.type === 'Withdraw';
     
     const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
         const funds = await getAvailableClientFunds(clientId);
@@ -300,20 +300,17 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     };
     
     const handleFundSelectionChange = (fundId: string, isSelected: boolean) => {
-        setSelectedFundIds(prev => {
-            const newSelection = isSelected ? [...prev, fundId] : prev.filter(id => id !== fundId);
-            
-            const totalUsd = newSelection.reduce((sum, id) => {
-                const fund = availableFunds.find(f => f.id === id);
-                return sum + (fund?.amountUsd || 0);
-            }, 0);
-            
-            setFormData(currentFormData => {
-                const updates = recalculateFinancials(totalUsd, currentFormData.type);
-                return { ...currentFormData, amount: totalUsd, amount_usd: totalUsd, ...updates };
-            });
+        const newSelection = isSelected ? [...selectedFundIds, fundId] : selectedFundIds.filter(id => id !== fundId);
+        setSelectedFundIds(newSelection);
 
-            return newSelection;
+        const totalUsd = newSelection.reduce((sum, id) => {
+            const fund = availableFunds.find(f => f.id === id);
+            return sum + (fund?.amountUsd || 0);
+        }, 0);
+
+        setFormData(currentFormData => {
+            const updates = recalculateFinancials(totalUsd, currentFormData.type);
+            return { ...currentFormData, amount: totalUsd, amount_usd: totalUsd, ...updates };
         });
     };
     
@@ -491,7 +488,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
-                                    <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)} disabled={readOnly}>
+                                    <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)} disabled={readOnly || isSyncedTx}>
                                         <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit (Buy USDT)</SelectItem>
@@ -593,7 +590,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
 
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx || readOnly} className={cn(isSyncedTx && "font-bold border-blue-400", readOnly ? "bg-muted/50" : "")} />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={handleManualUsdtAmountChange} readOnly={isSyncedTx || readOnly} className={cn((isSyncedTx || readOnly) && "bg-muted/50", isSyncedTx && "font-bold border-blue-400")} />
                             </div>
                         </CardContent>
                         <CardFooter>
