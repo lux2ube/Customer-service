@@ -126,10 +126,10 @@ function ClientSelector({ clients, onClientSelect }: { clients: Client[], onClie
   )
 }
 
-export function CashReceiptsTable() {
-  const [receipts, setReceipts] = React.useState<UnifiedReceipt[]>([]);
-  const [clients, setClients] = React.useState<Client[]>([]);
-  const [loading, setLoading] = React.useState(true);
+export function CashReceiptsTable({ initialReceipts, initialClients }: { initialReceipts: UnifiedReceipt[], initialClients: Client[] }) {
+  const [receipts, setReceipts] = React.useState<UnifiedReceipt[]>(initialReceipts);
+  const [clients, setClients] = React.useState<Client[]>(initialClients);
+  const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [sourceFilter, setSourceFilter] = React.useState('all');
@@ -143,73 +143,51 @@ export function CashReceiptsTable() {
   const { toast } = useToast();
 
   React.useEffect(() => {
+    // Set initial data, then subscribe for real-time updates
+    setReceipts(initialReceipts);
+    setClients(initialClients);
+
     const receiptsRef = ref(db, 'cash_receipts/');
     const smsRef = ref(db, 'sms_transactions/');
     const clientsRef = ref(db, 'clients/');
 
-    let manualReceipts: CashReceipt[] = [];
-    let smsCredits: (SmsTransaction & {id: string})[] = [];
-    
-    const combineAndSetReceipts = () => {
-        const unifiedManuals: UnifiedReceipt[] = manualReceipts.map(r => ({
-            id: r.id,
-            date: r.date,
-            clientName: r.clientName,
-            senderName: r.senderName,
-            bankAccountName: r.bankAccountName,
-            amount: r.amount,
-            currency: r.currency,
-            remittanceNumber: r.remittanceNumber,
-            source: 'Manual',
-            status: r.status,
-        }));
-
-        const unifiedSms: UnifiedReceipt[] = smsCredits
-            .filter(sms => sms.type === 'credit')
-            .map(sms => ({
-                id: sms.id,
-                date: sms.parsed_at,
-                clientName: sms.matched_client_name || 'Unmatched',
-                senderName: sms.client_name,
-                bankAccountName: sms.account_name || 'N/A',
-                amount: sms.amount || 0,
-                currency: sms.currency || '',
-                remittanceNumber: sms.transaction_id,
-                source: 'SMS',
-                status: sms.status,
-                rawSms: sms.raw_sms,
+    const unsubReceipts = onValue(receiptsRef, (snapshot) => {
+        const manualReceipts: CashReceipt[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
+        setReceipts(currentReceipts => {
+            const smsPart = currentReceipts.filter(r => r.source === 'SMS');
+            const manualPart = manualReceipts.map(r => ({
+                id: r.id, date: r.date, clientName: r.clientName, senderName: r.senderName,
+                bankAccountName: r.bankAccountName, amount: r.amount, currency: r.currency,
+                remittanceNumber: r.remittanceNumber, source: 'Manual', status: r.status,
             }));
+            return [...smsPart, ...manualPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
+    });
 
-        const allReceipts = [...unifiedManuals, ...unifiedSms];
-        allReceipts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setReceipts(allReceipts);
-        setLoading(false);
-    }
-    
-    const unsubscribeManual = onValue(receiptsRef, (snapshot) => {
-        const data = snapshot.val();
-        manualReceipts = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        combineAndSetReceipts();
+    const unsubSms = onValue(smsRef, (snapshot) => {
+        const smsCredits: SmsTransaction[] = snapshot.exists() ? Object.values(snapshot.val()).filter((sms: any) => sms.type === 'credit') : [];
+        setReceipts(currentReceipts => {
+             const manualPart = currentReceipts.filter(r => r.source === 'Manual');
+             const smsPart = smsCredits.map((sms: any) => ({
+                id: sms.id, date: sms.parsed_at, clientName: sms.matched_client_name || 'Unmatched',
+                senderName: sms.client_name, bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0,
+                currency: sms.currency || '', remittanceNumber: sms.transaction_id, source: 'SMS',
+                status: sms.status, rawSms: sms.raw_sms,
+            }));
+             return [...manualPart, ...smsPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
     });
-    
-    const unsubscribeSms = onValue(smsRef, (snapshot) => {
-        const data = snapshot.val();
-        smsCredits = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        combineAndSetReceipts();
-    });
-    
-    const unsubscribeClients = onValue(clientsRef, (snapshot) => {
-        const data = snapshot.val();
-        const list: Client[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        setClients(list);
+
+    const unsubClients = onValue(clientsRef, (snapshot) => {
+        setClients(snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : []);
     });
 
     return () => {
-        unsubscribeManual();
-        unsubscribeSms();
-        unsubscribeClients();
+        unsubReceipts();
+        unsubSms();
+        unsubClients();
     };
-  }, []);
+  }, [initialReceipts, initialClients]);
   
   const filteredReceipts = React.useMemo(() => {
     return receipts.filter(r => {

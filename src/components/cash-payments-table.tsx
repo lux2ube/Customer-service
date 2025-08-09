@@ -44,7 +44,7 @@ import { updateSmsTransactionStatus, linkSmsToClient, cancelCashPayment } from '
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CashReceiptBulkActions } from './cash-receipt-bulk-actions'; // Can be reused for SMS actions
+import { CashReceiptBulkActions } from './cash-receipt-bulk-actions';
 import Link from 'next/link';
 
 const statuses: (SmsTransaction['status'] | CashPayment['status'])[] = ['pending', 'parsed', 'matched', 'used', 'rejected', 'Confirmed', 'Cancelled'];
@@ -127,10 +127,10 @@ function ClientSelector({ clients, onClientSelect }: { clients: Client[], onClie
   )
 }
 
-export function CashPaymentsTable() {
-  const [payments, setPayments] = React.useState<UnifiedPayment[]>([]);
-  const [clients, setClients] = React.useState<Client[]>([]);
-  const [loading, setLoading] = React.useState(true);
+export function CashPaymentsTable({ initialPayments, initialClients }: { initialPayments: UnifiedPayment[], initialClients: Client[] }) {
+  const [payments, setPayments] = React.useState<UnifiedPayment[]>(initialPayments);
+  const [clients, setClients] = React.useState<Client[]>(initialClients);
+  const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [sourceFilter, setSourceFilter] = React.useState('all');
@@ -145,73 +145,51 @@ export function CashPaymentsTable() {
   const { toast } = useToast();
 
   React.useEffect(() => {
+    // Set initial data, then subscribe for real-time updates
+    setPayments(initialPayments);
+    setClients(initialClients);
+
     const paymentsRef = ref(db, 'cash_payments/');
     const smsRef = ref(db, 'sms_transactions/');
     const clientsRef = ref(db, 'clients/');
 
-    let manualPayments: CashPayment[] = [];
-    let smsDebits: (SmsTransaction & {id: string})[] = [];
-    
-    const combineAndSetData = () => {
-        const unifiedManuals: UnifiedPayment[] = manualPayments.map(p => ({
-            id: p.id,
-            date: p.date,
-            clientName: p.clientName,
-            recipientName: p.recipientName,
-            bankAccountName: p.bankAccountName,
-            amount: p.amount,
-            currency: p.currency,
-            remittanceNumber: p.remittanceNumber,
-            source: 'Manual',
-            status: p.status,
-        }));
-
-        const unifiedSms: UnifiedPayment[] = smsDebits
-            .filter(sms => sms.type === 'debit')
-            .map(sms => ({
-                id: sms.id,
-                date: sms.parsed_at,
-                clientName: sms.matched_client_name || 'Unmatched',
-                recipientName: sms.client_name,
-                bankAccountName: sms.account_name || 'N/A',
-                amount: sms.amount || 0,
-                currency: sms.currency || '',
-                remittanceNumber: sms.transaction_id,
-                source: 'SMS',
-                status: sms.status,
-                rawSms: sms.raw_sms,
+    const unsubPayments = onValue(paymentsRef, (snapshot) => {
+        const manualPayments: CashPayment[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
+        setPayments(currentPayments => {
+            const smsPart = currentPayments.filter(p => p.source === 'SMS');
+            const manualPart = manualPayments.map(p => ({
+                id: p.id, date: p.date, clientName: p.clientName, recipientName: p.recipientName,
+                bankAccountName: p.bankAccountName, amount: p.amount, currency: p.currency,
+                remittanceNumber: p.remittanceNumber, source: 'Manual', status: p.status,
             }));
+            return [...smsPart, ...manualPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
+    });
 
-        const allPayments = [...unifiedManuals, ...unifiedSms];
-        allPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setPayments(allPayments);
-        setLoading(false);
-    }
-    
-    const unsubscribeManual = onValue(paymentsRef, (snapshot) => {
-        const data = snapshot.val();
-        manualPayments = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        combineAndSetData();
+    const unsubSms = onValue(smsRef, (snapshot) => {
+        const smsDebits: SmsTransaction[] = snapshot.exists() ? Object.values(snapshot.val()).filter((sms: any) => sms.type === 'debit') : [];
+        setPayments(currentPayments => {
+             const manualPart = currentPayments.filter(p => p.source === 'Manual');
+             const smsPart = smsDebits.map((sms: any) => ({
+                id: sms.id, date: sms.parsed_at, clientName: sms.matched_client_name || 'Unmatched',
+                recipientName: sms.client_name, bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0,
+                currency: sms.currency || '', remittanceNumber: sms.transaction_id, source: 'SMS',
+                status: sms.status, rawSms: sms.raw_sms,
+            }));
+             return [...manualPart, ...smsPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
     });
-    
-    const unsubscribeSms = onValue(smsRef, (snapshot) => {
-        const data = snapshot.val();
-        smsDebits = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        combineAndSetData();
-    });
-    
-    const unsubscribeClients = onValue(clientsRef, (snapshot) => {
-        const data = snapshot.val();
-        const list: Client[] = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-        setClients(list);
+
+    const unsubClients = onValue(clientsRef, (snapshot) => {
+        setClients(snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : []);
     });
 
     return () => {
-        unsubscribeManual();
-        unsubscribeSms();
-        unsubscribeClients();
+        unsubPayments();
+        unsubSms();
+        unsubClients();
     };
-  }, []);
+  }, [initialPayments, initialClients]);
   
   const filteredPayments = React.useMemo(() => {
     return payments.filter(p => {

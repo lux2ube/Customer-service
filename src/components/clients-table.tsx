@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -20,31 +19,65 @@ import { Pencil, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, X } fro
 import { Input } from '@/components/ui/input';
 import { normalizeArabic, cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { db } from '@/lib/firebase';
+import { onValue, ref } from 'firebase/database';
 
 
 interface ClientsTableProps {
-    clients: Client[];
-    transactions: Transaction[];
-    bankAccounts: Account[];
-    cryptoWallets: Account[];
-    loading: boolean;
-    onFilteredDataChange: (data: Client[]) => void;
+    initialClients: Client[];
+    initialTransactions: Transaction[];
+    initialBankAccounts: Account[];
+    initialCryptoWallets: Account[];
 }
 
 const ITEMS_PER_PAGE = 50;
 
 export function ClientsTable({ 
-    clients, 
-    transactions,
-    bankAccounts,
-    cryptoWallets,
-    loading, 
-    onFilteredDataChange 
+    initialClients,
+    initialTransactions,
+    initialBankAccounts,
+    initialCryptoWallets,
 }: ClientsTableProps) {
+  const [clients, setClients] = React.useState<Client[]>(initialClients);
+  const [transactions, setTransactions] = React.useState<Transaction[]>(initialTransactions);
+  const [bankAccounts, setBankAccounts] = React.useState<Account[]>(initialBankAccounts);
+  const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>(initialCryptoWallets);
+  const [loading, setLoading] = React.useState(false); // Initial load is done on server
+  
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
   const [bankAccountFilter, setBankAccountFilter] = React.useState('all');
   const [cryptoWalletFilter, setCryptoWalletFilter] = React.useState('all');
+
+  // Listen for real-time updates
+  React.useEffect(() => {
+    const clientsRef = ref(db, 'clients/');
+    const transactionsRef = ref(db, 'transactions/');
+    const accountsRef = ref(db, 'accounts/');
+    
+    const unsubs: (()=>void)[] = [];
+
+    unsubs.push(onValue(clientsRef, (snapshot) => {
+        const data = snapshot.val();
+        setClients(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
+    }));
+    
+    unsubs.push(onValue(transactionsRef, (snapshot) => {
+        const data = snapshot.val();
+        setTransactions(data ? Object.values(data) : []);
+    }));
+    
+    unsubs.push(onValue(accountsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            const allAccounts: Account[] = Object.values(data);
+            setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+            setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+        }
+    }));
+
+    return () => unsubs.forEach(unsub => unsub());
+}, []);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -68,7 +101,12 @@ export function ClientsTable({
 
 
   const filteredClients = React.useMemo(() => {
-    let filtered = [...clients];
+    let filtered = [...clients].sort((a,b) => {
+        const idA = parseInt(a.id);
+        const idB = parseInt(b.id);
+        if (!isNaN(idA) && !isNaN(idB)) return idB - idA;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
 
     if (search) {
         const normalizedSearch = normalizeArabic(search.toLowerCase().trim());
@@ -108,9 +146,8 @@ export function ClientsTable({
   }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientTransactionMap]);
 
   React.useEffect(() => {
-    onFilteredDataChange(filteredClients);
     setCurrentPage(1);
-  }, [filteredClients, onFilteredDataChange]);
+  }, [search, bankAccountFilter, cryptoWalletFilter]);
 
   const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
 
