@@ -10,7 +10,7 @@ import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'fi
 import type { Client, Transaction } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks, endOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
@@ -141,11 +141,10 @@ export default function DashboardPage() {
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
         const transactionsRef = ref(db, 'transactions');
-        const recentTxQuery = query(ref(db, 'transactions'), limitToLast(5));
         
         const unsubs: (() => void)[] = [];
 
-        unsubs.push(onValue(recentTxQuery, (snapshot) => {
+        unsubs.push(onValue(query(ref(db, 'transactions'), orderByChild('createdAt'), limitToLast(5)), (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const list: Transaction[] = Object.keys(data).map(key => ({
@@ -230,7 +229,7 @@ export default function DashboardPage() {
 
                 const dailyData = last7Days.map(day => {
                     const dayStart = startOfDay(day);
-                    const dayEnd = endOfWeek(day);
+                    const dayEnd = endOfDay(day);
                     const volume = confirmedTxs
                         .filter(tx => {
                             const txDate = parseISO(tx.date);
@@ -256,7 +255,7 @@ export default function DashboardPage() {
         
         // Mark loading as false after initial data load
         Promise.all([
-            get(recentTxQuery), 
+            get(query(ref(db, 'transactions'), orderByChild('createdAt'), limitToLast(5))), 
             get(transactionsRef), 
             get(clientsRef)
         ]).then(() => setLoading(false));
