@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -319,7 +320,7 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
-    clientName: z.string().optional(),
+    clientName: z.string().min(1, 'Client name is required.'),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
     senderName: z.string().optional(),
@@ -334,15 +335,6 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
     const rawData: Record<string, any> = { ...Object.fromEntries(formData.entries()) };
     
-    if (!rawData.clientName && rawData.clientId) {
-        try {
-            const clientSnapshot = await get(ref(db, `clients/${rawData.clientId}`));
-            if (clientSnapshot.exists()) {
-                rawData.clientName = (clientSnapshot.val() as Client).name;
-            }
-        } catch (e) { /* Let validation handle it if name isn't found */ }
-    }
-    
     const validatedFields = CashReceiptSchema.safeParse(rawData);
 
     if (!validatedFields.success) {
@@ -352,7 +344,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
     }
 
-    const { bankAccountId, clientId, clientName, amount, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, clientName, amount, amountUsd, senderName, remittanceNumber, note } = validatedFields.data;
     
     try {
         const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
@@ -362,29 +354,28 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         
-        let amountUsd = validatedFields.data.amountUsd;
-
         const newReceiptRef = push(ref(db, 'cash_receipts'));
+
         const receiptData: Omit<CashReceipt, 'id'> = {
             date: new Date().toISOString(),
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName: clientName!,
-            senderName: senderName || clientName!,
+            clientName,
+            senderName: senderName || clientName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
-            remittanceNumber,
-            note,
             status: 'Pending',
             createdAt: new Date().toISOString(),
+            ...(remittanceNumber && { remittanceNumber }),
+            ...(note && { note }),
         };
         
-        await set(newReceiptRef, receiptData);
+        await set(newReceiptRef, stripUndefined(receiptData));
         
         revalidatePath('/cash-receipts');
-        revalidatePath(`/transactions/add`);
+        revalidatePath(`/transactions`);
         return { success: true, message: 'Cash receipt recorded successfully.' };
 
     } catch (e: any) {
