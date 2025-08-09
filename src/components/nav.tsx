@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -36,9 +37,10 @@ const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { type: 'divider', label: 'Operations' },
   { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/transactions', label: 'Transactions', icon: Banknote },
   { href: '/cash-receipts', label: 'Cash Receipts', icon: HandCoins },
-  { href: '/cash-payments', label: 'Cash Payments', icon: ArrowLeftRight },
+  { href: '/cash-payments', label: 'Cash Payments', icon: HandCoins },
   { href: '/wallet', label: 'USDT Sender Wallet', icon: Wallet },
   { type: 'divider', label: 'Accounting & Reports' },
   { href: '/accounting/journal', label: 'Journal', icon: BookCopy },
