@@ -4,7 +4,7 @@
     ".read": true,
     ".write": true,
     "sms_transactions": {
-      ".indexOn": ["parsed_at", "matched_client_id"]
+      ".indexOn": ["parsed_at", "matched_client_id", "clientId"]
     },
     "transactions": {
       ".indexOn": ["createdAt", "clientId"]
