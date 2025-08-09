@@ -81,112 +81,108 @@ export function ExchangeForm({ clients, accounts }: { clients: Client[], account
 
     return (
         <form>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                {/* They Give Section */}
-                <Card className="h-full">
-                    <CardHeader>
-                        <CardTitle>They Give (Client Pays)</CardTitle>
-                        <CardDescription>Details of the currency received from the client.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Amount Received</Label>
-                            <Input type="number" placeholder="e.g., 200" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Currency</Label>
-                            <Select>
-                                <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="EGP">Egyptian Pound (EGP)</SelectItem>
-                                    <SelectItem value="SAR">Saudi Riyal (SAR)</SelectItem>
-                                    <SelectItem value="USD">US Dollar (USD)</SelectItem>
-                                    <SelectItem value="YER">Yemeni Rial (YER)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Received Into Account</Label>
-                             <Select>
-                                <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
-                                <SelectContent>
-                                    {accounts.filter(a => a.type === 'Assets').map(account => (
-                                        <SelectItem key={account.id} value={account.id}>{account.name} ({account.currency})</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* They Get Section */}
-                <Card className="h-full">
-                    <CardHeader>
-                        <CardTitle>They Get (We Pay)</CardTitle>
-                        <CardDescription>Details of the currency given to the client.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Amount Paid</Label>
-                            <Input type="number" placeholder="e.g., 11100" readOnly className="bg-muted" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Currency</Label>
-                            <Select>
-                                <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="YER">Yemeni Rial (YER)</SelectItem>
-                                    <SelectItem value="SAR">Saudi Riyal (SAR)</SelectItem>
-                                    <SelectItem value="USD">US Dollar (USD)</SelectItem>
-                                    <SelectItem value="EGP">Egyptian Pound (EGP)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                         <div className="space-y-2">
-                            <Label>Paid From Account</Label>
-                             <Select>
-                                <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
-                                <SelectContent>
-                                    {accounts.filter(a => a.type === 'Assets').map(account => (
-                                        <SelectItem key={account.id} value={account.id}>{account.name} ({account.currency})</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Separator className="my-6" />
-
-            <Card>
+             <Card>
                 <CardHeader>
-                    <CardTitle>Transaction Details</CardTitle>
+                    <CardTitle>Currency Exchange</CardTitle>
+                    <CardDescription>Record a currency purchase or sale transaction.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                     <div className="grid md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
+                <CardContent>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* They Give Section */}
+                        <Card className="h-full bg-muted/20">
+                            <CardHeader>
+                                <CardTitle className="text-base text-green-600">They Give (Client Pays)</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Amount Received</Label>
+                                    <Input type="number" placeholder="e.g., 200" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Currency</Label>
+                                    <Select>
+                                        <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="USD">US Dollar (USD)</SelectItem>
+                                            <SelectItem value="YER">Yemeni Rial (YER)</SelectItem>
+                                            <SelectItem value="SAR">Saudi Riyal (SAR)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Received Into Account</Label>
+                                    <Select>
+                                        <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {accounts.filter(a => a.type === 'Assets').map(account => (
+                                                <SelectItem key={account.id} value={account.id}>{account.name} ({account.currency})</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* They Get Section */}
+                        <Card className="h-full bg-muted/20">
+                            <CardHeader>
+                                <CardTitle className="text-base text-red-600">They Get (We Pay)</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Amount Paid</Label>
+                                    <Input type="number" placeholder="e.g., 11100" readOnly className="bg-muted" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Currency</Label>
+                                    <Select>
+                                        <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="YER">Yemeni Rial (YER)</SelectItem>
+                                            <SelectItem value="SAR">Saudi Riyal (SAR)</SelectItem>
+                                            <SelectItem value="USD">US Dollar (USD)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Paid From Account</Label>
+                                    <Select>
+                                        <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {accounts.filter(a => a.type === 'Assets').map(account => (
+                                                <SelectItem key={account.id} value={account.id}>{account.name} ({account.currency})</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <Separator className="my-6" />
+
+                    <div className="grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2 md:col-span-1">
                             <Label>Client</Label>
                             <ClientSelector clients={clients} selectedClientId="" onSelect={() => {}} />
                         </div>
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             <Label>Exchange Rate</Label>
-                            <Input type="number" placeholder="e.g., 37" />
+                            <Input type="number" placeholder="e.g., 555" />
                         </div>
                         <div className="space-y-2">
                             <Label>Reference / Source</Label>
                             <Input placeholder="Optional reference" />
                         </div>
                     </div>
-                     <div className="space-y-2">
+                     <div className="space-y-2 mt-4">
                         <Label>Notes</Label>
                         <Textarea placeholder="Add any notes for this transaction..." />
                     </div>
                 </CardContent>
-                <CardFooter className="flex justify-between items-center bg-muted/50 p-4">
+                <CardFooter className="flex justify-between items-center bg-muted/50 p-4 mt-4 border-t">
                     <div className="flex gap-2">
                          <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Print Invoice</Button>
-                         <Button variant="outline">Print Receipt</Button>
                     </div>
                     <SubmitButton />
                 </CardFooter>
