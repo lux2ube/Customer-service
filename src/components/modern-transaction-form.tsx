@@ -24,6 +24,8 @@ import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/databas
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { QuickCashReceiptForm } from './quick-cash-receipt-form';
 import { QuickCashPaymentForm } from './quick-cash-payment-form';
+import { QuickUsdtReceiptForm } from './quick-usdt-receipt-form';
+
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -83,6 +85,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
     const [isQuickReceiptOpen, setIsQuickReceiptOpen] = React.useState(false);
     const [isQuickPaymentOpen, setIsQuickPaymentOpen] = React.useState(false);
+    const [isQuickUsdtReceiptOpen, setIsQuickUsdtReceiptOpen] = React.useState(false);
 
     const { toast } = useToast();
 
@@ -138,10 +141,17 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
             min_sell_fee: cryptoFees?.minimum_sell_fee || 1,
         };
         
+        let baseAmountForFee = 0;
+        if (transactionType === 'Deposit') {
+            baseAmountForFee = totalInflowUSD; // Fee is on what the client gives us
+        } else if (transactionType === 'Withdraw') {
+            const cryptoInflows = inflows.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amountUsd, 0);
+            baseAmountForFee = cryptoInflows; // Fee is on the USDT they give us
+        }
+
         const feePercent = (transactionType === 'Deposit' ? feeConfig.buy_fee : feeConfig.sell_fee) / 100;
         const minFee = transactionType === 'Deposit' ? feeConfig.min_buy_fee : feeConfig.min_sell_fee;
         
-        const baseAmountForFee = transactionType === 'Deposit' ? totalInflowUSD : totalOutflowUSD;
         const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
         const netResult = totalInflowUSD - totalOutflowUSD - calculatedFee;
@@ -192,6 +202,12 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 isOpen={isQuickPaymentOpen}
                 setIsOpen={setIsQuickPaymentOpen}
                 onPaymentCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
+            />
+             <QuickUsdtReceiptForm
+                client={selectedClient}
+                isOpen={isQuickUsdtReceiptOpen}
+                setIsOpen={setIsQuickUsdtReceiptOpen}
+                onReceiptCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
             />
             <div className="space-y-4">
                 {/* Step 1 */}
@@ -250,9 +266,15 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <CardTitle>Step 3: Select Financial Records</CardTitle>
                                 <CardDescription>Choose the records to link to this transaction.</CardDescription>
                             </div>
-                            <div>
-                                {transactionType !== 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Receipt</Button>}
-                                {transactionType !== 'Deposit' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)} className="ml-2"><PlusCircle className="mr-2 h-4 w-4" />Record New Payment</Button>}
+                            <div className="flex gap-2">
+                                {transactionType === 'Deposit' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Receipt</Button>}
+                                {transactionType === 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Payment</Button>}
+                                {transactionType === 'Transfer' && (
+                                    <>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Fiat In</Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />USDT In</Button>
+                                    </>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent>
