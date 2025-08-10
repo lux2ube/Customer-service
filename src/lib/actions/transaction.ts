@@ -8,7 +8,7 @@ import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'f
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt } from '../types';
-import { stripUndefined, sendTelegramNotification, sendTelegramPhoto } from './helpers';
+import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 
@@ -326,6 +326,63 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
     }
 }
 
+export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!validatedFields.success) {
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
+    }
+    const { bankAccountId, clientId, clientName, amount, amountUsd, remittanceNumber } = validatedFields.data;
+    try {
+        const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
+        if (!bankAccountSnapshot.exists()) {
+            return { message: 'Error: Could not find bank account.', success: false };
+        }
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+
+        const newReceiptRef = push(ref(db, 'cash_receipts'));
+        const newReceiptId = newReceiptRef.key!;
+
+        const receiptData: Omit<CashReceipt, 'id'> = {
+            date: new Date().toISOString(),
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName,
+            senderName: clientName, // For manual add, sender is the client
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            status: 'Pending',
+            createdAt: new Date().toISOString(),
+            remittanceNumber: remittanceNumber || undefined
+        };
+
+        await set(newReceiptRef, stripUndefined(receiptData));
+
+        // Create journal entry
+        const journalDesc = `Cash receipt from ${clientName} for ${amount} ${bankAccount.currency}`;
+        const newJournalRef = push(ref(db, 'journal_entries'));
+        await set(newJournalRef, {
+            date: receiptData.date,
+            description: journalDesc,
+            debit_account: bankAccountId,
+            credit_account: `6001${clientId}`, // Assuming client liability account
+            debit_amount: amount,
+            credit_amount: amountUsd,
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: bankAccount.name,
+            credit_account_name: clientName,
+        });
+
+        revalidatePath('/cash-receipts');
+        return { success: true, message: 'Cash receipt recorded successfully.' };
+    } catch (e: any) {
+        console.error("Error creating cash receipt:", e);
+        return { message: 'Database Error: Could not record cash receipt.', success: false };
+    }
+}
+
 export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
     if (!clientId) return [];
     try {
@@ -386,5 +443,146 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
     } catch (error) {
         console.error("Error fetching available client funds:", error);
         return [];
+    }
+}
+
+
+export type CashPaymentFormState = {
+  errors?: { bankAccountId?: string[]; clientId?: string[]; amount?: string[]; recipientName?: string[]; };
+  message?: string;
+  success?: boolean;
+} | undefined;
+
+const CashPaymentSchema = z.object({
+    bankAccountId: z.string().min(1, 'Please select a bank account.'),
+    clientId: z.string().min(1, 'Please select a client to debit from.'),
+    recipientName: z.string().optional(),
+    amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+    amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
+    remittanceNumber: z.string().optional(),
+    note: z.string().optional(),
+});
+
+
+export async function createCashPayment(paymentId: string | null, prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
+    const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!validatedFields.success) {
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.' };
+    }
+
+    const { bankAccountId, clientId, recipientName, amount, amountUsd, remittanceNumber, note } = validatedFields.data;
+    
+    try {
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+        ]);
+        
+        if (!bankAccountSnapshot.exists()) return { message: 'Bank account not found.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
+
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+
+        const newPaymentRef = paymentId ? ref(db, `cash_payments/${paymentId}`) : push(ref(db, 'cash_payments'));
+        const newPaymentId = paymentId || newPaymentRef.key!;
+
+        const journalDesc = `Cash payment to ${recipientName || client.name} for ${amount} ${bankAccount.currency}`;
+        const newJournalRef = push(ref(db, 'journal_entries'));
+        
+        const paymentData = {
+            id: newPaymentId,
+            date: new Date().toISOString(),
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName: client.name,
+            recipientName: recipientName || client.name,
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            remittanceNumber: remittanceNumber || undefined,
+            note: note || undefined,
+            status: 'Confirmed' as const,
+            createdAt: new Date().toISOString(),
+            journalEntryId: newJournalRef.key,
+        };
+
+        const updates: { [key: string]: any } = {};
+        updates[`/cash_payments/${newPaymentId}`] = stripUndefined(paymentData);
+        updates[`/journal_entries/${newJournalRef.key}`] = {
+            date: paymentData.date,
+            description: journalDesc,
+            debit_account: `6001${clientId}`, // Assuming client liability account
+            credit_account: bankAccountId,
+            debit_amount: amountUsd,
+            credit_amount: amount,
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: client.name,
+            credit_account_name: bankAccount.name,
+        };
+        
+        await update(ref(db), updates);
+
+        revalidatePath('/cash-payments');
+        return { success: true, message: 'Cash payment recorded successfully.' };
+    } catch (e: any) {
+        console.error("Error creating cash payment:", e);
+        return { message: 'Database Error: Could not record cash payment.', success: false };
+    }
+}
+
+export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean; message?: string }> {
+    if (!paymentId) {
+        return { success: false, message: 'Payment ID is required.' };
+    }
+
+    try {
+        const paymentRef = ref(db, `cash_payments/${paymentId}`);
+        const paymentSnapshot = await get(paymentRef);
+
+        if (!paymentSnapshot.exists()) {
+            return { success: false, message: 'Payment not found.' };
+        }
+        
+        const paymentData = paymentSnapshot.val() as CashPayment;
+
+        if (paymentData.status === 'Cancelled') {
+            return { success: true, message: 'Payment was already cancelled.' };
+        }
+        
+        const updates: { [key: string]: any } = {};
+        updates[`/cash_payments/${paymentId}/status`] = 'Cancelled';
+
+        if (paymentData.journalEntryId) {
+            const journalRef = ref(db, `journal_entries/${paymentData.journalEntryId}`);
+            const journalSnapshot = await get(journalRef);
+            if(journalSnapshot.exists()) {
+                const journalData = journalSnapshot.val();
+                const reversalJournalRef = push(ref(db, 'journal_entries'));
+                updates[`/journal_entries/${reversalJournalRef.key}`] = {
+                    date: new Date().toISOString(),
+                    description: `Reversal for cash payment #${paymentId}`,
+                    debit_account: journalData.credit_account,
+                    credit_account: journalData.debit_account,
+                    debit_amount: journalData.credit_amount,
+                    credit_amount: journalData.debit_amount,
+                    amount_usd: journalData.amount_usd,
+                    createdAt: new Date().toISOString(),
+                    debit_account_name: journalData.credit_account_name,
+                    credit_account_name: journalData.debit_account_name,
+                };
+            }
+        }
+        
+        await update(ref(db), updates);
+        
+        revalidatePath('/cash-payments');
+        return { success: true, message: 'Payment cancelled and journal entry reversed.' };
+
+    } catch (error) {
+        console.error('Error cancelling payment:', error);
+        return { success: false, message: 'Database error while cancelling payment.' };
     }
 }

@@ -17,9 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, FiatRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/transaction';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'database';
 
 
 function SubmitButton() {
