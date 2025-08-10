@@ -202,6 +202,11 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         }
         if (!cryptoFees) return {};
 
+        // If USD amount is zero, all financial results should be zero.
+        if (usdAmount <= 0) {
+            return { fee_usd: 0, amount_usdt: 0, expense_usd: 0 };
+        }
+
         const feePercent = type === 'Deposit' ? cryptoFees.buy_fee_percent / 100 : cryptoFees.sell_fee_percent / 100;
         const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         
