@@ -7,18 +7,10 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate, UnifiedReceipt, UnifiedFinancialRecord } from '../types';
-import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt } from '../types';
+import { stripUndefined, sendTelegramNotification, sendTelegramPhoto } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
-import { ensureDefaultAccounts } from './account';
-
-const PROFIT_ACCOUNT_ID = '4001';
-const COMMISSION_ACCOUNT_ID = '4002';
-const EXPENSE_ACCOUNT_ID = '5001';
-const UNMATCHED_FUNDS_ACCOUNT_ID = '7000';
-const CLIENT_PARENT_ACCOUNT_ID = '6000';
-
 
 export type TransactionFormState =
   | {
@@ -40,13 +32,13 @@ export type TransactionFormState =
 const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
     clientId: z.string().min(1, 'A client must be selected for the transaction.'),
-    type: z.enum(['Deposit', 'Withdraw', 'Modern']),
+    type: z.enum(['Deposit', 'Withdraw']),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number().min(0, "Fee must be positive."),
     expense_usd: z.coerce.number().optional(),
     amount_usdt: z.coerce.number(),
+    bankAccountId: z.string().optional().nullable(),
     cryptoWalletId: z.string().optional().nullable(),
-    exchange_rate_commission: z.coerce.number().min(0, "Commission must be positive.").optional(),
     attachment_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     invoice_image_url: z.string().url({ message: "Invalid URL" }).optional().nullable(),
     notes: z.string().optional(),
@@ -127,17 +119,25 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
 
     let clientName = '';
-    let clientAccountId = '';
     try {
         const clientRef = ref(db, `clients/${dataToSave.clientId}`);
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
-            const client = snapshot.val() as Client;
-            clientName = client.name;
-            clientAccountId = `6000${dataToSave.clientId}`;
+            clientName = (snapshot.val() as Client).name;
         }
     } catch (e) {
         console.error("Could not fetch client name for transaction");
+    }
+
+    let bankAccountName = '';
+    if (dataToSave.bankAccountId) {
+         try {
+            const bankAccountRef = ref(db, `accounts/${dataToSave.bankAccountId}`);
+            const snapshot = await get(bankAccountRef);
+            if (snapshot.exists()) {
+                bankAccountName = (snapshot.val() as Account).name;
+            }
+        } catch (e) { console.error("Could not fetch bank account name for transaction"); }
     }
 
     let cryptoWalletName = '';
@@ -155,16 +155,20 @@ export async function createTransaction(transactionId: string | null, formData: 
     
     const linkedSmsIdString = dataToSave.linkedReceiptIds?.join(',');
 
-    const finalData: Omit<Transaction, 'amount' | 'currency' > & {amount?: number, currency?: string} = {
+    const finalData = {
         id: newId,
         date: dataToSave.date,
         type: dataToSave.type,
         clientId: dataToSave.clientId,
         clientName,
+        bankAccountId: dataToSave.bankAccountId,
+        bankAccountName,
         cryptoWalletId: dataToSave.cryptoWalletId,
         cryptoWalletName,
+        amount: dataToSave.amount_usd, // Simplification for display
+        currency: 'USD',
         amount_usd: dataToSave.amount_usd,
-        fee_usd: Math.abs(dataToSave.fee_usd),
+        fee_usd: dataToSave.fee_usd,
         expense_usd: dataToSave.expense_usd,
         amount_usdt: dataToSave.amount_usdt,
         attachment_url: dataToSave.attachment_url,
@@ -176,16 +180,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         status: dataToSave.status,
         createdAt: previousTxState?.createdAt || new Date().toISOString(),
         linkedSmsId: linkedSmsIdString,
-        exchange_rate_commission: Math.abs(dataToSave.exchange_rate_commission || 0),
     };
-    
-    if (finalData.type === 'Withdraw') {
-        finalData.amount = dataToSave.amount_usdt;
-        finalData.currency = 'USDT';
-    } else {
-        delete finalData.amount;
-        delete finalData.currency;
-    }
     
     let dataForFirebase = stripUndefined(finalData);
 
@@ -202,58 +197,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
-        await ensureDefaultAccounts();
-
-        const journalUpdates: { [key: string]: any } = {};
-
-        const description = `${finalData.type} for ${finalData.clientName} (Tx: ${newId.slice(-6)})`;
-
-        if (finalData.type === 'Deposit') {
-            const totalCreditToClient = finalData.amount_usdt;
-            const journalRef = push(ref(db, 'journal_entries'));
-            journalUpdates[journalRef.key!] = {
-                date: finalData.date, description,
-                debit_account: clientAccountId, debit_amount: totalCreditToClient,
-                credit_account: finalData.cryptoWalletId, credit_amount: totalCreditToClient,
-                amount_usd: totalCreditToClient, createdAt: new Date().toISOString()
-            };
-        } else { // Withdraw
-            const totalDebitFromClient = finalData.amount_usdt;
-             const journalRef = push(ref(db, 'journal_entries'));
-             journalUpdates[journalRef.key!] = {
-                date: finalData.date, description,
-                debit_account: finalData.cryptoWalletId, debit_amount: totalDebitFromClient,
-                credit_account: clientAccountId, credit_amount: totalDebitFromClient,
-                amount_usd: totalDebitFromClient, createdAt: new Date().toISOString()
-            };
-        }
-        
-        // Fee Journal Entry
-        if (finalData.fee_usd > 0) {
-            const feeJournalRef = push(ref(db, 'journal_entries'));
-            journalUpdates[feeJournalRef.key!] = {
-                date: finalData.date, description: `Fee for Tx: ${newId.slice(-6)}`,
-                debit_account: clientAccountId, debit_amount: finalData.fee_usd,
-                credit_account: PROFIT_ACCOUNT_ID, credit_amount: finalData.fee_usd,
-                amount_usd: finalData.fee_usd, createdAt: new Date().toISOString()
-            };
-        }
-        // Expense Journal Entry
-        if (finalData.expense_usd && finalData.expense_usd !== 0) {
-             const expenseJournalRef = push(ref(db, 'journal_entries'));
-             journalUpdates[expenseJournalRef.key!] = {
-                date: finalData.date, description: `Expense/Discount for Tx: ${newId.slice(-6)}`,
-                debit_account: EXPENSE_ACCOUNT_ID, debit_amount: Math.abs(finalData.expense_usd),
-                credit_account: clientAccountId, credit_amount: Math.abs(finalData.expense_usd),
-                amount_usd: Math.abs(finalData.expense_usd), createdAt: new Date().toISOString()
-            };
-        }
-
-        if (Object.keys(journalUpdates).length > 0) {
-            await update(ref(db, 'journal_entries'), journalUpdates);
-        }
-        
+    if (finalData.status === 'Confirmed') {
         let title = '';
         let message = '';
         if (finalData.type === 'Deposit') {
@@ -298,7 +242,6 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
     
     revalidatePath('/transactions');
-    revalidatePath('/accounting/journal');
     revalidatePath(`/clients/${finalData.clientId}/edit`);
     revalidatePath(`/transactions/add`);
     if(transactionId) revalidatePath(`/transactions/${transactionId}/edit`);
@@ -340,21 +283,15 @@ const CashReceiptSchema = z.object({
     clientName: z.string().min(1, 'Client name is required.'),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
-    senderName: z.string().optional(),
     remittanceNumber: z.string().optional(),
-    note: z.string().optional(),
 });
 
 export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    return createCashReceipt(prevState, formData);
-}
-
-export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
     const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
     }
-    const { bankAccountId, clientId, clientName, amount, amountUsd, senderName, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, clientName, amount, amountUsd, remittanceNumber } = validatedFields.data;
     try {
         const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
         if (!bankAccountSnapshot.exists()) {
@@ -366,133 +303,26 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         const newReceiptId = newReceiptRef.key!;
 
         const receiptData: Omit<CashReceipt, 'id'> = {
-            date: new Date().toISOString(), bankAccountId, bankAccountName: bankAccount.name,
-            clientId, clientName, senderName: senderName || clientName, amount, currency: bankAccount.currency!,
-            amountUsd, status: 'Pending', createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined, note: note || undefined,
-        };
-        await set(newReceiptRef, stripUndefined(receiptData));
-
-        const clientAccountRef = `6000${clientId}`;
-        const journalRef = push(ref(db, 'journal_entries'));
-        const journalEntry: Omit<JournalEntry, 'id'> = {
             date: new Date().toISOString(),
-            description: `Cash receipt from ${clientName} for ${amount} ${bankAccount.currency}`,
-            debit_account: bankAccountId,
-            credit_account: clientAccountRef,
-            debit_amount: amount,
-            credit_amount: amount,
-            amount_usd: amountUsd,
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName,
+            senderName: clientName, // For quick add, sender is the client
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            status: 'Pending',
             createdAt: new Date().toISOString(),
+            remittanceNumber: remittanceNumber || undefined
         };
-        await set(journalRef, journalEntry);
 
-        revalidatePath('/cash-receipts');
-        revalidatePath(`/transactions`);
+        await set(newReceiptRef, stripUndefined(receiptData));
+        revalidatePath('/transactions');
         return { success: true, message: 'Cash receipt recorded successfully.' };
     } catch (e: any) {
-        console.error("Error creating cash receipt:", e);
+        console.error("Error creating quick cash receipt:", e);
         return { message: 'Database Error: Could not record cash receipt.', success: false };
-    }
-}
-
-export type CashPaymentFormState = CashReceiptFormState; 
-
-const CashPaymentSchema = z.object({
-    bankAccountId: z.string().min(1, 'Please select a bank account.'),
-    clientId: z.string().min(1, 'Please select a client to debit.'),
-    recipientName: z.string().optional(),
-    amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
-    amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
-    remittanceNumber: z.string().optional(),
-    note: z.string().optional(),
-});
-
-export async function createCashPayment(paymentId: string | null, prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
-    const isEditing = !!paymentId;
-    const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
-    if (!validatedFields.success) {
-        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.' };
-    }
-    const { bankAccountId, clientId, amount, amountUsd, recipientName, remittanceNumber, note } = validatedFields.data;
-    try {
-        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
-            get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, `clients/${clientId}`)),
-        ]);
-        if (!bankAccountSnapshot.exists() || !clientSnapshot.exists()) {
-            return { message: 'Error: Could not find required data.', success: false };
-        }
-        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
-        const client = { id: clientId, ...clientSnapshot.val() } as Client;
-
-        if (isEditing) {
-            await update(ref(db, `cash_payments/${paymentId}`), { recipientName, remittanceNumber, note });
-        } else {
-            const newPaymentRef = push(ref(db, 'cash_payments'));
-            const journalRef = push(ref(db, 'journal_entries'));
-            const paymentData: Omit<CashPayment, 'id'> = {
-                date: new Date().toISOString(), bankAccountId, bankAccountName: bankAccount.name, clientId,
-                clientName: client.name, recipientName: recipientName || client.name, amount,
-                currency: bankAccount.currency!, amountUsd, remittanceNumber, note, status: 'Confirmed',
-                createdAt: new Date().toISOString(), journalEntryId: journalRef.key!,
-            };
-            const journalEntry: Omit<JournalEntry, 'id'> = {
-                date: new Date().toISOString(),
-                description: `Cash payment to ${recipientName || client.name}`,
-                debit_account: `6000${clientId}`,
-                credit_account: bankAccountId,
-                debit_amount: amount, credit_amount: amount,
-                amount_usd: amountUsd, createdAt: new Date().toISOString(),
-            };
-            await set(newPaymentRef, paymentData);
-            await set(journalRef, journalEntry);
-        }
-        revalidatePath('/cash-payments');
-        return { success: true, message: isEditing ? 'Cash payment updated.' : 'Cash payment recorded.' };
-    } catch (e: any) {
-        console.error("Error creating/updating cash payment:", e);
-        return { message: 'Database Error.', success: false };
-    }
-}
-
-export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean, message?: string }> {
-    if (!paymentId) return { success: false, message: "Payment ID is missing." };
-    try {
-        const paymentRef = ref(db, `cash_payments/${paymentId}`);
-        const paymentSnapshot = await get(paymentRef);
-        if (!paymentSnapshot.exists()) return { success: false, message: "Payment not found." };
-        const payment = paymentSnapshot.val() as CashPayment;
-        if (payment.status === 'Cancelled') return { success: true, message: "This payment is already cancelled." };
-
-        const updates: { [key: string]: any } = {};
-        updates[`/cash_payments/${paymentId}/status`] = 'Cancelled';
-        
-        if (payment.journalEntryId) {
-            const journalEntrySnapshot = await get(ref(db, `journal_entries/${payment.journalEntryId}`));
-            if (journalEntrySnapshot.exists()) {
-                const originalEntry = journalEntrySnapshot.val() as JournalEntry;
-                const reversalRef = push(ref(db, 'journal_entries'));
-                const reversalEntry: Omit<JournalEntry, 'id'> = {
-                    date: new Date().toISOString(),
-                    description: `Reversal for payment ${paymentId}`,
-                    debit_account: originalEntry.credit_account,
-                    credit_account: originalEntry.debit_account,
-                    debit_amount: originalEntry.credit_amount,
-                    credit_amount: originalEntry.debit_amount,
-                    amount_usd: originalEntry.amount_usd,
-                    createdAt: new Date().toISOString(),
-                };
-                updates[`/journal_entries/${reversalRef.key}`] = reversalEntry;
-            }
-        }
-        await update(ref(db), updates);
-        revalidatePath('/cash-payments');
-        revalidatePath('/accounting/journal');
-        return { success: true };
-    } catch (error) {
-        console.error("Error cancelling cash payment:", error);
-        return { success: false, message: "Database error." };
     }
 }
 
@@ -517,10 +347,17 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
             const receipt = allCashReceipts[id];
             if (receipt.clientId === clientId && receipt.status === 'Pending') {
                 funds.push({
-                    id, date: receipt.date, clientName: receipt.clientName, senderName: receipt.senderName,
-                    bankAccountName: receipt.bankAccountName, amount: receipt.amount, currency: receipt.currency,
-                    amountUsd: receipt.amountUsd, remittanceNumber: receipt.remittanceNumber,
-                    source: 'Manual', status: receipt.status
+                    id,
+                    date: receipt.date,
+                    clientName: receipt.clientName,
+                    senderName: receipt.senderName,
+                    bankAccountName: receipt.bankAccountName,
+                    amount: receipt.amount,
+                    currency: receipt.currency,
+                    amountUsd: receipt.amountUsd,
+                    remittanceNumber: receipt.remittanceNumber,
+                    source: 'Manual',
+                    status: receipt.status
                 });
             }
         }
@@ -531,9 +368,17 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
                  const rate = rateInfo ? rateInfo.clientBuy : 1;
                  const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
                 funds.push({
-                    id, date: sms.parsed_at, clientName: sms.matched_client_name || '', senderName: sms.client_name,
-                    bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0, currency: sms.currency || '',
-                    amountUsd, remittanceNumber: sms.id.slice(-6), source: 'SMS', status: sms.status
+                    id,
+                    date: sms.parsed_at,
+                    clientName: sms.matched_client_name || '',
+                    senderName: sms.client_name,
+                    bankAccountName: sms.account_name || 'N/A',
+                    amount: sms.amount || 0,
+                    currency: sms.currency || '',
+                    amountUsd,
+                    remittanceNumber: sms.id.slice(-6),
+                    source: 'SMS',
+                    status: sms.status
                 });
             }
         }
@@ -542,113 +387,4 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         console.error("Error fetching available client funds:", error);
         return [];
     }
-}
-
-export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
-  if (!clientId) return [];
-  try {
-    const [
-      cashReceiptsSnap,
-      cashPaymentsSnap,
-      smsSnap,
-      usdtReceiptsSnap,
-    ] = await Promise.all([
-      get(query(ref(db, 'cash_receipts'), orderByChild('clientId'), equalTo(clientId))),
-      get(query(ref(db, 'cash_payments'), orderByChild('clientId'), equalTo(clientId))),
-      get(query(ref(db, 'sms_transactions'), orderByChild('matched_client_id'), equalTo(clientId))),
-      get(query(ref(db, 'usdt_receipts'), orderByChild('clientId'), equalTo(clientId))),
-    ]);
-    
-    const records: UnifiedFinancialRecord[] = [];
-
-    // Cash Receipts (Manual & SMS)
-    if (cashReceiptsSnap.exists()) {
-        Object.entries(cashReceiptsSnap.val() as Record<string, CashReceipt>).forEach(([id, r]) => {
-            if (r.status === 'Pending') {
-                 records.push({
-                    id, date: r.date, type: 'inflow', source: 'Manual', amount: r.amount,
-                    currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName
-                });
-            }
-        });
-    }
-    if (smsSnap.exists()) {
-        Object.entries(smsSnap.val() as Record<string, SmsTransaction>).forEach(([id, sms]) => {
-            if (sms.status === 'matched') {
-                records.push({
-                    id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow',
-                    source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '',
-                    amountUsd: 0, // This needs to be calculated with rates
-                    status: sms.status, bankAccountName: sms.account_name,
-                });
-            }
-        });
-    }
-    
-     // Cash Payments
-    if (cashPaymentsSnap.exists()) {
-        Object.entries(cashPaymentsSnap.val() as Record<string, CashPayment>).forEach(([id, p]) => {
-             records.push({
-                id, date: p.date, type: 'outflow', source: 'Manual', amount: p.amount,
-                currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName
-            });
-        });
-    }
-
-    // USDT Receipts
-    if (usdtReceiptsSnap.exists()) {
-        Object.entries(usdtReceiptsSnap.val() as Record<string, UsdtManualReceipt>).forEach(([id, r]) => {
-             if (r.status === 'Completed') {
-                  records.push({
-                    id, date: r.date, type: 'inflow', source: 'USDT', amount: r.amount,
-                    currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName
-                });
-             }
-        });
-    }
-
-    return records.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  } catch (error) {
-    console.error("Error fetching unified client records:", error);
-    return [];
-  }
-}
-
-const ModernTransactionSchema = z.object({
-  clientId: z.string().min(1, 'A client must be selected.'),
-  notes: z.string().optional(),
-  linkedRecordIds: z.array(z.string()).min(1, 'At least one record must be selected.'),
-});
-
-export async function createModernTransaction(formData: FormData): Promise<{ success: boolean; message: string; }> {
-    const validatedFields = ModernTransactionSchema.safeParse({
-        clientId: formData.get('clientId'),
-        notes: formData.get('notes'),
-        linkedRecordIds: formData.getAll('linkedRecordIds'),
-    });
-
-    if (!validatedFields.success) {
-        return { success: false, message: validatedFields.error.flatten().fieldErrors.linkedRecordIds?.[0] || 'Invalid data submitted.' };
-    }
-
-    // This is where the complex logic of fetching all records, calculating totals,
-    // creating the transaction object, creating journal entries, and updating
-    // the status of linked records would go.
-
-    // For now, returning a success message as a placeholder for the full implementation.
-    console.log("Creating modern transaction with data:", validatedFields.data);
-
-    // Placeholder: Mark records as used
-    const updates: { [key: string]: any } = {};
-    for (const id of validatedFields.data.linkedRecordIds) {
-        updates[`/cash_receipts/${id}/status`] = 'Used';
-        updates[`/sms_transactions/${id}/status`] = 'used';
-        updates[`/usdt_receipts/${id}/status`] = 'Used';
-    }
-    await update(ref(db), updates);
-
-    revalidatePath('/transactions/modern');
-
-    return { success: true, message: 'Modern transaction created successfully.' };
 }
