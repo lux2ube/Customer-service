@@ -62,13 +62,13 @@ export default async function CashPaymentsPage() {
     return (
         <>
             <PageHeader
-                title="Cash Payments"
-                description="View and manage all recorded cash payments and outgoing SMS transactions."
+                title="سندات الصرف (Cash Payments)"
+                description="عرض وإدارة جميع المدفوعات النقدية المسجلة والمعاملات الصادرة عبر الرسائل القصيرة."
             >
                 <Button asChild>
                     <Link href="/cash-payments/add">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Record New Payment
+                        سند صرف جديد
                     </Link>
                 </Button>
             </PageHeader>

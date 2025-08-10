@@ -43,8 +43,8 @@ export default async function AddCashReceiptPage() {
     return (
         <>
             <PageHeader
-                title="Record Cash Receipt"
-                description="Use this form to record cash received in your bank accounts."
+                title="سند قبض جديد"
+                description="استخدم هذا النموذج لتسجيل المبالغ النقدية المستلمة في حساباتك المصرفية."
             />
             <Suspense fallback={<div>Loading form...</div>}>
                 <CashReceiptForm clients={clients} bankAccounts={bankAccounts} />

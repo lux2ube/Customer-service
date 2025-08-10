@@ -43,8 +43,8 @@ export default async function AddCashPaymentPage() {
     return (
         <>
             <PageHeader
-                title="Record Cash Payment"
-                description="Use this form to record cash paid out from your bank accounts."
+                title="سند صرف جديد"
+                description="استخدم هذا النموذج لتسجيل المبالغ النقدية المدفوعة من حساباتك المصرفية."
             />
             <Suspense fallback={<div>Loading form...</div>}>
                 <CashPaymentForm clients={clients} bankAccounts={bankAccounts} />

@@ -1,3 +1,4 @@
+
 import { PageHeader } from "@/components/page-header";
 import { JournalTable } from "@/components/journal-table";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,13 @@ export default function JournalPage() {
     return (
         <>
             <PageHeader 
-                title="Journal Entries"
-                description="Record and view all financial transactions."
+                title="دفتر اليومية (Journal Entries)"
+                description="تسجيل وعرض جميع المعاملات المالية."
             >
                 <Button asChild>
                     <Link href="/accounting/journal/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        New Entry
+                        سند قيد جديد
                     </Link>
                 </Button>
             </PageHeader>

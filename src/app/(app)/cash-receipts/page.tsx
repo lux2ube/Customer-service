@@ -59,13 +59,13 @@ export default async function CashReceiptsPage() {
     return (
         <>
             <PageHeader
-                title="Cash Receipts"
-                description="View and manage all recorded cash receipts."
+                title="سندات القبض (Cash Receipts)"
+                description="عرض وإدارة جميع سندات القبض النقدية."
             >
                 <Button asChild>
                     <Link href="/cash-receipts/add">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Record New Receipt
+                        سند قبض جديد
                     </Link>
                 </Button>
             </PageHeader>
