@@ -95,17 +95,24 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
     }
   }, [isOpen]);
 
+  // Use a ref to track if the toast has been shown for the current state
+  const stateRef = React.useRef<CashReceiptFormState>();
   React.useEffect(() => {
-    if (state?.success) {
-      toast({ title: 'Success', description: state.message });
-      onReceiptCreated();
-      setIsOpen(false);
-      formRef.current?.reset();
-      setSelectedBankAccountId('');
-      setAmount('');
-      setAmountUsd(0);
-    } else if (state?.message) {
-      toast({ title: 'Error', variant: 'destructive', description: state.message });
+    // Only process if the state has been updated
+    if (state && state !== stateRef.current) {
+      if (state.success) {
+        toast({ title: 'Success', description: state.message });
+        onReceiptCreated(); // Notify parent to refresh
+        setIsOpen(false);
+        formRef.current?.reset();
+        setSelectedBankAccountId('');
+        setAmount('');
+        setAmountUsd(0);
+      } else if (state.message) {
+        toast({ title: 'Error', variant: 'destructive', description: state.message });
+      }
+      // Update the ref to the current state so we don't process it again
+      stateRef.current = state;
     }
   }, [state, toast, onReceiptCreated, setIsOpen]);
   

@@ -9,7 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
-import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions';
+import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions/transaction';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle } from 'lucide-react';
