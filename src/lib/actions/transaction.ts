@@ -372,7 +372,7 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         };
         await set(newReceiptRef, stripUndefined(receiptData));
 
-        const clientAccountRef = `accounts/6000${clientId}`;
+        const clientAccountRef = `6000${clientId}`;
         const journalRef = push(ref(db, 'journal_entries'));
         const journalEntry: Omit<JournalEntry, 'id'> = {
             date: new Date().toISOString(),
@@ -462,7 +462,7 @@ export async function cancelCashPayment(paymentId: string): Promise<{ success: b
         const paymentSnapshot = await get(paymentRef);
         if (!paymentSnapshot.exists()) return { success: false, message: "Payment not found." };
         const payment = paymentSnapshot.val() as CashPayment;
-        if (payment.status === 'Cancelled') return { success: false, message: "This payment is already cancelled." };
+        if (payment.status === 'Cancelled') return { success: true, message: "This payment is already cancelled." };
 
         const updates: { [key: string]: any } = {};
         updates[`/cash_payments/${paymentId}/status`] = 'Cancelled';
