@@ -336,8 +336,8 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
                 {loading ? (
                     <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading receipts...</TableCell></TableRow>
                 ) : filteredReceipts.length > 0 ? (
-                filteredReceipts.map((receipt) => (
-                    <TableRow key={`${receipt.source}-${receipt.id}`} data-state={rowSelection[receipt.id] && "selected"}>
+                filteredReceipts.map((receipt, index) => (
+                    <TableRow key={`${receipt.source}-${receipt.id || index}`} data-state={rowSelection[receipt.id] && "selected"}>
                         <TableCell className="px-2">
                             <Checkbox
                                 checked={rowSelection[receipt.id] || false}
