@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -310,4 +311,58 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
     
     revalidatePath('/accounting/journal');
     redirect('/accounting/journal');
+}
+
+export type SetupState = { message?: string; error?: boolean; } | undefined;
+
+export async function setupClientParentAccount(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const accountsRef = ref(db, 'accounts');
+        const accountsSnapshot = await get(accountsRef);
+        const allAccounts = accountsSnapshot.val() || {};
+        
+        const updates: { [key: string]: any } = {};
+        
+        // 1. Create the parent account if it doesn't exist
+        if (!allAccounts['6000']) {
+            updates['/accounts/6000'] = {
+                name: 'Clients',
+                type: 'Liabilities',
+                isGroup: true,
+                currency: 'USD',
+                priority: 99, // High priority to appear at the top
+            };
+        } else {
+             // Ensure it is a group account
+            updates['/accounts/6000/isGroup'] = true;
+            updates['/accounts/6000/type'] = 'Liabilities';
+        }
+
+        // 2. Find all client sub-accounts and set their parentId
+        let updatedCount = 0;
+        for (const accountId in allAccounts) {
+            // A client sub-account is assumed to start with '600', is not a group, and is not the parent itself.
+            if (accountId.startsWith('600') && accountId !== '6000' && !allAccounts[accountId].isGroup) {
+                 if (allAccounts[accountId].parentId !== '6000') {
+                    updates[`/accounts/${accountId}/parentId`] = '6000';
+                    updatedCount++;
+                }
+            }
+        }
+        
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/accounting/chart-of-accounts');
+        
+        let message = "Parent account '6000 - Clients' ensured. ";
+        message += `Updated ${updatedCount} client sub-accounts to be nested correctly.`
+        
+        return { message, error: false };
+
+    } catch (e: any) {
+        console.error("Client parent account setup error:", e);
+        return { message: e.message || 'An unknown error occurred during setup.', error: true };
+    }
 }

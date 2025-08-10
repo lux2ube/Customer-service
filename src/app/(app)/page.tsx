@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -126,6 +126,14 @@ function MigrateClientIdsForm() {
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Migrate Client IDs" pendingText="Migrating..." variant="destructive" /></form>;
 }
+
+function SetupClientParentAccountForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(setupClientParentAccount, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Setup Failed' : 'Setup Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Network} text="Setup Client Accounts" pendingText="Setting up..." variant="destructive" /></form>;
+}
+
 
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
@@ -319,6 +327,7 @@ export default function DashboardPage() {
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
                            <MigrateClientIdsForm />
                            <RestructureIdsForm />
+                           <SetupClientParentAccountForm />
                         </div>
                     </CardContent>
                 </Card>
