@@ -1,7 +1,7 @@
 
 
 import { db } from '../firebase';
-import { push, ref, set } from 'firebase/database';
+import { push, ref, set, runTransaction } from 'firebase/database';
 import type { AuditLog } from '../types';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
@@ -127,4 +127,16 @@ export async function sendTelegramPhoto(photoUrl: string, caption: string) {
     } catch (error) {
         console.error("Error sending photo notification to Telegram:", error);
     }
+}
+
+// --- Shared Helper for Sequential IDs ---
+export async function getNextSequentialId(): Promise<number> {
+    const counterRef = ref(db, 'counters/globalRecordId');
+    const result = await runTransaction(counterRef, (currentValue) => {
+        return (currentValue || 0) + 1;
+    });
+    if (!result.committed) {
+        throw new Error("Failed to get next sequential ID.");
+    }
+    return result.snapshot.val();
 }

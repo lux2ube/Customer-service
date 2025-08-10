@@ -1,26 +1,14 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { ref, set, get, runTransaction } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, UsdtManualReceipt } from '../types';
-import { stripUndefined, logAction, sendTelegramNotification } from './helpers';
+import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
-
-
-// --- Shared Helper for Sequential IDs ---
-async function getNextSequentialId(): Promise<number> {
-    const counterRef = ref(db, 'counters/globalRecordId');
-    const result = await runTransaction(counterRef, (currentValue) => {
-        return (currentValue || 0) + 1;
-    });
-    if (!result.committed) {
-        throw new Error("Failed to get next sequential ID.");
-    }
-    return result.snapshot.val();
-}
 
 
 // --- USDT Manual Receipt ---
