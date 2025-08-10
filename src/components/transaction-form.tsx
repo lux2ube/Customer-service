@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -119,10 +118,10 @@ function BankAccountSelector({
   );
 }
 
-export function TransactionForm({ transaction, client, onSuccess }: { transaction?: Transaction | null, client?: Client | null, onSuccess: (txId: string) => void }) {
+export function TransactionForm({ transaction, client }: { transaction?: Transaction | null, client?: Client | null }) {
     const { toast } = useToast();
+    const router = useRouter();
     
-    const [isEditMode, setIsEditMode] = React.useState(!transaction);
     const [isSaving, setIsSaving] = React.useState(false);
     const [isDataLoading, setIsDataLoading] = React.useState(true);
     const [isDownloading, setIsDownloading] = React.useState(false);
@@ -144,7 +143,6 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     const [selectedFundIds, setSelectedFundIds] = React.useState<string[]>([]);
     
     const isSyncedTx = !!(transaction?.hash && transaction?.type === 'Withdraw');
-    const readOnly = !isEditMode;
 
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
@@ -202,7 +200,6 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         }
         if (!cryptoFees) return {};
 
-        // If USD amount is zero, all financial results should be zero.
         if (usdAmount <= 0) {
             return { fee_usd: 0, amount_usdt: 0, expense_usd: 0 };
         }
@@ -220,8 +217,6 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
     }, [cryptoFees, isSyncedTx, formData.amount_usdt]);
 
     React.useEffect(() => {
-        if (readOnly) return;
-        
         const totalUsdFromFunds = selectedFundIds.reduce((sum, id) => {
             const fund = availableFunds.find(f => f.id === id);
             return sum + (fund?.amountUsd || 0);
@@ -232,14 +227,14 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
              return { ...prev, amount_usd: totalUsdFromFunds, ...updates, expense_usd: 0 };
         });
 
-    }, [selectedFundIds, availableFunds, readOnly, recalculateFinancials]);
+    }, [selectedFundIds, availableFunds, recalculateFinancials]);
 
     const handleFieldChange = (field: keyof Transaction, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
     const handleManualUsdtChange = (newUsdtValue: number) => {
-        if (isSyncedTx || readOnly) return;
+        if (isSyncedTx) return;
         setFormData(prev => {
             if (!cryptoFees) return { ...prev, amount_usdt: newUsdtValue };
 
@@ -325,8 +320,11 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
         
         if (result?.success && result.transactionId) {
             toast({ title: 'Success', description: 'Transaction saved successfully.'});
-            onSuccess(result.transactionId);
-            setIsEditMode(false);
+            if (transaction?.id) {
+                 router.push('/transactions');
+            } else {
+                 router.push(`/transactions/${result.transactionId}/edit`);
+            }
         } else if (result?.errors) {
             setFormErrors(result.errors);
             toast({ variant: 'destructive', title: 'Error Recording Transaction', description: result.message });
@@ -408,23 +406,15 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                         </Alert>
                     )}
                     <Card>
-                        <CardHeader className="flex flex-row justify-between items-start">
-                            <div>
-                                <CardTitle>Transaction Details</CardTitle>
-                                {transaction?.id && <p className="text-xs text-muted-foreground pt-1">رقم السند: {transaction.id}</p>}
-                            </div>
-                             {!readOnly && transaction && (
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditMode(false)}>
-                                    <XIcon className="mr-2 h-4 w-4" /> Cancel
-                                </Button>
-                            )}
+                        <CardHeader>
+                            <CardTitle>Transaction Details</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="space-y-2">
                                     <Label htmlFor="date">Date and Time</Label>
                                     <Popover>
-                                    <PopoverTrigger asChild disabled={readOnly}>
+                                    <PopoverTrigger asChild>
                                         <Button variant={"outline"} size="sm" className={cn("w-full justify-start text-left font-normal", !formData.date && "text-muted-foreground")}>
                                             <CalendarIcon className="mr-2 h-4 w-4" />
                                             {formData.date ? format(new Date(formData.date), "PPP") : <span>Pick a date</span>}
@@ -435,7 +425,7 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Transaction Type</Label>
-                                    <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)} disabled={readOnly || isSyncedTx}>
+                                    <Select name="type" required value={formData.type} onValueChange={(v) => handleFieldChange('type', v)} disabled={isSyncedTx}>
                                         <SelectTrigger><SelectValue placeholder="Select type..."/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Deposit">Deposit (Buy USDT)</SelectItem>
@@ -446,12 +436,12 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                             </div>
                             <div className="space-y-2">
                                 <Label>Client</Label>
-                                <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} disabled={readOnly} />
+                                <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                                 {formErrors?.clientId && <p className="text-sm text-destructive">{formErrors.clientId[0]}</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label>System Crypto Wallet</Label>
-                                <BankAccountSelector accounts={cryptoWallets} value={formData.cryptoWalletId} onSelect={(v) => handleFieldChange('cryptoWalletId', v)} disabled={readOnly} />
+                                <BankAccountSelector accounts={cryptoWallets} value={formData.cryptoWalletId} onSelect={(v) => handleFieldChange('cryptoWalletId', v)} />
                             </div>
                         </CardContent>
                     </Card>
@@ -463,20 +453,18 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                                     <CardTitle>Available Client Funds</CardTitle>
                                     <CardDescription>Select cash receipts to fund this transaction.</CardDescription>
                                 </div>
-                                {!readOnly && (
-                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddOpen(true)}>
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        Record New Receipt
-                                    </Button>
-                                )}
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddOpen(true)}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Record New Receipt
+                                </Button>
                              </CardHeader>
                              <CardContent>
                                  <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                                      {availableFunds.length > 0 ? (
                                         availableFunds.map(fund => (
                                             <div key={fund.id} className="flex items-center gap-3 p-2 border rounded-md has-[:checked]:bg-muted">
-                                                <Checkbox id={fund.id} checked={selectedFundIds.includes(fund.id)} onCheckedChange={(checked) => handleFundSelectionChange(fund.id, !!checked)} disabled={readOnly} />
-                                                <Label htmlFor={fund.id} className={cn("flex-1", !readOnly && "cursor-pointer")}>
+                                                <Checkbox id={fund.id} checked={selectedFundIds.includes(fund.id)} onCheckedChange={(checked) => handleFundSelectionChange(fund.id, !!checked)} />
+                                                <Label htmlFor={fund.id} className="flex-1 cursor-pointer">
                                                     <div className="flex justify-between items-center">
                                                         <span className="font-bold">{new Intl.NumberFormat().format(fund.amount)} {fund.currency}</span>
                                                         <span className="text-xs text-muted-foreground">{fund.source}</span>
@@ -515,21 +503,9 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
 
                             <div className="flex items-center gap-2">
                                 <Label htmlFor="amount_usdt" className="w-1/3 shrink-0 text-right text-xs">Final USDT Amount</Label>
-                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={(e) => handleManualUsdtChange(parseFloat(e.target.value))} disabled={isSyncedTx || readOnly} className={cn((isSyncedTx || readOnly) && "bg-muted/50", isSyncedTx && "font-bold border-blue-400")} />
+                                <Input id="amount_usdt" name="amount_usdt" type="number" step="any" required value={formData.amount_usdt} onChange={(e) => handleManualUsdtChange(parseFloat(e.target.value))} disabled={isSyncedTx} className={cn(isSyncedTx && "bg-muted/50", isSyncedTx && "font-bold border-blue-400")} />
                             </div>
                         </CardContent>
-                        <CardFooter>
-                            {isEditMode ? (
-                                <Button type="submit" disabled={isSaving} size="sm" className="w-full">
-                                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                    {isSaving ? 'Saving...' : 'Save Transaction'}
-                                </Button>
-                            ) : (
-                                <Button type="button" onClick={() => setIsEditMode(true)} size="sm" className="w-full">
-                                    <Pencil className="mr-2 h-4 w-4" /> Edit Transaction
-                                </Button>
-                            )}
-                        </CardFooter>
                     </Card>
                 </div>
                 <div className="md:col-span-1 space-y-3">
@@ -551,18 +527,18 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                     <Card>
                         <CardHeader><CardTitle>Optional Data</CardTitle></CardHeader>
                         <CardContent className="space-y-3">
-                            <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2} readOnly={readOnly}/></div>
-                            <div className="space-y-2"><Label htmlFor="attachment_url_input">Upload Transaction Image</Label><Input id="attachment_url_input" name="attachment_url_input" type="file" size="sm" onChange={handleAttachmentChange} disabled={readOnly}/>
+                            <div className="space-y-2"><Label htmlFor="notes">Notes</Label><Textarea id="notes" name="notes" placeholder="Add any relevant notes..." value={formData.notes || ''} onChange={(e) => handleFieldChange('notes', e.target.value)} rows={2}/></div>
+                            <div className="space-y-2"><Label htmlFor="attachment_url_input">Upload Transaction Image</Label><Input id="attachment_url_input" name="attachment_url_input" type="file" size="sm" onChange={handleAttachmentChange}/>
                                 {attachmentPreview && (<div className="mt-2"><img src={attachmentPreview} alt="Preview" className="rounded-md max-h-48 w-auto" /></div>)}
                                 {!attachmentPreview && transaction?.attachment_url && <a href={transaction.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">View current attachment</a>}
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
-                                <div className="space-y-2"><Label htmlFor="remittance_number">Remittance Number</Label><Input id="remittance_number" name="remittance_number" value={formData.remittance_number || ''} onChange={(e) => handleFieldChange('remittance_number', e.target.value)} readOnly={readOnly}/></div>
+                                <div className="space-y-2"><Label htmlFor="remittance_number">Remittance Number</Label><Input id="remittance_number" name="remittance_number" value={formData.remittance_number || ''} onChange={(e) => handleFieldChange('remittance_number', e.target.value)}/></div>
                                 <div className="space-y-2"><Label htmlFor="hash">Crypto Hash</Label><Input id="hash" name="hash" value={formData.hash || ''} readOnly /></div>
                             </div>
-                            <div className="space-y-2"><Label htmlFor="client_wallet_address">Client Wallet Address</Label><Input id="client_wallet_address" name="client_wallet_address" value={formData.client_wallet_address || ''} onChange={(e) => handleFieldChange('client_wallet_address', e.target.value)} readOnly={readOnly}/></div>
+                            <div className="space-y-2"><Label htmlFor="client_wallet_address">Client Wallet Address</Label><Input id="client_wallet_address" name="client_wallet_address" value={formData.client_wallet_address || ''} onChange={(e) => handleFieldChange('client_wallet_address', e.target.value)}/></div>
                             <div className="space-y-2"><Label>Status</Label>
-                                <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])} disabled={readOnly}>
+                                <Select name="status" value={formData.status} onValueChange={(v) => handleFieldChange('status', v as Transaction['status'])}>
                                     <SelectTrigger><SelectValue/></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Pending">Pending</SelectItem>
@@ -574,12 +550,18 @@ export function TransactionForm({ transaction, client, onSuccess }: { transactio
                         </CardContent>
                     </Card>
                 </div>
+                 <CardFooter className="md:col-span-3 flex justify-end p-2">
+                    <Button type="submit" disabled={isSaving}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        {isSaving ? 'Saving...' : 'Save Transaction'}
+                    </Button>
+                </CardFooter>
             </form>
         </>
     );
 }
 
-function ClientSelector({ selectedClient, onSelect, disabled }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; disabled?: boolean; }) {
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
     const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
@@ -619,7 +601,7 @@ function ClientSelector({ selectedClient, onSelect, disabled }: { selectedClient
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={isOpen} className="w-full justify-between font-normal" disabled={disabled}>
+                <Button variant="outline" role="combobox" aria-expanded={isOpen} className="w-full justify-between font-normal">
                     {selectedClient ? selectedClient.name : "Select client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>

@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { z } from 'zod';
@@ -54,15 +52,6 @@ const TransactionSchema = z.object({
     client_wallet_address: z.string().optional(),
     status: z.enum(['Pending', 'Confirmed', 'Cancelled']),
     linkedReceiptIds: z.array(z.string()).optional(),
-}).refine(data => {
-    // For deposits, at least one funding source must be linked. This is checked by seeing if amount_usd is positive.
-    if (data.type === 'Deposit') {
-        return data.amount_usd > 0;
-    }
-    return true;
-}, {
-    message: "For a deposit, you must select at least one cash receipt to fund the transaction.",
-    path: ["linkedReceiptIds"], // Point error to the funding source
 });
 
 
@@ -275,7 +264,9 @@ export async function createTransaction(transactionId: string | null, formData: 
     revalidatePath('/transactions');
     revalidatePath('/accounting/journal');
     revalidatePath(`/clients/${finalData.clientId}/edit`);
-    
+    revalidatePath(`/transactions/add`);
+    if(transactionId) revalidatePath(`/transactions/${transactionId}/edit`);
+
     return { success: true, transactionId: newId, message: 'Transaction Saved' };
 }
 

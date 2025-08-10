@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -10,32 +9,18 @@ import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import type { Transaction, Client } from '@/lib/types';
-import { TransactionForm } from '@/components/transaction-form';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function TransactionsPage() {
     const [transactions, setTransactions] = React.useState<Transaction[]>([]);
-    const [clients, setClients] = React.useState<Client[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [exportData, setExportData] = React.useState<Transaction[]>([]);
-
-    const [selectedTxId, setSelectedTxId] = React.useState<string | null>(null);
-    const [isCreatingNew, setIsCreatingNew] = React.useState(false);
-
-    const selectedTransaction = React.useMemo(() => {
-        if (!selectedTxId) return null;
-        return transactions.find(tx => tx.id === selectedTxId) || null;
-    }, [selectedTxId, transactions]);
-
-    const selectedClient = React.useMemo(() => {
-        if (!selectedTransaction || !selectedTransaction.clientId) return null;
-        return clients.find(c => c.id === selectedTransaction.clientId) || null;
-    }, [selectedTransaction, clients]);
+    const router = useRouter();
 
     React.useEffect(() => {
         const transactionsRef = ref(db, 'transactions/');
-        const clientsRef = ref(db, 'clients/');
-        
         const unsubs: (()=>void)[] = [];
 
         unsubs.push(onValue(transactionsRef, (snapshot) => {
@@ -52,36 +37,12 @@ export default function TransactionsPage() {
             setLoading(false);
         }));
         
-        unsubs.push(onValue(clientsRef, (snapshot) => {
-            const data = snapshot.val();
-             if (data) {
-                const list: Client[] = Object.keys(data).map(key => ({
-                id: key,
-                ...data[key]
-                }));
-                setClients(list);
-            } else {
-                setClients([]);
-            }
-        }));
-
         return () => unsubs.forEach(unsub => unsub());
     }, []);
 
-    const handleSelectTransaction = (txId: string) => {
-        setIsCreatingNew(false);
-        setSelectedTxId(txId);
+    const handleRowClick = (txId: string) => {
+        router.push(`/transactions/${txId}/edit`);
     };
-    
-    const handleCreateNew = () => {
-        setSelectedTxId(null);
-        setIsCreatingNew(true);
-    }
-    
-    const handleFormSuccess = (txId: string) => {
-        setIsCreatingNew(false);
-        setSelectedTxId(txId);
-    }
 
     const exportableData = exportData.map(tx => ({
         id: tx.id,
@@ -121,21 +82,14 @@ export default function TransactionsPage() {
                             notes: "Notes",
                         }}
                     />
-                    <Button onClick={handleCreateNew}>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add New Transaction
+                    <Button asChild>
+                        <Link href="/transactions/add">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add New Transaction
+                        </Link>
                     </Button>
                 </div>
             </PageHeader>
-            
-            {(selectedTransaction || isCreatingNew) && (
-                <TransactionForm
-                    key={selectedTxId || 'new'}
-                    transaction={selectedTransaction}
-                    client={selectedClient}
-                    onSuccess={handleFormSuccess}
-                />
-            )}
             
             {loading && <Skeleton className="h-[200px] w-full" />}
             
@@ -143,8 +97,8 @@ export default function TransactionsPage() {
                 transactions={transactions} 
                 loading={loading}
                 onFilteredDataChange={setExportData}
-                onRowClick={handleSelectTransaction}
-                selectedTxId={selectedTxId}
+                onRowClick={handleRowClick}
+                selectedTxId={null} // No longer needed
             />
         </div>
     );
