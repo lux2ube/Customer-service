@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -12,7 +13,7 @@ import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/l
 import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -33,27 +34,19 @@ function SubmitButton() {
     );
 }
 
-function FinancialRecordTable({ title, records, selectedIds, onSelectionChange, type }: { title: string, records: UnifiedFinancialRecord[], selectedIds: string[], onSelectionChange: (id: string, selected: boolean) => void, type: 'inflow' | 'outflow' }) {
+function FinancialRecordTable({ title, records, selectedIds, onSelectionChange, type, category }: { title: string, records: UnifiedFinancialRecord[], selectedIds: string[], onSelectionChange: (id: string, selected: boolean) => void, type: 'inflow' | 'outflow', category: 'fiat' | 'crypto' }) {
     if (records.length === 0) {
-        return (
-            <Card className="flex-1">
-                <CardHeader>
-                    <CardTitle className={cn("text-base flex items-center gap-2", type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
-                        {type === 'inflow' ? <ArrowDown /> : <ArrowUp />} {title}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground text-center py-8">No records available.</p>
-                </CardContent>
-            </Card>
-        )
+        return null;
     }
+
+    const iconColor = type === 'inflow' ? 'text-green-600' : 'text-red-600';
+    const Icon = type === 'inflow' ? ArrowDown : ArrowUp;
 
     return (
         <Card className="flex-1">
             <CardHeader>
-                <CardTitle className={cn("text-base flex items-center gap-2", type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
-                    {type === 'inflow' ? <ArrowDown /> : <ArrowUp />} {title}
+                <CardTitle className={cn("text-base flex items-center gap-2", iconColor)}>
+                    <Icon /> {title}
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -155,9 +148,16 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
 
         return { totalInflowUSD, totalOutflowUSD, calculatedFee, netResult };
     }, [selectedRecordIds, records, cryptoFees, transactionType]);
+    
+    const recordCategories = React.useMemo(() => {
+        return {
+            fiatInflows: records.filter(r => r.type === 'inflow' && r.category === 'fiat'),
+            cryptoInflows: records.filter(r => r.type === 'inflow' && r.category === 'crypto'),
+            fiatOutflows: records.filter(r => r.type === 'outflow' && r.category === 'fiat'),
+            cryptoOutflows: records.filter(r => r.type === 'outflow' && r.category === 'crypto'),
+        }
+    }, [records]);
 
-    const inflowRecords = records.filter(r => r.type === 'inflow');
-    const outflowRecords = records.filter(r => r.type === 'outflow');
 
     return (
         <form action={async (formData) => {
@@ -203,7 +203,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                         <RadioGroup
                             value={transactionType || ''}
                             onValueChange={(value) => setTransactionType(value as Transaction['type'])}
-                            className="grid grid-cols-2 gap-4"
+                            className="grid grid-cols-2 lg:grid-cols-3 gap-4"
                         >
                              <div>
                                 <RadioGroupItem value="Deposit" id="type-deposit" className="peer sr-only" />
@@ -217,6 +217,13 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <Label htmlFor="type-withdraw" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
                                     <ArrowUp className="mb-3 h-6 w-6" />
                                     Withdraw (Client Sells USDT)
+                                </Label>
+                             </div>
+                             <div>
+                                <RadioGroupItem value="Transfer" id="type-transfer" className="peer sr-only" />
+                                <Label htmlFor="type-transfer" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                                    <Repeat className="mb-3 h-6 w-6" />
+                                    Internal Transfer
                                 </Label>
                              </div>
                         </RadioGroup>
@@ -243,18 +250,10 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <CardTitle>Step 3: Select Financial Records</CardTitle>
                                 <CardDescription>Choose the records to link to this transaction.</CardDescription>
                             </div>
-                            {transactionType === 'Deposit' && (
-                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Record New Receipt
-                                </Button>
-                            )}
-                            {transactionType === 'Withdraw' && (
-                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Record New Payment
-                                </Button>
-                            )}
+                            <div>
+                                {transactionType !== 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Receipt</Button>}
+                                {transactionType !== 'Deposit' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)} className="ml-2"><PlusCircle className="mr-2 h-4 w-4" />Record New Payment</Button>}
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {loadingRecords ? (
@@ -263,9 +262,31 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                     <Skeleton className="h-48 w-full" />
                                 </div>
                             ) : (
-                                <div className="flex flex-col md:flex-row gap-4">
-                                    <FinancialRecordTable title="Inflows (Client Gives)" records={inflowRecords} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" />
-                                    <FinancialRecordTable title="Outflows (Client Gets)" records={outflowRecords} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {transactionType === 'Deposit' && (
+                                        <>
+                                            <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
+                                            {/* For deposit, there is no explicit outflow selection, it's calculated. */}
+                                        </>
+                                    )}
+                                    {transactionType === 'Withdraw' && (
+                                        <>
+                                            <FinancialRecordTable title="Client Gives (USDT)" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
+                                            <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
+                                        </>
+                                    )}
+                                    {transactionType === 'Transfer' && (
+                                        <>
+                                            <div className="space-y-4">
+                                                <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
+                                                <FinancialRecordTable title="Client Gives (USDT)" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
+                                            </div>
+                                             <div className="space-y-4">
+                                                <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
+                                                <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </CardContent>

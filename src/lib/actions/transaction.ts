@@ -32,7 +32,7 @@ export type TransactionFormState =
 const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
     clientId: z.string().min(1, 'A client must be selected for the transaction.'),
-    type: z.enum(['Deposit', 'Withdraw']),
+    type: z.enum(['Deposit', 'Withdraw', 'Modern', 'Transfer']),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number().min(0, "Fee must be positive."),
     expense_usd: z.coerce.number().optional(),
@@ -471,38 +471,38 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
         const records: UnifiedFinancialRecord[] = [];
 
-        // Cash Receipts (Inflow)
+        // Cash Receipts (Inflow, Fiat)
         for (const id in allCashReceipts) {
             const r = allCashReceipts[id];
             if (r.clientId === clientId && r.status === 'Pending') {
-                records.push({ id, date: r.date, type: 'inflow', source: 'Manual', amount: r.amount, currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName });
+                records.push({ id, date: r.date, type: 'inflow', category: 'fiat', source: 'Manual', amount: r.amount, currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName });
             }
         }
         
-        // Cash Payments (Outflow)
+        // Cash Payments (Outflow, Fiat)
         for (const id in allCashPayments) {
             const p = allCashPayments[id];
-            if (p.clientId === clientId && p.status === 'Confirmed') { // Assuming confirmed payments can be part of a larger tx
-                 records.push({ id, date: p.date, type: 'outflow', source: 'Manual', amount: p.amount, currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName });
+            if (p.clientId === clientId && p.status === 'Confirmed') {
+                 records.push({ id, date: p.date, type: 'outflow', category: 'fiat', source: 'Cash Payment', amount: p.amount, currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName });
             }
         }
         
-        // USDT Receipts (Inflow)
+        // USDT Receipts (Inflow, Crypto)
         for (const id in allUsdtReceipts) {
             const r = allUsdtReceipts[id];
-            if (r.clientId === clientId && r.status === 'Completed') { // Assuming completed receipts are available
-                records.push({ id, date: r.date, type: 'inflow', source: 'USDT', amount: r.amount, currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName });
+            if (r.clientId === clientId && r.status === 'Completed') {
+                records.push({ id, date: r.date, type: 'inflow', category: 'crypto', source: 'USDT', amount: r.amount, currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName });
             }
         }
 
-        // SMS Transactions (Inflow/Outflow)
+        // SMS Transactions (Inflow/Outflow, Fiat)
         for (const id in allSms) {
             const sms = allSms[id];
             if (sms.matched_client_id === clientId && sms.status === 'matched') {
                 const rateInfo = fiatRates.find(r => r.currency === sms.currency);
                 const rate = sms.type === 'credit' ? (rateInfo?.clientBuy || 1) : (rateInfo?.clientSell || 1);
                 const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
-                records.push({ id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow', source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '', amountUsd, status: sms.status, bankAccountName: sms.account_name });
+                records.push({ id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow', category: 'fiat', source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '', amountUsd, status: sms.status, bankAccountName: sms.account_name });
             }
         }
 
@@ -769,8 +769,10 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         const record = selectedRecords.find(r => r.id === recordId);
         if (record?.source === 'Manual') {
             updates[`/cash_receipts/${recordId}/status`] = 'Used';
-            updates[`/usdt_receipts/${recordId}/status`] = 'Used'; // Assuming a future path
-            updates[`/cash_payments/${recordId}/status`] = 'Used'; // Assuming a future path
+        } else if (record?.source === 'USDT') {
+             updates[`/usdt_receipts/${recordId}/status`] = 'Used'; 
+        } else if (record?.source === 'Cash Payment') {
+            updates[`/cash_payments/${recordId}/status`] = 'Used'; 
         } else if (record?.source === 'SMS') {
             updates[`/sms_transactions/${recordId}/status`] = 'used';
         }

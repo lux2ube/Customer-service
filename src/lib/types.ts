@@ -59,7 +59,7 @@ export interface ServiceProvider {
 export interface Transaction {
     id: string;
     date: string;
-    type: 'Deposit' | 'Withdraw' | 'Modern';
+    type: 'Deposit' | 'Withdraw' | 'Modern' | 'Transfer';
     clientId: string;
     clientName?: string; // For display
     bankAccountId?: string;
@@ -237,6 +237,7 @@ export interface UnifiedFinancialRecord {
   id: string;
   date: string;
   type: 'inflow' | 'outflow';
+  category: 'fiat' | 'crypto';
   source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment';
   amount: number;
   currency: string;
