@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -39,7 +40,7 @@ import {
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/modern', label: 'Modern', icon: Sparkles },
+  { href: '/modern', label: 'Modern Hub', icon: Sparkles },
   
   { type: 'divider', label: 'العمليات المالية' },
   { href: '/cash-receipts', label: 'سندات القبض', icon: ArrowDownToLine },
@@ -49,6 +50,7 @@ const menuItems = [
   { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
 
   { type: 'divider', label: 'المعاملات' },
+  { href: '/transactions/modern', label: 'Modern Transaction', icon: HandCoins },
   { href: '/transactions', label: 'Deposit / Withdraw', icon: Banknote },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },

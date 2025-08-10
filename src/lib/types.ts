@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -58,15 +59,15 @@ export interface ServiceProvider {
 export interface Transaction {
     id: string;
     date: string;
-    type: 'Deposit' | 'Withdraw';
+    type: 'Deposit' | 'Withdraw' | 'Modern';
     clientId: string;
     clientName?: string; // For display
     bankAccountId?: string;
     bankAccountName?: string; // for display
     cryptoWalletId?: string;
     cryptoWalletName?: string; // for display
-    amount: number;
-    currency: string;
+    amount?: number;
+    currency?: string;
     amount_usd: number;
     fee_usd: number;
     expense_usd?: number;
@@ -80,6 +81,7 @@ export interface Transaction {
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     createdAt: string;
     linkedSmsId?: string;
+    linkedRecordIds?: string;
     exchange_rate_commission?: number;
 }
 
@@ -231,6 +233,18 @@ export type UnifiedReceipt = {
     rawSms?: string;
 }
 
+export interface UnifiedFinancialRecord {
+  id: string;
+  date: string;
+  type: 'inflow' | 'outflow';
+  source: 'Manual' | 'SMS' | 'USDT';
+  amount: number;
+  currency: string;
+  amountUsd: number;
+  status: string;
+  bankAccountName?: string;
+  cryptoWalletName?: string;
+}
 
 export interface ParsedSms {
   parsed: boolean;
@@ -265,7 +279,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'transaction';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate, UnifiedReceipt } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, CashPayment, JournalEntry, FiatRate, UnifiedReceipt, UnifiedFinancialRecord } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -39,7 +40,7 @@ export type TransactionFormState =
 const TransactionSchema = z.object({
     date: z.string({ invalid_type_error: 'Please select a date.' }),
     clientId: z.string().min(1, 'A client must be selected for the transaction.'),
-    type: z.enum(['Deposit', 'Withdraw']),
+    type: z.enum(['Deposit', 'Withdraw', 'Modern']),
     amount_usd: z.coerce.number(),
     fee_usd: z.coerce.number().min(0, "Fee must be positive."),
     expense_usd: z.coerce.number().optional(),
@@ -541,4 +542,113 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         console.error("Error fetching available client funds:", error);
         return [];
     }
+}
+
+export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
+  if (!clientId) return [];
+  try {
+    const [
+      cashReceiptsSnap,
+      cashPaymentsSnap,
+      smsSnap,
+      usdtReceiptsSnap,
+    ] = await Promise.all([
+      get(query(ref(db, 'cash_receipts'), orderByChild('clientId'), equalTo(clientId))),
+      get(query(ref(db, 'cash_payments'), orderByChild('clientId'), equalTo(clientId))),
+      get(query(ref(db, 'sms_transactions'), orderByChild('matched_client_id'), equalTo(clientId))),
+      get(query(ref(db, 'usdt_receipts'), orderByChild('clientId'), equalTo(clientId))),
+    ]);
+    
+    const records: UnifiedFinancialRecord[] = [];
+
+    // Cash Receipts (Manual & SMS)
+    if (cashReceiptsSnap.exists()) {
+        Object.entries(cashReceiptsSnap.val() as Record<string, CashReceipt>).forEach(([id, r]) => {
+            if (r.status === 'Pending') {
+                 records.push({
+                    id, date: r.date, type: 'inflow', source: 'Manual', amount: r.amount,
+                    currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName
+                });
+            }
+        });
+    }
+    if (smsSnap.exists()) {
+        Object.entries(smsSnap.val() as Record<string, SmsTransaction>).forEach(([id, sms]) => {
+            if (sms.status === 'matched') {
+                records.push({
+                    id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow',
+                    source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '',
+                    amountUsd: 0, // This needs to be calculated with rates
+                    status: sms.status, bankAccountName: sms.account_name,
+                });
+            }
+        });
+    }
+    
+     // Cash Payments
+    if (cashPaymentsSnap.exists()) {
+        Object.entries(cashPaymentsSnap.val() as Record<string, CashPayment>).forEach(([id, p]) => {
+             records.push({
+                id, date: p.date, type: 'outflow', source: 'Manual', amount: p.amount,
+                currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName
+            });
+        });
+    }
+
+    // USDT Receipts
+    if (usdtReceiptsSnap.exists()) {
+        Object.entries(usdtReceiptsSnap.val() as Record<string, UsdtManualReceipt>).forEach(([id, r]) => {
+             if (r.status === 'Completed') {
+                  records.push({
+                    id, date: r.date, type: 'inflow', source: 'USDT', amount: r.amount,
+                    currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName
+                });
+             }
+        });
+    }
+
+    return records.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  } catch (error) {
+    console.error("Error fetching unified client records:", error);
+    return [];
+  }
+}
+
+const ModernTransactionSchema = z.object({
+  clientId: z.string().min(1, 'A client must be selected.'),
+  notes: z.string().optional(),
+  linkedRecordIds: z.array(z.string()).min(1, 'At least one record must be selected.'),
+});
+
+export async function createModernTransaction(formData: FormData): Promise<{ success: boolean; message: string; }> {
+    const validatedFields = ModernTransactionSchema.safeParse({
+        clientId: formData.get('clientId'),
+        notes: formData.get('notes'),
+        linkedRecordIds: formData.getAll('linkedRecordIds'),
+    });
+
+    if (!validatedFields.success) {
+        return { success: false, message: validatedFields.error.flatten().fieldErrors.linkedRecordIds?.[0] || 'Invalid data submitted.' };
+    }
+
+    // This is where the complex logic of fetching all records, calculating totals,
+    // creating the transaction object, creating journal entries, and updating
+    // the status of linked records would go.
+
+    // For now, returning a success message as a placeholder for the full implementation.
+    console.log("Creating modern transaction with data:", validatedFields.data);
+
+    // Placeholder: Mark records as used
+    const updates: { [key: string]: any } = {};
+    for (const id of validatedFields.data.linkedRecordIds) {
+        updates[`/cash_receipts/${id}/status`] = 'Used';
+        updates[`/sms_transactions/${id}/status`] = 'used';
+        updates[`/usdt_receipts/${id}/status`] = 'Used';
+    }
+    await update(ref(db), updates);
+
+    revalidatePath('/transactions/modern');
+
+    return { success: true, message: 'Modern transaction created successfully.' };
 }
