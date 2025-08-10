@@ -447,6 +447,73 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
 }
 
 
+export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
+    if (!clientId) return [];
+    try {
+        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, smsSnap, fiatHistorySnap] = await Promise.all([
+            get(ref(db, 'cash_receipts')),
+            get(ref(db, 'cash_payments')),
+            get(ref(db, 'usdt_receipts')),
+            get(ref(db, 'sms_transactions')),
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
+        ]);
+
+        const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnap.val() || {};
+        const allCashPayments: Record<string, CashPayment> = cashPaymentsSnap.val() || {};
+        const allUsdtReceipts: Record<string, UsdtManualReceipt> = usdtReceiptsSnap.val() || {};
+        const allSms: Record<string, SmsTransaction> = smsSnap.val() || {};
+        
+        let fiatRates: FiatRate[] = [];
+        if (fiatHistorySnap.exists()) {
+            const lastEntryKey = Object.keys(fiatHistorySnap.val())[0];
+            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || [];
+        }
+
+        const records: UnifiedFinancialRecord[] = [];
+
+        // Cash Receipts (Inflow)
+        for (const id in allCashReceipts) {
+            const r = allCashReceipts[id];
+            if (r.clientId === clientId && r.status === 'Pending') {
+                records.push({ id, date: r.date, type: 'inflow', source: 'Manual', amount: r.amount, currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName });
+            }
+        }
+        
+        // Cash Payments (Outflow)
+        for (const id in allCashPayments) {
+            const p = allCashPayments[id];
+            if (p.clientId === clientId && p.status === 'Confirmed') { // Assuming confirmed payments can be part of a larger tx
+                 records.push({ id, date: p.date, type: 'outflow', source: 'Manual', amount: p.amount, currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName });
+            }
+        }
+        
+        // USDT Receipts (Inflow)
+        for (const id in allUsdtReceipts) {
+            const r = allUsdtReceipts[id];
+            if (r.clientId === clientId && r.status === 'Completed') { // Assuming completed receipts are available
+                records.push({ id, date: r.date, type: 'inflow', source: 'USDT', amount: r.amount, currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName });
+            }
+        }
+
+        // SMS Transactions (Inflow/Outflow)
+        for (const id in allSms) {
+            const sms = allSms[id];
+            if (sms.matched_client_id === clientId && sms.status === 'matched') {
+                const rateInfo = fiatRates.find(r => r.currency === sms.currency);
+                const rate = sms.type === 'credit' ? (rateInfo?.clientBuy || 1) : (rateInfo?.clientSell || 1);
+                const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
+                records.push({ id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow', source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '', amountUsd, status: sms.status, bankAccountName: sms.account_name });
+            }
+        }
+
+        return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    } catch (error) {
+        console.error("Error fetching unified client records:", error);
+        return [];
+    }
+}
+
+
 export type CashPaymentFormState = {
   errors?: { bankAccountId?: string[]; clientId?: string[]; amount?: string[]; recipientName?: string[]; };
   message?: string;
@@ -624,7 +691,7 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
 
     const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
     const feesSnapshot = await get(feesRef);
-    const cryptoFees: CryptoFee | null = feesSnapshot.exists() ? Object.values(feesSnapshot.val())[0] : null;
+    const cryptoFees: any | null = feesSnapshot.exists() ? Object.values(feesSnapshot.val())[0] : null;
 
     const feePercent = cryptoFees ? cryptoFees.buy_fee_percent / 100 : 0.02;
     const minFee = cryptoFees ? cryptoFees.minimum_buy_fee : 1;
