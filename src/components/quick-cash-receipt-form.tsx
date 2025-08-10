@@ -74,7 +74,7 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       if (snapshot.exists()) {
         const allAccountsData: Record<string, Account> = snapshot.val();
         const allAccountsList = Object.keys(allAccountsData).map(key => ({ id: key, ...allAccountsData[key] }));
-        setBankAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
+        setBankAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
       }
       setLoading(false);
     });
