@@ -67,6 +67,7 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
 
   React.useEffect(() => {
     if (!isOpen) return;
+    setLoading(true);
 
     const accountsRef = ref(db, 'accounts');
     const unsubAccounts = onValue(accountsRef, (snapshot) => {
@@ -100,6 +101,9 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       onReceiptCreated();
       setIsOpen(false);
       formRef.current?.reset();
+      setSelectedBankAccountId('');
+      setAmount('');
+      setAmountUsd(0);
     } else if (state?.message) {
       toast({ title: 'Error', variant: 'destructive', description: state.message });
     }
@@ -149,8 +153,8 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
           <div className="space-y-4 py-4">
              <div className="space-y-2">
                 <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
-                <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
-                    <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
+                <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={loading}>
+                    <SelectTrigger><SelectValue placeholder={loading ? "Loading accounts..." : "Select bank account..."} /></SelectTrigger>
                     <SelectContent>
                         {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
                         : bankAccounts.map(account => (

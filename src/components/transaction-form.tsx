@@ -468,7 +468,7 @@ export function TransactionForm({ transaction, client }: { transaction?: Transac
                                                 <Label htmlFor={fund.id} className="flex-1 cursor-pointer">
                                                     <div className="flex justify-between items-center">
                                                         <span className="font-bold">{new Intl.NumberFormat().format(fund.amount)} {fund.currency}</span>
-                                                        <span className="text-xs text-muted-foreground">{fund.source}</span>
+                                                        <Badge variant={fund.source === 'Manual' ? 'secondary' : 'outline'} className="font-normal">{fund.source}</Badge>
                                                     </div>
                                                     <div className="flex justify-between items-center text-xs text-muted-foreground">
                                                         <span>From: {fund.senderName}</span>
