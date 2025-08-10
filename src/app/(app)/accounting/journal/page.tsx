@@ -9,13 +9,13 @@ export default function JournalPage() {
     return (
         <>
             <PageHeader 
-                title="دفتر اليومية (Journal Entries)"
-                description="تسجيل وعرض جميع المعاملات المالية."
+                title="Internal Transfers (Journal Entries)"
+                description="View all internal financial movements between accounts."
             >
                 <Button asChild>
                     <Link href="/accounting/journal/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        سند قيد جديد
+                        New Internal Transfer
                     </Link>
                 </Button>
             </PageHeader>

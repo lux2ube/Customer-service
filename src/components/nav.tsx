@@ -31,26 +31,36 @@ import {
   HandCoins,
   ArrowLeftRight,
   Globe,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Repeat,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { type: 'divider', label: 'Operations' },
-  { href: '/clients', label: 'Clients', icon: Users },
+  { type: 'divider', label: 'العمليات المالية' },
+  { href: '/cash-receipts', label: 'سندات القبض', icon: ArrowDownToLine },
+  { href: '/cash-payments', label: 'سندات الصرف', icon: ArrowUpFromLine },
+  
+  { type: 'divider', label: 'التنفيذ' },
+  { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
+
+  { type: 'divider', label: 'المعاملات' },
+  { href: '/transactions', label: 'Deposit / Withdraw', icon: Banknote },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
-  { href: '/transactions', label: 'Transactions', icon: Banknote },
-  { href: '/cash-receipts', label: 'سندات القبض', icon: HandCoins },
-  { href: '/cash-payments', label: 'سندات الصرف', icon: HandCoins },
-  { href: '/wallet', label: 'USDT Sender Wallet', icon: Wallet },
-  { type: 'divider', label: 'Accounting & Reports' },
-  { href: '/accounting/journal', label: 'دفتر اليومية', icon: BookCopy },
+  { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
+
+  { type: 'divider', label: 'المحاسبة والتقارير' },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { type: 'divider', label: 'Management' },
+
+  { type: 'divider', label: 'الإدارة' },
+  { href: '/clients', label: 'Clients', icon: Users },
   { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { href: '/logs', label: 'Audit Log', icon: History },
-  { type: 'divider', label: 'System' },
+
+  { type: 'divider', label: 'النظام' },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },

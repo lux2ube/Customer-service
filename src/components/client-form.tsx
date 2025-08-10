@@ -178,9 +178,9 @@ export function ClientForm({ client, bankAccounts, activityHistory, otherClients
             <form ref={formRef} onSubmit={(e) => { e.preventDefault(); handleSubmit('save_client'); }}>
                 <Card>
                     <CardHeader>
-                        <CardTitle>{client ? 'Edit Client' : 'New Client'}</CardTitle>
+                        <CardTitle>ملف العميل</CardTitle>
                         <CardDescription>
-                            {client ? `Editing profile for ${client.name} (ID: ${client.id})` : 'Fill in the details for the new client profile.'}
+                            {client ? `رقم السند: ${client.id}` : 'Fill in the details for the new client profile.'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

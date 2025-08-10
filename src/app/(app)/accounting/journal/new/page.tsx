@@ -6,8 +6,8 @@ export default async function NewJournalEntryPage() {
     return (
         <>
             <PageHeader
-                title="سند قيد جديد"
-                description="تسجيل معاملة جديدة باستخدام مبادئ القيد المزدوج."
+                title="New Internal Transfer"
+                description="Record a transaction between two internal accounts using double-entry principles."
             />
             <JournalEntryForm />
         </>
