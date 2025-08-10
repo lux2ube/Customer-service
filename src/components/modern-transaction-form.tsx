@@ -19,7 +19,7 @@ import { format } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import { Skeleton } from './ui/skeleton';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { QuickCashReceiptForm } from './quick-cash-receipt-form';
 import { QuickCashPaymentForm } from './quick-cash-payment-form';
