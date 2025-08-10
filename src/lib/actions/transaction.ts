@@ -600,6 +600,50 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
     }
 }
 
+export async function createQuickCashPayment(prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
+    const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!validatedFields.success) {
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.' };
+    }
+    const { bankAccountId, clientId, amount, amountUsd, remittanceNumber } = validatedFields.data;
+
+    try {
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+        ]);
+        if (!bankAccountSnapshot.exists()) return { message: 'Error: Could not find bank account.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Error: Could not find client.', success: false };
+
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+
+        const newPaymentRef = push(ref(db, 'cash_payments'));
+        const paymentData: Omit<CashPayment, 'id'> = {
+            date: new Date().toISOString(),
+            bankAccountId,
+            bankAccountName: bankAccount.name,
+            clientId,
+            clientName: client.name,
+            recipientName: client.name, // For quick add, recipient is the client
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            status: 'Confirmed', // Quick payments are auto-confirmed
+            createdAt: new Date().toISOString(),
+            remittanceNumber: remittanceNumber || undefined
+        };
+
+        await set(newPaymentRef, stripUndefined(paymentData));
+        revalidatePath('/transactions'); // To refresh the modern transaction form
+        return { success: true, message: 'Cash payment recorded successfully.' };
+    } catch (e: any) {
+        console.error("Error creating quick cash payment:", e);
+        return { message: 'Database Error: Could not record cash payment.', success: false };
+    }
+}
+
+
 export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean; message?: string }> {
     if (!paymentId) {
         return { success: false, message: 'Payment ID is required.' };

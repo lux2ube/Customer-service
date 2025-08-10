@@ -9,7 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
-import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions/transaction';
+import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle } from 'lucide-react';
@@ -19,9 +19,10 @@ import { format } from 'date-fns';
 import { Checkbox } from './ui/checkbox';
 import { Skeleton } from './ui/skeleton';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'database';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { QuickCashReceiptForm } from './quick-cash-receipt-form';
+import { QuickCashPaymentForm } from './quick-cash-payment-form';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -87,7 +88,9 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
     const [loadingRecords, setLoadingRecords] = React.useState(false);
     const [selectedRecordIds, setSelectedRecordIds] = React.useState<string[]>([]);
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
-    const [isQuickAddOpen, setIsQuickAddOpen] = React.useState(false);
+    const [isQuickReceiptOpen, setIsQuickReceiptOpen] = React.useState(false);
+    const [isQuickPaymentOpen, setIsQuickPaymentOpen] = React.useState(false);
+
     const { toast } = useToast();
 
     React.useEffect(() => {
@@ -180,9 +183,15 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         }}>
              <QuickCashReceiptForm
                 client={selectedClient}
-                isOpen={isQuickAddOpen}
-                setIsOpen={setIsQuickAddOpen}
+                isOpen={isQuickReceiptOpen}
+                setIsOpen={setIsQuickReceiptOpen}
                 onReceiptCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
+            />
+             <QuickCashPaymentForm
+                client={selectedClient}
+                isOpen={isQuickPaymentOpen}
+                setIsOpen={setIsQuickPaymentOpen}
+                onPaymentCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
             />
             <div className="space-y-4">
                 {/* Step 1 */}
@@ -234,10 +243,18 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <CardTitle>Step 3: Select Financial Records</CardTitle>
                                 <CardDescription>Choose the records to link to this transaction.</CardDescription>
                             </div>
-                             <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddOpen(true)}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Record New Receipt
-                            </Button>
+                            {transactionType === 'Deposit' && (
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Record New Receipt
+                                </Button>
+                            )}
+                            {transactionType === 'Withdraw' && (
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Record New Payment
+                                </Button>
+                            )}
                         </CardHeader>
                         <CardContent>
                             {loadingRecords ? (

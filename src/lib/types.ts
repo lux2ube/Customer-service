@@ -237,7 +237,7 @@ export interface UnifiedFinancialRecord {
   id: string;
   date: string;
   type: 'inflow' | 'outflow';
-  source: 'Manual' | 'SMS' | 'USDT';
+  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment';
   amount: number;
   currency: string;
   amountUsd: number;
