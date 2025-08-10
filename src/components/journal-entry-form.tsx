@@ -79,12 +79,10 @@ export function JournalEntryForm() {
 
         const getRate = (currency?: string) => {
             if (!currency || !settings) return 1;
-            switch(currency) {
-                case 'YER': return settings.yer_usd || 0;
-                case 'SAR': return settings.sar_usd || 0;
-                case 'USDT': return settings.usdt_usd || 1;
-                case 'USD': default: return 1;
-            }
+            const fiatRate = (settings.fiat_rates as any)?.find((r:any) => r.currency === currency);
+            if (fiatRate) return fiatRate.systemBuy || 1; // Use a consistent rate like systemBuy
+            if (currency === 'USDT' || currency === 'USD') return 1;
+            return 1;
         };
 
         const debitRate = getRate(debitAccount?.currency);
@@ -93,16 +91,16 @@ export function JournalEntryForm() {
         if (lastEdited === 'debit') {
             const debitValue = parseFloat(debitAmount);
             if (!isNaN(debitValue) && debitRate > 0 && creditRate > 0) {
-                const usd = debitValue * debitRate;
-                const credit = usd / creditRate;
+                const usd = debitValue / debitRate;
+                const credit = usd * creditRate;
                 setCreditAmount(credit.toFixed(2));
                 setAmountUSD(usd);
             }
         } else if (lastEdited === 'credit') {
             const creditValue = parseFloat(creditAmount);
             if (!isNaN(creditValue) && debitRate > 0 && creditRate > 0) {
-                const usd = creditValue * creditRate;
-                const debit = usd / debitRate;
+                const usd = creditValue / creditRate;
+                const debit = usd * debitRate;
                 setDebitAmount(debit.toFixed(2));
                 setAmountUSD(usd);
             }
@@ -306,3 +304,5 @@ function AccountSelector({ name, accounts, placeholder, onAccountSelect }: { nam
     </>
   )
 }
+
+    

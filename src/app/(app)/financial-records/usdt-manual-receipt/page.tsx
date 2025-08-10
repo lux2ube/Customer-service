@@ -1,11 +1,45 @@
 
 import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
-// import { UsdtManualReceiptForm } from "@/components/usdt-manual-receipt-form";
-// We will create this form component in a subsequent step.
-// For now, we create the page structure.
+import { UsdtManualReceiptForm } from "@/components/usdt-manual-receipt-form";
+import { db } from '@/lib/firebase';
+import { ref, get } from 'firebase/database';
+import type { Client, Account } from '@/lib/types';
 
-export default function UsdtManualReceiptPage() {
+
+async function getFormData() {
+    const clientsRef = ref(db, 'clients');
+    const accountsRef = ref(db, 'accounts');
+
+    const [clientsSnapshot, accountsSnapshot] = await Promise.all([
+        get(clientsRef),
+        get(accountsRef),
+    ]);
+    
+    const clients: Client[] = [];
+    if (clientsSnapshot.exists()) {
+        const data = clientsSnapshot.val();
+        Object.keys(data).forEach(key => {
+            clients.push({ id: key, ...data[key] });
+        });
+    }
+
+    const cryptoWallets: Account[] = [];
+    if (accountsSnapshot.exists()) {
+        const data = accountsSnapshot.val();
+        Object.keys(data).forEach(key => {
+            if (!data[key].isGroup && data[key].currency === 'USDT') {
+                 cryptoWallets.push({ id: key, ...data[key] });
+            }
+        });
+    }
+
+    return { clients, cryptoWallets };
+}
+
+export default async function UsdtManualReceiptPage() {
+    const { clients, cryptoWallets } = await getFormData();
+
     return (
         <>
             <PageHeader
@@ -13,10 +47,10 @@ export default function UsdtManualReceiptPage() {
                 description="Record receiving USDT from a client manually."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-               <div className="text-center text-muted-foreground p-8 border-dashed border-2 rounded-lg">
-                    USDT Manual Receipt Form will be implemented here.
-               </div>
+               <UsdtManualReceiptForm clients={clients} cryptoWallets={cryptoWallets} />
             </Suspense>
         </>
     );
 }
+
+    

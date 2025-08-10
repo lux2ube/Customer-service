@@ -23,7 +23,7 @@ const operations = [
 ];
 
 const transactions = [
-    { title: "Deposit (Client Buys USDT)", href: "/transactions/add", icon: <DollarSign className="h-5 w-5 text-primary" /> },
+    { title: "Deposit (Client Buys USDT)", href: "/transactions/add?type=Deposit", icon: <DollarSign className="h-5 w-5 text-primary" /> },
     { title: "Withdraw (Client Sells USDT)", href: "/transactions/add?type=Withdraw", icon: <DollarSign className="h-5 w-5 text-primary" /> },
     { title: "Internal Transfer", href: "/accounting/journal/new", icon: <Repeat className="h-5 w-5 text-gray-500" /> },
 ];
@@ -100,3 +100,5 @@ export default function ModernPage() {
         </div>
     );
 }
+
+    
