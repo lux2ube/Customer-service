@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistI
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
+import { ensureDefaultAccounts } from './account';
 
 const PROFIT_ACCOUNT_ID = '4001';
 const COMMISSION_ACCOUNT_ID = '4002';
@@ -123,13 +125,15 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-
     let clientName = '';
+    let clientAccountId = '';
     try {
         const clientRef = ref(db, `clients/${dataToSave.clientId}`);
         const snapshot = await get(clientRef);
         if (snapshot.exists()) {
-            clientName = (snapshot.val() as Client).name;
+            const client = snapshot.val() as Client;
+            clientName = client.name;
+            clientAccountId = `6000${dataToSave.clientId}`;
         }
     } catch (e) {
         console.error("Could not fetch client name for transaction");
@@ -174,7 +178,6 @@ export async function createTransaction(transactionId: string | null, formData: 
         exchange_rate_commission: Math.abs(dataToSave.exchange_rate_commission || 0),
     };
     
-    // For withdrawal, amount/currency are different
     if (finalData.type === 'Withdraw') {
         finalData.amount = dataToSave.amount_usdt;
         finalData.currency = 'USDT';
@@ -197,11 +200,61 @@ export async function createTransaction(transactionId: string | null, formData: 
             message: 'Database Error: Failed to create transaction.'
         }
     }
-    
+
     if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
+        await ensureDefaultAccounts();
+
+        const journalUpdates: { [key: string]: any } = {};
+
+        const description = `${finalData.type} for ${finalData.clientName} (Tx: ${newId.slice(-6)})`;
+
+        if (finalData.type === 'Deposit') {
+            const totalCreditToClient = finalData.amount_usdt;
+            const journalRef = push(ref(db, 'journal_entries'));
+            journalUpdates[journalRef.key!] = {
+                date: finalData.date, description,
+                debit_account: clientAccountId, debit_amount: totalCreditToClient,
+                credit_account: finalData.cryptoWalletId, credit_amount: totalCreditToClient,
+                amount_usd: totalCreditToClient, createdAt: new Date().toISOString()
+            };
+        } else { // Withdraw
+            const totalDebitFromClient = finalData.amount_usdt;
+             const journalRef = push(ref(db, 'journal_entries'));
+             journalUpdates[journalRef.key!] = {
+                date: finalData.date, description,
+                debit_account: finalData.cryptoWalletId, debit_amount: totalDebitFromClient,
+                credit_account: clientAccountId, credit_amount: totalDebitFromClient,
+                amount_usd: totalDebitFromClient, createdAt: new Date().toISOString()
+            };
+        }
+        
+        // Fee Journal Entry
+        if (finalData.fee_usd > 0) {
+            const feeJournalRef = push(ref(db, 'journal_entries'));
+            journalUpdates[feeJournalRef.key!] = {
+                date: finalData.date, description: `Fee for Tx: ${newId.slice(-6)}`,
+                debit_account: clientAccountId, debit_amount: finalData.fee_usd,
+                credit_account: PROFIT_ACCOUNT_ID, credit_amount: finalData.fee_usd,
+                amount_usd: finalData.fee_usd, createdAt: new Date().toISOString()
+            };
+        }
+        // Expense Journal Entry
+        if (finalData.expense_usd && finalData.expense_usd !== 0) {
+             const expenseJournalRef = push(ref(db, 'journal_entries'));
+             journalUpdates[expenseJournalRef.key!] = {
+                date: finalData.date, description: `Expense/Discount for Tx: ${newId.slice(-6)}`,
+                debit_account: EXPENSE_ACCOUNT_ID, debit_amount: Math.abs(finalData.expense_usd),
+                credit_account: clientAccountId, credit_amount: Math.abs(finalData.expense_usd),
+                amount_usd: Math.abs(finalData.expense_usd), createdAt: new Date().toISOString()
+            };
+        }
+
+        if (Object.keys(journalUpdates).length > 0) {
+            await update(ref(db, 'journal_entries'), journalUpdates);
+        }
+        
         let title = '';
         let message = '';
-
         if (finalData.type === 'Deposit') {
             title = '📥 Customer Receipt Voucher';
             message = `Amount of *${finalData.amount_usdt.toFixed(2)} USDT* received from customer *${finalData.clientName}* on ${format(new Date(finalData.date), 'yyyy-MM-dd')}.`;
@@ -209,19 +262,13 @@ export async function createTransaction(transactionId: string | null, formData: 
              title = '📤 Customer Withdrawal Voucher';
              message = `Withdrawal of *${finalData.amount_usdt.toFixed(2)} USDT* processed for customer *${finalData.clientName}* to wallet \`${finalData.client_wallet_address}\`.`;
         }
-        
         if (title && message) {
-            const fullNotification = `*${title}*\n\n${message}`;
-            await sendTelegramNotification(fullNotification);
+            await sendTelegramNotification(`*${title}*\n\n${message}`);
         }
-
         if (finalData.invoice_image_url) {
-            const caption = `Invoice for transaction: \`${newId}\``;
-            // Fire and forget
-            sendTelegramPhoto(finalData.invoice_image_url, caption);
+            await sendTelegramPhoto(finalData.invoice_image_url, `Invoice for transaction: \`${newId}\``);
         }
     }
-
 
     if (finalData.clientId && finalData.client_wallet_address) {
         try {
@@ -231,10 +278,8 @@ export async function createTransaction(transactionId: string | null, formData: 
                 const clientData = clientSnapshot.val() as Client;
                 const existingAddresses = clientData.bep20_addresses || [];
                 const newAddress = finalData.client_wallet_address;
-
                 if (!existingAddresses.some(addr => addr.toLowerCase() === newAddress.toLowerCase())) {
-                    const updatedAddresses = [...existingAddresses, newAddress];
-                    await update(clientRef, { bep20_addresses: updatedAddresses });
+                    await update(clientRef, { bep20_addresses: [...existingAddresses, newAddress] });
                 }
             }
         } catch (e) {
@@ -242,23 +287,13 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
     
-    // Mark all linked receipts/sms as used
     if (dataToSave.linkedReceiptIds && dataToSave.linkedReceiptIds.length > 0) {
         const updates: {[key: string]: any} = {};
         for (const id of dataToSave.linkedReceiptIds) {
-            // ID can belong to either cash_receipts or sms_transactions
             updates[`/cash_receipts/${id}/status`] = 'Used';
             updates[`/sms_transactions/${id}/status`] = 'used';
         }
-        try {
-            await update(ref(db), updates);
-        } catch(e) {
-            console.error(`Failed to update linked receipt statuses:`, e);
-        }
-    }
-
-    if (finalData.status === 'Confirmed' && previousTxState?.status !== 'Confirmed') {
-      // No journal entries needed here as they are created with the cash receipts/payments
+        await update(ref(db), updates);
     }
     
     revalidatePath('/transactions');
@@ -275,16 +310,13 @@ export type BulkUpdateState = { message?: string; error?: boolean } | undefined;
 export async function updateBulkTransactions(prevState: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
     const transactionIds = formData.getAll('transactionIds') as string[];
     const status = formData.get('status') as Transaction['status'];
-
     if (!transactionIds || transactionIds.length === 0 || !status) {
         return { message: 'No transactions or status selected.', error: true };
     }
-
     const updates: { [key: string]: any } = {};
     for (const id of transactionIds) {
         updates[`/transactions/${id}/status`] = status;
     }
-
     try {
         await update(ref(db), updates);
         revalidatePath('/transactions');
@@ -295,18 +327,11 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     }
 }
 
-
 export type CashReceiptFormState = {
-  errors?: {
-    bankAccountId?: string[];
-    clientId?: string[];
-    amount?: string[];
-    clientName?: string[];
-  };
+  errors?: { bankAccountId?: string[]; clientId?: string[]; amount?: string[]; clientName?: string[]; };
   message?: string;
   success?: boolean;
 } | undefined;
-
 
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
@@ -324,51 +349,46 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 }
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const rawData: Record<string, any> = { ...Object.fromEntries(formData.entries()) };
-    
-    const validatedFields = CashReceiptSchema.safeParse(rawData);
-
+    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to record receipt. Please check the fields.',
-        };
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
     }
-
     const { bankAccountId, clientId, clientName, amount, amountUsd, senderName, remittanceNumber, note } = validatedFields.data;
-    
     try {
         const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
         if (!bankAccountSnapshot.exists()) {
             return { message: 'Error: Could not find bank account.', success: false };
         }
-        
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
-        
-        const newReceiptRef = push(ref(db, 'cash_receipts'));
 
-        const receiptData = {
-            date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
-            clientId,
-            clientName,
-            senderName: senderName || clientName,
-            amount,
-            currency: bankAccount.currency!,
-            amountUsd,
-            status: 'Pending',
-            createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined,
-            note: note || undefined,
+        const newReceiptRef = push(ref(db, 'cash_receipts'));
+        const newReceiptId = newReceiptRef.key!;
+
+        const receiptData: Omit<CashReceipt, 'id'> = {
+            date: new Date().toISOString(), bankAccountId, bankAccountName: bankAccount.name,
+            clientId, clientName, senderName: senderName || clientName, amount, currency: bankAccount.currency!,
+            amountUsd, status: 'Pending', createdAt: new Date().toISOString(),
+            remittanceNumber: remittanceNumber || undefined, note: note || undefined,
         };
-        
         await set(newReceiptRef, stripUndefined(receiptData));
-        
+
+        const clientAccountRef = `accounts/6000${clientId}`;
+        const journalRef = push(ref(db, 'journal_entries'));
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: new Date().toISOString(),
+            description: `Cash receipt from ${clientName} for ${amount} ${bankAccount.currency}`,
+            debit_account: bankAccountId,
+            credit_account: clientAccountRef,
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+        };
+        await set(journalRef, journalEntry);
+
         revalidatePath('/cash-receipts');
         revalidatePath(`/transactions`);
         return { success: true, message: 'Cash receipt recorded successfully.' };
-
     } catch (e: any) {
         console.error("Error creating cash receipt:", e);
         return { message: 'Database Error: Could not record cash receipt.', success: false };
@@ -389,109 +409,101 @@ const CashPaymentSchema = z.object({
 
 export async function createCashPayment(paymentId: string | null, prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
     const isEditing = !!paymentId;
-
     const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
-
     if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to record payment. Please check the fields.',
-        };
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.' };
     }
-
     const { bankAccountId, clientId, amount, amountUsd, recipientName, remittanceNumber, note } = validatedFields.data;
-
     try {
         const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
             get(ref(db, `clients/${clientId}`)),
         ]);
-
         if (!bankAccountSnapshot.exists() || !clientSnapshot.exists()) {
-            return { message: 'Error: Could not find required data (bank account, client).', success: false };
+            return { message: 'Error: Could not find required data.', success: false };
         }
-
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
         if (isEditing) {
-            const paymentRef = ref(db, `cash_payments/${paymentId}`);
-            const paymentUpdates = { recipientName, remittanceNumber, note };
-            await update(paymentRef, paymentUpdates);
+            await update(ref(db, `cash_payments/${paymentId}`), { recipientName, remittanceNumber, note });
         } else {
             const newPaymentRef = push(ref(db, 'cash_payments'));
+            const journalRef = push(ref(db, 'journal_entries'));
             const paymentData: Omit<CashPayment, 'id'> = {
-                date: new Date().toISOString(),
-                bankAccountId,
-                bankAccountName: bankAccount.name,
-                clientId,
-                clientName: client.name,
-                recipientName: recipientName || client.name,
-                amount,
-                currency: bankAccount.currency!,
-                amountUsd: amountUsd, 
-                remittanceNumber,
-                note,
-                status: 'Confirmed',
-                createdAt: new Date().toISOString(),
-                journalEntryId: '', 
+                date: new Date().toISOString(), bankAccountId, bankAccountName: bankAccount.name, clientId,
+                clientName: client.name, recipientName: recipientName || client.name, amount,
+                currency: bankAccount.currency!, amountUsd, remittanceNumber, note, status: 'Confirmed',
+                createdAt: new Date().toISOString(), journalEntryId: journalRef.key!,
             };
-            
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: new Date().toISOString(),
+                description: `Cash payment to ${recipientName || client.name}`,
+                debit_account: `6000${clientId}`,
+                credit_account: bankAccountId,
+                debit_amount: amount, credit_amount: amount,
+                amount_usd: amountUsd, createdAt: new Date().toISOString(),
+            };
             await set(newPaymentRef, paymentData);
+            await set(journalRef, journalEntry);
         }
-        
         revalidatePath('/cash-payments');
-
-        return { success: true, message: isEditing ? 'Cash payment updated successfully.' : 'Cash payment recorded successfully.' };
-
+        return { success: true, message: isEditing ? 'Cash payment updated.' : 'Cash payment recorded.' };
     } catch (e: any) {
         console.error("Error creating/updating cash payment:", e);
-        return { message: 'Database Error: Could not record cash payment.', success: false };
+        return { message: 'Database Error.', success: false };
     }
 }
 
-
 export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean, message?: string }> {
-    if (!paymentId) {
-        return { success: false, message: "Payment ID is missing." };
-    }
-    
+    if (!paymentId) return { success: false, message: "Payment ID is missing." };
     try {
         const paymentRef = ref(db, `cash_payments/${paymentId}`);
         const paymentSnapshot = await get(paymentRef);
-        if (!paymentSnapshot.exists()) {
-            return { success: false, message: "Payment not found." };
-        }
-        
+        if (!paymentSnapshot.exists()) return { success: false, message: "Payment not found." };
         const payment = paymentSnapshot.val() as CashPayment;
-        if (payment.status === 'Cancelled') {
-            return { success: false, message: "This payment has already been cancelled." };
+        if (payment.status === 'Cancelled') return { success: false, message: "This payment is already cancelled." };
+
+        const updates: { [key: string]: any } = {};
+        updates[`/cash_payments/${paymentId}/status`] = 'Cancelled';
+        
+        if (payment.journalEntryId) {
+            const journalEntrySnapshot = await get(ref(db, `journal_entries/${payment.journalEntryId}`));
+            if (journalEntrySnapshot.exists()) {
+                const originalEntry = journalEntrySnapshot.val() as JournalEntry;
+                const reversalRef = push(ref(db, 'journal_entries'));
+                const reversalEntry: Omit<JournalEntry, 'id'> = {
+                    date: new Date().toISOString(),
+                    description: `Reversal for payment ${paymentId}`,
+                    debit_account: originalEntry.credit_account,
+                    credit_account: originalEntry.debit_account,
+                    debit_amount: originalEntry.credit_amount,
+                    credit_amount: originalEntry.debit_amount,
+                    amount_usd: originalEntry.amount_usd,
+                    createdAt: new Date().toISOString(),
+                };
+                updates[`/journal_entries/${reversalRef.key}`] = reversalEntry;
+            }
         }
-        
-        await update(paymentRef, { status: 'Cancelled' });
-
+        await update(ref(db), updates);
         revalidatePath('/cash-payments');
-        
+        revalidatePath('/accounting/journal');
         return { success: true };
-
     } catch (error) {
         console.error("Error cancelling cash payment:", error);
-        return { success: false, message: "Database error while cancelling payment." };
+        return { success: false, message: "Database error." };
     }
 }
 
 export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
     if (!clientId) return [];
-    
     try {
         const [cashReceiptsSnapshot, smsTransactionsSnapshot] = await Promise.all([
             get(ref(db, 'cash_receipts')),
             get(ref(db, 'sms_transactions')),
         ]);
-        
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
         const allSms: Record<string, SmsTransaction> = smsTransactionsSnapshot.val() || {};
-        
         const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
         const fiatHistorySnapshot = await get(fiatHistoryRef);
         let fiatRates: FiatRate[] = [];
@@ -499,55 +511,32 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
             const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
             fiatRates = fiatHistorySnapshot.val()[lastEntryKey].rates || [];
         }
-
         const funds: UnifiedReceipt[] = [];
-
-        // Process Manual Cash Receipts
         for(const id in allCashReceipts) {
             const receipt = allCashReceipts[id];
             if (receipt.clientId === clientId && receipt.status === 'Pending') {
                 funds.push({
-                    id,
-                    date: receipt.date,
-                    clientName: receipt.clientName,
-                    senderName: receipt.senderName,
-                    bankAccountName: receipt.bankAccountName,
-                    amount: receipt.amount,
-                    currency: receipt.currency,
-                    amountUsd: receipt.amountUsd,
-                    remittanceNumber: receipt.remittanceNumber,
-                    source: 'Manual',
-                    status: receipt.status
+                    id, date: receipt.date, clientName: receipt.clientName, senderName: receipt.senderName,
+                    bankAccountName: receipt.bankAccountName, amount: receipt.amount, currency: receipt.currency,
+                    amountUsd: receipt.amountUsd, remittanceNumber: receipt.remittanceNumber,
+                    source: 'Manual', status: receipt.status
                 });
             }
         }
-        
-        // Process Matched SMS Transactions
         for(const id in allSms) {
             const sms = allSms[id];
             if (sms.matched_client_id === clientId && sms.status === 'matched' && sms.type === 'credit') {
                  const rateInfo = fiatRates.find(r => r.currency === sms.currency);
                  const rate = rateInfo ? rateInfo.clientBuy : 1;
                  const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
-                
                 funds.push({
-                    id,
-                    date: sms.parsed_at,
-                    clientName: sms.matched_client_name || '',
-                    senderName: sms.client_name,
-                    bankAccountName: sms.account_name || 'N/A',
-                    amount: sms.amount || 0,
-                    currency: sms.currency || '',
-                    amountUsd: amountUsd,
-                    remittanceNumber: sms.id.slice(-6),
-                    source: 'SMS',
-                    status: sms.status
+                    id, date: sms.parsed_at, clientName: sms.matched_client_name || '', senderName: sms.client_name,
+                    bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0, currency: sms.currency || '',
+                    amountUsd, remittanceNumber: sms.id.slice(-6), source: 'SMS', status: sms.status
                 });
             }
         }
-
         return funds.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
     } catch (error) {
         console.error("Error fetching available client funds:", error);
         return [];

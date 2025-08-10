@@ -32,7 +32,7 @@ const AccountSchema = z.object({
   currency: z.enum(['USD', 'YER', 'SAR', 'USDT', 'none']).optional().nullable(),
 });
 
-async function ensureDefaultAccounts() {
+export async function ensureDefaultAccounts() {
     const accountsRef = ref(db, 'accounts');
     const snapshot = await get(accountsRef);
     const existingAccounts = snapshot.val() || {};
