@@ -7,8 +7,8 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt } from '../types';
-import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction } from './helpers';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord } from '../types';
+import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 
@@ -584,5 +584,95 @@ export async function cancelCashPayment(paymentId: string): Promise<{ success: b
     } catch (error) {
         console.error('Error cancelling payment:', error);
         return { success: false, message: 'Database error while cancelling payment.' };
+    }
+}
+
+const ModernTransactionSchema = z.object({
+  clientId: z.string().min(1, 'A client must be selected.'),
+  linkedRecordIds: z.array(z.string()).min(1, 'At least one financial record must be selected.'),
+  notes: z.string().optional(),
+  attachment: z.instanceof(File).optional(),
+});
+
+export async function createModernTransaction(formData: FormData): Promise<{ success: boolean; message: string; }> {
+    const dataToValidate = {
+        clientId: formData.get('clientId'),
+        linkedRecordIds: formData.getAll('linkedRecordIds'),
+        notes: formData.get('notes'),
+        attachment: formData.get('attachment'),
+    };
+    
+    const validatedFields = ModernTransactionSchema.safeParse(dataToValidate);
+
+    if (!validatedFields.success) {
+        return {
+            success: false,
+            message: validatedFields.error.flatten().fieldErrors.linkedRecordIds?.[0] || 'Invalid data submitted.',
+        };
+    }
+    
+    const { clientId, linkedRecordIds, notes, attachment } = validatedFields.data;
+    const records = await getUnifiedClientRecords(clientId);
+    const selectedRecords = records.filter(r => linkedRecordIds.includes(r.id));
+    
+    if (selectedRecords.length === 0) {
+        return { success: false, message: "No valid records were selected." };
+    }
+
+    const totalInflowUSD = selectedRecords.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
+    const totalOutflowUSD = selectedRecords.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
+
+    const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
+    const feesSnapshot = await get(feesRef);
+    const cryptoFees: CryptoFee | null = feesSnapshot.exists() ? Object.values(feesSnapshot.val())[0] : null;
+
+    const feePercent = cryptoFees ? cryptoFees.buy_fee_percent / 100 : 0.02;
+    const minFee = cryptoFees ? cryptoFees.minimum_buy_fee : 1;
+
+    const fee_usd = Math.max(totalInflowUSD * feePercent, totalInflowUSD > 0 ? minFee : 0);
+    const amount_usdt = totalInflowUSD - totalOutflowUSD - fee_usd;
+    
+    const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+    if (!clientSnapshot.exists()) return { success: false, message: "Client not found." };
+    
+    const newTxId = await getNextSequentialId();
+
+    const transactionData: Omit<Transaction, 'id'> = {
+        date: new Date().toISOString(),
+        type: 'Modern',
+        clientId: clientId,
+        clientName: clientSnapshot.val().name,
+        amount_usd: totalInflowUSD,
+        fee_usd,
+        amount_usdt,
+        status: 'Confirmed',
+        notes: notes || '',
+        createdAt: new Date().toISOString(),
+        linkedRecordIds: linkedRecordIds.join(','),
+    };
+
+    const updates: { [key: string]: any } = {};
+    updates[`/transactions/${newTxId}`] = transactionData;
+    
+    for (const recordId of linkedRecordIds) {
+        const record = selectedRecords.find(r => r.id === recordId);
+        if (record?.source === 'Manual') {
+            updates[`/cash_receipts/${recordId}/status`] = 'Used';
+            updates[`/usdt_receipts/${recordId}/status`] = 'Used'; // Assuming a future path
+            updates[`/cash_payments/${recordId}/status`] = 'Used'; // Assuming a future path
+        } else if (record?.source === 'SMS') {
+            updates[`/sms_transactions/${recordId}/status`] = 'used';
+        }
+    }
+
+    try {
+        await update(ref(db), updates);
+        await logAction('create_modern_transaction', { type: 'transaction', id: String(newTxId), name: `Modern TX for ${transactionData.clientName}` }, transactionData);
+        revalidatePath('/transactions/modern');
+        revalidatePath(`/transactions`);
+        return { success: true, message: `Transaction #${newTxId} created.` };
+    } catch (error) {
+        console.error("Modern transaction creation error:", error);
+        return { success: false, message: "A database error occurred." };
     }
 }
