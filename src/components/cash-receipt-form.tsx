@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -19,7 +18,7 @@ import type { Client, Account, FiatRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/transaction';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 
 
 function SubmitButton() {
