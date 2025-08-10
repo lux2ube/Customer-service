@@ -11,7 +11,7 @@ import { ImportClientsButton } from "@/components/import-clients-button";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, get, onValue } from 'firebase/database';
-import type { Client, Account, Transaction } from '@/lib/types';
+import type { Client, Transaction, Account } from '@/lib/types';
 import { MergeClientsButton } from '@/components/merge-clients-button';
 import { Suspense } from "react";
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,7 +50,8 @@ export default function ClientsPage() {
             const bankAccountList: Account[] = [];
             const cryptoWalletList: Account[] = [];
             if (accountsSnap.exists()) {
-                const allAccounts: Account[] = Object.values(accountsSnap.val());
+                const allAccountsData = accountsSnap.val();
+                const allAccounts: Account[] = Object.keys(allAccountsData).map(key => ({ id: key, ...allAccountsData[key] }));
                 bankAccountList.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency && acc.currency !== 'USDT'));
                 cryptoWalletList.push(...allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
             }

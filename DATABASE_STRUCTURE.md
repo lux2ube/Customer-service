@@ -147,3 +147,30 @@ The primary record for all financial trades (buy/sell USDT). This record ties to
 -   **`notes`**: `string` (optional) - Any additional notes.
 -   **`createdAt`**: `string` (ISO 8601) - The timestamp when the record was created.
 -   ... and other optional fields for display or reference.
+
+---
+
+### 10. `/usdt_receipts/{recordId}`
+
+A manually recorded receipt of USDT from a client.
+
+-   **`id`**: `string` - The sequential record ID.
+-   **`date`**: `string` (ISO 8601) - The date of the receipt.
+-   **`clientId`**: `string`
+-   **`clientName`**: `string`
+-   **`cryptoWalletId`**: `string` - The system wallet that received the funds.
+-   **`cryptoWalletName`**: `string`
+-   **`amount`**: `number` - The amount of USDT received.
+-   **`txid`**: `string` (optional) - The blockchain transaction hash.
+-   **`walletAddress`**: `string` (optional) - The client's sending wallet address.
+-   **`notes`**: `string` (optional)
+-   **`status`**: `string` ('Completed', 'Cancelled')
+-   **`createdAt`**: `string` (ISO 8601)
+
+---
+
+### 11. `/counters`
+
+Stores atomic counters for generating sequential IDs.
+
+-   **/`globalRecordId`**: `number` - The last used ID for any new financial record.

@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -118,6 +117,22 @@ export interface CashPayment {
     createdAt: string;
     journalEntryId?: string;
 }
+
+export interface UsdtManualReceipt {
+    id: string;
+    date: string;
+    clientId: string;
+    clientName: string;
+    cryptoWalletId: string;
+    cryptoWalletName: string;
+    amount: number; // USDT amount
+    walletAddress?: string;
+    txid?: string;
+    notes?: string;
+    status: 'Completed' | 'Cancelled';
+    createdAt: string;
+}
+
 
 export interface Account {
     id: string;
@@ -250,7 +265,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;

@@ -34,10 +34,13 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Repeat,
+  Sparkles,
 } from 'lucide-react';
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/modern', label: 'Modern', icon: Sparkles },
+  
   { type: 'divider', label: 'العمليات المالية' },
   { href: '/cash-receipts', label: 'سندات القبض', icon: ArrowDownToLine },
   { href: '/cash-payments', label: 'سندات الصرف', icon: ArrowUpFromLine },
