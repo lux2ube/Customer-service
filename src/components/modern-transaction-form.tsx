@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -77,7 +76,7 @@ function FinancialRecordTable({ title, records, selectedIds, onSelectionChange, 
 }
 
 export function ModernTransactionForm({ initialClients }: { initialClients: Client[] }) {
-    const [transactionType, setTransactionType] = React.useState<Transaction['type'] | null>(null);
+    const [transactionType, setTransactionType] = React.useState<Transaction['type']>('Deposit');
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
     const [loadingRecords, setLoadingRecords] = React.useState(false);
@@ -137,10 +136,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         };
         
         let baseAmountForFee = 0;
-        let finalCashOutflow = 0;
-        let finalCryptoOutflow = 0;
-        let totalInflowUSD = 0;
-        let totalOutflowUSD = 0;
+        let totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
+        let totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
 
         if (transactionType === 'Deposit') {
             const fiatInflows = selected.filter(r => r.type === 'inflow' && r.category === 'fiat');
@@ -149,13 +146,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
             const cryptoInflows = selected.filter(r => r.type === 'inflow' && r.category === 'crypto');
             baseAmountForFee = cryptoInflows.reduce((sum, r) => sum + r.amountUsd, 0);
         } else if (transactionType === 'Transfer') {
-             const fiatInflows = selected.filter(r => r.type === 'inflow' && r.category === 'fiat');
-             const cryptoInflows = selected.filter(r => r.type === 'inflow' && r.category === 'crypto');
-             baseAmountForFee = fiatInflows.reduce((sum, r) => sum + r.amountUsd, 0) + cryptoInflows.reduce((sum, r) => sum + r.amountUsd, 0);
+             baseAmountForFee = totalInflowUSD;
         }
-
-        totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
-        totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
 
         const feePercent = (transactionType === 'Deposit' ? feeConfig.buy_fee : feeConfig.sell_fee) / 100;
         const minFee = transactionType === 'Deposit' ? feeConfig.min_buy_fee : feeConfig.min_sell_fee;
@@ -280,7 +272,6 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 { (transactionType === 'Deposit' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button> }
                                 { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button> }
                                 { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button> }
-                                {/* Add USDT Payment button once that form is created */}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -379,24 +370,38 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const debounceTimeoutRef = React.useRef<NodeJS.Timeout>();
+    
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    const handleSearch = (value: string) => {
-        setInputValue(value);
+    React.useEffect(() => {
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+            return;
+        }
+
+        setIsLoading(true);
         if (debounceTimeoutRef.current) {
             clearTimeout(debounceTimeoutRef.current);
         }
-        if (value.length < 2) {
-            setSearchResults([]);
-            return;
-        }
-        setIsLoading(true);
+        
         debounceTimeoutRef.current = setTimeout(async () => {
-            const results = await searchClients(value);
+            const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
+            if(results.length > 0) {
+              setIsOpen(true);
+            }
         }, 300);
-    };
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
 
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
@@ -409,21 +414,19 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     
     const handlePaste = async () => {
         const text = await navigator.clipboard.readText();
-        handleSearch(text);
+        setInputValue(text);
     };
 
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <div className="relative">
-                    <Command>
-                         <CommandInput
-                            placeholder="Search client by name or phone..."
-                            value={inputValue}
-                            onValueChange={handleSearch}
-                            className="pr-10"
-                        />
-                    </Command>
+                     <Input
+                        placeholder="Search client by name, phone, or paste address..."
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        className="pr-10"
+                    />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>

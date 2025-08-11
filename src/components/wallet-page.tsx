@@ -246,24 +246,38 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const debounceTimeoutRef = React.useRef<NodeJS.Timeout>();
 
-    const handleSearch = (value: string) => {
-        setInputValue(value);
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+            return;
+        }
+
+        setIsLoading(true);
         if (debounceTimeoutRef.current) {
             clearTimeout(debounceTimeoutRef.current);
         }
-        if (value.length < 2) {
-            setSearchResults([]);
-            return;
-        }
-        setIsLoading(true);
+        
         debounceTimeoutRef.current = setTimeout(async () => {
-            const results = await searchClients(value);
+            const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
+            if(results.length > 0) {
+              setIsOpen(true);
+            }
         }, 300);
-    };
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
 
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
@@ -276,21 +290,19 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     
     const handlePaste = async () => {
         const text = await navigator.clipboard.readText();
-        handleSearch(text);
+        setInputValue(text);
     };
 
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <div className="relative">
-                    <Command>
-                         <CommandInput
-                            placeholder="Search client by name or phone..."
-                            value={inputValue}
-                            onValueChange={handleSearch}
-                            className="pr-10"
-                        />
-                    </Command>
+                     <Input
+                        placeholder="Search client by name, phone, or paste address..."
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        className="pr-10"
+                    />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>
@@ -318,6 +330,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+
 
 function TransactionHistory() {
     const [history, setHistory] = React.useState<SendRequest[]>([]);
