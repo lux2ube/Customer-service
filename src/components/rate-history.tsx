@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 type FiatHistoryEntry = {
     id: string;
     timestamp: string;
-    rates: FiatRate[];
+    rates: Record<string, Omit<FiatRate, 'currency'>>;
 };
 
 type CryptoHistoryEntry = {
@@ -48,15 +48,17 @@ export function RateHistory() {
             unsubCrypto();
         };
     }, []);
-
-    const getFiatRateCell = (rates: FiatRate[], currency: 'YER' | 'SAR') => {
-        const rate = rates.find(r => r.currency === currency);
-        if (!rate) return <TableCell className="text-muted-foreground">N/A</TableCell>;
+    
+    const getFiatRateCell = (rates: Record<string, Omit<FiatRate, 'currency'>>, currencyCode: string) => {
+        const rate = rates[currencyCode];
+        if (!rate) return <TableCell className="text-muted-foreground text-center">N/A</TableCell>;
         return (
             <TableCell>
                 <div className="grid grid-cols-2 text-xs">
-                    <span className="text-muted-foreground">Buy:</span> <span>{rate.clientBuy}</span>
-                    <span className="text-muted-foreground">Sell:</span> <span>{rate.clientSell}</span>
+                    <span className="text-muted-foreground">Client Buy:</span> <span>{rate.clientBuy}</span>
+                    <span className="text-muted-foreground">Client Sell:</span> <span>{rate.clientSell}</span>
+                    <span className="text-muted-foreground">System Buy:</span> <span>{rate.systemBuy}</span>
+                    <span className="text-muted-foreground">System Sell:</span> <span>{rate.systemSell}</span>
                 </div>
             </TableCell>
         );
@@ -80,8 +82,8 @@ export function RateHistory() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[180px]">Timestamp</TableHead>
-                                        <TableHead>YER Client Rates</TableHead>
-                                        <TableHead>SAR Client Rates</TableHead>
+                                        <TableHead>YER Rates</TableHead>
+                                        <TableHead>SAR Rates</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -21,11 +22,15 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
     for (const code of currencyCodes) {
         const clientBuyKey = `${code}_clientBuy`;
         const clientSellKey = `${code}_clientSell`;
+        const systemBuyKey = `${code}_systemBuy`;
+        const systemSellKey = `${code}_systemSell`;
 
-        if (data[clientBuyKey] && data[clientSellKey]) {
+        if (data[clientBuyKey] && data[clientSellKey] && data[systemBuyKey] && data[systemSellKey]) {
             rates[code] = {
                 clientBuy: parseFloat(data[clientBuyKey] as string || '0'),
                 clientSell: parseFloat(data[clientSellKey] as string || '0'),
+                systemBuy: parseFloat(data[systemBuyKey] as string || '0'),
+                systemSell: parseFloat(data[systemSellKey] as string || '0'),
             };
         }
     }

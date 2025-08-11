@@ -203,6 +203,8 @@ export interface FiatRate {
     currency: string;
     clientBuy: number;
     clientSell: number;
+    systemBuy: number;
+    systemSell: number;
 }
 
 export interface CryptoFee {

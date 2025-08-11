@@ -2,8 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -199,22 +198,36 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
             <Card>
                 <CardHeader>
                     <CardTitle>Global Fiat Exchange Rates</CardTitle>
-                    <CardDescription>Define buy/sell rates for Fiat currencies against USD/USDT.</CardDescription>
+                    <CardDescription>Define buy/sell rates for Fiat currencies against the base currency (USD/USDT).</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {fiatCurrencies.map(currency => {
                         const currentRate = initialRates[currency.code];
                         return (
                             <div key={currency.code} className="space-y-3 p-3 border rounded-md bg-muted/50">
-                                <h4 className="font-semibold">{currency.name} ({currency.code}) to USD/USDT</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Client Buy Rate (We Sell)</Label>
-                                        <Input name={`${currency.code}_clientBuy`} type="number" step="any" defaultValue={currentRate?.clientBuy || ''} required />
+                                <h4 className="font-semibold">{currency.name} ({currency.code})</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                     <div className="space-y-2 border-r pr-4">
+                                        <h5 className="text-sm font-medium">Client Side</h5>
+                                         <div className="space-y-1">
+                                            <Label className="text-xs">Buy Rate (Client Buys)</Label>
+                                            <Input name={`${currency.code}_clientBuy`} type="number" step="any" defaultValue={currentRate?.clientBuy || ''} required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Sell Rate (Client Sells)</Label>
+                                            <Input name={`${currency.code}_clientSell`} type="number" step="any" defaultValue={currentRate?.clientSell || ''} required />
+                                        </div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Client Sell Rate (We Buy)</Label>
-                                        <Input name={`${currency.code}_clientSell`} type="number" step="any" defaultValue={currentRate?.clientSell || ''} required />
+                                    <div className="space-y-2">
+                                         <h5 className="text-sm font-medium">System Side</h5>
+                                         <div className="space-y-1">
+                                            <Label className="text-xs">Buy Rate (System Buys)</Label>
+                                            <Input name={`${currency.code}_systemBuy`} type="number" step="any" defaultValue={currentRate?.systemBuy || ''} required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Sell Rate (System Sells)</Label>
+                                            <Input name={`${currency.code}_systemSell`} type="number" step="any" defaultValue={currentRate?.systemSell || ''} required />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
