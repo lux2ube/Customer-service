@@ -91,32 +91,26 @@ export function ChartOfAccountsTable() {
       }
     });
 
-    // Process transactions
+    // Process transactions - This only affects Assets and Equity/Income accounts
     transactions.forEach(tx => {
         if (tx.status !== 'Confirmed') return;
-        if (tx.type === 'Deposit') {
-            if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
-                leafBalances[tx.bankAccountId].native += tx.amount;
-                leafBalances[tx.bankAccountId].usd += tx.amount_usd;
-            }
-            if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
-                leafBalances[tx.cryptoWalletId].native -= tx.amount_usdt;
-                leafBalances[tx.cryptoWalletId].usd -= tx.amount_usdt;
-            }
-        } 
-        else if (tx.type === 'Withdraw') {
-            if (tx.bankAccountId && leafBalances[tx.bankAccountId]) {
-                leafBalances[tx.bankAccountId].native -= tx.amount;
-                leafBalances[tx.bankAccountId].usd -= tx.amount_usd;
-            }
-            if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId]) {
-                leafBalances[tx.cryptoWalletId].native += tx.amount_usdt;
-                leafBalances[tx.cryptoWalletId].usd += tx.amount_usdt;
-            }
+        
+        // Fee income
+        if (tx.fee_usd && leafBalances['4001']) {
+            leafBalances['4001'].native -= tx.fee_usd; // Income has credit balance
+            leafBalances['4001'].usd -= tx.fee_usd;
         }
+        
+        // Expense/Discount
+        if (tx.expense_usd && leafBalances['5001']) {
+            leafBalances['5001'].native += tx.expense_usd; // Expense has debit balance
+            leafBalances['5001'].usd += tx.expense_usd;
+        }
+
+        // We no longer process client-side accounts here to improve performance
     });
 
-    // Process journal entries
+    // Process journal entries - this is the main source of truth for most accounts
     journalEntries.forEach(entry => {
       if (leafBalances[entry.debit_account]) {
         leafBalances[entry.debit_account].native += entry.debit_amount;
@@ -138,7 +132,13 @@ export function ChartOfAccountsTable() {
         const totalUsd = children.reduce((sum, child) => {
           return sum + (aggregatedBalances[child.id]?.usd || 0);
         }, 0);
-        aggregatedBalances[account.id] = { native: totalUsd, usd: totalUsd };
+        
+        const nativeCurrency = account.currency || 'USD';
+        const totalNative = nativeCurrency === 'USD' 
+            ? totalUsd 
+            : children.reduce((sum, child) => sum + (aggregatedBalances[child.id]?.native || 0), 0);
+
+        aggregatedBalances[account.id] = { native: totalNative, usd: totalUsd };
       }
     });
     
@@ -183,11 +183,14 @@ export function ChartOfAccountsTable() {
   };
 
   const renderAccounts = () => {
-    const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
+    // Filter out client sub-accounts to improve performance
+    const displayableAccounts = accounts.filter(acc => acc.parentId !== '6000');
+
+    const accountMap = new Map(displayableAccounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
     const rootAccounts: any[] = [];
 
     // Build the tree structure
-    accounts.forEach(account => {
+    displayableAccounts.forEach(account => {
         const node = accountMap.get(account.id)!;
         if (account.parentId && accountMap.has(account.parentId)) {
             accountMap.get(account.parentId)!.children.push(node);
@@ -211,6 +214,11 @@ export function ChartOfAccountsTable() {
     const renderRow = (account: any, level = 0, siblings: any[] = [], index: number = 0) => {
       const isGroup = account.isGroup;
       const balanceInfo = balances[account.id];
+      const displayBalance = balanceInfo ? { 
+          native: isNaN(balanceInfo.native) ? 0 : balanceInfo.native,
+          usd: isNaN(balanceInfo.usd) ? 0 : balanceInfo.usd
+      } : { native: 0, usd: 0 };
+
       return (
         <React.Fragment key={account.id}>
           <TableRow className={cn(isGroup && 'bg-muted/50')}>
@@ -234,23 +242,22 @@ export function ChartOfAccountsTable() {
                 <Badge variant={getBadgeVariant(account.type)}>{account.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono">
-              {balanceInfo !== undefined && (
-                isGroup ? (
+              {isGroup ? (
                   <span>
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.usd)}
+                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(displayBalance.usd)}
                   </span>
                 ) : (
                   account.currency && (
                     <span>
                       {
                         account.currency === 'USD' || account.currency === 'USDT' ?
-                          new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceInfo.native) :
-                          `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceInfo.native)} ${account.currency}`
+                          new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(displayBalance.native) :
+                          `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(displayBalance.native)} ${account.currency}`
                       }
                     </span>
                   )
                 )
-              )}
+              }
             </TableCell>
             <TableCell className="text-right">
                 <Button asChild variant="ghost" size="icon">
