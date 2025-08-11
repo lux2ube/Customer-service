@@ -132,7 +132,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         const totalInflowUSD = inflows.reduce((sum, r) => sum + r.amountUsd, 0);
         const totalOutflowUSD = outflows.reduce((sum, r) => sum + r.amountUsd, 0);
         
-        if (!transactionType) return { totalInflowUSD: 0, totalOutflowUSD: 0, calculatedFee: 0, netResult: 0 };
+        if (!transactionType) return { totalInflowUSD: 0, totalOutflowUSD: 0, calculatedFee: 0, netResult: 0, netResultCurrency: 'USD' };
         
         const feeConfig = {
             buy_fee: cryptoFees?.buy_fee_percent || 2,
@@ -143,10 +143,15 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         
         let baseAmountForFee = 0;
         if (transactionType === 'Deposit') {
-            baseAmountForFee = totalInflowUSD; // Fee is on what the client gives us
+            const fiatInflows = inflows.filter(r => r.category === 'fiat').reduce((sum, r) => sum + r.amountUsd, 0);
+            baseAmountForFee = fiatInflows;
         } else if (transactionType === 'Withdraw') {
             const cryptoInflows = inflows.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amountUsd, 0);
-            baseAmountForFee = cryptoInflows; // Fee is on the USDT they give us
+            baseAmountForFee = cryptoInflows;
+        } else if (transactionType === 'Transfer') {
+             const fiatInflows = inflows.filter(r => r.category === 'fiat').reduce((sum, r) => sum + r.amountUsd, 0);
+             const cryptoInflows = inflows.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amountUsd, 0);
+             baseAmountForFee = fiatInflows > 0 ? fiatInflows : cryptoInflows;
         }
 
         const feePercent = (transactionType === 'Deposit' ? feeConfig.buy_fee : feeConfig.sell_fee) / 100;
@@ -155,8 +160,10 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
         const netResult = totalInflowUSD - totalOutflowUSD - calculatedFee;
+        const netResultCurrency = transactionType === 'Deposit' ? 'USDT' : 'USD';
 
-        return { totalInflowUSD, totalOutflowUSD, calculatedFee, netResult };
+
+        return { totalInflowUSD, totalOutflowUSD, calculatedFee, netResult, netResultCurrency };
     }, [selectedRecordIds, records, cryptoFees, transactionType]);
     
     const recordCategories = React.useMemo(() => {
@@ -268,7 +275,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                             </div>
                             <div className="flex gap-2">
                                 {transactionType === 'Deposit' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Receipt</Button>}
-                                {transactionType === 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Payment</Button>}
+                                {transactionType === 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New USDT Receipt</Button>}
                                 {transactionType === 'Transfer' && (
                                     <>
                                         <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Fiat In</Button>
@@ -288,7 +295,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                     {transactionType === 'Deposit' && (
                                         <>
                                             <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
-                                            {/* For deposit, there is no explicit outflow selection, it's calculated. */}
+                                            <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
                                         </>
                                     )}
                                     {transactionType === 'Withdraw' && (
@@ -335,8 +342,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <p className="font-bold">${calculation.calculatedFee.toFixed(2)}</p>
                             </div>
                             <div className="p-2 border rounded-md bg-muted">
-                                <p className="text-xs text-muted-foreground">Net Result</p>
-                                <p className="font-bold text-primary">${calculation.netResult.toFixed(2)} USDT</p>
+                                <p className="text-xs text-muted-foreground">Net {calculation.netResultCurrency} Result</p>
+                                <p className="font-bold text-primary">{calculation.netResult.toFixed(2)} {calculation.netResultCurrency}</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -404,3 +411,4 @@ function ClientSelector({ clients, selectedClient, onSelect }: { clients: Client
         </Popover>
     );
 }
+
