@@ -41,7 +41,7 @@ export async function ensureDefaultAccounts() {
     const defaultAccounts: Omit<Account, 'id'>[] = [
         { name: 'Crypto Transaction Fees', type: 'Income', isGroup: false, parentId: '4000', currency: 'USD', id: '4001' },
         { name: 'Exchange Rate Commission', type: 'Income', isGroup: false, parentId: '4000', currency: 'USD', id: '4002' },
-        { name: 'Discounts & Expenses', type: 'Expenses', isGroup: false, parentId: '5000', currency: 'USD', id: '5001' },
+        { name: 'Discounts & Expenses', type: 'Expenses', isGroup: false, parentId: '5001', currency: 'USD', id: '5001' },
     ];
     
     let priority = snapshot.exists() ? snapshot.size : 0;
