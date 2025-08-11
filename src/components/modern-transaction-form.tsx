@@ -381,8 +381,9 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        if (inputValue.trim().length < 2) {
+        if (!inputValue) {
             setSearchResults([]);
+            setIsOpen(false);
             return;
         }
 
@@ -391,6 +392,8 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         }
 
         setIsLoading(true);
+        setIsOpen(true); 
+
         searchTimeoutRef.current = setTimeout(async () => {
             const results = await searchClients(inputValue);
             setSearchResults(results);
@@ -441,7 +444,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                 <Command shouldFilter={false}>
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
@@ -459,3 +462,4 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+

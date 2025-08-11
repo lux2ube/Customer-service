@@ -247,10 +247,11 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-    
+
     React.useEffect(() => {
-        if (inputValue.trim().length < 2) {
+        if (!inputValue) {
             setSearchResults([]);
+            setIsOpen(false);
             return;
         }
 
@@ -259,6 +260,8 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         }
 
         setIsLoading(true);
+        setIsOpen(true); 
+
         searchTimeoutRef.current = setTimeout(async () => {
             const results = await searchClients(inputValue);
             setSearchResults(results);
@@ -284,7 +287,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Input
+                 <Input
                     placeholder="Search client by name or phone..."
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
@@ -294,7 +297,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                 <Command shouldFilter={false}>
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
@@ -419,3 +422,4 @@ export function WalletView() {
         </div>
     );
 }
+
