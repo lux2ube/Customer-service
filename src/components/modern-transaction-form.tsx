@@ -268,20 +268,22 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 {/* Step 3 */}
                 {selectedClient && (
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader className="flex-wrap flex-row items-center justify-between gap-2">
                             <div className="space-y-1">
                                 <CardTitle>Step 3: Select Financial Records</CardTitle>
                                 <CardDescription>Choose the records to link to this transaction.</CardDescription>
                             </div>
-                            <div className="flex gap-2">
-                                {transactionType === 'Deposit' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New Receipt</Button>}
-                                {transactionType === 'Withdraw' && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record New USDT Receipt</Button>}
-                                {transactionType === 'Transfer' && (
-                                    <>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Fiat In</Button>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />USDT In</Button>
-                                    </>
-                                )}
+                            <div className="flex gap-2 flex-wrap">
+                                {(transactionType === 'Deposit' || transactionType === 'Transfer') && 
+                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button>
+                                }
+                                 {(transactionType === 'Withdraw' || transactionType === 'Transfer') && 
+                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button>
+                                }
+                                 {(transactionType === 'Withdraw' || transactionType === 'Transfer') && 
+                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button>
+                                }
+                                 {/* Add Quick USDT Payment button here when ready */}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -295,7 +297,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                     {transactionType === 'Deposit' && (
                                         <>
                                             <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
-                                            <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                            {/* Placeholder for USDT Outflow. We don't have records for this yet but the structure is here. */}
+                                            <Card className="flex-1"><CardHeader><CardTitle className="text-base flex items-center gap-2 text-red-600"><ArrowUp/> Client Gets (USDT)</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">USDT payment will be calculated automatically.</p></CardContent></Card>
                                         </>
                                     )}
                                     {transactionType === 'Withdraw' && (
@@ -312,7 +315,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                             </div>
                                              <div className="space-y-4">
                                                 <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
-                                                <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                                {/* Placeholder for USDT Outflow */}
+                                                <Card className="flex-1"><CardHeader><CardTitle className="text-base flex items-center gap-2 text-red-600"><ArrowUp/> Client Gets (USDT)</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">USDT payment will be calculated automatically.</p></CardContent></Card>
                                             </div>
                                         </>
                                     )}
@@ -411,4 +415,3 @@ function ClientSelector({ clients, selectedClient, onSelect }: { clients: Client
         </Popover>
     );
 }
-
