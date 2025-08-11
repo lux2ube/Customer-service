@@ -33,7 +33,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
             const tx = transactions[key];
             if (tx.clientId === clientId) {
                 history.push({
-                    id: key,
+                    id: `tx-${key}`,
                     date: tx.date,
                     type: tx.type,
                     description: tx.type === 'Deposit' ? `vs ${tx.amount} ${tx.currency}` : `vs ${tx.amount_usdt} USDT`,
@@ -53,7 +53,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
             const receipt = receipts[key];
             if (receipt.clientId === clientId) {
                  history.push({
-                    id: key,
+                    id: `cr-${key}`,
                     date: receipt.date,
                     type: 'Cash Receipt',
                     description: `From ${receipt.senderName} via ${receipt.bankAccountName}`,
@@ -72,7 +72,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
             const payment = payments[key];
             if (payment.clientId === clientId) {
                 history.push({
-                    id: key,
+                    id: `cp-${key}`,
                     date: payment.date,
                     type: 'Cash Payment',
                     description: `To ${payment.recipientName} via ${payment.bankAccountName}`,
@@ -91,7 +91,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
             const sms = smsTxs[key];
              if (sms.matched_client_id === clientId) {
                 history.push({
-                    id: key,
+                    id: `sms-${key}`,
                     date: sms.parsed_at,
                     type: sms.type === 'credit' ? 'SMS Credit' : 'SMS Debit',
                     description: `From ${sms.client_name} via ${sms.account_name}`,
