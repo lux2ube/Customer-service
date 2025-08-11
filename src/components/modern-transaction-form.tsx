@@ -24,6 +24,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { QuickCashReceiptForm } from './quick-cash-receipt-form';
 import { QuickCashPaymentForm } from './quick-cash-payment-form';
 import { QuickUsdtReceiptForm } from './quick-usdt-receipt-form';
+import { QuickUsdtPaymentForm } from './quick-usdt-payment-form';
 
 
 function SubmitButton() {
@@ -85,6 +86,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
     const [isQuickReceiptOpen, setIsQuickReceiptOpen] = React.useState(false);
     const [isQuickPaymentOpen, setIsQuickPaymentOpen] = React.useState(false);
     const [isQuickUsdtReceiptOpen, setIsQuickUsdtReceiptOpen] = React.useState(false);
+    const [isQuickUsdtPaymentOpen, setIsQuickUsdtPaymentOpen] = React.useState(false);
 
     const { toast } = useToast();
 
@@ -211,6 +213,12 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 setIsOpen={setIsQuickUsdtReceiptOpen}
                 onReceiptCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
             />
+            <QuickUsdtPaymentForm
+                client={selectedClient}
+                isOpen={isQuickUsdtPaymentOpen}
+                setIsOpen={setIsQuickUsdtPaymentOpen}
+                onPaymentCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
+            />
             <div className="space-y-4">
                 {/* Step 1 */}
                 <Card>
@@ -272,6 +280,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 { (transactionType === 'Deposit' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button> }
                                 { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button> }
                                 { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button> }
+                                { (transactionType === 'Deposit' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Payment</Button> }
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -372,38 +381,27 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
 
     const lastSelectedName = React.useRef<string | null>(null);
 
-    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
     React.useEffect(() => {
         // Don't search if the input value was just set from a selection
         if (inputValue === lastSelectedName.current) {
             return;
         }
-        
-        if (inputValue.length < 2) {
-            setSearchResults([]);
-            return;
-        }
 
-        setIsLoading(true);
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-        
-        debounceTimeoutRef.current = setTimeout(async () => {
+        const timerId = setTimeout(async () => {
+            if (inputValue.length < 2) {
+                setSearchResults([]);
+                return;
+            }
+            setIsLoading(true);
             const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
             if (results.length > 0) {
-                setIsOpen(true);
+                 setIsOpen(true);
             }
         }, 300);
 
-        return () => {
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
-        };
+        return () => clearTimeout(timerId);
     }, [inputValue]);
 
     const handleSelect = (client: Client) => {

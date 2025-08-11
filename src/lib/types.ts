@@ -135,6 +135,19 @@ export interface UsdtManualReceipt {
     createdAt: string;
 }
 
+export interface UsdtPayment {
+    id: string;
+    date: string;
+    clientId: string;
+    clientName: string;
+    recipientAddress: string;
+    amount: number; // USDT amount
+    txid?: string;
+    notes?: string;
+    status: 'Completed' | 'Cancelled';
+    createdAt: string;
+}
+
 
 export interface Account {
     id: string;
@@ -280,7 +293,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'transaction';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;

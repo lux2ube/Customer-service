@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, UsdtManualReceipt } from '../types';
+import type { Client, Account, UsdtManualReceipt, UsdtPayment } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -130,5 +130,67 @@ export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, 
     } catch (e: any) {
         console.error("Error creating quick USDT receipt:", e);
         return { message: 'Database Error: Could not record USDT receipt.', success: false };
+    }
+}
+
+
+// --- USDT Manual Payment ---
+export type UsdtPaymentState = {
+  errors?: {
+    recipientAddress?: string[];
+    amount?: string[];
+    txid?: string[];
+  };
+  message?: string;
+  success?: boolean;
+} | undefined;
+
+
+const UsdtManualPaymentSchema = z.object({
+  clientId: z.string(),
+  recipientAddress: z.string().min(1, 'Recipient address is required.'),
+  amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+  txid: z.string().optional(),
+});
+
+export async function createUsdtManualPayment(prevState: UsdtPaymentState, formData: FormData): Promise<UsdtPaymentState> {
+    const validatedFields = UsdtManualPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!validatedFields.success) {
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
+    }
+    const { clientId, recipientAddress, amount, txid } = validatedFields.data;
+    
+    try {
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        if (!clientSnapshot.exists()) {
+            return { message: 'Error: Could not find client.', success: false };
+        }
+        const client = clientSnapshot.val() as Client;
+
+        const newId = await getNextSequentialId();
+        const paymentData: Omit<UsdtPayment, 'id'> = {
+            date: new Date().toISOString(),
+            clientId: clientId,
+            clientName: client.name,
+            recipientAddress: recipientAddress,
+            amount: amount,
+            txid: txid || undefined,
+            status: 'Completed',
+            createdAt: new Date().toISOString(),
+        };
+        
+        await set(ref(db, `usdt_payments/${newId}`), stripUndefined(paymentData));
+        
+        await logAction(
+            'create_usdt_manual_payment',
+            { type: 'usdt_payment', id: String(newId), name: `USDT Payment to ${client.name}` },
+            paymentData
+        );
+        
+        revalidatePath('/transactions/modern');
+        return { success: true, message: 'USDT manual payment recorded successfully.' };
+    } catch (e: any) {
+        console.error("Error creating manual USDT payment:", e);
+        return { message: 'Database Error: Could not record payment.', success: false };
     }
 }
