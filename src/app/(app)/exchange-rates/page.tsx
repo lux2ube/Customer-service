@@ -19,6 +19,7 @@ import { updateFiatRates, updateCryptoFees, initializeDefaultCurrencies, addCurr
 import { RateHistory } from '@/components/rate-history';
 import {
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
