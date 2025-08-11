@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -450,10 +450,11 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
     try {
-        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, smsSnap, fiatHistorySnap] = await Promise.all([
+        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, usdtPaymentsSnap, smsSnap, fiatHistorySnap] = await Promise.all([
             get(ref(db, 'cash_receipts')),
             get(ref(db, 'cash_payments')),
             get(ref(db, 'usdt_receipts')),
+            get(ref(db, 'usdt_payments')),
             get(ref(db, 'sms_transactions')),
             get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
         ]);
@@ -461,6 +462,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnap.val() || {};
         const allCashPayments: Record<string, CashPayment> = cashPaymentsSnap.val() || {};
         const allUsdtReceipts: Record<string, UsdtManualReceipt> = usdtReceiptsSnap.val() || {};
+        const allUsdtPayments: Record<string, UsdtPayment> = usdtPaymentsSnap.val() || {};
         const allSms: Record<string, SmsTransaction> = smsSnap.val() || {};
         
         let fiatRates: FiatRate[] = [];
@@ -482,7 +484,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         // Cash Payments (Outflow, Fiat)
         for (const id in allCashPayments) {
             const p = allCashPayments[id];
-            if (p.clientId === clientId && p.status === 'Confirmed') {
+            if (p.clientId === clientId && p.status === 'Confirmed') { // Assume we can use confirmed payments
                  records.push({ id, date: p.date, type: 'outflow', category: 'fiat', source: 'Cash Payment', amount: p.amount, currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName });
             }
         }
@@ -492,6 +494,14 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             const r = allUsdtReceipts[id];
             if (r.clientId === clientId && r.status === 'Completed') {
                 records.push({ id, date: r.date, type: 'inflow', category: 'crypto', source: 'USDT', amount: r.amount, currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName });
+            }
+        }
+        
+        // USDT Payments (Outflow, Crypto)
+        for (const id in allUsdtPayments) {
+            const p = allUsdtPayments[id];
+            if (p.clientId === clientId && p.status === 'Completed') {
+                records.push({ id, date: p.date, type: 'outflow', category: 'crypto', source: 'USDT Payment', amount: p.amount, currency: 'USDT', amountUsd: p.amount, status: p.status });
             }
         }
 

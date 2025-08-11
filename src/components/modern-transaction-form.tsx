@@ -9,7 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
-import { getUnifiedClientRecords, createModernTransaction, searchClients, findClientByAddress } from '@/lib/actions';
+import { getUnifiedClientRecords, createModernTransaction, searchClients } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste } from 'lucide-react';
@@ -294,7 +294,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                     {transactionType === 'Deposit' && (
                                         <>
                                             <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
-                                            <Card className="flex-1"><CardHeader><CardTitle className="text-base flex items-center gap-2 text-red-600"><ArrowUp/> Client Gets (USDT)</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">USDT payment will be calculated automatically.</p></CardContent></Card>
+                                            <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
                                         </>
                                     )}
                                     {transactionType === 'Withdraw' && (
@@ -311,7 +311,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                             </div>
                                              <div className="space-y-4">
                                                 <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
-                                                <Card className="flex-1"><CardHeader><CardTitle className="text-base flex items-center gap-2 text-red-600"><ArrowUp/> Client Gets (USDT)</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">USDT payment will be calculated automatically.</p></CardContent></Card>
+                                                <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
                                             </div>
                                         </>
                                     )}
@@ -380,28 +380,37 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [isLoading, setIsLoading] = React.useState(false);
 
     const lastSelectedName = React.useRef<string | null>(null);
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        // Don't search if the input value was just set from a selection
         if (inputValue === lastSelectedName.current) {
             return;
         }
 
-        const timerId = setTimeout(async () => {
-            if (inputValue.length < 2) {
-                setSearchResults([]);
-                return;
-            }
-            setIsLoading(true);
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        debounceTimeoutRef.current = setTimeout(async () => {
             const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
-            if (results.length > 0) {
-                 setIsOpen(true);
+            if(results.length > 0) {
+              setIsOpen(true);
             }
         }, 300);
 
-        return () => clearTimeout(timerId);
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
     }, [inputValue]);
 
     const handleSelect = (client: Client) => {
@@ -422,15 +431,17 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <div className="relative">
-                     <Input
-                        placeholder="Search client by name, phone, or paste address..."
-                        value={inputValue}
-                        onChange={(e) => {
-                            setInputValue(e.target.value);
-                            lastSelectedName.current = null; // Clear last selection on new typing
-                        }}
-                        className="pr-10"
-                    />
+                     <Command>
+                        <CommandInput
+                            placeholder="Search client by name, phone, or paste address..."
+                            value={inputValue}
+                            onValueChange={(value) => {
+                                setInputValue(value);
+                                lastSelectedName.current = null;
+                            }}
+                            className="pr-10"
+                        />
+                     </Command>
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>

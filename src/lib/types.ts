@@ -251,7 +251,7 @@ export interface UnifiedFinancialRecord {
   date: string;
   type: 'inflow' | 'outflow';
   category: 'fiat' | 'crypto';
-  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment';
+  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment' | 'USDT Payment';
   amount: number;
   currency: string;
   amountUsd: number;
