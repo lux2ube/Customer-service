@@ -243,37 +243,27 @@ function SendForm() {
 function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
-    const [inputValue, setInputValue] = React.useState('');
+    const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout>();
 
-    React.useEffect(() => {
-        if (!inputValue) {
+    const handleSearch = (value: string) => {
+        setInputValue(value);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        if (value.length < 2) {
             setSearchResults([]);
-            setIsOpen(false);
             return;
         }
-
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
-
         setIsLoading(true);
-        setIsOpen(true); 
-
-        searchTimeoutRef.current = setTimeout(async () => {
-            const results = await searchClients(inputValue);
+        debounceTimeoutRef.current = setTimeout(async () => {
+            const results = await searchClients(value);
             setSearchResults(results);
             setIsLoading(false);
         }, 300);
-
-        return () => {
-            if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-            }
-        };
-    }, [inputValue]);
+    };
 
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
@@ -281,23 +271,36 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         setIsOpen(false);
         setInputValue(client.name);
     };
-    
+
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+    
+    const handlePaste = async () => {
+        const text = await navigator.clipboard.readText();
+        handleSearch(text);
+    };
 
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                 <Input
-                    placeholder="Search client by name or phone..."
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                />
+                <div className="relative">
+                    <Command>
+                         <CommandInput
+                            placeholder="Search client by name or phone..."
+                            value={inputValue}
+                            onValueChange={handleSearch}
+                            className="pr-10"
+                        />
+                    </Command>
+                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
+                        <ClipboardPaste className="h-4 w-4" />
+                    </Button>
+                </div>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command shouldFilter={false}>
+                <Command>
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
@@ -422,4 +425,3 @@ export function WalletView() {
         </div>
     );
 }
-
