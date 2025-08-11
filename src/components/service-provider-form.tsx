@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -96,6 +95,8 @@ const cryptoFormulaOptions: CryptoFormulaField[] = ['Address', 'ID'];
 export function ServiceProviderForm({ provider, accounts }: { provider?: ServiceProvider, accounts: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
+    const formRef = React.useRef<HTMLFormElement>(null);
+
     const actionWithId = createServiceProvider.bind(null, provider?.id || null);
     const [state, formAction] = useActionState<ServiceProviderFormState, FormData>(actionWithId, undefined);
 
@@ -134,11 +135,24 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
         }));
     };
 
-    return (
-        <form action={formAction} className="space-y-4">
-             <input type="hidden" name="bankFormula" value={JSON.stringify(formData.bankFormula)} />
-             <input type="hidden" name="cryptoFormula" value={JSON.stringify(formData.cryptoFormula)} />
+    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const rawFormData = new FormData(formRef.current!);
+        
+        // Manually add the stringified formula arrays
+        rawFormData.set('bankFormula', JSON.stringify(formData.bankFormula));
+        rawFormData.set('cryptoFormula', JSON.stringify(formData.cryptoFormula));
 
+        // Manually add account IDs
+        formData.accountIds.forEach(id => {
+            rawFormData.append('accountIds', id);
+        });
+
+        formAction(rawFormData);
+    };
+
+    return (
+        <form onSubmit={handleSubmit} ref={formRef} className="space-y-4">
             <Card>
                 <CardHeader>
                     <CardTitle>{provider ? 'Edit' : 'New'} Service Provider</CardTitle>
@@ -185,7 +199,6 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
                             selectedAccountIds={formData.accountIds}
                             onSelectionChange={(ids) => setFormData(prev => ({...prev, accountIds: ids}))}
                         />
-                         {formData.accountIds.map(id => <input key={id} type="hidden" name="accountIds" value={id} />)}
                          {state?.errors?.accountIds && <p className="text-sm text-destructive">{state.errors.accountIds[0]}</p>}
                     </div>
                     
