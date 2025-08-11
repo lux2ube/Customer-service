@@ -277,7 +277,6 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button>
                                 <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button>
                                 <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button>
-                                 {/* Add Quick USDT Payment button here when ready */}
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -382,7 +381,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        if (!inputValue) {
+        if (inputValue.trim().length < 2) {
             setSearchResults([]);
             return;
         }
@@ -393,10 +392,8 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
 
         setIsLoading(true);
         searchTimeoutRef.current = setTimeout(async () => {
-            if (inputValue.trim().length >= 2) {
-                const results = await searchClients(inputValue);
-                setSearchResults(results);
-            }
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
             setIsLoading(false);
         }, 300);
 

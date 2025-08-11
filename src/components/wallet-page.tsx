@@ -247,9 +247,9 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
+    
     React.useEffect(() => {
-        if (!inputValue) {
+        if (inputValue.trim().length < 2) {
             setSearchResults([]);
             return;
         }
@@ -260,10 +260,8 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
 
         setIsLoading(true);
         searchTimeoutRef.current = setTimeout(async () => {
-            if (inputValue.trim().length >= 2) {
-                const results = await searchClients(inputValue);
-                setSearchResults(results);
-            }
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
             setIsLoading(false);
         }, 300);
 
@@ -273,7 +271,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
             }
         };
     }, [inputValue]);
-    
+
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
         onSelect(client);
