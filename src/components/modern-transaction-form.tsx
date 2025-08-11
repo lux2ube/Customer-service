@@ -385,26 +385,31 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [isOpen, setIsOpen] = React.useState(false);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const { toast } = useToast();
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    React.useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        if (inputValue.trim().length < 2) {
+    const handleInputChange = (value: string) => {
+        setInputValue(value);
+        setIsOpen(true);
+        if (value === '') {
+            setSelectedClient(null);
+            onSelect(null);
             setSearchResults([]);
             return;
         }
 
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+        
         setIsLoading(true);
-        const timerId = setTimeout(async () => {
-            const results = await searchClients(inputValue);
-            setSearchResults(results);
+        searchTimeoutRef.current = setTimeout(async () => {
+            if (value.trim().length >= 2) {
+                const results = await searchClients(value);
+                setSearchResults(results);
+            }
             setIsLoading(false);
         }, 300);
-
-        return () => clearTimeout(timerId);
-    }, [inputValue, isOpen]);
+    };
     
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
@@ -418,8 +423,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const handlePaste = async () => {
         try {
             const text = await navigator.clipboard.readText();
-            setInputValue(text);
-            setIsOpen(true);
+            handleInputChange(text);
         } catch (err) {
             toast({ variant: 'destructive', title: 'Paste Failed', description: 'Could not read from clipboard.'});
         }
@@ -432,14 +436,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                     <Input
                         placeholder="Search by name or phone..."
                         value={inputValue}
-                        onChange={(e) => {
-                            setInputValue(e.target.value);
-                            setIsOpen(true);
-                            if (e.target.value === '') {
-                                setSelectedClient(null);
-                                onSelect(null);
-                            }
-                        }}
+                        onChange={(e) => handleInputChange(e.target.value)}
                          className="w-full"
                     />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
