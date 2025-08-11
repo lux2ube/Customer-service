@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -60,6 +61,16 @@ export function ServiceProvidersTable({ initialProviders, allAccounts }: { initi
     const getAccountName = (id: string) => {
         return allAccounts.find(acc => acc.id === id)?.name || id;
     };
+    
+    const getFormulaString = (provider: ServiceProvider) => {
+        if (provider.type === 'Bank' && provider.bankFormula) {
+            return provider.bankFormula.join(', ');
+        }
+        if (provider.type === 'Crypto' && provider.cryptoFormula) {
+            return provider.cryptoFormula.join(', ');
+        }
+        return 'Not Set';
+    };
 
     return (
         <>
@@ -70,6 +81,7 @@ export function ServiceProvidersTable({ initialProviders, allAccounts }: { initi
                             <TableHead>Provider Name</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Linked Accounts</TableHead>
+                            <TableHead>Payment Formula</TableHead>
                             <TableHead>Created At</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -94,6 +106,9 @@ export function ServiceProvidersTable({ initialProviders, allAccounts }: { initi
                                             )}
                                         </div>
                                     </TableCell>
+                                     <TableCell>
+                                        <span className="text-xs text-muted-foreground">{getFormulaString(provider)}</span>
+                                    </TableCell>
                                     <TableCell>{format(new Date(provider.createdAt), 'PPP')}</TableCell>
                                     <TableCell className="text-right">
                                         <Button asChild variant="ghost" size="icon">
@@ -109,7 +124,7 @@ export function ServiceProvidersTable({ initialProviders, allAccounts }: { initi
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
+                                <TableCell colSpan={6} className="h-24 text-center">
                                     No service providers found. Add one to get started.
                                 </TableCell>
                             </TableRow>

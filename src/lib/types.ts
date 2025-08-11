@@ -36,12 +36,17 @@ export interface ClientActivity {
     link?: string;
 }
 
+export type BankFormulaField = 'Client Name' | 'Phone Number' | 'ID';
+export type CryptoFormulaField = 'Address' | 'ID';
+
 export interface ServiceProvider {
     id: string;
     name: string;
     type: 'Bank' | 'Crypto';
     accountIds: string[];
     createdAt: string;
+    bankFormula?: BankFormulaField[];
+    cryptoFormula?: CryptoFormulaField[];
     // Optional overrides for global settings
     fiatRates?: {
         YER?: { clientBuy: number; clientSell: number; };
@@ -251,7 +256,7 @@ export interface UnifiedFinancialRecord {
   date: string;
   type: 'inflow' | 'outflow';
   category: 'fiat' | 'crypto';
-  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment' | 'USDT Payment';
+  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment' | 'USDT Payment' | 'Wallet';
   amount: number;
   currency: string;
   amountUsd: number;

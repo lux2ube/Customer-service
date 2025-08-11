@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -11,7 +12,7 @@ import { Button } from './ui/button';
 import { Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import type { Account, ServiceProvider } from '@/lib/types';
+import type { Account, ServiceProvider, BankFormulaField, CryptoFormulaField } from '@/lib/types';
 import { createServiceProvider, type ServiceProviderFormState } from '@/lib/actions/service-provider';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { Checkbox } from './ui/checkbox';
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -88,6 +90,9 @@ function AccountMultiSelect({ accounts, selectedAccountIds, onSelectionChange }:
     );
 }
 
+const bankFormulaOptions: BankFormulaField[] = ['Client Name', 'Phone Number', 'ID'];
+const cryptoFormulaOptions: CryptoFormulaField[] = ['Address', 'ID'];
+
 export function ServiceProviderForm({ provider, accounts }: { provider?: ServiceProvider, accounts: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
@@ -98,6 +103,8 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
         name: provider?.name || '',
         type: provider?.type || 'Bank',
         accountIds: provider?.accountIds || [],
+        bankFormula: provider?.bankFormula || [],
+        cryptoFormula: provider?.cryptoFormula || [],
     });
 
     React.useEffect(() => {
@@ -109,14 +116,35 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
         }
     }, [state, toast]);
 
+    const handleBankFormulaChange = (field: BankFormulaField, checked: boolean) => {
+        setFormData(prev => ({
+            ...prev,
+            bankFormula: checked 
+                ? [...prev.bankFormula, field]
+                : prev.bankFormula.filter(f => f !== field)
+        }));
+    };
+    
+    const handleCryptoFormulaChange = (field: CryptoFormulaField, checked: boolean) => {
+        setFormData(prev => ({
+            ...prev,
+            cryptoFormula: checked
+                ? [...prev.cryptoFormula, field]
+                : prev.cryptoFormula.filter(f => f !== field)
+        }));
+    };
+
     return (
         <form action={formAction} className="space-y-4">
+             <input type="hidden" name="bankFormula" value={JSON.stringify(formData.bankFormula)} />
+             <input type="hidden" name="cryptoFormula" value={JSON.stringify(formData.cryptoFormula)} />
+
             <Card>
                 <CardHeader>
                     <CardTitle>{provider ? 'Edit' : 'New'} Service Provider</CardTitle>
-                    <CardDescription>Group Chart of Accounts records under a single bank or crypto service entity.</CardDescription>
+                    <CardDescription>Group Chart of Accounts records and define payment formulas.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                     <div className="space-y-2">
                         <Label htmlFor="name">Provider Name</Label>
                         <Input
@@ -160,6 +188,41 @@ export function ServiceProviderForm({ provider, accounts }: { provider?: Service
                          {formData.accountIds.map(id => <input key={id} type="hidden" name="accountIds" value={id} />)}
                          {state?.errors?.accountIds && <p className="text-sm text-destructive">{state.errors.accountIds[0]}</p>}
                     </div>
+                    
+                    <div className="space-y-2">
+                        <Label>Payment Formula</Label>
+                        <Card className="p-4 bg-muted/50">
+                             {formData.type === 'Bank' ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {bankFormulaOptions.map(field => (
+                                        <div key={field} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`bank_formula_${field}`}
+                                                checked={formData.bankFormula.includes(field)}
+                                                onCheckedChange={(checked) => handleBankFormulaChange(field, !!checked)}
+                                            />
+                                            <Label htmlFor={`bank_formula_${field}`} className="font-normal text-sm">{field}</Label>
+                                        </div>
+                                    ))}
+                                </div>
+                             ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                     {cryptoFormulaOptions.map(field => (
+                                        <div key={field} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`crypto_formula_${field}`}
+                                                checked={formData.cryptoFormula.includes(field)}
+                                                onCheckedChange={(checked) => handleCryptoFormulaChange(field, !!checked)}
+                                            />
+                                            <Label htmlFor={`crypto_formula_${field}`} className="font-normal text-sm">{field}</Label>
+                                        </div>
+                                    ))}
+                                </div>
+                             )}
+                        </Card>
+                        <p className="text-xs text-muted-foreground">Define which fields are required for payments through this provider.</p>
+                    </div>
+
                 </CardContent>
                  <CardFooter className="flex justify-end">
                     <SubmitButton isEditing={!!provider} />

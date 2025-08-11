@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -24,6 +25,10 @@ const ServiceProviderSchema = z.object({
   name: z.string().min(1, { message: 'Provider name is required.' }),
   type: z.enum(['Bank', 'Crypto']),
   accountIds: z.array(z.string()).min(1, { message: 'At least one account must be selected.' }),
+  
+  // Formulas as stringified JSON
+  bankFormula: z.string().transform((str) => JSON.parse(str)).pipe(z.array(z.string())).optional(),
+  cryptoFormula: z.string().transform((str) => JSON.parse(str)).pipe(z.array(z.string())).optional(),
   
   // Optional Fiat Rate Overrides
   fiatRates_YER_clientBuy: z.coerce.number().optional(),
@@ -51,7 +56,7 @@ export async function createServiceProvider(providerId: string | null, prevState
     }
     
     const { 
-        name, type, accountIds,
+        name, type, accountIds, bankFormula, cryptoFormula,
         fiatRates_YER_clientBuy, fiatRates_YER_clientSell,
         fiatRates_SAR_clientBuy, fiatRates_SAR_clientSell,
         cryptoFees_buy_fee_percent, cryptoFees_sell_fee_percent,
@@ -59,6 +64,9 @@ export async function createServiceProvider(providerId: string | null, prevState
     } = validatedFields.data;
     
     const data: any = { name, type, accountIds };
+    
+    if(type === 'Bank' && bankFormula) data.bankFormula = bankFormula;
+    if(type === 'Crypto' && cryptoFormula) data.cryptoFormula = cryptoFormula;
 
     // Construct fiatRates override object if any fields are present
     const yerRates = { clientBuy: fiatRates_YER_clientBuy, clientSell: fiatRates_YER_clientSell };
