@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -118,16 +118,9 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
-    let clientName = '';
-    try {
-        const clientRef = ref(db, `clients/${dataToSave.clientId}`);
-        const snapshot = await get(clientRef);
-        if (snapshot.exists()) {
-            clientName = (snapshot.val() as Client).name;
-        }
-    } catch (e) {
-        console.error("Could not fetch client name for transaction");
-    }
+    const clientRef = ref(db, `clients/${dataToSave.clientId}`);
+    let clientSnapshot = await get(clientRef);
+    let client = clientSnapshot.exists() ? { id: dataToSave.clientId, ...clientSnapshot.val() } as Client : null;
 
     let bankAccountName = '';
     if (dataToSave.bankAccountId) {
@@ -160,7 +153,7 @@ export async function createTransaction(transactionId: string | null, formData: 
         date: dataToSave.date,
         type: dataToSave.type,
         clientId: dataToSave.clientId,
-        clientName,
+        clientName: client?.name || 'Unknown Client',
         bankAccountId: dataToSave.bankAccountId,
         bankAccountName,
         cryptoWalletId: dataToSave.cryptoWalletId,
@@ -215,16 +208,56 @@ export async function createTransaction(transactionId: string | null, formData: 
         }
     }
 
+    // --- Start: Auto-save payment methods to client profile ---
+    if (finalData.status === 'Confirmed' && client && finalData.bankAccountId) {
+        const serviceProvidersSnapshot = await get(ref(db, 'service_providers'));
+        if (serviceProvidersSnapshot.exists()) {
+            const allProviders: Record<string, ServiceProvider> = serviceProvidersSnapshot.val();
+            const providerEntry = Object.entries(allProviders).find(([, p]) => p.accountIds.includes(finalData.bankAccountId!));
+
+            if (providerEntry) {
+                const [providerId, provider] = providerEntry;
+                const newMethodDetails: Record<string, string> = {};
+
+                if (provider.bankFormula) {
+                    if (provider.bankFormula.includes('Client Name') && client.name) newMethodDetails['Client Name'] = client.name;
+                    if (provider.bankFormula.includes('Phone Number') && client.phone?.[0]) newMethodDetails['Phone Number'] = client.phone[0];
+                    if (provider.bankFormula.includes('ID') && client.id) newMethodDetails['ID'] = client.id;
+                }
+                
+                if (Object.keys(newMethodDetails).length > 0) {
+                    const newServiceProviderRecord: ClientServiceProvider = {
+                        providerId: providerId,
+                        providerName: provider.name,
+                        providerType: provider.type,
+                        details: newMethodDetails,
+                    };
+                    
+                    const existingProviders = client.serviceProviders || [];
+                    const isDuplicate = existingProviders.some(p => JSON.stringify(p.details) === JSON.stringify(newMethodDetails) && p.providerId === providerId);
+
+                    if (!isDuplicate) {
+                        const updatedProviders = [...existingProviders, newServiceProviderRecord];
+                        await update(ref(db, `clients/${client.id}`), { serviceProviders: updatedProviders });
+                    }
+                }
+            }
+        }
+    }
+     // --- End: Auto-save payment methods ---
+
+
     if (finalData.clientId && finalData.client_wallet_address) {
         try {
-            const clientRef = ref(db, `clients/${finalData.clientId}`);
-            const clientSnapshot = await get(clientRef);
-            if (clientSnapshot.exists()) {
-                const clientData = clientSnapshot.val() as Client;
-                const existingAddresses = clientData.bep20_addresses || [];
+            if (!client) {
+                 const newClientSnapshot = await get(ref(db, `clients/${finalData.clientId}`));
+                 client = newClientSnapshot.exists() ? {id: finalData.clientId, ...newClientSnapshot.val()} : null;
+            }
+            if (client) {
+                const existingAddresses = client.bep20_addresses || [];
                 const newAddress = finalData.client_wallet_address;
                 if (!existingAddresses.some(addr => addr.toLowerCase() === newAddress.toLowerCase())) {
-                    await update(clientRef, { bep20_addresses: [...existingAddresses, newAddress] });
+                    await update(ref(db, `clients/${client.id}`), { bep20_addresses: [...existingAddresses, newAddress] });
                 }
             }
         } catch (e) {

@@ -163,7 +163,7 @@ async function getServiceProviders(): Promise<ServiceProvider[]> {
 
 
 export default async function EditClientPage({ params }: { params: { id: string } }) {
-    const { id } = await params;
+    const { id } = params;
     const client = await getClient(id);
 
     if (!client) {
@@ -175,8 +175,8 @@ export default async function EditClientPage({ params }: { params: { id: string 
     const auditLogs = await getClientAuditLogs(id);
     const serviceProviders = await getServiceProviders();
     
-    const usedBankAccountIds = new Set(activityHistory.map(h => h.bankAccountId).filter(Boolean));
-    const usedServiceProviders = serviceProviders.filter(p => p.accountIds.some(id => usedBankAccountIds.has(id)));
+    const usedProviderIds = new Set(client?.serviceProviders?.map(sp => sp.providerId) || []);
+    const usedServiceProviders = serviceProviders.filter(p => usedProviderIds.has(p.id));
 
 
     return (
