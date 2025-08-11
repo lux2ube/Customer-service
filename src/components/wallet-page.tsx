@@ -242,19 +242,21 @@ function SendForm() {
 
 function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
 
+    const lastSelectedName = React.useRef<string | null>(null);
+
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
+        if (inputValue === lastSelectedName.current) {
+            return;
+        }
+
         if (inputValue.length < 2) {
             setSearchResults([]);
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
             return;
         }
 
@@ -280,10 +282,10 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     }, [inputValue]);
 
     const handleSelect = (client: Client) => {
-        setSelectedClient(client);
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
+        lastSelectedName.current = client.name;
     };
 
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
@@ -300,7 +302,10 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                      <Input
                         placeholder="Search client by name, phone, or paste address..."
                         value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
+                        onChange={(e) => {
+                            setInputValue(e.target.value);
+                            lastSelectedName.current = null;
+                        }}
                         className="pr-10"
                     />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
@@ -316,7 +321,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", inputValue === client.name ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>

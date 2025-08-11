@@ -366,19 +366,22 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
 
 function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    
+
+    const lastSelectedName = React.useRef<string | null>(null);
+
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
+        // Don't search if the input value was just set from a selection
+        if (inputValue === lastSelectedName.current) {
+            return;
+        }
+        
         if (inputValue.length < 2) {
             setSearchResults([]);
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
             return;
         }
 
@@ -391,8 +394,8 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
             const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
-            if(results.length > 0) {
-              setIsOpen(true);
+            if (results.length > 0) {
+                setIsOpen(true);
             }
         }, 300);
 
@@ -404,12 +407,12 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     }, [inputValue]);
 
     const handleSelect = (client: Client) => {
-        setSelectedClient(client);
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
+        lastSelectedName.current = client.name;
     };
-
+    
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
     
     const handlePaste = async () => {
@@ -424,7 +427,10 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                      <Input
                         placeholder="Search client by name, phone, or paste address..."
                         value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
+                        onChange={(e) => {
+                            setInputValue(e.target.value);
+                            lastSelectedName.current = null; // Clear last selection on new typing
+                        }}
                         className="pr-10"
                     />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
@@ -440,7 +446,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", inputValue === client.name ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
