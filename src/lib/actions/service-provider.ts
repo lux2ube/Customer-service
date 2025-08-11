@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -44,7 +43,12 @@ const ServiceProviderSchema = z.object({
 });
 
 export async function createServiceProvider(providerId: string | null, prevState: ServiceProviderFormState, formData: FormData) {
-    const dataToValidate = Object.fromEntries(formData.entries());
+    const rawData = Object.fromEntries(formData.entries());
+    // Use getAll to ensure accountIds is always an array
+    const dataToValidate = {
+        ...rawData,
+        accountIds: formData.getAll('accountIds'),
+    };
     
     const validatedFields = ServiceProviderSchema.safeParse(dataToValidate);
 
