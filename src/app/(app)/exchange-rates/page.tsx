@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast, get } from 'firebase/database';
 import type { FiatRate, CryptoFee, Currency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
