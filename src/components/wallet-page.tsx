@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -184,7 +185,7 @@ function SendForm() {
                 <CardContent className="space-y-4">
                      <div className="space-y-2">
                         <Label htmlFor="client">Client</Label>
-                        <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
+                        <ClientSelector onSelect={handleClientSelect} />
                     </div>
 
                     <div className="space-y-2">
@@ -239,18 +240,20 @@ function SendForm() {
     );
 }
 
-function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
-    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
+function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
+    const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isOpen, setIsOpen] = React.useState(false);
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
 
     React.useEffect(() => {
         if (!isOpen) return;
 
         if (inputValue.trim().length < 2) {
             setSearchResults([]);
-            if (inputValue.trim().length === 0 && selectedClient) {
+            if(inputValue.trim().length === 0 && selectedClient) {
+                setSelectedClient(null);
                 onSelect(null);
             }
             return;
@@ -266,48 +269,35 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         return () => clearTimeout(timerId);
     }, [inputValue, isOpen, onSelect, selectedClient]);
     
-    React.useEffect(() => {
-        setInputValue(selectedClient?.name || "");
-    }, [selectedClient]);
-
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
-
     const handleSelect = (client: Client) => {
+        setSelectedClient(client);
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
     };
 
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={isOpen}
-                    className="w-full justify-between font-normal"
-                >
-                    {selectedClient ? selectedClient.name : "Select client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <Input
+                    placeholder="Search client by name or phone..."
+                    value={inputValue}
+                    onChange={(e) => {
+                        setInputValue(e.target.value);
+                        setIsOpen(true);
+                    }}
+                />
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command shouldFilter={false}>
-                    <CommandInput 
-                        placeholder="Search by name or phone..."
-                        value={inputValue}
-                        onValueChange={setInputValue}
-                    />
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
                         {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={`${client.name} ${getPhone(client.phone)}`}
-                                    onSelect={() => handleSelect(client)}
-                                >
+                                <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
                                     <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>

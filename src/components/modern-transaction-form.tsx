@@ -10,10 +10,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
-import { getUnifiedClientRecords, createModernTransaction } from '@/lib/actions';
+import { getUnifiedClientRecords, createModernTransaction, searchClients } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -260,7 +260,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                         <CardTitle>Step 2: Select a Client</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ClientSelector clients={initialClients} selectedClient={selectedClient} onSelect={handleClientSelect} />
+                        <ClientSelector onSelect={handleClientSelect} />
                     </CardContent>
                 </Card>
                 )}
@@ -378,34 +378,88 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
 }
 
 
-function ClientSelector({ clients, selectedClient, onSelect }: { clients: Client[], selectedClient: Client | null, onSelect: (client: Client | null) => void }) {
-    const [open, setOpen] = React.useState(false);
+function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
+    const [inputValue, setInputValue] = React.useState("");
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [isOpen, setIsOpen] = React.useState(false);
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const { toast } = useToast();
+
+    React.useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        if (inputValue.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        const timerId = setTimeout(async () => {
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
+            setIsLoading(false);
+        }, 300);
+
+        return () => clearTimeout(timerId);
+    }, [inputValue, isOpen]);
+    
+    const handleSelect = (client: Client) => {
+        setSelectedClient(client);
+        onSelect(client);
+        setIsOpen(false);
+        setInputValue(client.name);
+    };
+
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handlePaste = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            setInputValue(text);
+            setIsOpen(true);
+        } catch (err) {
+            toast({ variant: 'destructive', title: 'Paste Failed', description: 'Could not read from clipboard.'});
+        }
+    };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-[300px] justify-between font-normal">
-                    {selectedClient ? selectedClient.name : "Select a client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <div className="relative">
+                    <Input
+                        placeholder="Search by name or phone..."
+                        value={inputValue}
+                        onChange={(e) => {
+                            setInputValue(e.target.value);
+                            setIsOpen(true);
+                            if (e.target.value === '') {
+                                setSelectedClient(null);
+                                onSelect(null);
+                            }
+                        }}
+                         className="w-full"
+                    />
+                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
+                        <ClipboardPaste className="h-4 w-4" />
+                    </Button>
+                </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[300px] p-0">
-                <Command>
-                    <CommandInput placeholder="Search clients..." />
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
                     <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && inputValue && inputValue.length > 1 && searchResults.length === 0 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
-                            {clients.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={client.name}
-                                    onSelect={() => {
-                                        onSelect(client);
-                                        setOpen(false);
-                                    }}
-                                >
+                            {searchResults.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
                                     <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                    {client.name}
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
