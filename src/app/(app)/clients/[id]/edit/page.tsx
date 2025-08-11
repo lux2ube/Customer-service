@@ -5,7 +5,7 @@ import { ClientForm } from "@/components/client-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
 import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
-import type { Client, Account, Transaction, AuditLog, CashReceipt, CashPayment, SmsTransaction, ClientActivity } from '@/lib/types';
+import type { Client, Account, Transaction, AuditLog, CashReceipt, CashPayment, SmsTransaction, ClientActivity, ServiceProvider } from '@/lib/types';
 import { notFound } from "next/navigation";
 
 async function getClient(id: string): Promise<Client | null> {
@@ -41,7 +41,8 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
                     currency: 'USD',
                     status: tx.status,
                     source: 'Transaction',
-                    link: `/transactions/${key}/edit`
+                    link: `/transactions/${key}/edit`,
+                    bankAccountId: tx.bankAccountId
                 });
             }
         });
@@ -125,18 +126,6 @@ async function getClientAuditLogs(clientId: string): Promise<AuditLog[]> {
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-async function getBankAccounts(): Promise<Account[]> {
-    const accountsRef = ref(db, 'accounts');
-    const snapshot = await get(accountsRef);
-    if (snapshot.exists()) {
-        const allAccounts: Account[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
-        return allAccounts.filter(acc => 
-            !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'
-        );
-    }
-    return [];
-}
-
 async function getOtherClientsWithSameName(client: Client): Promise<Client[]> {
     if (!client.name) return [];
     
@@ -162,6 +151,16 @@ async function getOtherClientsWithSameName(client: Client): Promise<Client[]> {
     });
 }
 
+async function getServiceProviders(): Promise<ServiceProvider[]> {
+    const providersRef = ref(db, 'service_providers');
+    const snapshot = await get(providersRef);
+    if (snapshot.exists()) {
+        const data = snapshot.val();
+        return Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    }
+    return [];
+}
+
 
 export default async function EditClientPage({ params }: { params: { id: string } }) {
     const { id } = await params;
@@ -171,10 +170,14 @@ export default async function EditClientPage({ params }: { params: { id: string 
         notFound();
     }
 
-    const bankAccounts = await getBankAccounts();
     const activityHistory = await getClientActivityHistory(id);
     const otherClientsWithSameName = await getOtherClientsWithSameName(client);
     const auditLogs = await getClientAuditLogs(id);
+    const serviceProviders = await getServiceProviders();
+    
+    const usedBankAccountIds = new Set(activityHistory.map(h => h.bankAccountId).filter(Boolean));
+    const usedServiceProviders = serviceProviders.filter(p => p.accountIds.some(id => usedBankAccountIds.has(id)));
+
 
     return (
         <>
@@ -185,10 +188,10 @@ export default async function EditClientPage({ params }: { params: { id: string 
             <Suspense fallback={<div>Loading form...</div>}>
                 <ClientForm 
                     client={client} 
-                    bankAccounts={bankAccounts} 
                     activityHistory={activityHistory}
                     otherClientsWithSameName={otherClientsWithSameName} 
                     auditLogs={auditLogs} 
+                    usedServiceProviders={usedServiceProviders}
                 />
             </Suspense>
         </>

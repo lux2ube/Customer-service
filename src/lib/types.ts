@@ -10,6 +10,17 @@ export interface KycDocument {
 
 export type VerificationStatus = 'Active' | 'Inactive' | 'Pending';
 
+export interface ClientServiceProvider {
+    providerId: string;
+    providerName: string;
+    providerType: 'Bank' | 'Crypto';
+    // Stores key-value pairs based on the provider's formula
+    // e.g., { 'Client Name': 'John Doe', 'Phone Number': '555-1234' }
+    // or { 'Address': '0x123...' }
+    details: Record<string, string>;
+}
+
+
 export interface Client {
     id: string;
     name: string; // The full name of the client
@@ -22,6 +33,7 @@ export interface Client {
     bep20_addresses?: string[];
     favoriteBankAccountId?: string;
     favoriteBankAccountName?: string;
+    serviceProviders?: ClientServiceProvider[];
 }
 
 export interface ClientActivity {
@@ -34,6 +46,7 @@ export interface ClientActivity {
     status: string;
     source: 'Transaction' | 'Cash Receipt' | 'Cash Payment' | 'SMS';
     link?: string;
+    bankAccountId?: string;
 }
 
 export type BankFormulaField = 'Client Name' | 'Phone Number' | 'ID';

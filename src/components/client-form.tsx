@@ -1,17 +1,18 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2, Loader2, AlertTriangle, History, LinkIcon } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertTriangle, History, LinkIcon, Banknote, Landmark, Wallet2 } from 'lucide-react';
 import React from 'react';
 import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Checkbox } from './ui/checkbox';
-import type { Client, Account, ClientActivity, AuditLog } from '@/lib/types';
+import type { Client, Account, ClientActivity, AuditLog, ServiceProvider } from '@/lib/types';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -31,8 +32,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
+import { Accordion, AccordionTrigger, AccordionContent, AccordionItem } from './ui/accordion';
 
-export function ClientForm({ client, bankAccounts, activityHistory, otherClientsWithSameName, auditLogs }: { client?: Client, bankAccounts?: Account[], activityHistory?: ClientActivity[], otherClientsWithSameName?: Client[], auditLogs?: AuditLog[] }) {
+export function ClientForm({ client, activityHistory, otherClientsWithSameName, auditLogs, usedServiceProviders }: { client?: Client, activityHistory?: ClientActivity[], otherClientsWithSameName?: Client[], auditLogs?: AuditLog[], usedServiceProviders?: ServiceProvider[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -59,19 +61,6 @@ export function ClientForm({ client, bankAccounts, activityHistory, otherClients
         description: string;
         intent: string;
     } | null>(null);
-
-    const usedBankAccounts = React.useMemo(() => {
-        if (!activityHistory) return [];
-        const accountsMap = new Map<string, { name: string, lastUsed: string }>();
-        
-        activityHistory
-            .filter(tx => tx.source === 'Transaction' && tx.link) // Only consider actual transactions
-            .forEach(tx => {
-                // This part would need the transaction object to get bankAccountId, which we don't have here.
-                // We'll leave this empty for now as it's complex to get the full tx object here.
-            });
-        return Array.from(accountsMap.entries()).map(([id, data]) => ({ id, ...data }));
-    }, [activityHistory]);
 
     const cryptoWalletsLastUsed = React.useMemo(() => {
         if (!activityHistory) return new Map<string, string>();
@@ -255,7 +244,7 @@ export function ClientForm({ client, bankAccounts, activityHistory, otherClients
                                                     {activityHistory && activityHistory.length > 0 ? (
                                                         activityHistory.map((item) => (
                                                             <TableRow key={item.id}>
-                                                                <TableCell className="text-xs">{format(parseISO(item.date), 'PP p')}</TableCell>
+                                                                <TableCell className="text-xs">{item.date ? format(parseISO(item.date), 'PP p') : 'N/A'}</TableCell>
                                                                 <TableCell><Badge variant="secondary" className="font-normal">{item.type}</Badge></TableCell>
                                                                 <TableCell className="text-xs">{item.description}</TableCell>
                                                                 <TableCell className={cn("text-right font-mono", item.amount < 0 && "text-destructive")}>
@@ -277,19 +266,44 @@ export function ClientForm({ client, bankAccounts, activityHistory, otherClients
                                     </CardContent>
                                 </Card>
                             </TabsContent>
-                            <TabsContent value="accounts" className="mt-6 space-y-6">
+                           <TabsContent value="accounts" className="mt-6 space-y-6">
                                 <div>
-                                    <h4 className="font-medium text-sm mb-2">Bank Accounts Used</h4>
-                                    <p className="text-xs text-muted-foreground mb-3">A list of fiat bank accounts this client has used in confirmed transactions.</p>
-                                    {usedBankAccounts.length > 0 ? (
-                                        <ul className="divide-y divide-border rounded-md border bg-muted/50">
-                                            {usedBankAccounts.map((account) => (
-                                                <li key={account.id} className="flex items-center justify-between p-3 text-sm">
-                                                    <div><p className="font-medium">{account.name}</p><p className="text-xs text-muted-foreground">Last used: {format(parseISO(account.lastUsed), 'PPP')}</p></div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : <p className="text-sm text-muted-foreground p-3 border rounded-md">No bank accounts used yet.</p>}
+                                    <h4 className="font-medium text-sm mb-2">Saved Payment Methods</h4>
+                                    <p className="text-xs text-muted-foreground mb-3">Payment details saved from previous transactions, grouped by service provider.</p>
+                                    {client?.serviceProviders && client.serviceProviders.length > 0 ? (
+                                        <Accordion type="multiple" className="w-full">
+                                            {usedServiceProviders?.map(provider => {
+                                                const clientMethodsForProvider = client.serviceProviders?.filter(sp => sp.providerId === provider.id);
+                                                if (!clientMethodsForProvider || clientMethodsForProvider.length === 0) return null;
+
+                                                return (
+                                                <AccordionItem value={provider.id} key={provider.id}>
+                                                    <AccordionTrigger className="text-sm font-semibold hover:no-underline p-3 bg-muted/50 rounded-md">
+                                                        <div className="flex items-center gap-2">
+                                                            {provider.type === 'Bank' ? <Landmark className="h-4 w-4" /> : <Wallet2 className="h-4 w-4" />}
+                                                            {provider.name}
+                                                        </div>
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="pt-2">
+                                                        <ul className="divide-y divide-border border rounded-md">
+                                                            {clientMethodsForProvider.map((method, index) => (
+                                                                <li key={index} className="p-3 text-sm space-y-1">
+                                                                    {Object.entries(method.details).map(([key, value]) => (
+                                                                        <div key={key} className="flex justify-between items-center">
+                                                                            <span className="text-muted-foreground text-xs">{key}:</span>
+                                                                            <span className="font-mono text-xs">{value}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                                )
+                                            })}
+                                        </Accordion>
+
+                                    ) : <p className="text-sm text-muted-foreground p-3 border rounded-md">No saved payment methods.</p>}
                                 </div>
                                 <div>
                                     <h4 className="font-medium text-sm mb-2">Crypto Wallets Used (BEP20)</h4>
