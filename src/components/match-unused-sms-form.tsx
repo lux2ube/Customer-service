@@ -28,7 +28,7 @@ export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnu
     const smsRef = ref(db, 'sms_transactions');
     const unsubscribe = onValue(smsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allSms: SmsTransaction[] = Object.values(snapshot.val());
+        const allSms: SmsTransaction[] = Object.keys(snapshot.val()).map(id => ({ id, ...snapshot.val()[id] }));
         const unmatched = allSms.filter(sms => sms.status === 'parsed' || !sms.matched_client_id);
         setSmsList(unmatched.sort((a,b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime()));
       }
