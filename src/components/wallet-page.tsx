@@ -241,19 +241,15 @@ function SendForm() {
 }
 
 function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
-    const [inputValue, setInputValue] = React.useState("");
+    const [open, setIsOpen] = React.useState(false);
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [inputValue, setInputValue] = React.useState('');
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const [isOpen, setIsOpen] = React.useState(false);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    const handleInputChange = (value: string) => {
-        setInputValue(value);
-        setIsOpen(true);
-        if (value === '') {
-            setSelectedClient(null);
-            onSelect(null);
+    React.useEffect(() => {
+        if (!inputValue) {
             setSearchResults([]);
             return;
         }
@@ -264,30 +260,36 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
 
         setIsLoading(true);
         searchTimeoutRef.current = setTimeout(async () => {
-            if (value.trim().length >= 2) {
-                const results = await searchClients(value);
+            if (inputValue.trim().length >= 2) {
+                const results = await searchClients(inputValue);
                 setSearchResults(results);
             }
             setIsLoading(false);
         }, 300);
-    };
 
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
+    
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
     };
-
+    
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <Input
                     placeholder="Search client by name or phone..."
                     value={inputValue}
-                    onChange={(e) => handleInputChange(e.target.value)}
+                    onChange={(e) => setInputValue(e.target.value)}
                 />
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">

@@ -160,7 +160,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
         const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
         const netResult = totalInflowUSD - totalOutflowUSD - calculatedFee;
-        const netResultCurrency = transactionType === 'Deposit' ? 'USDT' : 'USD';
+        const netResultCurrency = transactionType === 'Deposit' ? 'USDT' : (transactionType === 'Withdraw' ? 'USD' : 'USD');
 
 
         return { totalInflowUSD, totalOutflowUSD, calculatedFee, netResult, netResultCurrency };
@@ -274,15 +274,9 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <CardDescription>Choose the records to link to this transaction.</CardDescription>
                             </div>
                             <div className="flex gap-2 flex-wrap">
-                                {(transactionType === 'Deposit' || transactionType === 'Transfer') && 
-                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button>
-                                }
-                                 {(transactionType === 'Withdraw' || transactionType === 'Transfer') && 
-                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button>
-                                }
-                                 {(transactionType === 'Withdraw' || transactionType === 'Transfer') && 
-                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button>
-                                }
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button>
                                  {/* Add Quick USDT Payment button here when ready */}
                             </div>
                         </CardHeader>
@@ -379,20 +373,16 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
 
 
 function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
-    const [inputValue, setInputValue] = React.useState("");
+    const [open, setIsOpen] = React.useState(false);
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [inputValue, setInputValue] = React.useState('');
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const [isOpen, setIsOpen] = React.useState(false);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const { toast } = useToast();
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    const handleInputChange = (value: string) => {
-        setInputValue(value);
-        setIsOpen(true);
-        if (value === '') {
-            setSelectedClient(null);
-            onSelect(null);
+    React.useEffect(() => {
+        if (!inputValue) {
             setSearchResults([]);
             return;
         }
@@ -400,16 +390,22 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
-        
+
         setIsLoading(true);
         searchTimeoutRef.current = setTimeout(async () => {
-            if (value.trim().length >= 2) {
-                const results = await searchClients(value);
+            if (inputValue.trim().length >= 2) {
+                const results = await searchClients(inputValue);
                 setSearchResults(results);
             }
             setIsLoading(false);
         }, 300);
-    };
+
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
     
     const handleSelect = (client: Client) => {
         setSelectedClient(client);
@@ -423,20 +419,20 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const handlePaste = async () => {
         try {
             const text = await navigator.clipboard.readText();
-            handleInputChange(text);
+            setInputValue(text);
         } catch (err) {
             toast({ variant: 'destructive', title: 'Paste Failed', description: 'Could not read from clipboard.'});
         }
     };
 
     return (
-         <Popover open={isOpen} onOpenChange={setIsOpen}>
+         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <div className="relative">
                     <Input
                         placeholder="Search by name or phone..."
                         value={inputValue}
-                        onChange={(e) => handleInputChange(e.target.value)}
+                        onChange={(e) => setInputValue(e.target.value)}
                          className="w-full"
                     />
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
