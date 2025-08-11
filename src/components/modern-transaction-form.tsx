@@ -287,14 +287,14 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                             <div className="space-y-2">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gives (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
                                             </div>
-                                             <div className="space-y-2">
+                                            <div className="space-y-2">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (Fiat)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
                                             </div>
