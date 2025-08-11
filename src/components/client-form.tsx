@@ -270,9 +270,9 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
                                 <div>
                                     <h4 className="font-medium text-sm mb-2">Saved Payment Methods</h4>
                                     <p className="text-xs text-muted-foreground mb-3">Payment details saved from previous transactions, grouped by service provider.</p>
-                                    {client?.serviceProviders && client.serviceProviders.length > 0 ? (
+                                    {client?.serviceProviders && client.serviceProviders.length > 0 && usedServiceProviders ? (
                                         <Accordion type="multiple" className="w-full">
-                                            {usedServiceProviders?.map(provider => {
+                                            {usedServiceProviders.map(provider => {
                                                 const clientMethodsForProvider = client.serviceProviders?.filter(sp => sp.providerId === provider.id);
                                                 if (!clientMethodsForProvider || clientMethodsForProvider.length === 0) return null;
 

@@ -106,7 +106,11 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
     }
 
     // Sort by date descending
-    history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    history.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+    });
     
     return history;
 }
