@@ -5,15 +5,7 @@ import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from './ui/dialog';
+import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -26,9 +18,8 @@ import { ref, onValue } from 'firebase/database';
 
 interface QuickUsdtReceiptFormProps {
   client: Client | null;
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
   onReceiptCreated: () => void;
+  setIsOpen: (open: boolean) => void;
 }
 
 function SubmitButton() {
@@ -50,7 +41,7 @@ function SubmitButton() {
     );
 }
 
-export function QuickUsdtReceiptForm({ client, isOpen, setIsOpen, onReceiptCreated }: QuickUsdtReceiptFormProps) {
+export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: QuickUsdtReceiptFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   
@@ -60,7 +51,6 @@ export function QuickUsdtReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
   const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createQuickUsdtReceipt, undefined);
   
   React.useEffect(() => {
-    if (!isOpen) return;
     setLoading(true);
 
     const accountsRef = ref(db, 'accounts');
@@ -74,7 +64,7 @@ export function QuickUsdtReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
     });
 
     return () => unsubAccounts();
-  }, [isOpen]);
+  }, []);
 
   const stateRef = React.useRef<UsdtManualReceiptState>();
   React.useEffect(() => {
@@ -94,51 +84,41 @@ export function QuickUsdtReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
   if (!client) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Record New USDT Receipt</DialogTitle>
-          <DialogDescription>
-            Quickly add a USDT receipt for {client.name}.
-          </DialogDescription>
-        </DialogHeader>
-        <form action={formAction} ref={formRef}>
-          <input type="hidden" name="clientId" value={client.id} />
-          <input type="hidden" name="clientName" value={client.name} />
-          <div className="space-y-4 py-4">
-             <div className="space-y-2">
-                <Label htmlFor="cryptoWalletId">Received In (System Wallet)</Label>
-                <Select name="cryptoWalletId" required disabled={loading}>
-                    <SelectTrigger><SelectValue placeholder={loading ? "Loading wallets..." : "Select system wallet..."} /></SelectTrigger>
-                    <SelectContent>
-                        {loading ? <SelectItem value="loading" disabled>Loading...</SelectItem> 
-                        : cryptoWallets.map(account => (
-                            <SelectItem key={account.id} value={account.id}>
-                                {account.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                {state?.errors?.cryptoWalletId && <p className="text-sm text-destructive">{state.errors.cryptoWalletId[0]}</p>}
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="amount">Amount (USDT)</Label>
-                <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" />
-                {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="txid">Transaction Hash (TxID)</Label>
-                <Input id="txid" name="txid" placeholder="Optional" />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
-            <SubmitButton />
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+        <input type="hidden" name="clientId" value={client.id} />
+        <input type="hidden" name="clientName" value={client.name} />
+        <div className="space-y-4 py-4">
+            <div className="space-y-2">
+            <Label htmlFor="cryptoWalletId">Received In (System Wallet)</Label>
+            <Select name="cryptoWalletId" required disabled={loading}>
+                <SelectTrigger><SelectValue placeholder={loading ? "Loading wallets..." : "Select system wallet..."} /></SelectTrigger>
+                <SelectContent>
+                    {loading ? <SelectItem value="loading" disabled>Loading...</SelectItem> 
+                    : cryptoWallets.map(account => (
+                        <SelectItem key={account.id} value={account.id}>
+                            {account.name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {state?.errors?.cryptoWalletId && <p className="text-sm text-destructive">{state.errors.cryptoWalletId[0]}</p>}
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="amount">Amount (USDT)</Label>
+            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" />
+            {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="txid">Transaction Hash (TxID)</Label>
+            <Input id="txid" name="txid" placeholder="Optional" />
+        </div>
+        </div>
+        <DialogFooter>
+        <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancel</Button>
+        </DialogClose>
+        <SubmitButton />
+        </DialogFooter>
+    </form>
   );
 }

@@ -32,4 +32,3 @@ import { ethers } from 'ethers';
 export function QuickUsdtPaymentForm() {
     return <div>This component is deprecated.</div>
 }
-

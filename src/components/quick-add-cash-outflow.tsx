@@ -19,11 +19,9 @@ import type { Client } from '@/lib/types';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { useFormState } from 'react-dom';
 import { sendTelegramNotification } from '@/lib/actions/helpers';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Send } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
+import { Send } from 'lucide-react';
 
 interface QuickAddCashOutflowProps {
   client: Client | null;
@@ -91,14 +89,14 @@ export function QuickAddCashOutflow({ client, isOpen, setIsOpen, onRecordCreated
             <TabsTrigger value="operation">New Operation</TabsTrigger>
           </TabsList>
           <TabsContent value="manual">
-            <QuickCashPaymentForm client={client} isOpen={isOpen} setIsOpen={setIsOpen} onPaymentCreated={onRecordCreated} />
+            <QuickCashPaymentForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
           <TabsContent value="sms">
             <MatchUnusedSmsForm client={client} onSmsMatched={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
            <TabsContent value="operation">
             <CashOperationForm client={client} setIsOpen={setIsOpen} />
-          </TabsContent>
+           </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>

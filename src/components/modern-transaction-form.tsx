@@ -9,7 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
-import { getUnifiedClientRecords, createModernTransaction, searchClients } from '@/lib/actions';
+import { createModernTransaction, searchClients, getUnifiedClientRecords } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste } from 'lucide-react';
@@ -375,15 +375,10 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     const [inputValue, setInputValue] = React.useState("");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-
-    const lastSelectedName = React.useRef<string | null>(null);
+    
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        if (inputValue === lastSelectedName.current) {
-            return;
-        }
-
         if (inputValue.length < 2) {
             setSearchResults([]);
             return;
@@ -414,7 +409,6 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
-        lastSelectedName.current = client.name;
     };
     
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
@@ -432,10 +426,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                         <CommandInput
                             placeholder="Search client by name, phone, or paste address..."
                             value={inputValue}
-                            onValueChange={(value) => {
-                                setInputValue(value);
-                                lastSelectedName.current = null;
-                            }}
+                            onValueChange={setInputValue}
                             className="pr-10"
                         />
                     </Command>

@@ -5,15 +5,7 @@ import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from './ui/dialog';
+import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -26,9 +18,8 @@ import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/databas
 
 interface QuickCashPaymentFormProps {
   client: Client | null;
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
   onPaymentCreated: () => void;
+  setIsOpen: (open: boolean) => void;
 }
 
 function SubmitButton() {
@@ -50,7 +41,7 @@ function SubmitButton() {
     );
 }
 
-export function QuickCashPaymentForm({ client, isOpen, setIsOpen, onPaymentCreated }: QuickCashPaymentFormProps) {
+export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: QuickCashPaymentFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   
@@ -65,7 +56,6 @@ export function QuickCashPaymentForm({ client, isOpen, setIsOpen, onPaymentCreat
   const [amountUsd, setAmountUsd] = React.useState(0);
 
   React.useEffect(() => {
-    if (!isOpen) return;
     setLoading(true);
 
     const accountsRef = ref(db, 'accounts');
@@ -92,7 +82,7 @@ export function QuickCashPaymentForm({ client, isOpen, setIsOpen, onPaymentCreat
       unsubAccounts();
       unsubFiat();
     }
-  }, [isOpen]);
+  }, []);
 
   const stateRef = React.useRef<CashPaymentFormState>();
   React.useEffect(() => {
@@ -141,56 +131,46 @@ export function QuickCashPaymentForm({ client, isOpen, setIsOpen, onPaymentCreat
   if (!client) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Record New Cash Payment</DialogTitle>
-          <DialogDescription>
-            Quickly add a cash payment to {client.name}. This will become available to use in the transaction immediately.
-          </DialogDescription>
-        </DialogHeader>
-        <form action={formAction} ref={formRef}>
-          <input type="hidden" name="clientId" value={client.id} />
-          <input type="hidden" name="clientName" value={client.name} />
-          <input type="hidden" name="amountUsd" value={amountUsd} />
-          <div className="space-y-4 py-4">
-             <div className="space-y-2">
-                <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
-                <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={loading}>
-                    <SelectTrigger><SelectValue placeholder={loading ? "Loading accounts..." : "Select bank account..."} /></SelectTrigger>
-                    <SelectContent>
-                        {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
-                        : bankAccounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>
-                                {account.name} ({account.currency})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="amount">Amount Paid</Label>
-                <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
-            </div>
+    <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+        <input type="hidden" name="clientId" value={client.id} />
+        <input type="hidden" name="clientName" value={client.name} />
+        <input type="hidden" name="amountUsd" value={amountUsd} />
+        <div className="space-y-4 py-4">
             <div className="space-y-2">
-                <Label>Equivalent Amount (USD)</Label>
-                <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="remittanceNumber">Remittance Number</Label>
-                <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
-            <SubmitButton />
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
+            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={loading}>
+                <SelectTrigger><SelectValue placeholder={loading ? "Loading accounts..." : "Select bank account..."} /></SelectTrigger>
+                <SelectContent>
+                    {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
+                    : bankAccounts.map(account => (
+                        <SelectItem key={account.id} value={account.id}>
+                            {account.name} ({account.currency})
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="amount">Amount Paid</Label>
+            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+        </div>
+        <div className="space-y-2">
+            <Label>Equivalent Amount (USD)</Label>
+            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="remittanceNumber">Remittance Number</Label>
+            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
+        </div>
+        </div>
+        <DialogFooter>
+        <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancel</Button>
+        </DialogClose>
+        <SubmitButton />
+        </DialogFooter>
+    </form>
   );
 }
