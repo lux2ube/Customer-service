@@ -217,6 +217,8 @@ export interface CryptoFee {
 export interface Currency {
     code: string;
     name: string;
+    type: 'fiat' | 'crypto';
+    decimals: number;
 }
 
 

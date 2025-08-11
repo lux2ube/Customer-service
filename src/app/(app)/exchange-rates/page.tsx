@@ -11,12 +11,25 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
-import type { FiatRate, CryptoFee } from '@/lib/types';
+import type { FiatRate, CryptoFee, Currency } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save } from 'lucide-react';
-import { updateFiatRates, updateCryptoFees, type RateFormState } from '@/lib/actions';
+import { Save, PlusCircle, Database, Trash2 } from 'lucide-react';
+import { updateFiatRates, updateCryptoFees, initializeDefaultCurrencies, addCurrency, deleteCurrency, type RateFormState, type CurrencyFormState } from '@/lib/actions';
 import { RateHistory } from '@/components/rate-history';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
@@ -26,6 +39,145 @@ function SubmitButton({ children, disabled }: { children: React.ReactNode, disab
             {pending ? 'Saving...' : children}
         </Button>
     );
+}
+
+function AddCurrencyDialog() {
+    const { toast } = useToast();
+    const [open, setOpen] = React.useState(false);
+    const formRef = React.useRef<HTMLFormElement>(null);
+    const [state, formAction] = useActionState<CurrencyFormState, FormData>(addCurrency, undefined);
+
+    React.useEffect(() => {
+        if(state?.message) {
+            toast({ title: state.error ? 'Error' : 'Success', description: state.message, variant: state.error ? 'destructive' : 'default' });
+            if (!state.error) {
+                setOpen(false);
+                formRef.current?.reset();
+            }
+        }
+    }, [state, toast]);
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline"><PlusCircle className="mr-2 h-4 w-4"/>Add New Currency</Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add New Currency</DialogTitle>
+                    <DialogDescription>Define a new currency for use throughout the system.</DialogDescription>
+                </DialogHeader>
+                <form action={formAction} ref={formRef} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="code">Code</Label>
+                        <Input id="code" name="code" placeholder="e.g., USD" required />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Name</Label>
+                        <Input id="name" name="name" placeholder="e.g., US Dollar" required />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Type</Label>
+                        <RadioGroup name="type" defaultValue="fiat" className="flex gap-4">
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="fiat" id="fiat"/><Label htmlFor="fiat" className="font-normal">Fiat</Label></div>
+                            <div className="flex items-center space-x-2"><RadioGroupItem value="crypto" id="crypto"/><Label htmlFor="crypto" className="font-normal">Crypto</Label></div>
+                        </RadioGroup>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="decimals">Decimal Places</Label>
+                        <Input id="decimals" name="decimals" type="number" placeholder="e.g., 2" defaultValue={2} required />
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                        <SubmitButton><Save className="mr-2 h-4 w-4"/>Add Currency</SubmitButton>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function CurrencyManager({ currencies }: { currencies: Currency[] }) {
+    const { toast } = useToast();
+    const [itemToDelete, setItemToDelete] = React.useState<Currency | null>(null);
+
+    const [initState, initFormAction] = useActionState<RateFormState, FormData>(initializeDefaultCurrencies, undefined);
+    const { pending: initPending } = useFormStatus();
+    
+    React.useEffect(() => {
+        if(initState?.message) {
+            toast({ title: initState.error ? 'Error' : 'Success', description: initState.message, variant: initState.error ? 'destructive' : 'default' });
+        }
+    }, [initState, toast]);
+
+    const handleDelete = async () => {
+        if (!itemToDelete) return;
+        const result = await deleteCurrency(itemToDelete.code);
+        toast({ title: result.error ? 'Error' : 'Success', description: result.message, variant: result.error ? 'destructive' : 'default' });
+        setItemToDelete(null);
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>System Currencies</CardTitle>
+                <CardDescription>Manage all fiat and crypto currencies used in the application.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Code</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Decimals</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {currencies.length > 0 ? (
+                            currencies.map(c => (
+                                <TableRow key={c.code}>
+                                    <TableCell className="font-semibold">{c.code}</TableCell>
+                                    <TableCell>{c.name}</TableCell>
+                                    <TableCell className="capitalize">{c.type}</TableCell>
+                                    <TableCell>{c.decimals}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => setItemToDelete(c)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow><TableCell colSpan={5} className="h-24 text-center">No currencies configured.</TableCell></TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+                <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete the currency "{itemToDelete?.name} ({itemToDelete?.code})". This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete}>Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
+            <CardFooter className="justify-between">
+                <form action={initFormAction}>
+                    <Button variant="secondary" type="submit" disabled={initPending}>
+                        <Database className="mr-2 h-4 w-4"/>
+                        {initPending ? 'Initializing...' : 'Initialize Default Currencies'}
+                    </Button>
+                </form>
+                <AddCurrencyDialog />
+            </CardFooter>
+        </Card>
+    )
 }
 
 function FiatRateFields({ currency, rate }: { currency: string, rate?: FiatRate }) {
@@ -140,11 +292,13 @@ function CryptoFeesForm({ initialFees }: { initialFees?: CryptoFee }) {
 export default function ExchangeRatesPage() {
     const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | undefined>(undefined);
+    const [currencies, setCurrencies] = React.useState<Currency[]>([]);
     const [loading, setLoading] = React.useState(true);
     
     React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
         const cryptoFeesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
+        const currenciesRef = ref(db, 'settings/currencies');
 
         const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
             if (snapshot.exists()) {
@@ -155,7 +309,6 @@ export default function ExchangeRatesPage() {
             } else {
                 setFiatRates([]);
             }
-            setLoading(false);
         });
 
         const unsubCrypto = onValue(cryptoFeesRef, (snapshot) => {
@@ -168,9 +321,20 @@ export default function ExchangeRatesPage() {
             }
         });
 
+        const unsubCurrencies = onValue(currenciesRef, (snapshot) => {
+            setCurrencies(snapshot.exists() ? Object.values(snapshot.val()) : []);
+        });
+
+        Promise.all([
+            get(fiatRatesRef),
+            get(cryptoFeesRef),
+            get(currenciesRef)
+        ]).then(() => setLoading(false));
+
         return () => {
             unsubFiat();
             unsubCrypto();
+            unsubCurrencies();
         };
     }, []);
 
@@ -197,14 +361,13 @@ export default function ExchangeRatesPage() {
             />
             <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
-                    <FiatRatesForm initialRates={fiatRates} />
+                    <CurrencyManager currencies={currencies} />
+                    <CryptoFeesForm initialFees={cryptoFees} />
                 </div>
                 <div className="space-y-6">
-                     <CryptoFeesForm initialFees={cryptoFees} />
+                    <FiatRatesForm initialRates={fiatRates} />
+                     <RateHistory />
                 </div>
-            </div>
-            <div className="mt-8">
-                <RateHistory />
             </div>
         </>
     );

@@ -207,18 +207,21 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
 export type CurrencyFormState = { message?: string; error?: boolean } | undefined;
 
 const CurrencySchema = z.object({
-  code: z.string().min(3, "Code must be 3 letters").max(4, "Code must be 3-4 letters").transform(v => v.toUpperCase()),
+  code: z.string().min(3, "Code must be 3-4 letters").max(4).transform(v => v.toUpperCase()),
   name: z.string().min(2, "Name is required."),
+  type: z.enum(['fiat', 'crypto']),
+  decimals: z.coerce.number().min(0).max(18),
 });
 
 export async function addCurrency(prevState: CurrencyFormState, formData: FormData): Promise<CurrencyFormState> {
     const validatedFields = CurrencySchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
-        return { error: true, message: validatedFields.error.flatten().fieldErrors.code?.[0] || 'Invalid data.' };
+        const errors = validatedFields.error.flatten().fieldErrors;
+        return { error: true, message: errors.code?.[0] || errors.name?.[0] || errors.decimals?.[0] || 'Invalid data.' };
     }
     
-    const { code, name } = validatedFields.data;
+    const { code, name, type, decimals } = validatedFields.data;
     
     try {
         const currenciesRef = ref(db, 'settings/currencies');
@@ -228,11 +231,11 @@ export async function addCurrency(prevState: CurrencyFormState, formData: FormDa
             return { error: true, message: `Currency with code ${code} already exists.` };
         }
 
-        const newCurrency: Currency = { code, name };
+        const newCurrency: Currency = { code, name, type, decimals };
         await update(ref(db, `settings/currencies/${code}`), newCurrency);
         
         revalidatePath('/exchange-rates');
-        return { message: 'Currency added.' };
+        return { message: 'Currency added successfully.' };
     } catch(error) {
         return { error: true, message: 'Database error: Failed to add currency.' };
     }
@@ -240,6 +243,10 @@ export async function addCurrency(prevState: CurrencyFormState, formData: FormDa
 
 export async function deleteCurrency(code: string): Promise<CurrencyFormState> {
     try {
+        // Simple validation to prevent deleting core currencies by mistake
+        if (['USD', 'YER', 'SAR', 'USDT'].includes(code)) {
+            return { error: true, message: `Core currency ${code} cannot be deleted.` };
+        }
         await remove(ref(db, `settings/currencies/${code}`));
         revalidatePath('/exchange-rates');
         return { message: 'Currency deleted.' };
@@ -247,6 +254,43 @@ export async function deleteCurrency(code: string): Promise<CurrencyFormState> {
         return { error: true, message: 'Database error: Failed to delete currency.' };
     }
 }
+
+export async function initializeDefaultCurrencies(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
+    const defaultCurrencies: Currency[] = [
+        { code: 'USD', name: 'US Dollar', type: 'fiat', decimals: 2 },
+        { code: 'YER', name: 'Yemeni Rial', type: 'fiat', decimals: 2 },
+        { code: 'SAR', name: 'Saudi Riyal', type: 'fiat', decimals: 2 },
+        { code: 'USDT', name: 'Tether', type: 'crypto', decimals: 6 },
+    ];
+    
+    try {
+        const currenciesRef = ref(db, 'settings/currencies');
+        const snapshot = await get(currenciesRef);
+        const existingCurrencies = snapshot.val() || {};
+        
+        const updates: {[key: string]: Currency} = {};
+        let addedCount = 0;
+        
+        for (const currency of defaultCurrencies) {
+            if (!existingCurrencies[currency.code]) {
+                updates[currency.code] = currency;
+                addedCount++;
+            }
+        }
+        
+        if (addedCount > 0) {
+            await update(currenciesRef, updates);
+            revalidatePath('/exchange-rates');
+            return { success: true, message: `Successfully initialized ${addedCount} default currencies.` };
+        } else {
+            return { message: 'Default currencies are already configured.' };
+        }
+    } catch (error) {
+        console.error("Error initializing currencies:", error);
+        return { error: true, message: 'Database error while initializing currencies.' };
+    }
+}
+
 
 // --- One-time Database Setup ---
 export type SetupState = { message?: string; error?: boolean; } | undefined;
@@ -266,18 +310,24 @@ export async function assignSequentialSmsIds(prevState: SetupState, formData: Fo
         }
         
         const counterRef = ref(db, 'counters/smsRecordId');
-        const updates: { [key: string]: any } = {};
-
-        // Run a single transaction to reserve all the IDs we need
-        const transactionResult = await runTransaction(counterRef, (currentValue) => {
-            return (currentValue || 0) + recordsToUpdate.length;
-        });
+        let newCounterValue: number;
         
-        if (!transactionResult.committed) {
-             throw new Error("Failed to update SMS counter in a transaction.");
+        try {
+            const transactionResult = await runTransaction(counterRef, (currentValue) => {
+                return (currentValue || 0) + recordsToUpdate.length;
+            });
+
+            if (!transactionResult.committed) {
+                throw new Error("Failed to update SMS counter in a transaction. The operation was aborted.");
+            }
+            newCounterValue = transactionResult.snapshot.val();
+        } catch (error: any) {
+            console.error("Firebase transaction failed:", error);
+            return { message: `Database transaction error: ${error.message}`, error: true };
         }
         
-        let currentId = transactionResult.snapshot.val() - recordsToUpdate.length;
+        let currentId = newCounterValue - recordsToUpdate.length;
+        const updates: { [key: string]: any } = {};
 
         for (const [key] of recordsToUpdate) {
             currentId++;

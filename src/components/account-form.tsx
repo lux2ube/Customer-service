@@ -147,7 +147,6 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
-                                    <SelectItem value="USDT">USDT</SelectItem>
                                     {currencies.map(c => (
                                         <SelectItem key={c.code} value={c.code}>{c.name} ({c.code})</SelectItem>
                                     ))}
