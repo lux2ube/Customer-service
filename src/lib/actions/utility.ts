@@ -266,20 +266,22 @@ export async function assignSequentialSmsIds(prevState: SetupState, formData: Fo
         }
         
         const counterRef = ref(db, 'counters/smsRecordId');
-        let newIdsCount = 0;
         const updates: { [key: string]: any } = {};
 
-        for (const [key, record] of recordsToUpdate) {
-            const result = await runTransaction(counterRef, (currentValue) => {
-                return (currentValue || 0) + 1;
-            });
+        // Run a single transaction to reserve all the IDs we need
+        const transactionResult = await runTransaction(counterRef, (currentValue) => {
+            return (currentValue || 0) + recordsToUpdate.length;
+        });
+        
+        if (!transactionResult.committed) {
+             throw new Error("Failed to update SMS counter in a transaction.");
+        }
+        
+        let currentId = transactionResult.snapshot.val() - recordsToUpdate.length;
 
-            if (!result.committed) {
-                throw new Error("Failed to get next sequential ID for SMS.");
-            }
-            const newId = result.snapshot.val();
-            updates[`/sms_transactions/${key}/transaction_id`] = `S${newId}`;
-            newIdsCount++;
+        for (const [key] of recordsToUpdate) {
+            currentId++;
+            updates[`/sms_transactions/${key}/transaction_id`] = `S${currentId}`;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -287,7 +289,7 @@ export async function assignSequentialSmsIds(prevState: SetupState, formData: Fo
         }
         
         revalidatePath('/sms/transactions');
-        return { message: `Successfully assigned unique IDs to ${newIdsCount} SMS records.`, error: false };
+        return { message: `Successfully assigned unique IDs to ${recordsToUpdate.length} SMS records.`, error: false };
 
     } catch (e: any) {
         console.error("SMS ID Assignment Error:", e);
