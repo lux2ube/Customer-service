@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus, useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Button } from './ui/button';
 import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
@@ -97,4 +98,3 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
     </form>
   );
 }
-
