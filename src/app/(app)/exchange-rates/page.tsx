@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter } from '@/components/ui/alert-dialog';
 
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
@@ -191,7 +192,7 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
         }
     }, [state, toast]);
     
-    const fiatCurrencies = currencies.filter(c => c.type === 'fiat' && c.code !== 'USD');
+    const fiatCurrencies = currencies.filter(c => c.type === 'fiat' && !['USD', 'USDT'].includes(c.code));
 
     return (
         <form action={formAction}>
@@ -205,14 +206,14 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
                         const currentRate = initialRates[currency.code];
                         return (
                             <div key={currency.code} className="space-y-3 p-3 border rounded-md bg-muted/50">
-                                <h4 className="font-semibold">{currency.name} ({currency.code}) to USD</h4>
+                                <h4 className="font-semibold">{currency.name} ({currency.code}) to USD/USDT</h4>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-1">
-                                        <Label className="text-xs">Client Buy Rate</Label>
+                                        <Label className="text-xs">Client Buy Rate (We Sell)</Label>
                                         <Input name={`${currency.code}_clientBuy`} type="number" step="any" defaultValue={currentRate?.clientBuy || ''} required />
                                     </div>
                                     <div className="space-y-1">
-                                        <Label className="text-xs">Client Sell Rate</Label>
+                                        <Label className="text-xs">Client Sell Rate (We Buy)</Label>
                                         <Input name={`${currency.code}_clientSell`} type="number" step="any" defaultValue={currentRate?.clientSell || ''} required />
                                     </div>
                                 </div>

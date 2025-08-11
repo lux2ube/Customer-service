@@ -19,8 +19,6 @@ async function getBankAccounts(): Promise<Account[]> {
 }
 
 export default async function AddClientPage() {
-    const bankAccounts = await getBankAccounts();
-
     return (
         <>
             <PageHeader
@@ -28,7 +26,7 @@ export default async function AddClientPage() {
                 description="Create a new client profile."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ClientForm bankAccounts={bankAccounts} />
+                <ClientForm />
             </Suspense>
         </>
     );
