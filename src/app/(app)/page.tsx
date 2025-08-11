@@ -4,7 +4,7 @@
 import React, { useActionState } from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
 import type { Client, Transaction } from '@/lib/types';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -134,6 +134,12 @@ function SetupClientParentAccountForm() {
     return <form action={formAction}><ActionButton Icon={Network} text="Setup Client Accounts" pendingText="Setting up..." variant="destructive" /></form>;
 }
 
+function AssignSmsIdsForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(assignSequentialSmsIds, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Assignment Failed' : 'Assignment Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Database} text="Assign SMS IDs" pendingText="Assigning..." /></form>;
+}
 
 export default function DashboardPage() {
     const [recentTransactions, setRecentTransactions] = React.useState<Transaction[]>([]);
@@ -315,6 +321,7 @@ export default function DashboardPage() {
                     <CardContent className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
                            <SyncForm />
+                           <AssignSmsIdsForm />
                         </div>
                          <div className="flex flex-wrap gap-2">
                            <ProcessSmsForm />

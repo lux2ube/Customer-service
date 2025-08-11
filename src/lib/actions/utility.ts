@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set, update, get, remove } from 'firebase/database';
+import { push, ref, set, update, get, remove, runTransaction } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account } from '../types';
 import { logAction } from './helpers';
@@ -250,6 +250,51 @@ export async function deleteCurrency(code: string): Promise<CurrencyFormState> {
 
 // --- One-time Database Setup ---
 export type SetupState = { message?: string; error?: boolean; } | undefined;
+
+export async function assignSequentialSmsIds(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const smsSnapshot = await get(ref(db, 'sms_transactions'));
+        if (!smsSnapshot.exists()) {
+            return { message: "No SMS records found to assign IDs.", error: false };
+        }
+        
+        const smsRecords: Record<string, SmsTransaction> = smsSnapshot.val();
+        const recordsToUpdate = Object.entries(smsRecords).filter(([, record]) => !record.transaction_id || !record.transaction_id.startsWith('S'));
+
+        if (recordsToUpdate.length === 0) {
+            return { message: "All SMS records already have sequential IDs.", error: false };
+        }
+        
+        const counterRef = ref(db, 'counters/smsRecordId');
+        let newIdsCount = 0;
+        const updates: { [key: string]: any } = {};
+
+        for (const [key, record] of recordsToUpdate) {
+            const result = await runTransaction(counterRef, (currentValue) => {
+                return (currentValue || 0) + 1;
+            });
+
+            if (!result.committed) {
+                throw new Error("Failed to get next sequential ID for SMS.");
+            }
+            const newId = result.snapshot.val();
+            updates[`/sms_transactions/${key}/transaction_id`] = `S${newId}`;
+            newIdsCount++;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/sms/transactions');
+        return { message: `Successfully assigned unique IDs to ${newIdsCount} SMS records.`, error: false };
+
+    } catch (e: any) {
+        console.error("SMS ID Assignment Error:", e);
+        return { message: e.message || 'An unknown error occurred during assignment.', error: true };
+    }
+}
+
 
 export async function setupInitialClientIdsAndAccounts(prevState: SetupState, formData: FormData): Promise<SetupState> {
     try {
