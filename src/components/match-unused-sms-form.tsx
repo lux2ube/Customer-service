@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { Client, SmsTransaction } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { linkSmsToClient } from '@/lib/actions';
 import { Loader2, Check } from 'lucide-react';
 import { format } from 'date-fns';
@@ -28,8 +28,13 @@ export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnu
     const smsRef = ref(db, 'sms_transactions');
     const unsubscribe = onValue(smsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allSms: SmsTransaction[] = Object.keys(snapshot.val()).map(id => ({ id, ...snapshot.val()[id] }));
-        const unmatched = allSms.filter(sms => sms.status === 'parsed' || !sms.matched_client_id);
+        const allSmsData: Record<string, Omit<SmsTransaction, 'id'>> = snapshot.val();
+        const allSmsList: SmsTransaction[] = Object.keys(allSmsData).map(id => ({
+          id,
+          ...allSmsData[id]
+        }));
+        
+        const unmatched = allSmsList.filter(sms => sms.status === 'parsed' || !sms.matched_client_id);
         setSmsList(unmatched.sort((a,b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime()));
       }
       setLoading(false);
