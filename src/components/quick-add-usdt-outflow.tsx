@@ -10,7 +10,8 @@ import {
   DialogDescription,
 } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { QuickUsdtPaymentForm } from './quick-usdt-payment-form';
+import { QuickUsdtManualForm } from './quick-usdt-manual-form';
+import { QuickUsdtAutoForm } from './quick-usdt-auto-form';
 import { MatchUnassignedBscTxForm } from './match-unassigned-bsc-tx-form';
 import type { Client } from '@/lib/types';
 
@@ -33,17 +34,17 @@ export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated
             Choose to record manually, send live, or match an unassigned BSCScan transaction.
           </DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="manual" className="w-full">
+        <Tabs defaultValue="auto" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="manual">Manual Record</TabsTrigger>
             <TabsTrigger value="auto">Auto Send</TabsTrigger>
             <TabsTrigger value="match">Match BSCScan</TabsTrigger>
           </TabsList>
           <TabsContent value="manual">
-            <QuickUsdtPaymentForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
+            <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
            <TabsContent value="auto">
-            <p>Auto Send Form Placeholder</p>
+            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
           <TabsContent value="match">
              <MatchUnassignedBscTxForm client={client} onTxMatched={onRecordCreated} setIsOpen={setIsOpen} />

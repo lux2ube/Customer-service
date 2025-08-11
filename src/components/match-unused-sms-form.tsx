@@ -62,7 +62,9 @@ export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnu
                 <div className="flex-1">
                   <div className="flex justify-between items-center text-sm">
                     <span className="font-semibold">{sms.amount?.toLocaleString()} {sms.currency}</span>
-                    <span className="text-xs text-muted-foreground">{format(new Date(sms.parsed_at), 'PP')}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {sms.parsed_at && !isNaN(new Date(sms.parsed_at).getTime()) ? format(new Date(sms.parsed_at), 'PP') : 'Invalid Date'}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">From: {sms.client_name}</p>
                 </div>
