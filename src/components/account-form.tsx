@@ -68,7 +68,7 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
                 <CardHeader>
                     <CardTitle>{account ? 'Edit' : 'New'} Account</CardTitle>
                     <CardDescription>
-                        {account ? `رقم السند: ${account.id}` : 'Create a new account for your chart of accounts.'}
+                        {account ? `Editing account: ${account.name} (${account.id})` : 'Create a new account for your chart of accounts.'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -128,7 +128,7 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
                             >
                                 <SelectTrigger><SelectValue placeholder="Select a parent account..."/></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">None</SelectItem>
+                                    <SelectItem value="none">None (Root Account)</SelectItem>
                                     {parentAccounts.map(parent => (
                                         <SelectItem key={parent.id} value={parent.id}>{parent.name} ({parent.id})</SelectItem>
                                     ))}
@@ -136,13 +136,14 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
                             </Select>
                         </div>
                     </div>
-                     <div className="grid md:grid-cols-2 gap-4">
+                     <div className="grid md:grid-cols-2 gap-4 items-end">
                         <div className="space-y-1.5">
-                            <Label htmlFor="currency">Currency (Optional)</Label>
+                            <Label htmlFor="currency">Currency (for postable accounts)</Label>
                             <Select 
                                 name="currency" 
                                 value={formData.currency || 'none'}
                                 onValueChange={(value) => handleFieldChange('currency', value)}
+                                disabled={formData.isGroup}
                             >
                                 <SelectTrigger><SelectValue placeholder="Select a currency..."/></SelectTrigger>
                                 <SelectContent>
@@ -154,15 +155,17 @@ export function AccountForm({ account, parentAccounts, currencies }: { account?:
                             </Select>
                             {state?.errors?.currency && <p className="text-sm text-destructive">{state.errors.currency[0]}</p>}
                         </div>
-                         <div className="flex items-center space-x-2 pt-6">
+                         <div className="flex items-center space-x-2 pb-2">
                             <Checkbox 
                                 id="isGroup" 
                                 name="isGroup" 
                                 checked={formData.isGroup} 
                                 onCheckedChange={(checked) => handleFieldChange('isGroup', !!checked)}
                             />
-                            <Label htmlFor="isGroup" className="font-normal">This is a group account</Label>
-                            <p className="text-xs text-muted-foreground">(Cannot post to)</p>
+                            <div>
+                                <Label htmlFor="isGroup" className="font-normal">This is a group account</Label>
+                                <p className="text-xs text-muted-foreground">Group accounts cannot have transactions posted to them directly.</p>
+                            </div>
                         </div>
                     </div>
 

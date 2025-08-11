@@ -11,6 +11,17 @@ import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
 export type RateFormState = { message?: string; error?: boolean, success?: boolean } | undefined;
+export type CurrencyFormState = { 
+    message?: string; 
+    error?: boolean; 
+    errors?: {
+        code?: string[];
+        name?: string[];
+        type?: string[];
+        decimals?: string[];
+    }
+} | undefined;
+
 
 export async function updateFiatRates(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
     const data = Object.fromEntries(formData.entries());
@@ -25,14 +36,19 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
         const systemBuyKey = `${code}_systemBuy`;
         const systemSellKey = `${code}_systemSell`;
 
+        // Check if all four keys for a currency exist before creating an entry
         if (data[clientBuyKey] && data[clientSellKey] && data[systemBuyKey] && data[systemSellKey]) {
-            rates[code] = {
+             rates[code] = {
                 clientBuy: parseFloat(data[clientBuyKey] as string || '0'),
                 clientSell: parseFloat(data[clientSellKey] as string || '0'),
                 systemBuy: parseFloat(data[systemBuyKey] as string || '0'),
                 systemSell: parseFloat(data[systemSellKey] as string || '0'),
             };
         }
+    }
+    
+    if (Object.keys(rates).length === 0) {
+        return { error: true, message: 'No complete rate data was submitted.' };
     }
 
     try {
@@ -211,13 +227,11 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
 }
 
 // --- Currency Actions ---
-export type CurrencyFormState = { message?: string; error?: boolean } | undefined;
-
 const CurrencySchema = z.object({
   code: z.string().min(3, "Code must be 3-4 letters").max(4).transform(v => v.toUpperCase()),
   name: z.string().min(2, "Name is required."),
   type: z.enum(['fiat', 'crypto']),
-  decimals: z.coerce.number().min(0).max(18),
+  decimals: z.coerce.number().min(0, "Decimals must be 0 or more.").max(18, "Decimals cannot exceed 18."),
 });
 
 export async function addCurrency(prevState: CurrencyFormState, formData: FormData): Promise<CurrencyFormState> {
@@ -225,7 +239,7 @@ export async function addCurrency(prevState: CurrencyFormState, formData: FormDa
 
     if (!validatedFields.success) {
         const errors = validatedFields.error.flatten().fieldErrors;
-        return { error: true, message: errors.code?.[0] || errors.name?.[0] || errors.decimals?.[0] || 'Invalid data.' };
+        return { error: true, message: 'Failed to add currency.', errors };
     }
     
     const { code, name, type, decimals } = validatedFields.data;
@@ -233,8 +247,8 @@ export async function addCurrency(prevState: CurrencyFormState, formData: FormDa
     try {
         const currenciesRef = ref(db, 'settings/currencies');
         const snapshot = await get(currenciesRef);
-        const existingCurrencies: Currency[] = snapshot.val() ? Object.values(snapshot.val()) : [];
-        if(existingCurrencies.some(c => c.code === code)) {
+        const existingCurrencies = snapshot.val() || {};
+        if(existingCurrencies[code]) {
             return { error: true, message: `Currency with code ${code} already exists.` };
         }
 

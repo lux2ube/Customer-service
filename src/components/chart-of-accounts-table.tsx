@@ -91,25 +91,6 @@ export function ChartOfAccountsTable() {
       }
     });
 
-    // Process transactions - This only affects Assets and Equity/Income accounts
-    transactions.forEach(tx => {
-        if (tx.status !== 'Confirmed') return;
-        
-        // Fee income
-        if (tx.fee_usd && leafBalances['4001']) {
-            leafBalances['4001'].native -= tx.fee_usd; // Income has credit balance
-            leafBalances['4001'].usd -= tx.fee_usd;
-        }
-        
-        // Expense/Discount
-        if (tx.expense_usd && leafBalances['5001']) {
-            leafBalances['5001'].native += tx.expense_usd; // Expense has debit balance
-            leafBalances['5001'].usd += tx.expense_usd;
-        }
-
-        // We no longer process client-side accounts here to improve performance
-    });
-
     // Process journal entries - this is the main source of truth for most accounts
     journalEntries.forEach(entry => {
       if (leafBalances[entry.debit_account]) {
@@ -133,12 +114,8 @@ export function ChartOfAccountsTable() {
           return sum + (aggregatedBalances[child.id]?.usd || 0);
         }, 0);
         
-        const nativeCurrency = account.currency || 'USD';
-        const totalNative = nativeCurrency === 'USD' 
-            ? totalUsd 
-            : children.reduce((sum, child) => sum + (aggregatedBalances[child.id]?.native || 0), 0);
-
-        aggregatedBalances[account.id] = { native: totalNative, usd: totalUsd };
+        // Use USD as the native currency for group accounts for consistent aggregation
+        aggregatedBalances[account.id] = { native: totalUsd, usd: totalUsd };
       }
     });
     
@@ -183,7 +160,7 @@ export function ChartOfAccountsTable() {
   };
 
   const renderAccounts = () => {
-    // Filter out client sub-accounts to improve performance
+    // Filter out individual client sub-accounts to improve performance
     const displayableAccounts = accounts.filter(acc => acc.parentId !== '6000');
 
     const accountMap = new Map(displayableAccounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
@@ -218,6 +195,10 @@ export function ChartOfAccountsTable() {
           native: isNaN(balanceInfo.native) ? 0 : balanceInfo.native,
           usd: isNaN(balanceInfo.usd) ? 0 : balanceInfo.usd
       } : { native: 0, usd: 0 };
+      
+      const formatNumber = (num: number) => {
+          return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num)
+      }
 
       return (
         <React.Fragment key={account.id}>
@@ -244,16 +225,16 @@ export function ChartOfAccountsTable() {
             <TableCell className="text-right font-mono">
               {isGroup ? (
                   <span>
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(displayBalance.usd)}
+                    {formatNumber(displayBalance.usd)} USD
                   </span>
                 ) : (
-                  account.currency && (
+                  account.currency ? (
                     <span>
-                      {
-                        account.currency === 'USD' || account.currency === 'USDT' ?
-                          new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(displayBalance.native) :
-                          `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(displayBalance.native)} ${account.currency}`
-                      }
+                      {formatNumber(displayBalance.native)} {account.currency}
+                    </span>
+                  ) : (
+                    <span>
+                       {formatNumber(displayBalance.usd)} USD
                     </span>
                   )
                 )

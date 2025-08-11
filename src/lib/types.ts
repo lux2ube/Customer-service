@@ -62,8 +62,7 @@ export interface ServiceProvider {
     cryptoFormula?: CryptoFormulaField[];
     // Optional overrides for global settings
     fiatRates?: {
-        YER?: { clientBuy: number; clientSell: number; };
-        SAR?: { clientBuy: number; clientSell: number; };
+        [currencyCode: string]: { clientBuy: number; clientSell: number; systemBuy: number; systemSell: number; };
     };
     cryptoFees?: {
         buy_fee_percent: number;

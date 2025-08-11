@@ -29,7 +29,16 @@ import {
 } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter } from '@/components/ui/alert-dialog';
+import { 
+    AlertDialog, 
+    AlertDialogAction, 
+    AlertDialogCancel, 
+    AlertDialogContent, 
+    AlertDialogDescription, 
+    AlertDialogHeader, 
+    AlertDialogTitle, 
+    AlertDialogFooter 
+} from '@/components/ui/alert-dialog';
 
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
@@ -71,10 +80,12 @@ function AddCurrencyDialog() {
                     <div className="space-y-2">
                         <Label htmlFor="code">Code</Label>
                         <Input id="code" name="code" placeholder="e.g., USD" required />
+                         {state?.errors?.code && <p className="text-sm text-destructive">{state.errors.code[0]}</p>}
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="name">Name</Label>
                         <Input id="name" name="name" placeholder="e.g., US Dollar" required />
+                        {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                     </div>
                     <div className="space-y-2">
                         <Label>Type</Label>
@@ -82,10 +93,12 @@ function AddCurrencyDialog() {
                             <div className="flex items-center space-x-2"><RadioGroupItem value="fiat" id="fiat"/><Label htmlFor="fiat" className="font-normal">Fiat</Label></div>
                             <div className="flex items-center space-x-2"><RadioGroupItem value="crypto" id="crypto"/><Label htmlFor="crypto" className="font-normal">Crypto</Label></div>
                         </RadioGroup>
+                         {state?.errors?.type && <p className="text-sm text-destructive">{state.errors.type[0]}</p>}
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="decimals">Decimal Places</Label>
                         <Input id="decimals" name="decimals" type="number" placeholder="e.g., 2" defaultValue={2} required />
+                        {state?.errors?.decimals && <p className="text-sm text-destructive">{state.errors.decimals[0]}</p>}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
@@ -102,7 +115,6 @@ function CurrencyManager({ currencies }: { currencies: Currency[] }) {
     const [itemToDelete, setItemToDelete] = React.useState<Currency | null>(null);
 
     const [initState, initFormAction] = useActionState<RateFormState, FormData>(initializeDefaultCurrencies, undefined);
-    const { pending: initPending } = useFormStatus();
     
     React.useEffect(() => {
         if(initState?.message) {
@@ -169,9 +181,9 @@ function CurrencyManager({ currencies }: { currencies: Currency[] }) {
             </CardContent>
             <CardFooter className="justify-between">
                 <form action={initFormAction}>
-                    <Button variant="secondary" type="submit" disabled={initPending}>
+                     <Button variant="secondary" type="submit">
                         <Database className="mr-2 h-4 w-4"/>
-                        {initPending ? 'Initializing...' : 'Initialize Default Currencies'}
+                        Initialize Default Currencies
                     </Button>
                 </form>
                 <AddCurrencyDialog />
@@ -202,7 +214,7 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
                     <CardDescription>Define buy/sell rates for Fiat currencies against the base currency (USD/USDT).</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {fiatCurrencies.map(currency => {
+                    {fiatCurrencies.length > 0 ? fiatCurrencies.map(currency => {
                         const currentRate = initialRates[currency.code];
                         return (
                             <div key={currency.code} className="space-y-3 p-3 border rounded-md bg-muted/50">
@@ -211,32 +223,34 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
                                      <div className="space-y-2 border-r pr-4">
                                         <h5 className="text-sm font-medium">Client Side</h5>
                                          <div className="space-y-1">
-                                            <Label className="text-xs">Buy Rate (Client Buys)</Label>
+                                            <Label className="text-xs">Buy Rate (Client Buys {currency.code})</Label>
                                             <Input name={`${currency.code}_clientBuy`} type="number" step="any" defaultValue={currentRate?.clientBuy || ''} required />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Sell Rate (Client Sells)</Label>
+                                            <Label className="text-xs">Sell Rate (Client Sells {currency.code})</Label>
                                             <Input name={`${currency.code}_clientSell`} type="number" step="any" defaultValue={currentRate?.clientSell || ''} required />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                          <h5 className="text-sm font-medium">System Side</h5>
                                          <div className="space-y-1">
-                                            <Label className="text-xs">Buy Rate (System Buys)</Label>
+                                            <Label className="text-xs">Buy Rate (System Buys {currency.code})</Label>
                                             <Input name={`${currency.code}_systemBuy`} type="number" step="any" defaultValue={currentRate?.systemBuy || ''} required />
                                         </div>
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Sell Rate (System Sells)</Label>
+                                            <Label className="text-xs">Sell Rate (System Sells {currency.code})</Label>
                                             <Input name={`${currency.code}_systemSell`} type="number" step="any" defaultValue={currentRate?.systemSell || ''} required />
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         )
-                    })}
+                    }) : (
+                        <p className="text-sm text-muted-foreground text-center p-4">No non-USD fiat currencies configured. Add one in the "System Currencies" section.</p>
+                    )}
                 </CardContent>
                 <CardFooter>
-                    <SubmitButton><Save className="mr-2 h-4 w-4"/>Save Fiat Rates</SubmitButton>
+                    <SubmitButton disabled={fiatCurrencies.length === 0}><Save className="mr-2 h-4 w-4"/>Save Fiat Rates</SubmitButton>
                 </CardFooter>
             </Card>
         </form>
@@ -332,7 +346,11 @@ export default function ExchangeRatesPage() {
             get(fiatRatesRef),
             get(cryptoFeesRef),
             get(currenciesRef)
-        ]).then(() => setLoading(false));
+        ]).then(() => setLoading(false))
+        .catch(err => {
+            console.error("Failed to load initial data:", err);
+            setLoading(false);
+        });
 
         return () => {
             unsubFiat();
@@ -375,3 +393,4 @@ export default function ExchangeRatesPage() {
         </>
     );
 }
+
