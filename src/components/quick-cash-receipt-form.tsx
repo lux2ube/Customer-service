@@ -27,9 +27,8 @@ import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/databas
 
 interface QuickCashReceiptFormProps {
   client: Client | null;
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
   onReceiptCreated: () => void;
+  setIsOpen: (open: boolean) => void;
 }
 
 function SubmitButton() {
@@ -51,7 +50,7 @@ function SubmitButton() {
     );
 }
 
-export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreated }: QuickCashReceiptFormProps) {
+export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: QuickCashReceiptFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   
@@ -66,7 +65,6 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
   const [amountUsd, setAmountUsd] = React.useState(0);
 
   React.useEffect(() => {
-    if (!isOpen) return;
     setLoading(true);
 
     const accountsRef = ref(db, 'accounts');
@@ -93,16 +91,14 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       unsubAccounts();
       unsubFiat();
     }
-  }, [isOpen]);
+  }, []);
 
-  // Use a ref to track if the toast has been shown for the current state
   const stateRef = React.useRef<CashReceiptFormState>();
   React.useEffect(() => {
-    // Only process if the state has been updated
     if (state && state !== stateRef.current) {
       if (state.success) {
         toast({ title: 'Success', description: state.message });
-        onReceiptCreated(); // Notify parent to refresh
+        onReceiptCreated();
         setIsOpen(false);
         formRef.current?.reset();
         setSelectedBankAccountId('');
@@ -111,7 +107,6 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
-      // Update the ref to the current state so we don't process it again
       stateRef.current = state;
     }
   }, [state, toast, onReceiptCreated, setIsOpen]);
@@ -145,56 +140,46 @@ export function QuickCashReceiptForm({ client, isOpen, setIsOpen, onReceiptCreat
   if (!client) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Record New Cash Receipt</DialogTitle>
-          <DialogDescription>
-            Quickly add a cash receipt for {client.name}. This will become available to use in the transaction immediately.
-          </DialogDescription>
-        </DialogHeader>
-        <form action={formAction} ref={formRef}>
-          <input type="hidden" name="clientId" value={client.id} />
-          <input type="hidden" name="clientName" value={client.name} />
-          <input type="hidden" name="amountUsd" value={amountUsd} />
-          <div className="space-y-4 py-4">
-             <div className="space-y-2">
-                <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
-                <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={loading}>
-                    <SelectTrigger><SelectValue placeholder={loading ? "Loading accounts..." : "Select bank account..."} /></SelectTrigger>
-                    <SelectContent>
-                        {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
-                        : bankAccounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>
-                                {account.name} ({account.currency})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="amount">Amount Received</Label>
-                <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
-            </div>
+    <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+        <input type="hidden" name="clientId" value={client.id} />
+        <input type="hidden" name="clientName" value={client.name} />
+        <input type="hidden" name="amountUsd" value={amountUsd} />
+        <div className="space-y-4 py-4">
             <div className="space-y-2">
-                <Label>Equivalent Amount (USD)</Label>
-                <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="remittanceNumber">Remittance Number</Label>
-                <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
-            <SubmitButton />
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
+            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={loading}>
+                <SelectTrigger><SelectValue placeholder={loading ? "Loading accounts..." : "Select bank account..."} /></SelectTrigger>
+                <SelectContent>
+                    {loading ? <SelectItem value="loading" disabled>Loading accounts...</SelectItem> 
+                    : bankAccounts.map(account => (
+                        <SelectItem key={account.id} value={account.id}>
+                            {account.name} ({account.currency})
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="amount">Amount Received</Label>
+            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
+        </div>
+        <div className="space-y-2">
+            <Label>Equivalent Amount (USD)</Label>
+            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
+        </div>
+            <div className="space-y-2">
+            <Label htmlFor="remittanceNumber">Remittance Number</Label>
+            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
+        </div>
+        </div>
+        <DialogFooter>
+        <DialogClose asChild>
+            <Button type="button" variant="secondary">Cancel</Button>
+        </DialogClose>
+        <SubmitButton />
+        </DialogFooter>
+    </form>
   );
 }

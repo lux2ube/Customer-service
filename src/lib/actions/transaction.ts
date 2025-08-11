@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -450,13 +450,14 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
     try {
-        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, usdtPaymentsSnap, smsSnap, fiatHistorySnap] = await Promise.all([
+        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, usdtPaymentsSnap, smsSnap, fiatHistorySnap, sendRequestsSnap] = await Promise.all([
             get(ref(db, 'cash_receipts')),
             get(ref(db, 'cash_payments')),
             get(ref(db, 'usdt_receipts')),
             get(ref(db, 'usdt_payments')),
             get(ref(db, 'sms_transactions')),
-            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1))),
+            get(ref(db, 'send_requests')),
         ]);
 
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnap.val() || {};
@@ -464,6 +465,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         const allUsdtReceipts: Record<string, UsdtManualReceipt> = usdtReceiptsSnap.val() || {};
         const allUsdtPayments: Record<string, UsdtPayment> = usdtPaymentsSnap.val() || {};
         const allSms: Record<string, SmsTransaction> = smsSnap.val() || {};
+        const allSendRequests: Record<string, SendRequest> = sendRequestsSnap.val() || {};
         
         let fiatRates: FiatRate[] = [];
         if (fiatHistorySnap.exists()) {
@@ -497,11 +499,23 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
         
-        // USDT Payments (Outflow, Crypto)
+        // USDT Payments (Outflow, Crypto) - Manual
         for (const id in allUsdtPayments) {
             const p = allUsdtPayments[id];
             if (p.clientId === clientId && p.status === 'Completed') {
                 records.push({ id, date: p.date, type: 'outflow', category: 'crypto', source: 'USDT Payment', amount: p.amount, currency: 'USDT', amountUsd: p.amount, status: p.status });
+            }
+        }
+        
+        // Send Requests from Wallet (Outflow, Crypto)
+        for (const id in allSendRequests) {
+            const req = allSendRequests[id];
+            // Need to link client to send request. This is a gap. For now, we assume if we found the client by address it's for them.
+            // A more robust system might store clientId on the send_request.
+            const p = (await get(ref(db, `clients`))).val()
+            const client = Object.values(p as any).find((c: any) => c.bep20_addresses?.includes(req.to)) as Client | undefined;
+            if(client?.id === clientId && req.status === 'sent'){
+                 records.push({ id, date: new Date(req.timestamp).toISOString(), type: 'outflow', category: 'crypto', source: 'Wallet', amount: req.amount, currency: 'USDT', amountUsd: req.amount, status: req.status });
             }
         }
 

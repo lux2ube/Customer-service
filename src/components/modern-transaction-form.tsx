@@ -21,11 +21,8 @@ import { Skeleton } from './ui/skeleton';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { QuickCashReceiptForm } from './quick-cash-receipt-form';
-import { QuickCashPaymentForm } from './quick-cash-payment-form';
-import { QuickUsdtReceiptForm } from './quick-usdt-receipt-form';
-import { QuickUsdtPaymentForm } from './quick-usdt-payment-form';
-
+import { QuickAddCashInflow } from './quick-add-cash-inflow';
+import { QuickAddUsdtOutflow } from './quick-add-usdt-outflow';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -83,10 +80,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
     const [loadingRecords, setLoadingRecords] = React.useState(false);
     const [selectedRecordIds, setSelectedRecordIds] = React.useState<string[]>([]);
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
-    const [isQuickReceiptOpen, setIsQuickReceiptOpen] = React.useState(false);
-    const [isQuickPaymentOpen, setIsQuickPaymentOpen] = React.useState(false);
-    const [isQuickUsdtReceiptOpen, setIsQuickUsdtReceiptOpen] = React.useState(false);
-    const [isQuickUsdtPaymentOpen, setIsQuickUsdtPaymentOpen] = React.useState(false);
+    const [isQuickAddCashOpen, setIsQuickAddCashOpen] = React.useState(false);
+    const [isQuickAddUsdtOpen, setIsQuickAddUsdtOpen] = React.useState(false);
 
     const { toast } = useToast();
 
@@ -195,29 +190,17 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 toast({ variant: 'destructive', title: 'Error', description: result.message });
             }
         }}>
-             <QuickCashReceiptForm
+             <QuickAddCashInflow
                 client={selectedClient}
-                isOpen={isQuickReceiptOpen}
-                setIsOpen={setIsQuickReceiptOpen}
-                onReceiptCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
+                isOpen={isQuickAddCashOpen}
+                setIsOpen={setIsQuickAddCashOpen}
+                onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
             />
-             <QuickCashPaymentForm
+            <QuickAddUsdtOutflow
                 client={selectedClient}
-                isOpen={isQuickPaymentOpen}
-                setIsOpen={setIsQuickPaymentOpen}
-                onPaymentCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
-            />
-             <QuickUsdtReceiptForm
-                client={selectedClient}
-                isOpen={isQuickUsdtReceiptOpen}
-                setIsOpen={setIsQuickUsdtReceiptOpen}
-                onReceiptCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
-            />
-            <QuickUsdtPaymentForm
-                client={selectedClient}
-                isOpen={isQuickUsdtPaymentOpen}
-                setIsOpen={setIsQuickUsdtPaymentOpen}
-                onPaymentCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
+                isOpen={isQuickAddUsdtOpen}
+                setIsOpen={setIsQuickAddUsdtOpen}
+                onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
             />
             <div className="space-y-4">
                 {/* Step 1 */}
@@ -271,17 +254,9 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 {/* Step 3 */}
                 {selectedClient && (
                     <Card>
-                        <CardHeader className="flex-wrap flex-row items-center justify-between gap-2">
-                            <div className="space-y-1">
-                                <CardTitle>Step 3: Select Financial Records</CardTitle>
-                                <CardDescription>Choose the records to link to this transaction.</CardDescription>
-                            </div>
-                            <div className="flex gap-2 flex-wrap">
-                                { (transactionType === 'Deposit' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Receipt</Button> }
-                                { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtReceiptOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Receipt</Button> }
-                                { (transactionType === 'Withdraw' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record Cash Payment</Button> }
-                                { (transactionType === 'Deposit' || transactionType === 'Transfer') && <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickUsdtPaymentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Record USDT Payment</Button> }
-                            </div>
+                        <CardHeader>
+                            <CardTitle>Step 3: Link Financial Records</CardTitle>
+                            <CardDescription>Select records to consolidate into this transaction.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {loadingRecords ? (
@@ -293,14 +268,38 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {transactionType === 'Deposit' && (
                                         <>
-                                            <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
-                                            <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                            <div className="space-y-2">
+                                                 <div className="flex justify-between items-center mb-2">
+                                                    <Label>Client Gives (Fiat)</Label>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                </div>
+                                                <FinancialRecordTable title="" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
+                                            </div>
+                                             <div className="space-y-2">
+                                                 <div className="flex justify-between items-center mb-2">
+                                                    <Label>Client Gets (USDT)</Label>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                </div>
+                                                <FinancialRecordTable title="" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                             </div>
                                         </>
                                     )}
                                     {transactionType === 'Withdraw' && (
                                         <>
-                                            <FinancialRecordTable title="Client Gives (USDT)" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
-                                            <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <Label>Client Gives (USDT)</Label>
+                                                     <Button type="button" variant="outline" size="sm" /* onClick open QuickAddUsdtInflow */><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                </div>
+                                                <FinancialRecordTable title="" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
+                                            </div>
+                                             <div className="space-y-2">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <Label>Client Gets (Fiat)</Label>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                </div>
+                                                <FinancialRecordTable title="" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
+                                            </div>
                                         </>
                                     )}
                                     {transactionType === 'Transfer' && (
@@ -401,7 +400,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
             const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
-            if(results.length > 0) {
+            if (results.length > 0) {
               setIsOpen(true);
             }
         }, 300);
@@ -428,10 +427,10 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
     };
 
     return (
-        <Popover open={open} onOpenChange={setIsOpen}>
+         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <div className="relative">
-                     <Command>
+                <div className="relative w-full">
+                    <Command>
                         <CommandInput
                             placeholder="Search client by name, phone, or paste address..."
                             value={inputValue}
@@ -441,7 +440,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                             }}
                             className="pr-10"
                         />
-                     </Command>
+                    </Command>
                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>
