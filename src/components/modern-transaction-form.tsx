@@ -23,6 +23,8 @@ import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/databas
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { QuickAddCashInflow } from './quick-add-cash-inflow';
 import { QuickAddUsdtOutflow } from './quick-add-usdt-outflow';
+import { QuickAddUsdtInflow } from './quick-add-usdt-inflow';
+import { QuickAddCashOutflow } from './quick-add-cash-outflow';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -80,8 +82,11 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
     const [loadingRecords, setLoadingRecords] = React.useState(false);
     const [selectedRecordIds, setSelectedRecordIds] = React.useState<string[]>([]);
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
-    const [isQuickAddCashOpen, setIsQuickAddCashOpen] = React.useState(false);
-    const [isQuickAddUsdtOpen, setIsQuickAddUsdtOpen] = React.useState(false);
+    
+    const [isQuickAddCashInOpen, setIsQuickAddCashInOpen] = React.useState(false);
+    const [isQuickAddUsdtOutOpen, setIsQuickAddUsdtOutOpen] = React.useState(false);
+    const [isQuickAddUsdtInOpen, setIsQuickAddUsdtInOpen] = React.useState(false);
+    const [isQuickAddCashOutOpen, setIsQuickAddCashOutOpen] = React.useState(false);
 
     const { toast } = useToast();
 
@@ -190,18 +195,11 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 toast({ variant: 'destructive', title: 'Error', description: result.message });
             }
         }}>
-             <QuickAddCashInflow
-                client={selectedClient}
-                isOpen={isQuickAddCashOpen}
-                setIsOpen={setIsQuickAddCashOpen}
-                onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
-            />
-            <QuickAddUsdtOutflow
-                client={selectedClient}
-                isOpen={isQuickAddUsdtOpen}
-                setIsOpen={setIsQuickAddUsdtOpen}
-                onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }}
-            />
+            <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtOutflow client={selectedClient} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+
             <div className="space-y-4">
                 {/* Step 1 */}
                 <Card>
@@ -271,14 +269,14 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                             <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gives (Fiat)</Label>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
                                             </div>
                                              <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
                                              </div>
@@ -289,14 +287,14 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                             <div className="space-y-2">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gives (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" /* onClick open QuickAddUsdtInflow */><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
                                             </div>
                                              <div className="space-y-2">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (Fiat)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                 <FinancialRecordTable title="" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
                                             </div>
