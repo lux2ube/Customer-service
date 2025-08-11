@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus, useActionState } from 'react-dom';
+import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Button } from './ui/button';
 import {
   Dialog,

@@ -340,5 +340,3 @@ export default function SmsGatewaySetupPage() {
         </>
     );
 }
-
-    

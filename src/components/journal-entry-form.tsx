@@ -304,5 +304,3 @@ function AccountSelector({ name, accounts, placeholder, onAccountSelect }: { nam
     </>
   )
 }
-
-    
