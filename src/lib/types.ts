@@ -201,8 +201,6 @@ export interface Settings {
 
 export interface FiatRate {
     currency: string;
-    systemBuy: number;
-    systemSell: number;
     clientBuy: number;
     clientSell: number;
 }

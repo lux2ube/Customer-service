@@ -29,7 +29,7 @@ const AccountSchema = z.object({
   type: z.enum(['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']),
   isGroup: z.boolean().default(false),
   parentId: z.string().optional().nullable(),
-  currency: z.enum(['USD', 'YER', 'SAR', 'USDT', 'none']).optional().nullable(),
+  currency: z.string().optional().nullable(), // Will be validated against currency list
 });
 
 export async function ensureDefaultAccounts() {

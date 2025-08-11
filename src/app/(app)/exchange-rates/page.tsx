@@ -2,8 +2,7 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -180,33 +179,7 @@ function CurrencyManager({ currencies }: { currencies: Currency[] }) {
     )
 }
 
-function FiatRateFields({ currency, rate }: { currency: string, rate?: FiatRate }) {
-    return (
-        <div className="space-y-3 p-3 border rounded-md bg-muted/50">
-            <h4 className="font-semibold">{currency} to USD</h4>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                 <div className="space-y-1">
-                    <Label className="text-xs">System Buy</Label>
-                    <Input name={`${currency}_systemBuy`} type="number" step="any" defaultValue={rate?.systemBuy || ''} required />
-                </div>
-                <div className="space-y-1">
-                    <Label className="text-xs">System Sell</Label>
-                    <Input name={`${currency}_systemSell`} type="number" step="any" defaultValue={rate?.systemSell || ''} required />
-                </div>
-                <div className="space-y-1">
-                    <Label className="text-xs">Client Buy</Label>
-                    <Input name={`${currency}_clientBuy`} type="number" step="any" defaultValue={rate?.clientBuy || ''} required />
-                </div>
-                <div className="space-y-1">
-                    <Label className="text-xs">Client Sell</Label>
-                    <Input name={`${currency}_clientSell`} type="number" step="any" defaultValue={rate?.clientSell || ''} required />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
+function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<string, Omit<FiatRate, 'currency'>>, currencies: Currency[] }) {
     const { toast } = useToast();
     const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
     
@@ -217,20 +190,35 @@ function FiatRatesForm({ initialRates }: { initialRates: FiatRate[] }) {
             toast({ variant: 'destructive', title: "Error", description: state.message });
         }
     }, [state, toast]);
-
-    const yerRate = initialRates.find(r => r.currency === 'YER');
-    const sarRate = initialRates.find(r => r.currency === 'SAR');
+    
+    const fiatCurrencies = currencies.filter(c => c.type === 'fiat' && c.code !== 'USD');
 
     return (
         <form action={formAction}>
             <Card>
                 <CardHeader>
                     <CardTitle>Global Fiat Exchange Rates</CardTitle>
-                    <CardDescription>Define buy/sell rates for Fiat currencies against USD for both system and client sides.</CardDescription>
+                    <CardDescription>Define buy/sell rates for Fiat currencies against USD/USDT.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <FiatRateFields currency="YER" rate={yerRate} />
-                    <FiatRateFields currency="SAR" rate={sarRate} />
+                    {fiatCurrencies.map(currency => {
+                        const currentRate = initialRates[currency.code];
+                        return (
+                            <div key={currency.code} className="space-y-3 p-3 border rounded-md bg-muted/50">
+                                <h4 className="font-semibold">{currency.name} ({currency.code}) to USD</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Client Buy Rate</Label>
+                                        <Input name={`${currency.code}_clientBuy`} type="number" step="any" defaultValue={currentRate?.clientBuy || ''} required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Client Sell Rate</Label>
+                                        <Input name={`${currency.code}_clientSell`} type="number" step="any" defaultValue={currentRate?.clientSell || ''} required />
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
                 </CardContent>
                 <CardFooter>
                     <SubmitButton><Save className="mr-2 h-4 w-4"/>Save Fiat Rates</SubmitButton>
@@ -290,7 +278,7 @@ function CryptoFeesForm({ initialFees }: { initialFees?: CryptoFee }) {
 }
 
 export default function ExchangeRatesPage() {
-    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+    const [fiatRates, setFiatRates] = React.useState<Record<string, Omit<FiatRate, 'currency'>>>({});
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | undefined>(undefined);
     const [currencies, setCurrencies] = React.useState<Currency[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -305,9 +293,9 @@ export default function ExchangeRatesPage() {
                 const data = snapshot.val();
                 const lastEntryKey = Object.keys(data)[0];
                 const lastEntry = data[lastEntryKey];
-                setFiatRates(lastEntry.rates || []);
+                setFiatRates(lastEntry.rates || {});
             } else {
-                setFiatRates([]);
+                setFiatRates({});
             }
         });
 
@@ -365,7 +353,7 @@ export default function ExchangeRatesPage() {
                     <CryptoFeesForm initialFees={cryptoFees} />
                 </div>
                 <div className="space-y-6">
-                    <FiatRatesForm initialRates={fiatRates} />
+                    <FiatRatesForm initialRates={fiatRates} currencies={currencies} />
                      <RateHistory />
                 </div>
             </div>

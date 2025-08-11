@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -14,18 +13,20 @@ export type RateFormState = { message?: string; error?: boolean, success?: boole
 
 export async function updateFiatRates(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
     const data = Object.fromEntries(formData.entries());
-    const rates: FiatRate[] = [];
+    const rates: Record<string, Omit<FiatRate, 'currency'>> = {};
 
-    const currencies = ['YER', 'SAR'];
-    for (const currency of currencies) {
-        if (data[`${currency}_systemBuy`]) {
-            rates.push({
-                currency: currency,
-                systemBuy: parseFloat(data[`${currency}_systemBuy`] as string || '0'),
-                systemSell: parseFloat(data[`${currency}_systemSell`] as string || '0'),
-                clientBuy: parseFloat(data[`${currency}_clientBuy`] as string || '0'),
-                clientSell: parseFloat(data[`${currency}_clientSell`] as string || '0'),
-            });
+    // Dynamically find all currency codes from the form data
+    const currencyCodes = new Set(Object.keys(data).map(key => key.split('_')[0]));
+
+    for (const code of currencyCodes) {
+        const clientBuyKey = `${code}_clientBuy`;
+        const clientSellKey = `${code}_clientSell`;
+
+        if (data[clientBuyKey] && data[clientSellKey]) {
+            rates[code] = {
+                clientBuy: parseFloat(data[clientBuyKey] as string || '0'),
+                clientSell: parseFloat(data[clientSellKey] as string || '0'),
+            };
         }
     }
 
@@ -43,6 +44,7 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
         return { error: true, message: 'Database error while updating fiat rates.' };
     }
 }
+
 
 const CryptoFeeSchema = z.object({
     buy_fee_percent: z.coerce.number().min(0),
