@@ -2,8 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -90,18 +90,18 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                    {selectedClient ? selectedClient.name : "Select a client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <div className="relative w-full">
+                    <Command>
+                        <CommandInput
+                            placeholder="Search client by name or phone..."
+                            value={inputValue}
+                            onValueChange={setInputValue}
+                        />
+                    </Command>
+                </div>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
-                    <CommandInput
-                        placeholder="Search client by name or phone..."
-                        value={inputValue}
-                        onValueChange={setInputValue}
-                    />
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
                         {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
