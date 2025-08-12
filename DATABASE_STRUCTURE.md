@@ -200,3 +200,4 @@ Stores atomic counters for generating sequential IDs.
 
 -   **/`globalRecordId`**: `number` - The last used ID for any new financial record.
 -   **/`modernCashRecordId`**: `number` - The last used ID for the modern cash records ledger.
+-   **/`usdtRecordId`**: `number` - The last used ID for the modern USDT records ledger.

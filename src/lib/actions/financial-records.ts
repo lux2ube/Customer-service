@@ -32,7 +32,7 @@ const UsdtManualReceiptSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
+export async function createUsdtManualReceipt(prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
     const validatedFields = UsdtManualReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
@@ -44,7 +44,7 @@ export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, 
     }
     
     try {
-        const { clientId, clientName, cryptoWalletId, amount, txid } = validatedFields.data;
+        const { date, clientId, clientName, cryptoWalletId, amount, txid, walletAddress, notes } = validatedFields.data;
         
         const walletSnapshot = await get(ref(db, `accounts/${cryptoWalletId}`));
         
@@ -53,16 +53,18 @@ export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, 
         }
 
         const wallet = walletSnapshot.val() as Account;
-        const newId = await getNextSequentialId();
+        const newId = await getNextSequentialId('usdtRecordId');
 
         const receiptData: Omit<UsdtManualReceipt, 'id'> = {
-            date: new Date().toISOString(),
+            date: date || new Date().toISOString(),
             clientId,
             clientName,
             cryptoWalletId,
             cryptoWalletName: wallet.name,
             amount,
+            walletAddress,
             txid,
+            notes,
             status: 'Completed', 
             createdAt: new Date().toISOString(),
         };
@@ -70,15 +72,15 @@ export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, 
         await set(ref(db, `usdt_receipts/${newId}`), stripUndefined(receiptData));
 
         await logAction(
-            'create_usdt_quick_receipt',
-            { type: 'usdt_receipt', id: String(newId), name: `USDT Quick Receipt from ${clientName}` },
+            'create_usdt_manual_receipt',
+            { type: 'usdt_receipt', id: String(newId), name: `USDT Manual Receipt from ${clientName}` },
             receiptData
         );
         
-        revalidatePath('/transactions/modern');
+        revalidatePath('/financial-records/usdt-manual-receipt');
         return { success: true, message: 'USDT Manual Receipt recorded successfully.' };
     } catch (error) {
-        console.error("Create Quick USDT Manual Receipt Error:", error);
+        console.error("Create USDT Manual Receipt Error:", error);
         return { message: 'Database Error: Failed to record receipt.', success: false };
     }
 }
@@ -117,7 +119,7 @@ export async function createUsdtManualPayment(prevState: UsdtPaymentState, formD
         }
         const client = clientSnapshot.val() as Client;
 
-        const newId = await getNextSequentialId();
+        const newId = await getNextSequentialId('globalRecordId');
         const paymentData: Omit<UsdtPayment, 'id'> = {
             date: new Date().toISOString(),
             clientId: clientId,

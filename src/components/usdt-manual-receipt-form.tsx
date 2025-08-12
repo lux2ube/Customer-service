@@ -137,6 +137,7 @@ export function UsdtManualReceiptForm({ clients, cryptoWallets }: { clients: Cli
                         <Label htmlFor="clientId">Received From (Client)</Label>
                          <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} />
                         <input type="hidden" name="clientId" value={selectedClientId} />
+                        <input type="hidden" name="clientName" value={clients.find(c => c.id === selectedClientId)?.name || ''} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
