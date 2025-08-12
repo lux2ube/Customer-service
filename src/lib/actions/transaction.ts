@@ -572,6 +572,40 @@ const ModernTransactionSchema = z.object({
   attachment: z.instanceof(File).optional(),
 });
 
+export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
+    if (!clientId) return [];
+
+    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('clientId'), get(clientId));
+    const snapshot = await get(recordsRef);
+    if (!snapshot.exists()) return [];
+    
+    const allRecords: UnifiedFinancialRecord[] = [];
+    const clientRecords: Record<string, ModernCashRecord> = snapshot.val();
+
+    for (const recordId in clientRecords) {
+        const record = clientRecords[recordId];
+        // Double check client ID as firebase queries on nested data are not exact
+        if (record.clientId === clientId && record.status === 'Pending') {
+             allRecords.push({
+                id: record.id,
+                date: record.date,
+                type: record.type,
+                category: record.currency === 'USDT' ? 'crypto' : 'fiat',
+                source: record.source,
+                amount: record.amount,
+                currency: record.currency,
+                amountUsd: record.amountUsd,
+                status: record.status,
+                bankAccountName: record.currency !== 'USDT' ? record.accountName : undefined,
+                cryptoWalletName: record.currency === 'USDT' ? record.accountName : undefined,
+            });
+        }
+    }
+    
+    allRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return allRecords;
+}
+
 export async function createModernTransaction(formData: FormData): Promise<{ success: boolean; message: string; }> {
     const dataToValidate = {
         clientId: formData.get('clientId'),
