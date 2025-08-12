@@ -73,7 +73,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=200&sort=asc&apikey=${apiKey}`;
+            // Fetch the most RECENT 200 transactions in DESCENDING order
+            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=200&sort=desc&apikey=${apiKey}`;
             
             const response = await fetch(apiUrl);
             if (!response.ok) {
@@ -91,8 +92,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const walletAccountSnapshot = await get(walletAccountRef);
             const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
             
-            // Explicitly sort transactions by timestamp ascending to guarantee correct order
-            const transactionsToProcess = (data.result as any[]).sort((a: any, b: any) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+            // REVERSE the array to process the OLDEST of the recent transactions first.
+            const transactionsToProcess = (data.result as any[]).reverse();
 
             for (const tx of transactionsToProcess) {
                 if (existingHashes.has(tx.hash)) continue;
