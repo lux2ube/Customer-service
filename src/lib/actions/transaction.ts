@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db, storage } from '../firebase';
-import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
+import { push, ref, set, update, get, query, limitToLast, orderByChild, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider, ModernCashRecord } from '../types';
@@ -575,7 +575,7 @@ const ModernTransactionSchema = z.object({
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
 
-    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('clientId'), get(clientId));
+    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('clientId'), equalTo(clientId));
     const snapshot = await get(recordsRef);
     if (!snapshot.exists()) return [];
     
