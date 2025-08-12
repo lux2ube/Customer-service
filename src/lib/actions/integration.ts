@@ -90,7 +90,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const walletAccountSnapshot = await get(walletAccountRef);
             const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
             
-            const transactionsToProcess = data.result;
+            // Explicitly sort transactions by timestamp ascending to guarantee correct order
+            const transactionsToProcess = data.result.sort((a: any, b: any) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
 
             for (const tx of transactionsToProcess) {
                 if (existingHashes.has(tx.hash)) continue;
