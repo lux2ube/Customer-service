@@ -26,11 +26,11 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
     const { apiId } = validatedFields.data;
 
     try {
-        const apiSettings: BscApiSetting[] = [];
+        const apiSettingsToSync: BscApiSetting[] = [];
         if (apiId) {
             const settingSnapshot = await get(ref(db, `bsc_apis/${apiId}`));
             if (settingSnapshot.exists()) {
-                apiSettings.push({ id: apiId, ...settingSnapshot.val() });
+                apiSettingsToSync.push({ id: apiId, ...settingSnapshot.val() });
             } else {
                  return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
             }
@@ -38,11 +38,11 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
              const allSettingsSnapshot = await get(ref(db, 'bsc_apis'));
             if (allSettingsSnapshot.exists()) {
                 const allSettingsData: Record<string, BscApiSetting> = allSettingsSnapshot.val();
-                apiSettings.push(...Object.keys(allSettingsData).map(key => ({ id: key, ...allSettingsData[key] })));
+                apiSettingsToSync.push(...Object.keys(allSettingsData).map(key => ({ id: key, ...allSettingsData[key] })));
             }
         }
 
-        if (apiSettings.length === 0) {
+        if (apiSettingsToSync.length === 0) {
             return { message: 'No BSC API configurations found. Please add one in Settings.', error: true };
         }
 
@@ -66,15 +66,15 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         
         const updates: { [key: string]: any } = {};
 
-        for (const setting of apiSettings) {
-            const { apiKey, walletAddress, accountId, name: configName } = setting;
+        for (const setting of apiSettingsToSync) {
+            const { apiKey, walletAddress, accountId, name: configName, lastSyncedBlock } = setting;
             if (!apiKey || !walletAddress) {
                 console.warn(`Skipping API config "${configName}" due to missing key or address.`);
                 continue;
             }
 
-            // Fetch the most RECENT 200 transactions in DESCENDING order
-            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=200&sort=desc&apikey=${apiKey}`;
+            const startBlockQuery = lastSyncedBlock ? `&startblock=${lastSyncedBlock + 1}` : '';
+            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}${startBlockQuery}`;
             
             const response = await fetch(apiUrl);
             if (!response.ok) {
@@ -92,8 +92,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const walletAccountSnapshot = await get(walletAccountRef);
             const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
             
-            // REVERSE the array to process the OLDEST of the recent transactions first.
-            const transactionsToProcess = (data.result as any[]).reverse();
+            const transactionsToProcess: any[] = data.result || [];
+            let latestBlockNumber = lastSyncedBlock || 0;
 
             for (const tx of transactionsToProcess) {
                 if (existingHashes.has(tx.hash)) continue;
@@ -125,11 +125,18 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 };
                 updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
                 totalNewTxCount++;
-                existingHashes.add(tx.hash); // Prevent duplicate adds in the same run
+                existingHashes.add(tx.hash);
+                if (parseInt(tx.blockNumber) > latestBlockNumber) {
+                    latestBlockNumber = parseInt(tx.blockNumber);
+                }
+            }
+            // After processing all transactions for a setting, update its lastSyncedBlock
+            if (latestBlockNumber > (lastSyncedBlock || 0)) {
+                updates[`/bsc_apis/${setting.id}/lastSyncedBlock`] = latestBlockNumber;
             }
         }
 
-        if (totalNewTxCount > 0) {
+        if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
         }
 

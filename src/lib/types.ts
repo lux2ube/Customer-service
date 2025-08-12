@@ -378,4 +378,5 @@ export interface BscApiSetting {
     walletAddress: string;
     accountId: string;
     createdAt: string;
+    lastSyncedBlock?: number;
 }

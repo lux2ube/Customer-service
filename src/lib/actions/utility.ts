@@ -559,38 +559,3 @@ export async function restructureRecordIds(prevState: SetupState, formData: Form
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }
-
-export async function deleteBscSyncedRecords(prevState: SetupState, formData: FormData): Promise<SetupState> {
-    try {
-        const recordsRef = ref(db, 'modern_usdt_records');
-        const snapshot = await get(recordsRef);
-
-        const updates: { [key: string]: null } = {};
-        let deletedCount = 0;
-        
-        if (snapshot.exists()) {
-            const allRecords: Record<string, ModernUsdtRecord> = snapshot.val();
-            for (const recordId in allRecords) {
-                if (allRecords[recordId].source === 'BSCScan') {
-                    updates[`/modern_usdt_records/${recordId}`] = null;
-                    deletedCount++;
-                }
-            }
-        }
-        
-        // Also reset the counter
-        updates[`/counters/usdtRecordId`] = null;
-
-        if (Object.keys(updates).length > 1 || deletedCount > 0) { // Check if there's more than just the counter update
-            await update(ref(db), updates);
-            revalidatePath('/modern-usdt-records');
-            return { message: `Successfully deleted ${deletedCount} BSCScan-synced records and reset the ID counter.`, error: false };
-        }
-
-        return { message: "No records with source 'BSCScan' found to delete.", error: false };
-        
-    } catch(e: any) {
-        console.error("Delete Synced Records Error:", e);
-        return { message: `An error occurred: ${e.message}`, error: true };
-    }
-}

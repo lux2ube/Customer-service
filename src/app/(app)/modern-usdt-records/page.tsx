@@ -4,14 +4,14 @@
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ModernUsdtRecordsTable } from "@/components/modern-usdt-records-table";
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, type SyncState, deleteBscSyncedRecords } from '@/lib/actions';
+import { syncBscTransactions, type SyncState } from '@/lib/actions';
 import type { BscApiSetting } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -22,21 +22,10 @@ function SyncBscButton() {
     return (
         <Button type="submit" disabled={pending}>
             <RefreshCw className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
-            {pending ? 'Syncing...' : 'Sync Selected Wallet'}
+            {pending ? 'Syncing...' : 'Sync Wallet'}
         </Button>
     )
 }
-
-function DeleteSyncedButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" variant="destructive" disabled={pending}>
-            <Trash2 className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
-            {pending ? 'Deleting...' : 'Delete Synced Records'}
-        </Button>
-    )
-}
-
 
 function SyncBscForm() {
     const { toast } = useToast();
@@ -97,27 +86,6 @@ function SyncBscForm() {
     );
 }
 
-function DeleteSyncedForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SyncState, FormData>(deleteBscSyncedRecords, undefined);
-
-    React.useEffect(() => {
-        if (state?.message) {
-            toast({
-                title: state.error ? 'Deletion Failed' : 'Deletion Complete',
-                description: state.message,
-                variant: state.error ? 'destructive' : 'default',
-            });
-        }
-    }, [state, toast]);
-
-    return (
-        <form action={formAction}>
-            <DeleteSyncedButton />
-        </form>
-    )
-}
-
 export default function ModernUsdtRecordsPage() {
     return (
         <>
@@ -139,7 +107,6 @@ export default function ModernUsdtRecordsPage() {
                             New Outflow
                         </Link>
                     </Button>
-                     <DeleteSyncedForm />
                 </div>
             </PageHeader>
             <Suspense fallback={<div>Loading records...</div>}>
