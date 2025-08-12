@@ -200,3 +200,4 @@ export default async function EditClientPage({ params }: { params: { id: string 
         </>
     );
 }
+
