@@ -2,8 +2,7 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -14,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, CashPayment, FiatRate } from '@/lib/types';
+import type { Client, Account, CashPayment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashPayment, type CashPaymentFormState } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
@@ -90,7 +89,7 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
     const [amount, setAmount] = React.useState<string | number>(payment?.amount || '');
     const [amountUsd, setAmountUsd] = React.useState<number>(payment?.amountUsd || 0);
 
-    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+    const [fiatRates, setFiatRates] = React.useState<Record<string, any>>({});
 
      React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
@@ -99,7 +98,7 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
                 const data = snapshot.val();
                 const lastEntryKey = Object.keys(data)[0];
                 const lastEntry = data[lastEntryKey];
-                setFiatRates(lastEntry.rates || []);
+                setFiatRates(lastEntry.rates || {});
             }
         });
         return () => unsubFiat();
@@ -123,7 +122,7 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
             return;
         }
 
-        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientSell > 0) {
             setAmountUsd(numericAmount / rateInfo.clientSell);
         } else {

@@ -305,7 +305,7 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
 }
 
 export type CashReceiptFormState = {
-  errors?: { bankAccountId?: string[]; clientId?: string[]; amount?: string[]; clientName?: string[]; };
+  errors?: { bankAccountId?: string[]; clientId?: string[]; amount?: string[]; clientName?: string[]; senderName?: string; };
   message?: string;
   success?: boolean;
 } | undefined;
@@ -358,7 +358,7 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
             amountUsd,
             status: 'Pending',
             createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined
+            remittanceNumber: remittanceNumber || undefined,
         };
 
         await set(ref(db, `cash_receipts/${newId}`), stripUndefined(receiptData));
@@ -425,19 +425,20 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
 export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
     if (!clientId) return [];
     try {
-        const [cashReceiptsSnapshot, smsTransactionsSnapshot] = await Promise.all([
+        const [cashReceiptsSnapshot, smsTransactionsSnapshot, fiatHistorySnap] = await Promise.all([
             get(ref(db, 'cash_receipts')),
             get(ref(db, 'sms_transactions')),
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1))),
         ]);
         const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
         const allSms: Record<string, SmsTransaction> = smsTransactionsSnapshot.val() || {};
-        const fiatHistoryRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
-        const fiatHistorySnapshot = await get(fiatHistoryRef);
-        let fiatRates: FiatRate[] = [];
-        if (fiatHistorySnapshot.exists()) {
-            const lastEntryKey = Object.keys(fiatHistorySnapshot.val())[0];
-            fiatRates = fiatHistorySnapshot.val()[lastEntryKey].rates || [];
+        
+        let fiatRates: Record<string, FiatRate> = {};
+        if (fiatHistorySnap.exists()) {
+            const lastEntryKey = Object.keys(fiatHistorySnap.val())[0];
+            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || {};
         }
+
         const funds: UnifiedReceipt[] = [];
         for(const id in allCashReceipts) {
             const receipt = allCashReceipts[id];
@@ -460,7 +461,7 @@ export async function getAvailableClientFunds(clientId: string): Promise<Unified
         for(const id in allSms) {
             const sms = allSms[id];
             if (sms.matched_client_id === clientId && sms.status === 'matched' && sms.type === 'credit') {
-                 const rateInfo = fiatRates.find(r => r.currency === sms.currency);
+                 const rateInfo = fiatRates[sms.currency || ''];
                  const rate = rateInfo ? rateInfo.clientBuy : 1;
                  const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
                 funds.push({

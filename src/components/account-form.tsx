@@ -27,9 +27,8 @@ function SubmitButton() {
 export function AccountForm({ account, parentAccounts, currencies }: { account?: Account, parentAccounts: Account[], currencies: Currency[] }) {
     const { toast } = useToast();
     
-    const actionWithId = createAccount.bind(null, account?.id || null);
     const [state, formAction] = useActionState<AccountFormState, FormData>(
-      actionWithId,
+      createAccount.bind(null, account?.id || null),
       undefined
     );
 

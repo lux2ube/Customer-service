@@ -196,7 +196,6 @@ export interface Settings {
     bsc_api_key?: string;
     bsc_wallet_address?: string;
     gemini_api_key?: string;
-    fiat_rates?: FiatRate[];
 }
 
 export interface FiatRate {

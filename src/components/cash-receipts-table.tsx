@@ -158,7 +158,7 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
             const manualPart = manualReceipts.map(r => ({
                 id: r.id, date: r.date, clientName: r.clientName, senderName: r.senderName,
                 bankAccountName: r.bankAccountName, amount: r.amount, currency: r.currency,
-                remittanceNumber: r.remittanceNumber, source: 'Manual', status: r.status,
+                remittanceNumber: r.remittanceNumber, source: 'Manual', status: r.status, amountUsd: r.amountUsd
             }));
             return [...smsPart, ...manualPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         });
@@ -172,7 +172,7 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
                 id: sms.id, date: sms.parsed_at, clientName: sms.matched_client_name || 'Unmatched',
                 senderName: sms.client_name, bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0,
                 currency: sms.currency || '', remittanceNumber: sms.transaction_id, source: 'SMS',
-                status: sms.status, rawSms: sms.raw_sms,
+                status: sms.status, rawSms: sms.raw_sms, amountUsd: 0
             }));
              return [...manualPart, ...smsPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         });
