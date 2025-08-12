@@ -196,9 +196,23 @@ export function ChartOfAccountsTable() {
           usd: isNaN(balanceInfo.usd) ? 0 : balanceInfo.usd
       } : { native: 0, usd: 0 };
       
-      const formatNumber = (num: number) => {
-          return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num)
+      const formatNumber = (num: number, currencyCode?: string) => {
+          const options: Intl.NumberFormatOptions = {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+          };
+          if (currencyCode) {
+              // Note: Style 'currency' is not used to avoid showing the symbol redundantly.
+              // This just formats the number according to locale rules.
+          }
+          return new Intl.NumberFormat('en-US', options).format(num);
       }
+
+      const balanceText = isGroup 
+          ? `${formatNumber(displayBalance.usd, 'USD')} USD`
+          : account.currency 
+            ? `${formatNumber(displayBalance.native, account.currency)} ${account.currency}`
+            : `${formatNumber(displayBalance.usd, 'USD')} USD`;
 
       return (
         <React.Fragment key={account.id}>
@@ -223,22 +237,7 @@ export function ChartOfAccountsTable() {
                 <Badge variant={getBadgeVariant(account.type)}>{account.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono">
-              {isGroup ? (
-                  <span>
-                    {formatNumber(displayBalance.usd)} USD
-                  </span>
-                ) : (
-                  account.currency ? (
-                    <span>
-                      {formatNumber(displayBalance.native)} {account.currency}
-                    </span>
-                  ) : (
-                    <span>
-                       {formatNumber(displayBalance.usd)} USD
-                    </span>
-                  )
-                )
-              }
+              {balanceText}
             </TableCell>
             <TableCell className="text-right">
                 <Button asChild variant="ghost" size="icon">
