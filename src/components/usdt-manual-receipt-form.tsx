@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useActionState, useFormStatus } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -169,5 +170,4 @@ export function UsdtManualReceiptForm({ clients, cryptoWallets }: { clients: Cli
         </form>
     );
 }
-
     

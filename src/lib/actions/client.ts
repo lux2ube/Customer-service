@@ -188,31 +188,6 @@ export async function manageClient(clientId: string, formData: FormData): Promis
             console.error("Failed to delete address:", error);
             return { message: 'Database Error: Failed to remove address.' };
         }
-    } else if (intent?.startsWith('unfavorite_bank_account:')) {
-        const accountIdToUnfavorite = intent.substring('unfavorite_bank_account:'.length);
-        if (!accountIdToUnfavorite) {
-            return { message: 'Bank account ID not provided.' };
-        }
-        try {
-            const clientRef = ref(db, `clients/${clientId}`);
-            const snapshot = await get(clientRef);
-            if (snapshot.exists()) {
-                const clientData = snapshot.val() as Client;
-                if (clientData.favoriteBankAccountId === accountIdToUnfavorite) {
-                    await update(clientRef, {
-                        favoriteBankAccountId: null,
-                        favoriteBankAccountName: null
-                    });
-                     revalidatePath(`/clients/${clientId}/edit`);
-                    return { success: true, message: "Client's favorite bank account link has been removed.", intent };
-                } else {
-                    return { success: true, message: "This was not the favorite account, so no link was removed.", intent };
-                }
-            }
-             return { message: 'Client not found.' };
-        } catch (error) {
-            return { message: 'Database Error: Failed to remove favorite bank account link.' };
-        }
     }
 
     // Default action is to update/create the client
