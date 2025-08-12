@@ -27,6 +27,7 @@ async function getInitialData(): Promise<{ receipts: UnifiedReceipt[], clients: 
         bankAccountName: r.bankAccountName,
         amount: r.amount,
         currency: r.currency,
+        amountUsd: r.amountUsd,
         remittanceNumber: r.remittanceNumber,
         source: 'Manual',
         status: r.status,
@@ -40,6 +41,7 @@ async function getInitialData(): Promise<{ receipts: UnifiedReceipt[], clients: 
         bankAccountName: sms.account_name || 'N/A',
         amount: sms.amount || 0,
         currency: sms.currency || '',
+        amountUsd: 0, // This will be calculated on the client side based on rates
         remittanceNumber: sms.transaction_id,
         source: 'SMS',
         status: sms.status,

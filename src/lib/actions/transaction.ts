@@ -313,35 +313,46 @@ export type CashReceiptFormState = {
 const CashReceiptSchema = z.object({
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
-    clientName: z.string().min(1, 'Client name is required.'),
+    senderName: z.string().min(1, 'Sender name is required.'),
     amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
     amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
     remittanceNumber: z.string().optional(),
+    note: z.string().optional(),
 });
 
 export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+    const validatedFields = CashReceiptSchema.safeParse({
+        ...Object.fromEntries(formData.entries()),
+        // Manually set senderName to clientName for quick add
+        senderName: formData.get('clientName')
+    });
+
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
     }
-    const { bankAccountId, clientId, clientName, amount, amountUsd, remittanceNumber } = validatedFields.data;
+
+    const { bankAccountId, clientId, senderName, amount, amountUsd, remittanceNumber } = validatedFields.data;
     try {
-        const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
-        if (!bankAccountSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account.', success: false };
-        }
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`))
+        ]);
+
+        if (!bankAccountSnapshot.exists()) return { message: 'Error: Could not find bank account.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Error: Could not find client.', success: false };
+
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        const newReceiptRef = push(ref(db, 'cash_receipts'));
-        const newReceiptId = newReceiptRef.key!;
-
+        const newId = await getNextSequentialId();
+        
         const receiptData: Omit<CashReceipt, 'id'> = {
             date: new Date().toISOString(),
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName,
-            senderName: clientName, // For quick add, sender is the client
+            clientName: client.name,
+            senderName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
@@ -350,7 +361,7 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
             remittanceNumber: remittanceNumber || undefined
         };
 
-        await set(newReceiptRef, stripUndefined(receiptData));
+        await set(ref(db, `cash_receipts/${newId}`), stripUndefined(receiptData));
         revalidatePath('/transactions');
         return { success: true, message: 'Cash receipt recorded successfully.' };
     } catch (e: any) {
@@ -361,60 +372,55 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
 
 export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
     const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
     }
-    const { bankAccountId, clientId, clientName, amount, amountUsd, remittanceNumber } = validatedFields.data;
+
+    const { bankAccountId, clientId, senderName, amount, amountUsd, remittanceNumber, note } = validatedFields.data;
+    
     try {
-        const bankAccountSnapshot = await get(ref(db, `accounts/${bankAccountId}`));
-        if (!bankAccountSnapshot.exists()) {
-            return { message: 'Error: Could not find bank account.', success: false };
-        }
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`))
+        ]);
+        
+        if (!bankAccountSnapshot.exists()) return { message: 'Error: Could not find bank account.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Error: Could not find client.', success: false };
+
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+        
+        const newReceiptId = await getNextSequentialId();
 
-        const newReceiptRef = push(ref(db, 'cash_receipts'));
-        const newReceiptId = newReceiptRef.key!;
-
-        const receiptData: Omit<CashReceipt, 'id'> = {
+        const receiptData: CashReceipt = {
+            id: String(newReceiptId),
             date: new Date().toISOString(),
             bankAccountId,
             bankAccountName: bankAccount.name,
             clientId,
-            clientName,
-            senderName: clientName, // For manual add, sender is the client
+            clientName: client.name,
+            senderName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
             status: 'Pending',
             createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined
+            remittanceNumber: remittanceNumber || undefined,
+            note: note || undefined,
         };
 
-        await set(newReceiptRef, stripUndefined(receiptData));
-
-        // Create journal entry
-        const journalDesc = `Cash receipt from ${clientName} for ${amount} ${bankAccount.currency}`;
-        const newJournalRef = push(ref(db, 'journal_entries'));
-        await set(newJournalRef, {
-            date: receiptData.date,
-            description: journalDesc,
-            debit_account: bankAccountId,
-            credit_account: `6001${clientId}`, // Assuming client liability account
-            debit_amount: amount,
-            credit_amount: amountUsd,
-            amount_usd: amountUsd,
-            createdAt: new Date().toISOString(),
-            debit_account_name: bankAccount.name,
-            credit_account_name: clientName,
-        });
-
+        await set(ref(db, `cash_receipts/${newReceiptId}`), stripUndefined(receiptData));
+        
         revalidatePath('/cash-receipts');
+        revalidatePath('/transactions/modern');
         return { success: true, message: 'Cash receipt recorded successfully.' };
     } catch (e: any) {
         console.error("Error creating cash receipt:", e);
         return { message: 'Database Error: Could not record cash receipt.', success: false };
     }
 }
+
 
 export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
     if (!clientId) return [];
@@ -500,10 +506,10 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         const allSms: Record<string, SmsTransaction> = smsSnap.val() || {};
         const allSendRequests: Record<string, SendRequest> = sendRequestsSnap.val() || {};
         
-        let fiatRates: FiatRate[] = [];
+        let fiatRates: Record<string, FiatRate> = {};
         if (fiatHistorySnap.exists()) {
             const lastEntryKey = Object.keys(fiatHistorySnap.val())[0];
-            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || [];
+            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || {};
         }
 
         const records: UnifiedFinancialRecord[] = [];
@@ -556,7 +562,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         for (const id in allSms) {
             const sms = allSms[id];
             if (sms.matched_client_id === clientId && sms.status === 'matched') {
-                const rateInfo = fiatRates.find(r => r.currency === sms.currency);
+                const rateInfo = sms.currency ? fiatRates[sms.currency] : undefined;
                 const rate = sms.type === 'credit' ? (rateInfo?.clientBuy || 1) : (rateInfo?.clientSell || 1);
                 const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
                 records.push({ id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow', category: 'fiat', source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '', amountUsd, status: sms.status, bankAccountName: sms.account_name });

@@ -87,8 +87,9 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
     const [amount, setAmount] = React.useState('');
     const [amountUsd, setAmountUsd] = React.useState(0);
+    const [senderName, setSenderName] = React.useState('');
 
-    const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+    const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
 
     React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
@@ -97,7 +98,7 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
                 const data = snapshot.val();
                 const lastEntryKey = Object.keys(data)[0];
                 const lastEntry = data[lastEntryKey];
-                setFiatRates(lastEntry.rates || []);
+                setFiatRates(lastEntry.rates || {});
             }
         });
         return () => unsubFiat();
@@ -121,7 +122,7 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
             return;
         }
 
-        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientBuy > 0) {
             setAmountUsd(numericAmount / rateInfo.clientBuy);
         } else {
@@ -139,6 +140,7 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
             setSelectedClientId('');
             setSelectedBankAccountId('');
             setAmount('');
+            setSenderName('');
         } else if (state?.message) {
             toast({
                 title: 'Error',
@@ -194,8 +196,9 @@ export function CashReceiptForm({ clients, bankAccounts }: { clients: Client[], 
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="senderName">Sender Name (if not a client)</Label>
-                        <Input id="senderName" name="senderName" placeholder="e.g., Ahmed from the corner store" />
+                        <Label htmlFor="senderName">Sender Name</Label>
+                        <Input id="senderName" name="senderName" placeholder="e.g., Ahmed from the corner store" value={senderName} onChange={(e) => setSenderName(e.target.value)} required />
+                        {state?.errors?.senderName && <p className="text-sm text-destructive">{state.errors.senderName[0]}</p>}
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
