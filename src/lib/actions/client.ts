@@ -514,4 +514,3 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
         return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }
-
