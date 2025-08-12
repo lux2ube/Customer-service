@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Bot } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ModernUsdtRecordsTable } from "@/components/modern-usdt-records-table";
@@ -12,13 +12,17 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, type SyncState } from '@/lib/actions';
+import type { BscApiSetting } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 function SyncBscButton() {
     const { pending } = useFormStatus();
     return (
-        <Button variant="outline" type="submit" disabled={pending}>
-            <Bot className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
-            {pending ? 'Syncing...' : 'Sync with BSCScan'}
+        <Button type="submit" disabled={pending}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
+            {pending ? 'Syncing...' : 'Sync Selected Wallet'}
         </Button>
     )
 }
@@ -26,6 +30,25 @@ function SyncBscButton() {
 function SyncBscForm() {
     const { toast } = useToast();
     const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
+    const [apiSettings, setApiSettings] = React.useState<BscApiSetting[]>([]);
+    const [selectedApi, setSelectedApi] = React.useState('');
+
+    React.useEffect(() => {
+        const settingsRef = ref(db, 'bsc_apis');
+        const unsubscribe = onValue(settingsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const list: BscApiSetting[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                setApiSettings(list);
+                if (list.length > 0 && !selectedApi) {
+                    setSelectedApi(list[0].id);
+                }
+            } else {
+                setApiSettings([]);
+            }
+        });
+        return () => unsubscribe();
+    }, [selectedApi]);
 
     React.useEffect(() => {
         if (state?.message) {
@@ -37,8 +60,27 @@ function SyncBscForm() {
         }
     }, [state, toast]);
 
+    if (apiSettings.length === 0) {
+        return (
+            <Button variant="outline" disabled>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                No API Configured
+            </Button>
+        );
+    }
+    
     return (
-        <form action={formAction}>
+        <form action={formAction} className="flex flex-wrap items-center gap-2">
+            <Select name="apiId" value={selectedApi} onValueChange={setSelectedApi} required>
+                <SelectTrigger className="w-full md:w-[250px]">
+                    <SelectValue placeholder="Select a wallet to sync..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {apiSettings.map(api => (
+                        <SelectItem key={api.id} value={api.id}>{api.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
             <SyncBscButton />
         </form>
     );
