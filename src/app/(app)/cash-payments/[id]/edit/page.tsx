@@ -28,8 +28,9 @@ async function getFormData() {
     if (accountsSnapshot.exists()) {
         const data = accountsSnapshot.val();
         Object.keys(data).forEach(key => {
-            if (!data[key].isGroup && data[key].currency && data[key].currency !== 'USDT') {
-                 bankAccounts.push({ id: key, ...data[key] });
+            const account = data[key];
+            if (!account.isGroup && account.type === 'Assets' && account.currency && account.currency !== 'USDT') {
+                 bankAccounts.push({ id: key, ...account });
             }
         });
     }
