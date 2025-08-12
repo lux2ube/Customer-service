@@ -27,8 +27,10 @@ function SubmitButton() {
 export function AccountForm({ account, parentAccounts, currencies }: { account?: Account, parentAccounts: Account[], currencies: Currency[] }) {
     const { toast } = useToast();
     
-    const action = createAccount.bind(null, account?.id || null);
-    const [state, formAction] = useActionState<AccountFormState, FormData>(action, undefined);
+    const [state, formAction] = useActionState<AccountFormState, FormData>(
+      (prevState, formData) => createAccount(account?.id || null, prevState, formData),
+      undefined
+    );
 
     const [formData, setFormData] = React.useState({
         id: account?.id || '',

@@ -33,7 +33,7 @@ const AccountSchema = z.object({
 });
 
 
-export async function createAccount(accountId: string | null, formData: FormData) {
+export async function createAccount(accountId: string | null, prevState: AccountFormState, formData: FormData): Promise<AccountFormState> {
     const parentIdValue = formData.get('parentId');
     const currencyValue = formData.get('currency');
 
@@ -156,7 +156,7 @@ export async function updateAccountPriority(accountId: string, parentId: string 
         await update(ref(db), updates);
     }
     
-    siblingAccounts.sort((a, b) => a.priority! - b.priority!);
+    siblingAccounts.sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity));
 
     const currentIndex = siblingAccounts.findIndex(acc => acc.id === accountId);
     if (currentIndex === -1) return;
