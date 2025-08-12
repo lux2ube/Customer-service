@@ -101,7 +101,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
 
     return (
         <div className="space-y-4">
-            <Card>
+            <Card key="add-card">
                 <form action={handleAddSubmit} ref={formRef}>
                     <CardHeader>
                         <CardTitle>Add New BSC API Configuration</CardTitle>
@@ -137,7 +137,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                 </form>
             </Card>
 
-            <Card>
+            <Card key="list-card">
                 <CardHeader>
                     <CardTitle>Existing API Configurations</CardTitle>
                 </CardHeader>
