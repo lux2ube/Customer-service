@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove, runTransaction } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account, ModernUsdtRecord } from '../types';
 import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
@@ -556,6 +556,40 @@ export async function restructureRecordIds(prevState: SetupState, formData: Form
 
     } catch(e: any) {
         console.error("ID Restructuring Error:", e);
+        return { message: `An error occurred: ${e.message}`, error: true };
+    }
+}
+
+export async function deleteBscSyncedRecords(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const recordsRef = ref(db, 'modern_usdt_records');
+        const snapshot = await get(recordsRef);
+
+        if (!snapshot.exists()) {
+            return { message: "No USDT records found to delete.", error: false };
+        }
+
+        const allRecords: Record<string, ModernUsdtRecord> = snapshot.val();
+        const updates: { [key: string]: null } = {};
+        let deletedCount = 0;
+
+        for (const recordId in allRecords) {
+            if (allRecords[recordId].source === 'BSCScan') {
+                updates[`/modern_usdt_records/${recordId}`] = null;
+                deletedCount++;
+            }
+        }
+        
+        if (deletedCount > 0) {
+            await update(ref(db), updates);
+            revalidatePath('/modern-usdt-records');
+            return { message: `Successfully deleted ${deletedCount} BSCScan-synced records.`, error: false };
+        }
+
+        return { message: "No records with source 'BSCScan' found to delete.", error: false };
+        
+    } catch(e: any) {
+        console.error("Delete Synced Records Error:", e);
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }

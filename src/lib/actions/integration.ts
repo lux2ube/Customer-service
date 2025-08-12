@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, update, get } from 'firebase/database';
+import { ref, set, get, remove, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, BscApiSetting, ModernUsdtRecord } from '../types';
 import { stripUndefined, getNextSequentialId } from './helpers';
@@ -72,7 +72,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 continue;
             }
 
-            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=200&sort=desc&apikey=${apiKey}`;
+            const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=200&sort=asc&apikey=${apiKey}`;
             
             const response = await fetch(apiUrl);
             if (!response.ok) {
@@ -90,7 +90,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const walletAccountSnapshot = await get(walletAccountRef);
             const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
             
-            for (const tx of data.result) {
+            const transactionsToProcess = data.result;
+
+            for (const tx of transactionsToProcess) {
                 if (existingHashes.has(tx.hash)) continue;
 
                 const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
