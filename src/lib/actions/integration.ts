@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -91,7 +92,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
             
             // Explicitly sort transactions by timestamp ascending to guarantee correct order
-            const transactionsToProcess = data.result.sort((a: any, b: any) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+            const transactionsToProcess = (data.result as any[]).sort((a: any, b: any) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
 
             for (const tx of transactionsToProcess) {
                 if (existingHashes.has(tx.hash)) continue;

@@ -130,11 +130,17 @@ export async function sendTelegramPhoto(photoUrl: string, caption: string) {
 }
 
 // --- Shared Helper for Sequential IDs ---
-export async function getNextSequentialId(counterName: 'globalRecordId' | 'modernCashRecordId'): Promise<string> {
+export async function getNextSequentialId(counterName: 'globalRecordId' | 'modernCashRecordId' | 'usdtRecordId' | 'bscApiId'): Promise<string> {
     const counterRef = ref(db, `counters/${counterName}`);
+    let startValue = 1000;
+    if (counterName === 'usdtRecordId' || counterName === 'bscApiId') {
+        startValue = 0;
+    }
+    
     const result = await runTransaction(counterRef, (currentValue) => {
-        return (currentValue || 1000) + 1; // Start from 1001
+        return (currentValue || startValue) + 1;
     });
+
     if (!result.committed) {
         throw new Error(`Failed to get next sequential ID from counter: ${counterName}.`);
     }
