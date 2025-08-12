@@ -22,6 +22,9 @@
       "fiat_rates": {
         ".indexOn": "timestamp"
       },
+      "crypto_rates": {
+        ".indexOn": "timestamp"
+      },
       "crypto_fees": {
         ".indexOn": "timestamp"
       }
