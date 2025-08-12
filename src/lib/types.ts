@@ -137,6 +137,7 @@ export interface ModernUsdtRecord {
     txHash?: string;
     clientWalletAddress?: string; // The external client wallet address
     createdAt: string;
+    blockNumber?: number; // For sync logic
 }
 
 

@@ -9,6 +9,9 @@
     "transactions": {
       ".indexOn": ["createdAt", "clientId", "status"]
     },
+    "modern_usdt_records": {
+      ".indexOn": ["accountId", "date"]
+    },
     "cash_receipts": {
       ".indexOn": ["clientId", "status"]
     },

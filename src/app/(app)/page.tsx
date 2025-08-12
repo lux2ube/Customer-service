@@ -16,7 +16,7 @@ import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfW
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, syncHistoricalBscTransactions, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -84,13 +84,6 @@ function SyncForm() {
     const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={RefreshCw} text="Sync with BSCScan" pendingText="Syncing..." /></form>;
-}
-
-function HistoricalSyncForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SyncState, FormData>(syncHistoricalBscTransactions, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={History} text="Sync (Before 25 May)" pendingText="Syncing History..." /></form>;
 }
 
 function ProcessSmsForm() {
@@ -330,7 +323,6 @@ export default function DashboardPage() {
                         </div>
                          <div className="flex flex-wrap gap-2">
                            <MergeClientsForm />
-                           <HistoricalSyncForm />
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
                            <MigrateClientIdsForm />
