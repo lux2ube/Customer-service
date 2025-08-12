@@ -275,9 +275,9 @@ export async function findClientByAddress(address: string): Promise<Client | nul
 
         for (const clientId in allClientsData) {
             const client = allClientsData[clientId];
-            if (client.bep20_addresses) {
-                for (const clientAddress of client.bep20_addresses) {
-                    if (clientAddress.toLowerCase() === lowercasedAddress) {
+            if (client.serviceProviders) {
+                for (const provider of client.serviceProviders) {
+                    if (provider.providerType === 'Crypto' && provider.details.Address?.toLowerCase() === lowercasedAddress) {
                         return { id: clientId, ...client };
                     }
                 }
@@ -514,3 +514,4 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
         return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }
+
