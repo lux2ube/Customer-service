@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, BlacklistItem, KycDocument, Transaction } from '../types';
+import type { Client, BlacklistItem, KycDocument, ServiceProvider, ClientServiceProvider } from '../types';
 import { normalizeArabic } from '../utils';
 import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
@@ -448,5 +448,69 @@ export async function batchUpdateClientForTransactions(clientId: string, walletA
     } catch(error) {
         console.error("Error during batch update:", error);
         return { error: true, message: "A database error occurred during the batch update." };
+    }
+}
+
+
+export type SetupState = { message?: string; error?: boolean; } | undefined;
+
+export async function migrateBep20Addresses(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const [clientsSnapshot, providersSnapshot] = await Promise.all([
+            get(ref(db, 'clients')),
+            get(ref(db, 'service_providers'))
+        ]);
+        
+        if (!clientsSnapshot.exists()) {
+            return { message: "No clients to migrate.", error: false };
+        }
+        if (!providersSnapshot.exists()) {
+            return { message: "Service Providers are not set up. Cannot migrate.", error: true };
+        }
+
+        const allClients: Record<string, Client> = clientsSnapshot.val();
+        const allProviders: Record<string, ServiceProvider> = providersSnapshot.val();
+        
+        const bep20Provider = Object.entries(allProviders).find(([,p]) => p.name === 'BEP20');
+        if (!bep20Provider) {
+            return { message: 'A Service Provider named "BEP20" must exist to perform this migration.', error: true };
+        }
+        const [providerId, providerDetails] = bep20Provider;
+
+        const updates: Record<string, any> = {};
+        let migratedCount = 0;
+
+        for (const clientId in allClients) {
+            const client = allClients[clientId];
+            if (client.bep20_addresses && client.bep20_addresses.length > 0) {
+                const existingServiceProviders = client.serviceProviders || [];
+                
+                const newServiceProviders = client.bep20_addresses.map(address => ({
+                    providerId: providerId,
+                    providerName: providerDetails.name,
+                    providerType: providerDetails.type,
+                    details: { Address: address }
+                }));
+                
+                // Simple merge, could be improved to avoid duplicates if run multiple times
+                const finalProviders = [...existingServiceProviders, ...newServiceProviders];
+                
+                updates[`/clients/${clientId}/serviceProviders`] = finalProviders;
+                updates[`/clients/${clientId}/bep20_addresses`] = null; // Clear old field
+                migratedCount++;
+            }
+        }
+        
+        if (migratedCount > 0) {
+            await update(ref(db), updates);
+            revalidatePath('/clients');
+            return { message: `Successfully migrated BEP20 addresses for ${migratedCount} clients.`, error: false };
+        }
+
+        return { message: "No clients with legacy BEP20 addresses were found.", error: false };
+
+    } catch (e: any) {
+        console.error("BEP20 Migration Error:", e);
+        return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }

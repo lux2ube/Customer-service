@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -16,7 +17,7 @@ import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfW
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, setupInitialClientIdsAndAccounts, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, setupInitialClientIdsAndAccounts, migrateBep20Addresses, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -133,6 +134,13 @@ function AssignSmsIdsForm() {
     const [state, formAction] = useActionState<SetupState, FormData>(assignSequentialSmsIds, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Assignment Failed' : 'Assignment Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={Database} text="Assign SMS IDs" pendingText="Assigning..." /></form>;
+}
+
+function MigrateBep20Form() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(migrateBep20Addresses, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={Users} text="Migrate BEP20 Addresses" pendingText="Migrating..." /></form>;
 }
 
 export default function DashboardPage() {
@@ -328,6 +336,7 @@ export default function DashboardPage() {
                            <MigrateClientIdsForm />
                            <RestructureIdsForm />
                            <SetupClientParentAccountForm />
+                           <MigrateBep20Form />
                         </div>
                     </CardContent>
                 </Card>
