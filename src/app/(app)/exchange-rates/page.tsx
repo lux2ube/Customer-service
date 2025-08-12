@@ -11,10 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast, get } from 'firebase/database';
-import type { FiatRate, CryptoFee, Currency } from '@/lib/types';
+import type { FiatRate, CryptoFee, Currency, Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, PlusCircle, Database, Trash2, DollarSign, Repeat } from 'lucide-react';
+import { Save, PlusCircle, Database, Trash2, Repeat } from 'lucide-react';
 import { updateFiatRates, updateCryptoFees, initializeDefaultCurrencies, addCurrency, deleteCurrency, type RateFormState, type CurrencyFormState } from '@/lib/actions';
 import { RateHistory } from '@/components/rate-history';
 import {
@@ -192,7 +192,7 @@ function CurrencyManager({ currencies }: { currencies: Currency[] }) {
     )
 }
 
-function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<string, Omit<FiatRate, 'currency'>>, currencies: Currency[] }) {
+function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<string, FiatRate>, currencies: Currency[] }) {
     const { toast } = useToast();
     const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
     
@@ -210,8 +210,8 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
         <form action={formAction}>
             <Card>
                 <CardHeader>
-                    <CardTitle>Global Fiat Exchange Rates</CardTitle>
-                    <CardDescription>Define buy/sell rates for Fiat currencies against the base currency (USD). New sections will appear automatically when you add a new fiat currency.</CardDescription>
+                    <CardTitle>Global Fiat Exchange Rates vs USD</CardTitle>
+                    <CardDescription>Define buy/sell rates for Fiat currencies against the base currency (USD). New sections appear automatically when you add a new fiat currency.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {fiatCurrencies.length > 0 ? fiatCurrencies.map(currency => {
@@ -256,6 +256,57 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
         </form>
     );
 }
+
+function CryptoRatesForm({ initialRates, currencies }: { initialRates: Record<string, number>, currencies: Currency[] }) {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
+    
+    React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: "Crypto Rates Saved", description: state.message });
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: "Error", description: state.message });
+        }
+    }, [state, toast]);
+    
+    const cryptoCurrencies = currencies.filter(c => c.type === 'crypto');
+
+    return (
+        <form action={formAction}>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Crypto Exchange Rates vs USD</CardTitle>
+                    <CardDescription>Define the value of each crypto asset relative to 1 USD.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {cryptoCurrencies.length > 0 ? cryptoCurrencies.map(currency => {
+                        const currentRate = initialRates[currency.code] || 1;
+                        return (
+                            <div key={currency.code} className="flex items-center gap-4">
+                                <Label className="w-24">1 {currency.code} =</Label>
+                                <Input 
+                                    name={currency.code} 
+                                    type="number" 
+                                    step="any" 
+                                    defaultValue={currentRate} 
+                                    required 
+                                    className="max-w-xs"
+                                />
+                                <Label>USD</Label>
+                            </div>
+                        )
+                    }) : (
+                        <p className="text-sm text-muted-foreground text-center p-4">No crypto currencies configured.</p>
+                    )}
+                </CardContent>
+                <CardFooter>
+                    <SubmitButton disabled={cryptoCurrencies.length === 0}><Save className="mr-2 h-4 w-4"/>Save Crypto Rates</SubmitButton>
+                </CardFooter>
+            </Card>
+        </form>
+    );
+}
+
 
 function CryptoFeesForm({ initialFees }: { initialFees?: CryptoFee }) {
     const { toast } = useToast();
@@ -306,35 +357,17 @@ function CryptoFeesForm({ initialFees }: { initialFees?: CryptoFee }) {
     );
 }
 
-function CryptoRatesInfo() {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Crypto Exchange Rates</CardTitle>
-                <CardDescription>The system operates with a fixed 1:1 rate for USDT to USD.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center justify-center p-6 bg-muted rounded-md">
-                    <div className="flex items-center gap-4 text-xl font-semibold">
-                         <span className="flex items-center gap-2"><DollarSign className="h-5 w-5 text-green-500"/> USDT</span>
-                         <Repeat className="h-5 w-5 text-muted-foreground"/>
-                         <span className="flex items-center gap-2"><DollarSign className="h-5 w-5 text-blue-500"/> USD</span>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
 
 export default function ExchangeRatesPage() {
-    const [fiatRates, setFiatRates] = React.useState<Record<string, Omit<FiatRate, 'currency'>>>({});
+    const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
+    const [cryptoRates, setCryptoRates] = React.useState<Record<string, number>>({});
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | undefined>(undefined);
     const [currencies, setCurrencies] = React.useState<Currency[]>([]);
     const [loading, setLoading] = React.useState(true);
     
     React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+        const cryptoRatesRef = query(ref(db, 'rate_history/crypto_rates'), orderByChild('timestamp'), limitToLast(1));
         const cryptoFeesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
         const currenciesRef = ref(db, 'settings/currencies');
 
@@ -346,6 +379,14 @@ export default function ExchangeRatesPage() {
                 setFiatRates(lastEntry.rates || {});
             } else {
                 setFiatRates({});
+            }
+        });
+
+        const unsubCryptoRates = onValue(cryptoRatesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const lastEntryKey = Object.keys(data)[0];
+                setCryptoRates(data[lastEntryKey].rates || {});
             }
         });
 
@@ -365,6 +406,7 @@ export default function ExchangeRatesPage() {
 
         Promise.all([
             get(fiatRatesRef),
+            get(cryptoRatesRef),
             get(cryptoFeesRef),
             get(currenciesRef)
         ]).then(() => setLoading(false))
@@ -375,6 +417,7 @@ export default function ExchangeRatesPage() {
 
         return () => {
             unsubFiat();
+            unsubCryptoRates();
             unsubCrypto();
             unsubCurrencies();
         };
@@ -404,7 +447,7 @@ export default function ExchangeRatesPage() {
             <div className="grid lg:grid-cols-2 gap-6 items-start">
                 <div className="space-y-6">
                     <CurrencyManager currencies={currencies} />
-                    <CryptoRatesInfo />
+                    <CryptoRatesForm initialRates={cryptoRates} currencies={currencies} />
                     <CryptoFeesForm initialFees={cryptoFees} />
                 </div>
                 <div className="space-y-6">
