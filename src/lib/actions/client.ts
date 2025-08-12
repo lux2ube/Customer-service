@@ -353,7 +353,6 @@ export async function importClients(prevState: ImportState, formData: FormData):
                 name: name,
                 phone: [phoneNumber],
                 verification_status: 'Active',
-                review_flags: [],
                 createdAt: new Date(dateOfAddition).toISOString(),
             };
             

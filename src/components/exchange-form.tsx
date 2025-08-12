@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import { Separator } from './ui/separator';
+import { searchClients } from '@/lib/actions';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -38,34 +39,79 @@ function SubmitButton() {
     );
 }
 
-function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void }) {
-    const [open, setOpen] = React.useState(false);
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null, onSelect: (client: Client | null) => void }) {
+    const [open, setIsOpen] = React.useState(false);
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        setInputValue(selectedClient?.name || '');
+    }, [selectedClient]);
+
+    React.useEffect(() => {
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        debounceTimeoutRef.current = setTimeout(async () => {
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
+            setIsLoading(false);
+            if (results.length > 0) {
+              setIsOpen(true);
+            }
+        }, 300);
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
+    
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        setIsOpen(false);
+        setInputValue(client.name);
+    };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                    {selectedClientId ? clients.find(c => c.id === selectedClientId)?.name : "Select a client..."}
+                    {selectedClient ? selectedClient.name : "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
-                    <CommandInput placeholder="Search clients..." />
+                    <CommandInput
+                        placeholder="Search client by name or phone..."
+                        value={inputValue}
+                        onValueChange={setInputValue}
+                    />
                     <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
-                            {clients.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={client.name}
-                                    onSelect={() => {
-                                        onSelect(client.id);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClientId === client.id ? "opacity-100" : "opacity-0")} />
-                                    {client.name}
+                            {searchResults.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -78,6 +124,7 @@ function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Clie
 
 export function ExchangeForm({ clients, accounts }: { clients: Client[], accounts: Account[] }) {
     const { toast } = useToast();
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
 
     return (
         <form>
@@ -164,7 +211,7 @@ export function ExchangeForm({ clients, accounts }: { clients: Client[], account
                     <div className="grid md:grid-cols-3 gap-4">
                         <div className="space-y-2 md:col-span-1">
                             <Label>Client</Label>
-                            <ClientSelector clients={clients} selectedClientId="" onSelect={() => {}} />
+                            <ClientSelector selectedClient={selectedClient} onSelect={setSelectedClient} />
                         </div>
                         <div className="space-y-2">
                             <Label>Exchange Rate</Label>

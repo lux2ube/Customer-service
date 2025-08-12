@@ -184,7 +184,7 @@ function SendForm() {
                 <CardContent className="space-y-4">
                      <div className="space-y-2">
                         <Label htmlFor="client">Client</Label>
-                        <ClientSelector onSelect={handleClientSelect} />
+                        <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
                     </div>
 
                     <div className="space-y-2">
@@ -239,21 +239,19 @@ function SendForm() {
     );
 }
 
-function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
-    const [inputValue, setInputValue] = React.useState("");
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-
-    const lastSelectedName = React.useRef<string | null>(null);
 
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        if (inputValue === lastSelectedName.current) {
-            return;
-        }
+        setInputValue(selectedClient?.name || '');
+    }, [selectedClient]);
 
+    React.useEffect(() => {
         if (inputValue.length < 2) {
             setSearchResults([]);
             return;
@@ -268,9 +266,6 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
             const results = await searchClients(inputValue);
             setSearchResults(results);
             setIsLoading(false);
-            if(results.length > 0) {
-              setIsOpen(true);
-            }
         }, 300);
 
         return () => {
@@ -284,43 +279,28 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         onSelect(client);
         setIsOpen(false);
         setInputValue(client.name);
-        lastSelectedName.current = client.name;
     };
-
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
     
-    const handlePaste = async () => {
-        const text = await navigator.clipboard.readText();
-        setInputValue(text);
-    };
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <div className="relative">
-                     <Input
-                        placeholder="Search client by name, phone, or paste address..."
-                        value={inputValue}
-                        onChange={(e) => {
-                            setInputValue(e.target.value);
-                            lastSelectedName.current = null;
-                        }}
-                        className="pr-10"
-                    />
-                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
-                        <ClipboardPaste className="h-4 w-4" />
-                    </Button>
-                </div>
+                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+                    {selectedClient ? selectedClient.name : "Select client..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
+                    <CommandInput placeholder="Search client by name or phone..." value={inputValue} onValueChange={setInputValue} />
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
                         {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
-                                    <Check className={cn("mr-2 h-4 w-4", inputValue === client.name ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { Save, Loader2, Check, ChevronsUpDown, ClipboardPaste } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, CashPayment } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createCashPayment, type CashPaymentFormState } from '@/lib/actions';
+import { createCashPayment, type CashPaymentFormState, searchClients } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
@@ -40,34 +40,81 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
     );
 }
 
-function ClientSelector({ clients, selectedClientId, onSelect, disabled }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void, disabled?: boolean }) {
-    const [open, setOpen] = React.useState(false);
+function ClientSelector({ selectedClient, onSelect, disabled }: { selectedClient: Client | null, onSelect: (client: Client | null) => void, disabled?: boolean }) {
+    const [open, setIsOpen] = React.useState(false);
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        setInputValue(selectedClient?.name || '');
+    }, [selectedClient]);
+
+    React.useEffect(() => {
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        debounceTimeoutRef.current = setTimeout(async () => {
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
+            setIsLoading(false);
+            if (results.length > 0) {
+              setIsOpen(true);
+            }
+        }, 300);
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
+    
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        setIsOpen(false);
+        setInputValue(client.name);
+    };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
-                    {selectedClientId ? clients.find(c => c.id === selectedClientId)?.name : "Select a client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <div className="relative w-full">
+                    <Command>
+                        <CommandInput
+                            placeholder="Search client by name or phone..."
+                            value={inputValue}
+                            onValueChange={setInputValue}
+                            className="pr-10"
+                            disabled={disabled}
+                        />
+                    </Command>
+                </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
-                    <CommandInput placeholder="Search clients..." />
                     <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
-                            {clients.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={client.name}
-                                    onSelect={() => {
-                                        onSelect(client.id);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClientId === client.id ? "opacity-100" : "opacity-0")} />
-                                    {client.name}
+                            {searchResults.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -85,7 +132,7 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
     const actionWithId = createCashPayment.bind(null, payment?.id || null);
     const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [selectedClientId, setSelectedClientId] = React.useState(payment?.clientId || '');
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === payment?.clientId) || null);
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(payment?.bankAccountId || '');
     const [amount, setAmount] = React.useState<string | number>(payment?.amount || '');
     const [amountUsd, setAmountUsd] = React.useState<number>(payment?.amountUsd || 0);
@@ -141,7 +188,7 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
                 router.push('/cash-payments');
             } else {
                 formRef.current?.reset();
-                setSelectedClientId('');
+                setSelectedClient(null);
                 setSelectedBankAccountId('');
                 setAmount('');
             }
@@ -195,8 +242,8 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
 
                     <div className="space-y-2">
                         <Label htmlFor="clientId">Debit from Client Account</Label>
-                         <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} disabled={isEditing} />
-                        <input type="hidden" name="clientId" value={selectedClientId} />
+                         <ClientSelector selectedClient={selectedClient} onSelect={setSelectedClient} disabled={isEditing} />
+                        <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
