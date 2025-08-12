@@ -32,7 +32,7 @@ const UsdtManualReceiptSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createUsdtManualReceipt(prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
+export async function createQuickUsdtReceipt(prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
     const validatedFields = UsdtManualReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {

@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
+import { createQuickUsdtReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { format } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
@@ -71,7 +71,7 @@ function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Clie
 export function UsdtManualReceiptForm({ clients, cryptoWallets }: { clients: Client[], cryptoWallets: Account[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createUsdtManualReceipt, undefined);
+    const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createQuickUsdtReceipt, undefined);
     
     const [date, setDate] = React.useState<Date | undefined>(new Date());
     const [selectedClientId, setSelectedClientId] = React.useState('');
