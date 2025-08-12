@@ -559,3 +559,38 @@ export async function restructureRecordIds(prevState: SetupState, formData: Form
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }
+
+export async function deleteBscSyncedRecords(): Promise<{ message: string; error: boolean }> {
+    try {
+        const recordsRef = ref(db, 'modern_usdt_records');
+        const snapshot = await get(recordsRef);
+
+        if (!snapshot.exists()) {
+            return { message: "No records to delete.", error: false };
+        }
+
+        const updates: { [key: string]: null } = {};
+        let deletedCount = 0;
+
+        snapshot.forEach(childSnapshot => {
+            const record: ModernUsdtRecord = childSnapshot.val();
+            if (record.source === 'BSCScan') {
+                updates[`/modern_usdt_records/${childSnapshot.key}`] = null;
+                deletedCount++;
+            }
+        });
+
+        // Also reset the counter
+        updates['/counters/usdtRecordId' as any] = 0 as any;
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+        
+        revalidatePath('/modern-usdt-records');
+        return { message: `Successfully deleted ${deletedCount} synced records and reset the counter.`, error: false };
+    } catch (e: any) {
+        console.error("Error deleting synced records:", e);
+        return { message: `An error occurred: ${e.message}`, error: true };
+    }
+}

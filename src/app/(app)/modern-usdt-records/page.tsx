@@ -4,18 +4,29 @@
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ModernUsdtRecordsTable } from "@/components/modern-usdt-records-table";
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, type SyncState } from '@/lib/actions';
+import { syncBscTransactions, type SyncState, deleteBscSyncedRecords } from '@/lib/actions';
 import type { BscApiSetting } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 
 function SyncBscButton() {
     const { pending } = useFormStatus();
@@ -86,6 +97,44 @@ function SyncBscForm() {
     );
 }
 
+function DeleteSyncedRecordsButton() {
+    const { toast } = useToast();
+    const [dialogOpen, setDialogOpen] = React.useState(false);
+    
+    const handleDelete = async () => {
+        const result = await deleteBscSyncedRecords();
+        if (result.error) {
+            toast({ title: "Error", description: result.message, variant: "destructive" });
+        } else {
+            toast({ title: "Success", description: result.message });
+        }
+        setDialogOpen(false);
+    }
+
+    return (
+        <>
+        <Button variant="destructive" onClick={() => setDialogOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Synced Records
+        </Button>
+        <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will delete ALL records synced from BSCScan and reset the USDT record ID counter to 0. This cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>Confirm & Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        </>
+    )
+}
+
 export default function ModernUsdtRecordsPage() {
     return (
         <>
@@ -95,6 +144,7 @@ export default function ModernUsdtRecordsPage() {
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <SyncBscForm />
+                    <DeleteSyncedRecordsButton />
                      <Button asChild>
                         <Link href="/financial-records/usdt-manual-receipt">
                             <ArrowDownToLine className="mr-2 h-4 w-4" />
