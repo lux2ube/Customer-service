@@ -50,14 +50,6 @@ function ApiSettingsForm({ initialSettings }: { initialSettings: Settings }) {
                         <Label htmlFor="gemini_api_key">Gemini API Key</Label>
                         <Input id="gemini_api_key" name="gemini_api_key" type="password" placeholder="Your Google AI Gemini API Key" defaultValue={initialSettings?.gemini_api_key || ''} />
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="bsc_api_key">BscScan API Key</Label>
-                        <Input id="bsc_api_key" name="bsc_api_key" type="password" placeholder="Your BscScan API Key" defaultValue={initialSettings?.bsc_api_key || ''} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="bsc_wallet_address">USDT Wallet Address (BSC)</Label>
-                        <Input id="bsc_wallet_address" name="bsc_wallet_address" type="text" placeholder="0x..." defaultValue={initialSettings?.bsc_wallet_address || ''} />
-                    </div>
                 </CardContent>
                 <CardFooter>
                     <SubmitButton><Save className="mr-2 h-4 w-4"/>Save API Settings</SubmitButton>

@@ -222,3 +222,17 @@ Stores atomic counters for generating sequential IDs.
 -   **/`globalRecordId`**: `number` - The last used ID for any new financial record.
 -   **/`modernCashRecordId`**: `number` - The last used ID for the modern cash records ledger.
 -   **/`usdtRecordId`**: `number` - The last used ID for the modern USDT records ledger.
+-   **/`bscApiId`**: `number` - The last used ID for BSC API configurations.
+
+---
+
+### 14. `/bsc_apis/{apiId}`
+
+Stores configurations for different BSCScan APIs and wallets to sync.
+
+-   **`id`**: `string` - The unique ID for the API configuration (e.g., "BSC1").
+-   **`name`**: `string` - A display name for this configuration (e.g., "Main Binance Wallet").
+-   **`apiKey`**: `string` - The BSCScan API key.
+-   **`walletAddress`**: `string` - The BSC wallet address to sync.
+-   **`accountId`**: `string` - The ID of the internal account from `/accounts` this wallet is linked to.
+-   **`createdAt`**: `string` (ISO 8601) - The timestamp when the configuration was added.

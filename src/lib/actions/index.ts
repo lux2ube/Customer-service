@@ -13,3 +13,4 @@ export * from './wallet';
 export * from './document';
 export * from './service-provider';
 export * from './financial-records';
+export * from './bsc';

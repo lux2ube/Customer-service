@@ -231,8 +231,6 @@ export interface JournalEntry {
 
 export interface Settings {
     // These are now under /api
-    bsc_api_key?: string;
-    bsc_wallet_address?: string;
     gemini_api_key?: string;
 }
 
@@ -350,7 +348,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record' | 'modern_usdt_record';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record' | 'modern_usdt_record' | 'bsc_api';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;
@@ -371,4 +369,13 @@ export interface TransactionFlag {
   name: string;
   color: string;
   description?: string;
+}
+
+export interface BscApiSetting {
+    id: string;
+    name: string;
+    apiKey: string;
+    walletAddress: string;
+    accountId: string;
+    createdAt: string;
 }

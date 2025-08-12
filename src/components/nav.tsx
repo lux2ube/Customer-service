@@ -38,6 +38,7 @@ import {
   Sparkles,
   Book,
   DollarSign,
+  Plug,
 } from 'lucide-react';
 
 const menuItems = [
@@ -70,6 +71,7 @@ const menuItems = [
   { type: 'divider', label: 'النظام' },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
+  { href: '/settings/bsc-apis', label: 'BSC API Settings', icon: Plug },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },
   { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
