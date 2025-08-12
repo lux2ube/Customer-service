@@ -1,3 +1,4 @@
+
 # Firebase Realtime Database Structure
 
 This document outlines the data structure used in the Firebase Realtime Database for this application.
@@ -8,7 +9,31 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 1. `/accounts/{accountId}`
+### 1. `/modern_cash_records/{recordId}`
+
+**Primary store for all cash-based transactions (inflows and outflows).** This is the new, unified ledger for cash movements, replacing the separate `cash_receipts` and parts of the `sms_transactions` paths. `{recordId}` is a sequential number.
+
+-   **`id`**: `string` - The unique, sequential ID for the record (e.g., "1001", "1002").
+-   **`date`**: `string` (ISO 8601) - The date of the transaction.
+-   **`type`**: `'inflow' | 'outflow'` - Whether the transaction is money coming in or going out.
+-   **`source`**: `'Manual' | 'SMS'` - The origin of the record.
+-   **`status`**: `'Pending' | 'Matched' | 'Used' | 'Cancelled'` - The lifecycle status of the record.
+-   **`clientId`**: `string | null` - The ID of the client associated with the record (can be null if unmatched).
+-   **`clientName`**: `string | null` - Denormalized client name for display.
+-   **`accountId`**: `string` - The ID of the internal bank/cash account affected.
+-   **`accountName`**: `string` - Denormalized account name for display.
+-   **`senderName`**: `string` (for inflows) - The name of the person/entity sending the money.
+-   **`recipientName`**: `string` (for outflows) - The name of the person/entity receiving the money.
+-   **`amount`**: `number` - The amount in the native currency of the account.
+-   **`currency`**: `string` - The currency code (e.g., 'YER', 'SAR').
+-   **`amountUsd`**: `number` - The calculated USD value of the transaction.
+-   **`notes`**: `string` (optional) - Any additional notes.
+-   **`rawSms`**: `string` (optional, for `source: 'SMS'`) - The original text of the SMS.
+-   **`createdAt`**: `string` (ISO 8601) - The timestamp when the record was created.
+
+---
+
+### 2. `/accounts/{accountId}`
 
 Stores the Chart of Accounts records. Each record can be a group (like "Assets") or a postable account (like "Cash - YER").
 
@@ -22,7 +47,7 @@ Stores the Chart of Accounts records. Each record can be a group (like "Assets")
 
 ---
 
-### 2. `/blacklist/{pushId}`
+### 3. `/blacklist/{pushId}`
 
 Stores a list of identifiers that should be flagged during data entry.
 
@@ -33,7 +58,7 @@ Stores a list of identifiers that should be flagged during data entry.
 
 ---
 
-### 3. `/clients/{clientId}`
+### 4. `/clients/{clientId}`
 
 Stores all customer information. After the initial migration, `{clientId}` is a sequential number starting from `1000001`.
 
@@ -52,7 +77,7 @@ Stores all customer information. After the initial migration, `{clientId}` is a 
 
 ---
 
-### 4. `/journal_entries/{pushId}`
+### 5. `/journal_entries/{pushId}`
 
 Stores all double-entry bookkeeping records, forming the general ledger.
 
@@ -67,7 +92,7 @@ Stores all double-entry bookkeeping records, forming the general ledger.
 
 ---
 
-### 5. `/logs/{pushId}`
+### 6. `/logs/{pushId}`
 
 An audit trail of important actions performed in the system.
 
@@ -81,7 +106,7 @@ An audit trail of important actions performed in the system.
 
 ---
 
-### 6. `/rate_history`
+### 7. `/rate_history`
 
 A log of all changes to exchange rates and fees.
 
@@ -97,7 +122,7 @@ A log of all changes to exchange rates and fees.
 
 ---
 
-### 7. `/send_requests/{pushId}`
+### 8. `/send_requests/{pushId}`
 
 A log of USDT sending requests made from the internal wallet.
 
@@ -110,9 +135,9 @@ A log of USDT sending requests made from the internal wallet.
 
 ---
 
-### 8. `/sms_transactions/{pushId}`
+### 9. `/sms_transactions/{pushId}` (Legacy)
 
-Stores records created from parsing incoming SMS messages. These are temporary records that get used up when linked to a formal transaction.
+Stores records created from parsing incoming SMS messages. **This path is being phased out in favor of `/modern_cash_records`**. New SMS messages will no longer be stored here.
 
 -   **`client_name`**: `string` - The name of the person parsed from the SMS text.
 -   **`account_id`**: `string` - The ID of the bank account that received the SMS.
@@ -127,7 +152,7 @@ Stores records created from parsing incoming SMS messages. These are temporary r
 
 ---
 
-### 9. `/transactions/{transactionId}`
+### 10. `/transactions/{transactionId}`
 
 The primary record for all financial trades (buy/sell USDT). This record ties together clients, funds (from cash receipts or SMS), and financial details.
 
@@ -141,7 +166,7 @@ The primary record for all financial trades (buy/sell USDT). This record ties to
 -   **`fee_usd`**: `number` - The fee charged in USD.
 -   **`amount_usdt`**: `number` - The final amount of USDT transferred.
 -   **`status`**: `string` - The transaction status ('Pending', 'Confirmed', 'Cancelled').
--   **`linkedSmsId`**: `string` (optional) - A comma-separated list of IDs from `/cash_receipts` or `/sms_transactions` that fund this transaction.
+-   **`linkedSmsId`**: `string` (optional) - A comma-separated list of IDs from `/modern_cash_records` that fund this transaction.
 -   **`hash`**: `string` (optional) - The blockchain transaction hash.
 -   **`client_wallet_address`**: `string` (optional) - The client's BEP20 address for the transfer.
 -   **`notes`**: `string` (optional) - Any additional notes.
@@ -150,7 +175,7 @@ The primary record for all financial trades (buy/sell USDT). This record ties to
 
 ---
 
-### 10. `/usdt_receipts/{recordId}`
+### 11. `/usdt_receipts/{recordId}`
 
 A manually recorded receipt of USDT from a client.
 
@@ -169,8 +194,9 @@ A manually recorded receipt of USDT from a client.
 
 ---
 
-### 11. `/counters`
+### 12. `/counters`
 
 Stores atomic counters for generating sequential IDs.
 
 -   **/`globalRecordId`**: `number` - The last used ID for any new financial record.
+-   **/`modernCashRecordId`**: `number` - The last used ID for the modern cash records ledger.

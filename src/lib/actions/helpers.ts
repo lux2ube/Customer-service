@@ -130,13 +130,13 @@ export async function sendTelegramPhoto(photoUrl: string, caption: string) {
 }
 
 // --- Shared Helper for Sequential IDs ---
-export async function getNextSequentialId(): Promise<number> {
-    const counterRef = ref(db, 'counters/globalRecordId');
+export async function getNextSequentialId(counterName: 'globalRecordId' | 'modernCashRecordId'): Promise<string> {
+    const counterRef = ref(db, `counters/${counterName}`);
     const result = await runTransaction(counterRef, (currentValue) => {
-        return (currentValue || 0) + 1;
+        return (currentValue || 1000) + 1; // Start from 1001
     });
     if (!result.committed) {
-        throw new Error("Failed to get next sequential ID.");
+        throw new Error(`Failed to get next sequential ID from counter: ${counterName}.`);
     }
-    return result.snapshot.val();
+    return String(result.snapshot.val());
 }

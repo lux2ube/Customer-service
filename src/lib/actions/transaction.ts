@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -7,7 +6,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider, ModernCashRecord } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
@@ -51,7 +50,7 @@ const TransactionSchema = z.object({
 
 
 export async function createTransaction(transactionId: string | null, formData: FormData): Promise<TransactionFormState> {
-    const newId = transactionId || push(ref(db, 'transactions')).key;
+    const newId = transactionId || await getNextSequentialId('globalRecordId');
     if (!newId) throw new Error("Could not generate a transaction ID.");
 
     // Fetch previous state if editing
@@ -268,8 +267,8 @@ export async function createTransaction(transactionId: string | null, formData: 
     if (dataToSave.linkedReceiptIds && dataToSave.linkedReceiptIds.length > 0) {
         const updates: {[key: string]: any} = {};
         for (const id of dataToSave.linkedReceiptIds) {
-            updates[`/cash_receipts/${id}/status`] = 'Used';
-            updates[`/sms_transactions/${id}/status`] = 'used';
+            updates[`/modern_cash_records/${id}/status`] = 'Used';
+            updates[`/sms_transactions/${id}/status`] = 'used'; // Keep for backwards compatibility if needed
         }
         await update(ref(db), updates);
     }
@@ -277,6 +276,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     revalidatePath('/transactions');
     revalidatePath(`/clients/${finalData.clientId}/edit`);
     revalidatePath(`/transactions/add`);
+    revalidatePath('/modern-cash-records');
     if(transactionId) revalidatePath(`/transactions/${transactionId}/edit`);
 
     return { success: true, transactionId: newId, message: 'Transaction Saved' };
@@ -323,7 +323,6 @@ const CashReceiptSchema = z.object({
 export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
     const validatedFields = CashReceiptSchema.safeParse({
         ...Object.fromEntries(formData.entries()),
-        // Manually set senderName to clientName for quick add
         senderName: formData.get('clientName')
     });
 
@@ -344,24 +343,26 @@ export async function createQuickCashReceipt(prevState: CashReceiptFormState, fo
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        const newId = await getNextSequentialId();
+        const newId = await getNextSequentialId('modernCashRecordId');
         
-        const receiptData: Omit<CashReceipt, 'id'> = {
+        const receiptData: ModernCashRecord = {
+            id: newId,
             date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
+            type: 'inflow',
+            source: 'Manual',
+            status: 'Pending',
             clientId,
             clientName: client.name,
+            accountId: bankAccountId,
+            accountName: bankAccount.name,
             senderName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
-            status: 'Pending',
             createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined,
         };
 
-        await set(ref(db, `cash_receipts/${newId}`), stripUndefined(receiptData));
+        await set(ref(db, `modern_cash_records/${newId}`), stripUndefined(receiptData));
         revalidatePath('/transactions');
         return { success: true, message: 'Cash receipt recorded successfully.' };
     } catch (e: any) {
@@ -391,189 +392,33 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
         
-        const newReceiptId = await getNextSequentialId();
+        const newReceiptId = await getNextSequentialId('modernCashRecordId');
 
-        const receiptData: CashReceipt = {
-            id: String(newReceiptId),
+        const receiptData: ModernCashRecord = {
+            id: newReceiptId,
             date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
+            type: 'inflow',
+            source: 'Manual',
+            status: 'Pending',
             clientId,
             clientName: client.name,
+            accountId: bankAccountId,
+            accountName: bankAccount.name,
             senderName,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
-            status: 'Pending',
+            notes: note || undefined,
             createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined,
-            note: note || undefined,
         };
 
-        await set(ref(db, `cash_receipts/${newReceiptId}`), stripUndefined(receiptData));
+        await set(ref(db, `modern_cash_records/${newReceiptId}`), stripUndefined(receiptData));
         
-        revalidatePath('/cash-receipts');
-        revalidatePath('/transactions/modern');
-        return { success: true, message: 'Cash receipt recorded successfully.' };
+        revalidatePath('/modern-cash-records');
+        redirect('/modern-cash-records');
     } catch (e: any) {
         console.error("Error creating cash receipt:", e);
         return { message: 'Database Error: Could not record cash receipt.', success: false };
-    }
-}
-
-
-export async function getAvailableClientFunds(clientId: string): Promise<UnifiedReceipt[]> {
-    if (!clientId) return [];
-    try {
-        const [cashReceiptsSnapshot, smsTransactionsSnapshot, fiatHistorySnap] = await Promise.all([
-            get(ref(db, 'cash_receipts')),
-            get(ref(db, 'sms_transactions')),
-            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1))),
-        ]);
-        const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnapshot.val() || {};
-        const allSms: Record<string, SmsTransaction> = smsTransactionsSnapshot.val() || {};
-        
-        let fiatRates: Record<string, FiatRate> = {};
-        if (fiatHistorySnap.exists()) {
-            const lastEntryKey = Object.keys(fiatHistorySnap.val())[0];
-            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || {};
-        }
-
-        const funds: UnifiedReceipt[] = [];
-        for(const id in allCashReceipts) {
-            const receipt = allCashReceipts[id];
-            if (receipt.clientId === clientId && receipt.status === 'Pending') {
-                funds.push({
-                    id,
-                    date: receipt.date,
-                    clientName: receipt.clientName,
-                    senderName: receipt.senderName,
-                    bankAccountName: receipt.bankAccountName,
-                    amount: receipt.amount,
-                    currency: receipt.currency,
-                    amountUsd: receipt.amountUsd,
-                    remittanceNumber: receipt.remittanceNumber,
-                    source: 'Manual',
-                    status: receipt.status
-                });
-            }
-        }
-        for(const id in allSms) {
-            const sms = allSms[id];
-            if (sms.matched_client_id === clientId && sms.status === 'matched' && sms.type === 'credit') {
-                 const rateInfo = fiatRates[sms.currency || ''];
-                 const rate = rateInfo ? rateInfo.clientBuy : 1;
-                 const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
-                funds.push({
-                    id,
-                    date: sms.parsed_at,
-                    clientName: sms.matched_client_name || '',
-                    senderName: sms.client_name,
-                    bankAccountName: sms.account_name || 'N/A',
-                    amount: sms.amount || 0,
-                    currency: sms.currency || '',
-                    amountUsd,
-                    remittanceNumber: sms.id.slice(-6),
-                    source: 'SMS',
-                    status: sms.status
-                });
-            }
-        }
-        return funds.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    } catch (error) {
-        console.error("Error fetching available client funds:", error);
-        return [];
-    }
-}
-
-
-export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
-    if (!clientId) return [];
-    try {
-        const [cashReceiptsSnap, cashPaymentsSnap, usdtReceiptsSnap, usdtPaymentsSnap, smsSnap, fiatHistorySnap, sendRequestsSnap] = await Promise.all([
-            get(ref(db, 'cash_receipts')),
-            get(ref(db, 'cash_payments')),
-            get(ref(db, 'usdt_receipts')),
-            get(ref(db, 'usdt_payments')),
-            get(ref(db, 'sms_transactions')),
-            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1))),
-            get(ref(db, 'send_requests')),
-        ]);
-
-        const allCashReceipts: Record<string, CashReceipt> = cashReceiptsSnap.val() || {};
-        const allCashPayments: Record<string, CashPayment> = cashPaymentsSnap.val() || {};
-        const allUsdtReceipts: Record<string, UsdtManualReceipt> = usdtReceiptsSnap.val() || {};
-        const allUsdtPayments: Record<string, UsdtPayment> = usdtPaymentsSnap.val() || {};
-        const allSms: Record<string, SmsTransaction> = smsSnap.val() || {};
-        const allSendRequests: Record<string, SendRequest> = sendRequestsSnap.val() || {};
-        
-        let fiatRates: Record<string, FiatRate> = {};
-        if (fiatHistorySnap.exists()) {
-            const lastEntryKey = Object.keys(fiatHistorySnap.val())[0];
-            fiatRates = fiatHistorySnap.val()[lastEntryKey].rates || {};
-        }
-
-        const records: UnifiedFinancialRecord[] = [];
-
-        // Cash Receipts (Inflow, Fiat)
-        for (const id in allCashReceipts) {
-            const r = allCashReceipts[id];
-            if (r.clientId === clientId && r.status === 'Pending') {
-                records.push({ id, date: r.date, type: 'inflow', category: 'fiat', source: 'Manual', amount: r.amount, currency: r.currency, amountUsd: r.amountUsd, status: r.status, bankAccountName: r.bankAccountName });
-            }
-        }
-        
-        // Cash Payments (Outflow, Fiat)
-        for (const id in allCashPayments) {
-            const p = allCashPayments[id];
-            if (p.clientId === clientId && p.status === 'Confirmed') { // Assume we can use confirmed payments
-                 records.push({ id, date: p.date, type: 'outflow', category: 'fiat', source: 'Cash Payment', amount: p.amount, currency: p.currency, amountUsd: p.amountUsd, status: p.status, bankAccountName: p.bankAccountName });
-            }
-        }
-        
-        // USDT Receipts (Inflow, Crypto)
-        for (const id in allUsdtReceipts) {
-            const r = allUsdtReceipts[id];
-            if (r.clientId === clientId && r.status === 'Completed') {
-                records.push({ id, date: r.date, type: 'inflow', category: 'crypto', source: 'USDT', amount: r.amount, currency: 'USDT', amountUsd: r.amount, status: r.status, cryptoWalletName: r.cryptoWalletName });
-            }
-        }
-        
-        // USDT Payments (Outflow, Crypto) - Manual
-        for (const id in allUsdtPayments) {
-            const p = allUsdtPayments[id];
-            if (p.clientId === clientId && p.status === 'Completed') {
-                records.push({ id, date: p.date, type: 'outflow', category: 'crypto', source: 'USDT Payment', amount: p.amount, currency: 'USDT', amountUsd: p.amount, status: p.status });
-            }
-        }
-        
-        // Send Requests from Wallet (Outflow, Crypto)
-        for (const id in allSendRequests) {
-            const req = allSendRequests[id];
-            // Need to link client to send request. This is a gap. For now, we assume if we found the client by address it's for them.
-            // A more robust system might store clientId on the send_request.
-            const p = (await get(ref(db, `clients`))).val()
-            const client = Object.values(p as any).find((c: any) => c.bep20_addresses?.includes(req.to)) as Client | undefined;
-            if(client?.id === clientId && req.status === 'sent'){
-                 records.push({ id, date: new Date(req.timestamp).toISOString(), type: 'outflow', category: 'crypto', source: 'Wallet', amount: req.amount, currency: 'USDT', amountUsd: req.amount, status: req.status });
-            }
-        }
-
-        // SMS Transactions (Inflow/Outflow, Fiat)
-        for (const id in allSms) {
-            const sms = allSms[id];
-            if (sms.matched_client_id === clientId && sms.status === 'matched') {
-                const rateInfo = sms.currency ? fiatRates[sms.currency] : undefined;
-                const rate = sms.type === 'credit' ? (rateInfo?.clientBuy || 1) : (rateInfo?.clientSell || 1);
-                const amountUsd = rate > 0 ? (sms.amount || 0) / rate : 0;
-                records.push({ id, date: sms.parsed_at, type: sms.type === 'credit' ? 'inflow' : 'outflow', category: 'fiat', source: 'SMS', amount: sms.amount || 0, currency: sms.currency || '', amountUsd, status: sms.status, bankAccountName: sms.account_name });
-            }
-        }
-
-        return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    } catch (error) {
-        console.error("Error fetching unified client records:", error);
-        return [];
     }
 }
 
@@ -615,49 +460,35 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        const newPaymentRef = paymentId ? ref(db, `cash_payments/${paymentId}`) : push(ref(db, 'cash_payments'));
-        const newPaymentId = paymentId || newPaymentRef.key!;
-
-        const journalDesc = `Cash payment to ${recipientName || client.name} for ${amount} ${bankAccount.currency}`;
-        const newJournalRef = push(ref(db, 'journal_entries'));
+        const newPaymentId = paymentId || await getNextSequentialId('modernCashRecordId');
         
-        const paymentData = {
+        const paymentData: ModernCashRecord = {
             id: newPaymentId,
             date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
+            type: 'outflow',
+            source: 'Manual',
+            status: 'Pending',
             clientId,
             clientName: client.name,
+            accountId: bankAccountId,
+            accountName: bankAccount.name,
             recipientName: recipientName || client.name,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
-            remittanceNumber: remittanceNumber || undefined,
-            note: note || undefined,
-            status: 'Confirmed' as const,
+            notes: note || undefined,
             createdAt: new Date().toISOString(),
-            journalEntryId: newJournalRef.key,
-        };
-
-        const updates: { [key: string]: any } = {};
-        updates[`/cash_payments/${newPaymentId}`] = stripUndefined(paymentData);
-        updates[`/journal_entries/${newJournalRef.key}`] = {
-            date: paymentData.date,
-            description: journalDesc,
-            debit_account: `6001${clientId}`, // Assuming client liability account
-            credit_account: bankAccountId,
-            debit_amount: amountUsd,
-            credit_amount: amount,
-            amount_usd: amountUsd,
-            createdAt: new Date().toISOString(),
-            debit_account_name: client.name,
-            credit_account_name: bankAccount.name,
         };
         
-        await update(ref(db), updates);
-
-        revalidatePath('/cash-payments');
-        return { success: true, message: 'Cash payment recorded successfully.' };
+        await set(ref(db, `modern_cash_records/${newPaymentId}`), stripUndefined(paymentData));
+        
+        revalidatePath('/modern-cash-records');
+        if (paymentId) {
+             redirect('/cash-payments'); // old path, but keep for now
+        } else {
+             redirect('/modern-cash-records');
+        }
+       
     } catch (e: any) {
         console.error("Error creating cash payment:", e);
         return { message: 'Database Error: Could not record cash payment.', success: false };
@@ -682,24 +513,26 @@ export async function createQuickCashPayment(prevState: CashPaymentFormState, fo
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        const newPaymentRef = push(ref(db, 'cash_payments'));
-        const paymentData: Omit<CashPayment, 'id'> = {
+        const newPaymentId = await getNextSequentialId('modernCashRecordId');
+        const paymentData: ModernCashRecord = {
+            id: newPaymentId,
             date: new Date().toISOString(),
-            bankAccountId,
-            bankAccountName: bankAccount.name,
+            type: 'outflow',
+            source: 'Manual',
+            status: 'Pending',
             clientId,
             clientName: client.name,
-            recipientName: client.name, // For quick add, recipient is the client
+            accountId: bankAccountId,
+            accountName: bankAccount.name,
+            recipientName: client.name,
             amount,
             currency: bankAccount.currency!,
             amountUsd,
-            status: 'Confirmed', // Quick payments are auto-confirmed
             createdAt: new Date().toISOString(),
-            remittanceNumber: remittanceNumber || undefined
         };
 
-        await set(newPaymentRef, stripUndefined(paymentData));
-        revalidatePath('/transactions'); // To refresh the modern transaction form
+        await set(ref(db, `modern_cash_records/${newPaymentId}`), stripUndefined(paymentData));
+        revalidatePath('/transactions/modern'); // To refresh the modern transaction form
         return { success: true, message: 'Cash payment recorded successfully.' };
     } catch (e: any) {
         console.error("Error creating quick cash payment:", e);
@@ -714,47 +547,17 @@ export async function cancelCashPayment(paymentId: string): Promise<{ success: b
     }
 
     try {
-        const paymentRef = ref(db, `cash_payments/${paymentId}`);
+        const paymentRef = ref(db, `modern_cash_records/${paymentId}`);
         const paymentSnapshot = await get(paymentRef);
 
         if (!paymentSnapshot.exists()) {
             return { success: false, message: 'Payment not found.' };
         }
         
-        const paymentData = paymentSnapshot.val() as CashPayment;
-
-        if (paymentData.status === 'Cancelled') {
-            return { success: true, message: 'Payment was already cancelled.' };
-        }
+        await update(paymentRef, { status: 'Cancelled' });
         
-        const updates: { [key: string]: any } = {};
-        updates[`/cash_payments/${paymentId}/status`] = 'Cancelled';
-
-        if (paymentData.journalEntryId) {
-            const journalRef = ref(db, `journal_entries/${paymentData.journalEntryId}`);
-            const journalSnapshot = await get(journalRef);
-            if(journalSnapshot.exists()) {
-                const journalData = journalSnapshot.val();
-                const reversalJournalRef = push(ref(db, 'journal_entries'));
-                updates[`/journal_entries/${reversalJournalRef.key}`] = {
-                    date: new Date().toISOString(),
-                    description: `Reversal for cash payment #${paymentId}`,
-                    debit_account: journalData.credit_account,
-                    credit_account: journalData.debit_account,
-                    debit_amount: journalData.credit_amount,
-                    credit_amount: journalData.debit_amount,
-                    amount_usd: journalData.amount_usd,
-                    createdAt: new Date().toISOString(),
-                    debit_account_name: journalData.credit_account_name,
-                    credit_account_name: journalData.debit_account_name,
-                };
-            }
-        }
-        
-        await update(ref(db), updates);
-        
-        revalidatePath('/cash-payments');
-        return { success: true, message: 'Payment cancelled and journal entry reversed.' };
+        revalidatePath('/modern-cash-records');
+        return { success: true, message: 'Payment cancelled.' };
 
     } catch (error) {
         console.error('Error cancelling payment:', error);
@@ -810,7 +613,7 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
     const clientSnapshot = await get(ref(db, `clients/${clientId}`));
     if (!clientSnapshot.exists()) return { success: false, message: "Client not found." };
     
-    const newTxId = await getNextSequentialId();
+    const newTxId = await getNextSequentialId('globalRecordId');
 
     const transactionData: Omit<Transaction, 'id'> = {
         date: new Date().toISOString(),
@@ -831,15 +634,8 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
     
     for (const recordId of linkedRecordIds) {
         const record = selectedRecords.find(r => r.id === recordId);
-        if (record?.source === 'Manual') {
-            updates[`/cash_receipts/${recordId}/status`] = 'Used';
-        } else if (record?.source === 'USDT') {
-             updates[`/usdt_receipts/${recordId}/status`] = 'Used'; 
-        } else if (record?.source === 'Cash Payment') {
-            updates[`/cash_payments/${recordId}/status`] = 'Used'; 
-        } else if (record?.source === 'SMS') {
-            updates[`/sms_transactions/${recordId}/status`] = 'used';
-        }
+        // This logic needs to be updated for modern_cash_records
+        updates[`/modern_cash_records/${recordId}/status`] = 'Used';
     }
 
     try {

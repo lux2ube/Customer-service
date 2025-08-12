@@ -102,6 +102,27 @@ export interface Transaction {
     exchange_rate_commission?: number;
 }
 
+export interface ModernCashRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'SMS';
+    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string;
+    accountName: string;
+    senderName?: string; // For inflows
+    recipientName?: string; // For outflows
+    amount: number;
+    currency: string;
+    amountUsd: number;
+    notes?: string;
+    rawSms?: string;
+    createdAt: string;
+}
+
+
 export interface CashReceipt {
     id: string;
     date: string;
@@ -312,7 +333,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;

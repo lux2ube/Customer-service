@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import {
@@ -36,6 +35,7 @@ import {
   ArrowUpFromLine,
   Repeat,
   Sparkles,
+  Book,
 } from 'lucide-react';
 
 const menuItems = [
@@ -43,9 +43,8 @@ const menuItems = [
   { href: '/modern', label: 'Modern Hub', icon: Sparkles },
   
   { type: 'divider', label: 'العمليات المالية' },
-  { href: '/cash-receipts', label: 'سندات القبض', icon: ArrowDownToLine },
-  { href: '/cash-payments', label: 'سندات الصرف', icon: ArrowUpFromLine },
-  
+  { href: '/modern-cash-records', label: 'Modern Cash Records', icon: Book },
+
   { type: 'divider', label: 'التنفيذ' },
   { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
 
