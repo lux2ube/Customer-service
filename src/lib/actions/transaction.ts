@@ -208,36 +208,43 @@ export async function createTransaction(transactionId: string | null, formData: 
     }
 
     // --- Start: Auto-save payment methods to client profile ---
-    if (finalData.status === 'Confirmed' && client && finalData.bankAccountId) {
+    if (finalData.status === 'Confirmed' && client && (finalData.bankAccountId || finalData.client_wallet_address)) {
         const serviceProvidersSnapshot = await get(ref(db, 'service_providers'));
         if (serviceProvidersSnapshot.exists()) {
             const allProviders: Record<string, ServiceProvider> = serviceProvidersSnapshot.val();
-            const providerEntry = Object.entries(allProviders).find(([, p]) => p.accountIds.includes(finalData.bankAccountId!));
+            const accountIdToCheck = finalData.bankAccountId || finalData.cryptoWalletId;
 
-            if (providerEntry) {
-                const [providerId, provider] = providerEntry;
-                const newMethodDetails: Record<string, string> = {};
+            if (accountIdToCheck) {
+                const providerEntry = Object.entries(allProviders).find(([, p]) => p.accountIds.includes(accountIdToCheck));
 
-                if (provider.bankFormula) {
-                    if (provider.bankFormula.includes('Client Name') && client.name) newMethodDetails['Client Name'] = client.name;
-                    if (provider.bankFormula.includes('Phone Number') && client.phone?.[0]) newMethodDetails['Phone Number'] = client.phone[0];
-                    if (provider.bankFormula.includes('ID') && client.id) newMethodDetails['ID'] = client.id;
-                }
-                
-                if (Object.keys(newMethodDetails).length > 0) {
-                    const newServiceProviderRecord: ClientServiceProvider = {
-                        providerId: providerId,
-                        providerName: provider.name,
-                        providerType: provider.type,
-                        details: newMethodDetails,
-                    };
+                if (providerEntry) {
+                    const [providerId, provider] = providerEntry;
+                    const newMethodDetails: Record<string, string> = {};
+
+                    if (provider.type === 'Bank' && provider.bankFormula) {
+                        if (provider.bankFormula.includes('Client Name') && client.name) newMethodDetails['Client Name'] = client.name;
+                        if (provider.bankFormula.includes('Phone Number') && client.phone?.[0]) newMethodDetails['Phone Number'] = client.phone[0];
+                        if (provider.bankFormula.includes('ID') && client.id) newMethodDetails['ID'] = client.id;
+                    } else if (provider.type === 'Crypto' && provider.cryptoFormula) {
+                        if (provider.cryptoFormula.includes('Address') && finalData.client_wallet_address) newMethodDetails['Address'] = finalData.client_wallet_address;
+                        if (provider.cryptoFormula.includes('ID') && client.id) newMethodDetails['ID'] = client.id;
+                    }
                     
-                    const existingProviders = client.serviceProviders || [];
-                    const isDuplicate = existingProviders.some(p => JSON.stringify(p.details) === JSON.stringify(newMethodDetails) && p.providerId === providerId);
+                    if (Object.keys(newMethodDetails).length > 0) {
+                        const newServiceProviderRecord: ClientServiceProvider = {
+                            providerId: providerId,
+                            providerName: provider.name,
+                            providerType: provider.type,
+                            details: newMethodDetails,
+                        };
+                        
+                        const existingProviders = client.serviceProviders || [];
+                        const isDuplicate = existingProviders.some(p => JSON.stringify(p.details) === JSON.stringify(newMethodDetails) && p.providerId === providerId);
 
-                    if (!isDuplicate) {
-                        const updatedProviders = [...existingProviders, newServiceProviderRecord];
-                        await update(ref(db, `clients/${client.id}`), { serviceProviders: updatedProviders });
+                        if (!isDuplicate) {
+                            const updatedProviders = [...existingProviders, newServiceProviderRecord];
+                            await update(ref(db, `clients/${client.id}`), { serviceProviders: updatedProviders });
+                        }
                     }
                 }
             }

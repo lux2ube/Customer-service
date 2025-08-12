@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Trash2, Loader2, AlertTriangle, History, LinkIcon, Banknote, Landmark, Wallet2 } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertTriangle, History, LinkIcon, Landmark, Wallet2 } from 'lucide-react';
 import React from 'react';
 import { useActionState } from 'react';
 import { createClient, manageClient, type ClientFormState } from '@/lib/actions';
@@ -177,8 +177,8 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
                             <TabsList className="grid w-full grid-cols-4">
                                 <TabsTrigger value="profile">Profile</TabsTrigger>
                                 <TabsTrigger value="history" disabled={!client}>History</TabsTrigger>
-                                <TabsTrigger value="accounts" disabled={!client}>Accounts & Wallets</TabsTrigger>
-                                <TabsTrigger value="kyc" disabled={!client}>KYC & Audit</TabsTrigger>
+                                <TabsTrigger value="accounts" disabled={!client}>Accounts &amp; Wallets</TabsTrigger>
+                                <TabsTrigger value="kyc" disabled={!client}>KYC &amp; Audit</TabsTrigger>
                             </TabsList>
                             <TabsContent value="profile" className="mt-6 space-y-6">
                                 <div className="space-y-2">
