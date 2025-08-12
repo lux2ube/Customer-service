@@ -1,10 +1,9 @@
 
-
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set, update, get, remove } from 'firebase/database';
+import { push, ref, set, update, get, remove, runTransaction } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account } from '../types';
 import { logAction } from './helpers';
@@ -63,6 +62,39 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
     } catch (error) {
         console.error("Error updating fiat rates:", error);
         return { error: true, message: 'Database error while updating fiat rates.' };
+    }
+}
+
+
+export async function updateCryptoRates(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
+    const data = Object.fromEntries(formData.entries());
+    const rates: Record<string, number> = {};
+
+    for (const key in data) {
+        if (typeof data[key] === 'string') {
+            const rate = parseFloat(data[key] as string);
+            if (!isNaN(rate)) {
+                rates[key] = rate;
+            }
+        }
+    }
+
+    if (Object.keys(rates).length === 0) {
+        return { error: true, message: 'No valid crypto rate data was submitted.' };
+    }
+
+    try {
+        const historyRef = push(ref(db, 'rate_history/crypto_rates'));
+        await set(historyRef, {
+            rates: rates,
+            timestamp: new Date().toISOString()
+        });
+        
+        revalidatePath('/exchange-rates');
+        return { success: true, message: 'Crypto rates saved to history.' };
+    } catch (error) {
+        console.error("Error updating crypto rates:", error);
+        return { error: true, message: 'Database error while updating crypto rates.' };
     }
 }
 

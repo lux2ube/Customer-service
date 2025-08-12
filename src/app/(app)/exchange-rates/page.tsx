@@ -15,7 +15,7 @@ import type { FiatRate, CryptoFee, Currency, Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save, PlusCircle, Database, Trash2, Repeat } from 'lucide-react';
-import { updateFiatRates, updateCryptoFees, initializeDefaultCurrencies, addCurrency, deleteCurrency, type RateFormState, type CurrencyFormState } from '@/lib/actions';
+import { updateFiatRates, updateCryptoFees, initializeDefaultCurrencies, addCurrency, deleteCurrency, type RateFormState, type CurrencyFormState, updateCryptoRates } from '@/lib/actions';
 import { RateHistory } from '@/components/rate-history';
 import {
   Dialog,
@@ -259,7 +259,7 @@ function FiatRatesForm({ initialRates, currencies }: { initialRates: Record<stri
 
 function CryptoRatesForm({ initialRates, currencies }: { initialRates: Record<string, number>, currencies: Currency[] }) {
     const { toast } = useToast();
-    const [state, formAction] = useActionState<RateFormState, FormData>(updateFiatRates, undefined);
+    const [state, formAction] = useActionState<RateFormState, FormData>(updateCryptoRates, undefined);
     
     React.useEffect(() => {
         if (state?.success) {
