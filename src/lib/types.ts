@@ -122,6 +122,23 @@ export interface ModernCashRecord {
     createdAt: string;
 }
 
+export interface ModernUsdtRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'BSCScan';
+    status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string; // The system's internal crypto wallet account ID
+    accountName: string; // The system's internal crypto wallet name
+    amount: number; // The USDT amount
+    notes?: string;
+    txHash?: string;
+    clientWalletAddress?: string; // The external client wallet address
+    createdAt: string;
+}
+
 
 export interface CashReceipt {
     id: string;
@@ -333,7 +350,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record' | 'modern_usdt_record';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;

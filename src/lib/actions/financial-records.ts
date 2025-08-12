@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, push } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, UsdtManualReceipt, UsdtPayment } from '../types';
+import type { Client, Account, UsdtManualReceipt, UsdtPayment, ModernUsdtRecord } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 
 // --- USDT Manual Receipt ---
@@ -55,29 +55,32 @@ export async function createUsdtManualReceipt(prevState: UsdtManualReceiptState,
         const wallet = walletSnapshot.val() as Account;
         const newId = await getNextSequentialId('usdtRecordId');
 
-        const receiptData: Omit<UsdtManualReceipt, 'id'> = {
+        const receiptData: Omit<ModernUsdtRecord, 'id'> = {
             date: date || new Date().toISOString(),
+            type: 'inflow',
+            source: 'Manual',
+            status: 'Confirmed',
             clientId,
             clientName,
-            cryptoWalletId,
-            cryptoWalletName: wallet.name,
+            accountId: cryptoWalletId,
+            accountName: wallet.name,
             amount,
-            walletAddress,
-            txid,
+            clientWalletAddress: walletAddress,
+            txHash: txid,
             notes,
-            status: 'Completed', 
             createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `usdt_receipts/${newId}`), stripUndefined(receiptData));
+        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(receiptData));
 
         await logAction(
             'create_usdt_manual_receipt',
-            { type: 'usdt_receipt', id: String(newId), name: `USDT Manual Receipt from ${clientName}` },
+            { type: 'modern_usdt_record', id: String(newId), name: `USDT Manual Receipt from ${clientName}` },
             receiptData
         );
         
         revalidatePath('/financial-records/usdt-manual-receipt');
+        revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT Manual Receipt recorded successfully.' };
     } catch (error) {
         console.error("Create USDT Manual Receipt Error:", error);
@@ -119,27 +122,34 @@ export async function createUsdtManualPayment(prevState: UsdtPaymentState, formD
         }
         const client = clientSnapshot.val() as Client;
 
-        const newId = await getNextSequentialId('globalRecordId');
-        const paymentData: Omit<UsdtPayment, 'id'> = {
+        const newId = await getNextSequentialId('usdtRecordId');
+
+        // This should create a ModernUsdtRecord now
+        const paymentData: Omit<ModernUsdtRecord, 'id'> = {
             date: new Date().toISOString(),
-            clientId: clientId,
+            type: 'outflow',
+            source: 'Manual',
+            status: 'Confirmed',
+            clientId,
             clientName: client.name,
-            recipientAddress: recipientAddress,
-            amount: amount,
-            txid: txid || undefined,
-            status: 'Completed',
+            accountId: '1003', // Default USDT wallet, should be made configurable
+            accountName: 'USDT Wallet',
+            amount,
+            clientWalletAddress: recipientAddress,
+            txHash: txid,
             createdAt: new Date().toISOString(),
         };
         
-        await set(ref(db, `usdt_payments/${newId}`), stripUndefined(paymentData));
+        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(paymentData));
         
         await logAction(
             'create_usdt_manual_payment',
-            { type: 'usdt_payment', id: String(newId), name: `USDT Payment to ${client.name}` },
+            { type: 'modern_usdt_record', id: String(newId), name: `USDT Payment to ${client.name}` },
             paymentData
         );
         
         revalidatePath('/transactions/modern');
+        revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT manual payment recorded successfully.' };
     } catch (e: any) {
         console.error("Error creating manual USDT payment:", e);

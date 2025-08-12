@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -36,6 +37,7 @@ import {
   Repeat,
   Sparkles,
   Book,
+  DollarSign,
 } from 'lucide-react';
 
 const menuItems = [
@@ -43,7 +45,8 @@ const menuItems = [
   { href: '/modern', label: 'Modern Hub', icon: Sparkles },
   
   { type: 'divider', label: 'العمليات المالية' },
-  { href: '/modern-cash-records', label: 'Modern Cash Records', icon: Book },
+  { href: '/modern-cash-records', label: 'Modern Cash Records', icon: BookCopy },
+  { href: '/modern-usdt-records', label: 'Modern USDT Records', icon: DollarSign },
 
   { type: 'divider', label: 'التنفيذ' },
   { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },

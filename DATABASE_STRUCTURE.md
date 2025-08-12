@@ -33,7 +33,28 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 2. `/accounts/{accountId}`
+### 2. `/modern_usdt_records/{recordId}`
+
+**Primary store for all USDT-based transactions (inflows and outflows).** This is the new, unified ledger for USDT movements. `{recordId}` is a sequential number.
+
+-   **`id`**: `string` - The unique, sequential ID for the record.
+-   **`date`**: `string` (ISO 8601) - The date of the transaction.
+-   **`type`**: `'inflow' | 'outflow'` - Whether the transaction is USDT coming in or going out.
+-   **`source`**: `'Manual' | 'BSCScan'` - The origin of the record.
+-   **`status`**: `'Pending' | 'Used' | 'Cancelled' | 'Confirmed'` - The lifecycle status of the record.
+-   **`clientId`**: `string | null` - The ID of the client associated with the record.
+-   **`clientName`**: `string | null` - Denormalized client name for display.
+-   **`accountId`**: `string` - The ID of the internal system USDT wallet affected.
+-   **`accountName`**: `string` - Denormalized wallet name for display.
+-   **`amount`**: `number` - The amount of USDT.
+-   **`notes`**: `string` (optional) - Any additional notes.
+-   **`txHash`**: `string` (optional) - The blockchain transaction hash.
+-   **`clientWalletAddress`**: `string` (optional) - The client's external wallet address.
+-   **`createdAt`**: `string` (ISO 8601) - The timestamp when the record was created.
+
+---
+
+### 3. `/accounts/{accountId}`
 
 Stores the Chart of Accounts records. Each record can be a group (like "Assets") or a postable account (like "Cash - YER").
 
@@ -47,7 +68,7 @@ Stores the Chart of Accounts records. Each record can be a group (like "Assets")
 
 ---
 
-### 3. `/blacklist/{pushId}`
+### 4. `/blacklist/{pushId}`
 
 Stores a list of identifiers that should be flagged during data entry.
 
@@ -58,7 +79,7 @@ Stores a list of identifiers that should be flagged during data entry.
 
 ---
 
-### 4. `/clients/{clientId}`
+### 5. `/clients/{clientId}`
 
 Stores all customer information. After the initial migration, `{clientId}` is a sequential number starting from `1000001`.
 
@@ -77,7 +98,7 @@ Stores all customer information. After the initial migration, `{clientId}` is a 
 
 ---
 
-### 5. `/journal_entries/{pushId}`
+### 6. `/journal_entries/{pushId}`
 
 Stores all double-entry bookkeeping records, forming the general ledger.
 
@@ -92,7 +113,7 @@ Stores all double-entry bookkeeping records, forming the general ledger.
 
 ---
 
-### 6. `/logs/{pushId}`
+### 7. `/logs/{pushId}`
 
 An audit trail of important actions performed in the system.
 
@@ -106,7 +127,7 @@ An audit trail of important actions performed in the system.
 
 ---
 
-### 7. `/rate_history`
+### 8. `/rate_history`
 
 A log of all changes to exchange rates and fees.
 
@@ -122,7 +143,7 @@ A log of all changes to exchange rates and fees.
 
 ---
 
-### 8. `/send_requests/{pushId}`
+### 9. `/send_requests/{pushId}`
 
 A log of USDT sending requests made from the internal wallet.
 
@@ -135,7 +156,7 @@ A log of USDT sending requests made from the internal wallet.
 
 ---
 
-### 9. `/sms_transactions/{pushId}` (Legacy)
+### 10. `/sms_transactions/{pushId}` (Legacy)
 
 Stores records created from parsing incoming SMS messages. **This path is being phased out in favor of `/modern_cash_records`**. New SMS messages will no longer be stored here.
 
@@ -152,7 +173,7 @@ Stores records created from parsing incoming SMS messages. **This path is being 
 
 ---
 
-### 10. `/transactions/{transactionId}`
+### 11. `/transactions/{transactionId}`
 
 The primary record for all financial trades (buy/sell USDT). This record ties together clients, funds (from cash receipts or SMS), and financial details.
 
@@ -175,9 +196,9 @@ The primary record for all financial trades (buy/sell USDT). This record ties to
 
 ---
 
-### 11. `/usdt_receipts/{recordId}`
+### 12. `/usdt_receipts/{recordId}` (Legacy)
 
-A manually recorded receipt of USDT from a client.
+A manually recorded receipt of USDT from a client. **This will be replaced by `/modern_usdt_records`**.
 
 -   **`id`**: `string` - The sequential record ID.
 -   **`date`**: `string` (ISO 8601) - The date of the receipt.
@@ -194,7 +215,7 @@ A manually recorded receipt of USDT from a client.
 
 ---
 
-### 12. `/counters`
+### 13. `/counters`
 
 Stores atomic counters for generating sequential IDs.
 
