@@ -186,7 +186,9 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>This will permanently delete the API configuration "{itemToDelete?.name}".</AlertDialogDescription>
+                        <AlertDialogDescription>
+                            This will permanently delete the API configuration "{itemToDelete?.name}".
+                        </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
