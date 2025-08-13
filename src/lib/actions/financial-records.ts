@@ -33,9 +33,36 @@ const UsdtManualReceiptSchema = z.object({
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
 });
 
+// A more flexible schema for editing, where some fields might not be submitted if they are disabled.
+const EditUsdtManualReceiptSchema = UsdtManualReceiptSchema.partial().extend({
+    clientId: z.string().min(1, 'Please select a client.'),
+    clientName: z.string().min(1, 'Client name is required.'),
+    status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
+});
+
 export async function createQuickUsdtReceipt(recordId: string | null, prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
     const isEditing = !!recordId;
-    const validatedFields = UsdtManualReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    let existingRecord: ModernUsdtRecord | null = null;
+    if (isEditing) {
+        const recordSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
+        if (recordSnapshot.exists()) {
+            existingRecord = recordSnapshot.val();
+        } else {
+            return { message: 'Record to edit not found.', success: false };
+        }
+    }
+    
+    // Merge existing data for disabled fields if we are editing
+    const rawData = {
+        ...existingRecord,
+        ...Object.fromEntries(formData.entries()),
+    };
+
+    const validatedFields = isEditing
+        ? EditUsdtManualReceiptSchema.safeParse(rawData)
+        : UsdtManualReceiptSchema.safeParse(rawData);
+
 
     if (!validatedFields.success) {
         return {
@@ -46,7 +73,8 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
     }
     
     try {
-        const { date, clientId, clientName, cryptoWalletId, amount, txid, walletAddress, notes, status } = validatedFields.data;
+        const data = validatedFields.data;
+        const { date, clientId, clientName, cryptoWalletId, amount, txid, walletAddress, notes, status } = data;
         
         const [walletSnapshot, clientSnapshot] = await Promise.all([
              get(ref(db, `accounts/${cryptoWalletId}`)),
@@ -66,40 +94,37 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
         const updates: { [key: string]: any } = {};
 
         const receiptData: Omit<ModernUsdtRecord, 'id'> = {
-            date,
+            date: date!,
             type: 'inflow',
-            source: 'Manual',
-            status,
-            clientId,
-            clientName,
-            accountId: cryptoWalletId,
+            source: existingRecord?.source || 'Manual',
+            status: status!,
+            clientId: clientId!,
+            clientName: clientName!,
+            accountId: cryptoWalletId!,
             accountName: wallet.name,
-            amount,
+            amount: amount!,
             clientWalletAddress: walletAddress,
             txHash: txid,
             notes,
-            createdAt: new Date().toISOString(),
+            createdAt: existingRecord?.createdAt || new Date().toISOString(),
+            blockNumber: existingRecord?.blockNumber,
         };
 
         const dbRef = ref(db, `modern_usdt_records/${newId}`);
-        if(isEditing) {
-            updates[`/modern_usdt_records/${newId}`] = stripUndefined(receiptData);
-        } else {
-             updates[`/modern_usdt_records/${newId}`] = stripUndefined(receiptData);
-        }
+        updates[`/modern_usdt_records/${newId}`] = stripUndefined(receiptData);
         
         // Journal Entry: Debit Asset (wallet), Credit Liability (client)
-        if (status === 'Confirmed') {
+        if (status === 'Confirmed' && (!existingRecord || existingRecord.status !== 'Confirmed')) {
             const clientAccountId = `6000${clientId}`;
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
-                date: date,
-                description: `Manual USDT Receipt from ${clientName} - Ref: ${newId}`,
-                debit_account: cryptoWalletId,
+                date: date!,
+                description: `USDT Receipt from ${clientName} - Ref: ${newId}`,
+                debit_account: cryptoWalletId!,
                 credit_account: clientAccountId,
-                debit_amount: amount,
-                credit_amount: amount,
-                amount_usd: amount,
+                debit_amount: amount!,
+                credit_amount: amount!,
+                amount_usd: amount!,
                 createdAt: new Date().toISOString(),
                 debit_account_name: wallet.name,
                 credit_account_name: clientName,
@@ -150,9 +175,34 @@ const UsdtManualPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+const EditUsdtManualPaymentSchema = UsdtManualPaymentSchema.partial().extend({
+    clientId: z.string().min(1, 'Please select a client.'),
+    clientName: z.string().min(1, 'Client name is required.'),
+    status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
+});
+
 export async function createUsdtManualPayment(recordId: string | null, prevState: UsdtPaymentState, formData: FormData): Promise<UsdtPaymentState> {
     const isEditing = !!recordId;
-    const validatedFields = UsdtManualPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    let existingRecord: ModernUsdtRecord | null = null;
+    if (isEditing) {
+        const recordSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
+        if (recordSnapshot.exists()) {
+            existingRecord = recordSnapshot.val();
+        } else {
+            return { message: 'Record to edit not found.', success: false };
+        }
+    }
+
+    const rawData = {
+        ...existingRecord,
+        ...Object.fromEntries(formData.entries()),
+    };
+
+    const validatedFields = isEditing 
+        ? EditUsdtManualPaymentSchema.safeParse(rawData)
+        : UsdtManualPaymentSchema.safeParse(rawData);
+
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
@@ -163,42 +213,39 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         const updates: { [key: string]: any } = {};
 
         const paymentData: Omit<ModernUsdtRecord, 'id'> = {
-            date,
+            date: date!,
             type: 'outflow',
-            source: 'Manual',
-            status,
-            clientId,
-            clientName: clientName,
-            accountId: '1003', // Default USDT wallet, should be made configurable
-            accountName: 'USDT Wallet',
-            amount,
+            source: existingRecord?.source || 'Manual',
+            status: status!,
+            clientId: clientId!,
+            clientName: clientName!,
+            accountId: existingRecord?.accountId || '1003', // Default USDT wallet, should be made configurable
+            accountName: existingRecord?.accountName || 'USDT Wallet',
+            amount: amount!,
             clientWalletAddress: recipientAddress,
             txHash: txid,
             notes,
-            createdAt: new Date().toISOString(),
+            createdAt: existingRecord?.createdAt || new Date().toISOString(),
+            blockNumber: existingRecord?.blockNumber,
         };
         
-        if (isEditing) {
-            updates[`/modern_usdt_records/${newId}`] = stripUndefined(paymentData);
-        } else {
-            updates[`/modern_usdt_records/${newId}`] = stripUndefined(paymentData);
-        }
+        updates[`/modern_usdt_records/${newId}`] = stripUndefined(paymentData);
 
         // Journal Entry: Debit Liability (client), Credit Asset (wallet)
-        if (status === 'Confirmed') {
+        if (status === 'Confirmed' && (!existingRecord || existingRecord.status !== 'Confirmed')) {
             const clientAccountId = `6000${clientId}`;
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
-                date: date,
+                date: date!,
                 description: `Manual USDT Payment to ${clientName} - Ref: ${newId}`,
                 debit_account: clientAccountId,
-                credit_account: '1003', // Hardcoded USDT Wallet ID
-                debit_amount: amount,
-                credit_amount: amount,
-                amount_usd: amount,
+                credit_account: paymentData.accountId,
+                debit_amount: amount!,
+                credit_amount: amount!,
+                amount_usd: amount!,
                 createdAt: new Date().toISOString(),
-                debit_account_name: clientName,
-                credit_account_name: 'USDT Wallet',
+                debit_account_name: clientName!,
+                credit_account_name: paymentData.accountName,
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         }
@@ -222,4 +269,3 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         return { message: 'Database Error: Could not record payment.', success: false };
     }
 }
-
