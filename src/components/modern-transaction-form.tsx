@@ -37,41 +37,31 @@ function SubmitButton() {
 
 function FinancialRecordTable({ title, records, selectedIds, onSelectionChange, type, category }: { title: string, records: UnifiedFinancialRecord[], selectedIds: string[], onSelectionChange: (id: string, selected: boolean) => void, type: 'inflow' | 'outflow', category: 'fiat' | 'crypto' }) {
     if (records.length === 0) {
-        return null;
+        return <p className="text-xs text-muted-foreground text-center p-4 border rounded-md">No available records.</p>;
     }
 
-    const iconColor = type === 'inflow' ? 'text-green-600' : 'text-red-600';
-    const Icon = type === 'inflow' ? ArrowDown : ArrowUp;
-
     return (
-        <Card className="flex-1">
-            <CardHeader>
-                <CardTitle className={cn("text-base flex items-center gap-2", iconColor)}>
-                    <Icon /> {title}
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-                {records.map(record => (
-                    <div key={record.id} className="flex items-center gap-3 p-2 border rounded-md has-[:checked]:bg-muted has-[:checked]:border-primary">
-                        <Checkbox
-                            id={record.id}
-                            checked={selectedIds.includes(record.id)}
-                            onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
-                        />
-                        <Label htmlFor={record.id} className="flex-1 cursor-pointer w-full">
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="font-semibold">{record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {record.currency}</span>
-                                <span className="text-xs text-muted-foreground">{record.source}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
-                                <span>{format(new Date(record.date), 'PP')}</span>
-                                <span className="truncate max-w-[100px]">{record.bankAccountName || record.cryptoWalletName}</span>
-                            </div>
-                        </Label>
-                    </div>
-                ))}
-            </CardContent>
-        </Card>
+        <div className="space-y-2">
+            {records.map(record => (
+                <div key={record.id} className="flex items-center gap-3 p-2 border rounded-md has-[:checked]:bg-muted has-[:checked]:border-primary">
+                    <Checkbox
+                        id={record.id}
+                        checked={selectedIds.includes(record.id)}
+                        onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                    />
+                    <Label htmlFor={record.id} className="flex-1 cursor-pointer w-full">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="font-semibold">{record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {record.currency}</span>
+                            <span className="text-xs text-muted-foreground">{record.source}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
+                            <span>{format(new Date(record.date), 'PP')}</span>
+                            <span className="truncate max-w-[100px]">{record.bankAccountName || record.cryptoWalletName}</span>
+                        </div>
+                    </Label>
+                </div>
+            ))}
+        </div>
     );
 }
 
