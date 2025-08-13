@@ -16,7 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, ModernUsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createQuickUsdtReceipt, type UsdtManualReceiptState, searchClients } from '@/lib/actions/financial-records';
+import { createQuickUsdtReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
+import { searchClients } from '@/lib/actions/client';
 import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
@@ -84,7 +85,7 @@ function ClientSelector({
     };
 
     return (
-        <Popover open={open} onOpenChange={setIsOpen}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
                     {value || "Select a client..."}
