@@ -318,6 +318,7 @@ export type CashReceiptFormState = {
 } | undefined;
 
 const CashReceiptSchema = z.object({
+    date: z.string().optional(),
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to credit.'),
     senderName: z.string().min(1, 'Sender name is required.'),
@@ -327,65 +328,15 @@ const CashReceiptSchema = z.object({
     note: z.string().optional(),
 });
 
-export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const validatedFields = CashReceiptSchema.safeParse({
-        ...Object.fromEntries(formData.entries()),
-        senderName: formData.get('clientName')
-    });
-
-    if (!validatedFields.success) {
-        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
-    }
-
-    const { bankAccountId, clientId, senderName, amount, amountUsd, remittanceNumber } = validatedFields.data;
-    try {
-        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
-            get(ref(db, `accounts/${bankAccountId}`)),
-            get(ref(db, `clients/${clientId}`))
-        ]);
-
-        if (!bankAccountSnapshot.exists()) return { message: 'Error: Could not find bank account.', success: false };
-        if (!clientSnapshot.exists()) return { message: 'Error: Could not find client.', success: false };
-
-        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
-        const client = { id: clientId, ...clientSnapshot.val() } as Client;
-
-        const newId = await getNextSequentialId('modernCashRecordId');
-        
-        const receiptData: ModernCashRecord = {
-            id: newId,
-            date: new Date().toISOString(),
-            type: 'inflow',
-            source: 'Manual',
-            status: 'Pending',
-            clientId,
-            clientName: client.name,
-            accountId: bankAccountId,
-            accountName: bankAccount.name,
-            senderName,
-            amount,
-            currency: bankAccount.currency!,
-            amountUsd,
-            createdAt: new Date().toISOString(),
-        };
-
-        await set(ref(db, `modern_cash_records/${newId}`), stripUndefined(receiptData));
-        revalidatePath('/transactions');
-        return { success: true, message: 'Cash receipt recorded successfully.' };
-    } catch (e: any) {
-        console.error("Error creating quick cash receipt:", e);
-        return { message: 'Database Error: Could not record cash receipt.', success: false };
-    }
-}
-
-export async function createCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+export async function createCashReceipt(recordId: string | null, prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const isEditing = !!recordId;
     const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
     }
 
-    const { bankAccountId, clientId, senderName, amount, amountUsd, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, senderName, amount, amountUsd, remittanceNumber, note, date } = validatedFields.data;
     
     try {
         const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
@@ -399,14 +350,10 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
         const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
         
-        const newReceiptId = await getNextSequentialId('modernCashRecordId');
+        const newReceiptId = recordId || await getNextSequentialId('modernCashRecordId');
 
-        const receiptData: ModernCashRecord = {
-            id: newReceiptId,
-            date: new Date().toISOString(),
-            type: 'inflow',
-            source: 'Manual',
-            status: 'Pending',
+        const receiptData = {
+            date: date || new Date().toISOString(),
             clientId,
             clientName: client.name,
             accountId: bankAccountId,
@@ -416,13 +363,28 @@ export async function createCashReceipt(prevState: CashReceiptFormState, formDat
             currency: bankAccount.currency!,
             amountUsd,
             notes: note || undefined,
-            createdAt: new Date().toISOString(),
+            // Don't overwrite these fields if editing
+            ...(!isEditing && {
+              type: 'inflow',
+              source: 'Manual',
+              status: 'Pending',
+              createdAt: new Date().toISOString(),
+            })
         };
 
-        await set(ref(db, `modern_cash_records/${newReceiptId}`), stripUndefined(receiptData));
+        const finalData = stripUndefined(receiptData);
+
+        if (isEditing) {
+            await update(ref(db, `modern_cash_records/${newReceiptId}`), finalData);
+        } else {
+            await set(ref(db, `modern_cash_records/${newReceiptId}`), finalData);
+        }
         
         revalidatePath('/modern-cash-records');
-        redirect('/modern-cash-records');
+        if (recordId) {
+             redirect('/modern-cash-records');
+        }
+        return { success: true, message: `Cash receipt ${isEditing ? 'updated' : 'recorded'} successfully.` };
     } catch (e: any) {
         console.error("Error creating cash receipt:", e);
         return { message: 'Database Error: Could not record cash receipt.', success: false };
@@ -437,6 +399,7 @@ export type CashPaymentFormState = {
 } | undefined;
 
 const CashPaymentSchema = z.object({
+    date: z.string().optional(),
     bankAccountId: z.string().min(1, 'Please select a bank account.'),
     clientId: z.string().min(1, 'Please select a client to debit from.'),
     recipientName: z.string().optional(),
@@ -448,12 +411,13 @@ const CashPaymentSchema = z.object({
 
 
 export async function createCashPayment(paymentId: string | null, prevState: CashPaymentFormState, formData: FormData): Promise<CashPaymentFormState> {
+    const isEditing = !!paymentId;
     const validatedFields = CashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.' };
     }
 
-    const { bankAccountId, clientId, recipientName, amount, amountUsd, remittanceNumber, note } = validatedFields.data;
+    const { bankAccountId, clientId, recipientName, amount, amountUsd, remittanceNumber, note, date } = validatedFields.data;
     
     try {
         const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
@@ -469,12 +433,8 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
 
         const newPaymentId = paymentId || await getNextSequentialId('modernCashRecordId');
         
-        const paymentData: ModernCashRecord = {
-            id: newPaymentId,
-            date: new Date().toISOString(),
-            type: 'outflow',
-            source: 'Manual',
-            status: 'Pending',
+        const paymentData = {
+            date: date || new Date().toISOString(),
             clientId,
             clientName: client.name,
             accountId: bankAccountId,
@@ -484,17 +444,25 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             currency: bankAccount.currency!,
             amountUsd,
             notes: note || undefined,
-            createdAt: new Date().toISOString(),
+            // Don't overwrite these fields if editing
+             ...(!isEditing && {
+              type: 'outflow',
+              source: 'Manual',
+              status: 'Pending',
+              createdAt: new Date().toISOString(),
+            })
         };
         
-        await set(ref(db, `modern_cash_records/${newPaymentId}`), stripUndefined(paymentData));
+        const finalData = stripUndefined(paymentData);
+
+        if (isEditing) {
+            await update(ref(db, `modern_cash_records/${newPaymentId}`), finalData);
+        } else {
+            await set(ref(db, `modern_cash_records/${newPaymentId}`), finalData);
+        }
         
         revalidatePath('/modern-cash-records');
-        if (paymentId) {
-             redirect('/cash-payments'); // old path, but keep for now
-        } else {
-             redirect('/modern-cash-records');
-        }
+        redirect('/modern-cash-records');
        
     } catch (e: any) {
         console.error("Error creating cash payment:", e);

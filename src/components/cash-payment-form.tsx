@@ -8,18 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Loader2, Check, ChevronsUpDown, ClipboardPaste } from 'lucide-react';
+import { Save, Loader2, Check, ChevronsUpDown, ClipboardPaste, Calendar as CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, CashPayment } from '@/lib/types';
+import type { Client, Account, ModernCashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashPayment, type CashPaymentFormState, searchClients } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { format, parseISO } from 'date-fns';
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -125,17 +127,18 @@ function ClientSelector({ selectedClient, onSelect, disabled }: { selectedClient
     );
 }
 
-export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: Client[], bankAccounts: Account[], payment?: CashPayment }) {
+export function CashPaymentForm({ record, clients, bankAccounts }: { record?: ModernCashRecord, clients: Client[], bankAccounts: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const actionWithId = createCashPayment.bind(null, payment?.id || null);
+    const actionWithId = createCashPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === payment?.clientId) || null);
-    const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(payment?.bankAccountId || '');
-    const [amount, setAmount] = React.useState<string | number>(payment?.amount || '');
-    const [amountUsd, setAmountUsd] = React.useState<number>(payment?.amountUsd || 0);
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === record?.clientId) || null);
+    const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
+    const [amount, setAmount] = React.useState<string | number>(record?.amount || '');
+    const [amountUsd, setAmountUsd] = React.useState<number>(record?.amountUsd || 0);
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, any>>({});
 
@@ -184,8 +187,8 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
                 title: 'Success',
                 description: state.message,
             });
-            if (payment?.id) {
-                router.push('/cash-payments');
+            if (record?.id) {
+                router.push('/modern-cash-records');
             } else {
                 formRef.current?.reset();
                 setSelectedClient(null);
@@ -199,9 +202,10 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
                 variant: 'destructive',
             });
         }
-    }, [state, toast, payment, router]);
+    }, [state, toast, record, router]);
 
-    const isEditing = !!payment;
+    const isEditing = !!record;
+    const isSmsRecord = isEditing && record.source === 'SMS';
     const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
     return (
@@ -212,25 +216,41 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
                     <CardDescription>Fill in the details of the cash payment.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
-                        <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={isEditing}>
-                            <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
-                            <SelectContent>
-                                {bankAccounts.map(account => (
-                                    <SelectItem key={account.id} value={account.id}>
-                                        {account.name} ({account.currency})
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                             <Label>Date</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")} disabled={isSmsRecord}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {date ? format(date, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+                            </Popover>
+                            <input type="hidden" name="date" value={date?.toISOString()} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
+                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={isSmsRecord}>
+                                <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
+                                <SelectContent>
+                                    {bankAccounts.map(account => (
+                                        <SelectItem key={account.id} value={account.id}>
+                                            {account.name} ({account.currency})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
+                        </div>
                     </div>
+
 
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="amount">Amount Paid ({selectedAccount?.currency || '...'})</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={isEditing} />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={isSmsRecord} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                          <div className="space-y-2">
@@ -242,24 +262,24 @@ export function CashPaymentForm({ clients, bankAccounts, payment }: { clients: C
 
                     <div className="space-y-2">
                         <Label htmlFor="clientId">Debit from Client Account</Label>
-                         <ClientSelector selectedClient={selectedClient} onSelect={setSelectedClient} disabled={isEditing} />
+                         <ClientSelector selectedClient={selectedClient} onSelect={setSelectedClient} />
                         <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="recipientName">Recipient Name (if not a client)</Label>
-                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" defaultValue={payment?.recipientName} />
+                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" defaultValue={record?.recipientName} disabled={isSmsRecord} />
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="remittanceNumber">Remittance Number</Label>
-                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" defaultValue={payment?.remittanceNumber} />
+                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" defaultValue={record?.notes} />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="note">Note</Label>
-                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" defaultValue={payment?.note} />
+                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" defaultValue={record?.notes} />
                         </div>
                     </div>
                 </CardContent>
