@@ -6,10 +6,9 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, limitToLast, orderByChild, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider, ModernCashRecord } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, BlacklistItem, CashReceipt, FiatRate, UnifiedReceipt, CashPayment, UsdtManualReceipt, UnifiedFinancialRecord, UsdtPayment, SendRequest, ServiceProvider, ClientServiceProvider, ModernCashRecord, ModernUsdtRecord, JournalEntry } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
-import { format } from 'date-fns';
 
 export type TransactionFormState =
   | {
@@ -363,7 +362,6 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             currency: bankAccount.currency!,
             amountUsd,
             notes: note || undefined,
-            // Don't overwrite these fields if editing
             ...(!isEditing && {
               type: 'inflow',
               source: 'Manual',
@@ -375,12 +373,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         const finalData = stripUndefined(receiptData);
         
         const updates: { [key: string]: any } = {};
-
-        if (isEditing) {
-            updates[`/modern_cash_records/${newReceiptId}`] = finalData;
-        } else {
-            updates[`/modern_cash_records/${newReceiptId}`] = finalData;
-        }
+        updates[`/modern_cash_records/${newReceiptId}`] = finalData;
         
         // Journal Entry: Debit Asset (bank), Credit Liability (client)
         const clientAccountId = `6000${clientId}`;
@@ -391,7 +384,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             debit_account: bankAccountId,
             credit_account: clientAccountId,
             debit_amount: amount,
-            credit_amount: amountUsd, // Assuming client account is in USD
+            credit_amount: amountUsd,
             amount_usd: amountUsd,
             createdAt: new Date().toISOString(),
             debit_account_name: bankAccount.name,
@@ -465,7 +458,6 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             currency: bankAccount.currency!,
             amountUsd,
             notes: note || undefined,
-            // Don't overwrite these fields if editing
              ...(!isEditing && {
               type: 'outflow',
               source: 'Manual',
@@ -477,12 +469,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
         const finalData = stripUndefined(paymentData);
         
         const updates: { [key: string]: any } = {};
-
-        if (isEditing) {
-            updates[`/modern_cash_records/${newPaymentId}`] = finalData;
-        } else {
-            updates[`/modern_cash_records/${newPaymentId}`] = finalData;
-        }
+        updates[`/modern_cash_records/${newPaymentId}`] = finalData;
 
         // Journal Entry: Debit Liability (client), Credit Asset (bank)
         const clientAccountId = `6000${clientId}`;
@@ -492,7 +479,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             description: `Cash Payment to ${recipientName || client.name} for ${client.name} - Ref: ${newPaymentId}`,
             debit_account: clientAccountId,
             credit_account: bankAccountId,
-            debit_amount: amountUsd, // Assuming client account is in USD
+            debit_amount: amountUsd,
             credit_amount: amount,
             amount_usd: amountUsd,
             createdAt: new Date().toISOString(),
@@ -630,6 +617,7 @@ export async function cancelCashPayment(paymentId: string): Promise<{ success: b
 const ModernTransactionSchema = z.object({
   clientId: z.string().min(1, 'A client must be selected.'),
   linkedRecordIds: z.array(z.string()).min(1, 'At least one financial record must be selected.'),
+  type: z.enum(['Deposit', 'Withdraw', 'Transfer']),
   notes: z.string().optional(),
   attachment: z.instanceof(File).optional(),
 });
@@ -637,30 +625,53 @@ const ModernTransactionSchema = z.object({
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
 
-    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('clientId'), equalTo(clientId));
-    const snapshot = await get(recordsRef);
-    if (!snapshot.exists()) return [];
-    
     const allRecords: UnifiedFinancialRecord[] = [];
-    const clientRecords: Record<string, ModernCashRecord> = snapshot.val();
-
-    for (const recordId in clientRecords) {
-        const record = clientRecords[recordId];
-        // Double check client ID as firebase queries on nested data are not exact
-        if (record.clientId === clientId && record.status === 'Pending') {
-             allRecords.push({
-                id: record.id,
-                date: record.date,
-                type: record.type,
-                category: record.currency === 'USDT' ? 'crypto' : 'fiat',
-                source: record.source,
-                amount: record.amount,
-                currency: record.currency,
-                amountUsd: record.amountUsd,
-                status: record.status,
-                bankAccountName: record.currency !== 'USDT' ? record.accountName : undefined,
-                cryptoWalletName: record.currency === 'USDT' ? record.accountName : undefined,
-            });
+    
+    // Fetch cash records
+    const cashRecordsRef = query(ref(db, 'modern_cash_records'), orderByChild('clientId'), equalTo(clientId));
+    const cashSnapshot = await get(cashRecordsRef);
+    if (cashSnapshot.exists()) {
+        const clientCashRecords: Record<string, ModernCashRecord> = cashSnapshot.val();
+        for (const recordId in clientCashRecords) {
+            const record = clientCashRecords[recordId];
+            if (record.clientId === clientId && record.status === 'Pending') {
+                 allRecords.push({
+                    id: record.id,
+                    date: record.date,
+                    type: record.type,
+                    category: 'fiat',
+                    source: record.source,
+                    amount: record.amount,
+                    currency: record.currency,
+                    amountUsd: record.amountUsd,
+                    status: record.status,
+                    bankAccountName: record.accountName,
+                });
+            }
+        }
+    }
+    
+    // Fetch USDT records
+    const usdtRecordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
+    const usdtSnapshot = await get(usdtRecordsRef);
+    if (usdtSnapshot.exists()) {
+        const clientUsdtRecords: Record<string, ModernUsdtRecord> = usdtSnapshot.val();
+        for (const recordId in clientUsdtRecords) {
+            const record = clientUsdtRecords[recordId];
+            if (record.clientId === clientId && record.status === 'Pending') {
+                 allRecords.push({
+                    id: record.id,
+                    date: record.date,
+                    type: record.type,
+                    category: 'crypto',
+                    source: record.source,
+                    amount: record.amount,
+                    currency: 'USDT',
+                    amountUsd: record.amount, // For USDT, amount is amountUsd
+                    status: record.status,
+                    cryptoWalletName: record.accountName,
+                });
+            }
         }
     }
     
@@ -673,6 +684,7 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         clientId: formData.get('clientId'),
         linkedRecordIds: formData.getAll('linkedRecordIds'),
         notes: formData.get('notes'),
+        type: formData.get('type'),
         attachment: formData.get('attachment'),
     };
     
@@ -685,7 +697,7 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         };
     }
     
-    const { clientId, linkedRecordIds, notes, attachment } = validatedFields.data;
+    const { clientId, linkedRecordIds, notes, type, attachment } = validatedFields.data;
     const records = await getUnifiedClientRecords(clientId);
     const selectedRecords = records.filter(r => linkedRecordIds.includes(r.id));
     
@@ -699,11 +711,25 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
     const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
     const feesSnapshot = await get(feesRef);
     const cryptoFees: any | null = feesSnapshot.exists() ? Object.values(feesSnapshot.val())[0] : null;
+    
+    let baseAmountForFee = 0;
+    if (type === 'Deposit') {
+        baseAmountForFee = selectedRecords
+            .filter(r => r.type === 'inflow' && r.category === 'fiat')
+            .reduce((sum, r) => sum + r.amountUsd, 0);
+    } else if (type === 'Withdraw') {
+         baseAmountForFee = selectedRecords
+            .filter(r => r.type === 'inflow' && r.category === 'crypto')
+            .reduce((sum, r) => sum + r.amountUsd, 0);
+    } else { // Transfer
+        baseAmountForFee = totalInflowUSD;
+    }
 
-    const feePercent = cryptoFees ? cryptoFees.buy_fee_percent / 100 : 0.02;
-    const minFee = cryptoFees ? cryptoFees.minimum_buy_fee : 1;
 
-    const fee_usd = Math.max(totalInflowUSD * feePercent, totalInflowUSD > 0 ? minFee : 0);
+    const feePercent = (type === 'Deposit' ? (cryptoFees?.buy_fee_percent || 0) : (cryptoFees?.sell_fee_percent || 0)) / 100;
+    const minFee = type === 'Deposit' ? (cryptoFees?.minimum_buy_fee || 0) : (cryptoFees?.minimum_sell_fee || 0);
+
+    const fee_usd = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
     const amount_usdt = totalInflowUSD - totalOutflowUSD - fee_usd;
     
     const clientSnapshot = await get(ref(db, `clients/${clientId}`));
@@ -730,8 +756,11 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
     
     for (const recordId of linkedRecordIds) {
         const record = selectedRecords.find(r => r.id === recordId);
-        // This logic needs to be updated for modern_cash_records
-        updates[`/modern_cash_records/${recordId}/status`] = 'Used';
+        if (record?.category === 'fiat') {
+            updates[`/modern_cash_records/${recordId}/status`] = 'Used';
+        } else if (record?.category === 'crypto') {
+            updates[`/modern_usdt_records/${recordId}/status`] = 'Used';
+        }
     }
 
     try {
@@ -745,5 +774,3 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         return { success: false, message: "A database error occurred." };
     }
 }
-
-      
