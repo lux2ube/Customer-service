@@ -12,19 +12,21 @@ import { Calendar as CalendarIcon, Save, Loader2, Check, ChevronsUpDown } from '
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client } from '@/lib/types';
+import type { Client, ModernUsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { useRouter } from 'next/navigation';
 
-function SubmitButton() {
+function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {pending ? 'Recording...' : 'Record Payment'}
+            {pending ? 'Recording...' : isEditing ? 'Save Changes' : 'Record Payment'}
         </Button>
     );
 }
@@ -67,14 +69,15 @@ function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Clie
     );
 }
 
-export function UsdtManualPaymentForm({ clients }: { clients: Client[] }) {
+export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdtRecord, clients: Client[] }) {
     const { toast } = useToast();
+    const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [state, formAction] = useActionState<UsdtPaymentState, FormData>(createUsdtManualPayment, undefined);
+    const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
+    const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(new Date());
-    const [selectedClientId, setSelectedClientId] = React.useState('');
-    const [amount, setAmount] = React.useState('');
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
+    const [selectedClientId, setSelectedClientId] = React.useState(record?.clientId || '');
 
     React.useEffect(() => {
         if (state?.success) {
@@ -82,10 +85,13 @@ export function UsdtManualPaymentForm({ clients }: { clients: Client[] }) {
                 title: 'Success',
                 description: state.message,
             });
-            formRef.current?.reset();
-            setSelectedClientId('');
-            setAmount('');
-            setDate(new Date());
+             if (record?.id) {
+                router.push('/modern-usdt-records');
+            } else {
+                formRef.current?.reset();
+                setSelectedClientId('');
+                setDate(new Date());
+            }
         } else if (state?.message) {
             toast({
                 title: 'Error',
@@ -93,14 +99,16 @@ export function UsdtManualPaymentForm({ clients }: { clients: Client[] }) {
                 variant: 'destructive',
             });
         }
-    }, [state, toast]);
+    }, [state, toast, record, router]);
+    
+    const isEditing = !!record;
 
     return (
         <form action={formAction} ref={formRef}>
              <Card>
                 <CardHeader>
-                    <CardTitle>USDT Manual Payment</CardTitle>
-                    <CardDescription>Record sending USDT to a client manually. This creates an outflow record.</CardDescription>
+                    <CardTitle>{isEditing ? 'Edit' : 'New'} USDT Manual Payment</CardTitle>
+                    <CardDescription>{isEditing ? `Editing record ID: ${record.id}` : 'Record sending USDT to a client manually. This creates an outflow record.'}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="grid md:grid-cols-2 gap-4">
@@ -121,35 +129,50 @@ export function UsdtManualPaymentForm({ clients }: { clients: Client[] }) {
                            <Label htmlFor="clientId">Paid To (Client)</Label>
                             <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} />
                            <input type="hidden" name="clientId" value={selectedClientId} />
-                            {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                           <input type="hidden" name="clientName" value={clients.find(c => c.id === selectedClientId)?.name || ''} />
+                            {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                         </div>
                     </div>
                      
                     <div className="space-y-2">
                         <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
-                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required />
+                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required defaultValue={record?.clientWalletAddress} />
                         {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount (USDT)</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount}/>
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="txid">Transaction Hash (TxID)</Label>
-                            <Input id="txid" name="txid" placeholder="Optional" />
+                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash} />
                         </div>
                     </div>
                     
-                    <div className="space-y-2">
-                        <Label htmlFor="notes">Notes</Label>
-                        <Textarea id="notes" name="notes" placeholder="Optional notes about the transaction" />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Status</Label>
+                            <Select name="status" defaultValue={record?.status || 'Confirmed'}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Pending">Pending</SelectItem>
+                                    <SelectItem value="Used">Used</SelectItem>
+                                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="notes">Notes</Label>
+                            <Textarea id="notes" name="notes" placeholder="Optional notes about the transaction" defaultValue={record?.notes}/>
+                        </div>
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <SubmitButton />
+                    <SubmitButton isEditing={isEditing} />
                 </CardFooter>
             </Card>
         </form>

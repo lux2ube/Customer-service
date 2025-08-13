@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, ExternalLink } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, ExternalLink, Pencil } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const statuses: ModernUsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
 const sources: ModernUsdtRecord['source'][] = ['Manual', 'BSCScan'];
@@ -43,6 +44,7 @@ export function ModernUsdtRecordsTable() {
   const [sourceFilter, setSourceFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+  const router = useRouter();
 
   React.useEffect(() => {
     const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('date'));
@@ -166,7 +168,7 @@ export function ModernUsdtRecordsTable() {
                     <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading records...</TableCell></TableRow>
                 ) : filteredRecords.length > 0 ? (
                 filteredRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow key={record.id} onClick={() => router.push(`/modern-usdt-records/${record.id}/edit`)} className="cursor-pointer">
                         <TableCell className="font-mono text-xs">{record.id}</TableCell>
                         <TableCell>{record.date && !isNaN(new Date(record.date).getTime()) ? format(new Date(record.date), 'Pp') : 'N/A'}</TableCell>
                         <TableCell>
@@ -181,8 +183,13 @@ export function ModernUsdtRecordsTable() {
                         <TableCell><Badge variant={getStatusVariant(record.status)} className="capitalize">{record.status}</Badge></TableCell>
                         <TableCell className="text-right">
                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                     <DropdownMenuItem asChild>
+                                        <Link href={`/modern-usdt-records/${record.id}/edit`}>
+                                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                                        </Link>
+                                    </DropdownMenuItem>
                                     {record.txHash && (
                                         <DropdownMenuItem asChild>
                                             <a href={`https://bscscan.com/tx/${record.txHash}`} target="_blank" rel="noopener noreferrer">
@@ -190,7 +197,6 @@ export function ModernUsdtRecordsTable() {
                                             </a>
                                         </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem>Edit</DropdownMenuItem>
                                     <DropdownMenuItem>Cancel</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
