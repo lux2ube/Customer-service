@@ -3,6 +3,9 @@
   "rules": {
     ".read": true,
     ".write": true,
+    "modern_cash_records": {
+      ".indexOn": ["clientId"]
+    },
     "sms_transactions": {
       ".indexOn": ["parsed_at", "matched_client_id", "status"]
     },
@@ -10,7 +13,7 @@
       ".indexOn": ["createdAt", "clientId", "status"]
     },
     "modern_usdt_records": {
-      ".indexOn": ["accountId", "date", "source", "blockNumber"]
+      ".indexOn": ["accountId", "date", "source", "blockNumber", "clientId"]
     },
     "cash_receipts": {
       ".indexOn": ["clientId", "status"]
