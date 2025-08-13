@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
 import { Save, Trash2, TestTube2, AlertCircle } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
+import { useFormStatus, useActionState } from 'react-dom';
 import { createSmsParsingRule, deleteSmsParsingRule, type ParsingRuleFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { SmsParsingRule, ParsedSms } from '@/lib/types';
@@ -45,7 +45,9 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
     const [rules, setRules] = React.useState<SmsParsingRule[]>(initialRules);
     const [itemToDelete, setItemToDelete] = React.useState<SmsParsingRule | null>(null);
 
-    // Form state
+    const [state, formAction] = useActionState<ParsingRuleFormState, FormData>(createSmsParsingRule, undefined);
+
+    // Form state for testing
     const [ruleName, setRuleName] = React.useState('');
     const [type, setType] = React.useState<'credit' | 'debit'>();
     const [sampleSms, setSampleSms] = React.useState('');
@@ -67,22 +69,25 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
         return () => unsubscribe();
     }, []);
     
-    const handleAddSubmit = async (formData: FormData) => {
-        const result = await createSmsParsingRule(formData);
-        if (result?.message) {
-            toast({ variant: 'destructive', title: 'Error', description: result.message });
+    React.useEffect(() => {
+        if (!state) return;
+        if (state.message && state.errors) {
+            toast({ variant: 'destructive', title: 'Error', description: state.message });
+        } else if (state.message) { // For non-validation errors
+             toast({ variant: 'destructive', title: 'Error', description: state.message });
         } else {
-            toast({ title: 'Success', description: 'New parsing rule saved.' });
-            formRef.current?.reset();
-            // Reset local state as well
-            setRuleName('');
-            setType(undefined);
-            setAmountStartsAfter('');
-            setAmountEndsBefore('');
-            setPersonStartsAfter('');
-            setPersonEndsBefore('');
+             toast({ title: 'Success', description: 'New parsing rule saved.' });
+             formRef.current?.reset();
+             setRuleName('');
+             setType(undefined);
+             setAmountStartsAfter('');
+             setAmountEndsBefore('');
+             setPersonStartsAfter('');
+             setPersonEndsBefore('');
+             setTestResult(null);
+             setSampleSms('');
         }
-    };
+    }, [state, toast]);
 
     const handleDeleteClick = (item: SmsParsingRule) => {
         setItemToDelete(item);
@@ -124,7 +129,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
     return (
         <div className="space-y-4">
             <Card>
-                <form action={handleAddSubmit} ref={formRef}>
+                <form action={formAction} ref={formRef}>
                     <CardHeader>
                         <CardTitle>Add New Parsing Rule</CardTitle>
                         <CardDescription>Define markers to extract data from a new SMS format. All markers are required.</CardDescription>
@@ -134,6 +139,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                             <div className="space-y-2">
                                 <Label htmlFor="name">Rule Name</Label>
                                 <Input id="name" name="name" placeholder="e.g., Al-Amal Bank Deposit V2" required value={ruleName} onChange={e => setRuleName(e.target.value)} dir="rtl" />
+                                {state?.errors?.name && <p className="text-sm text-destructive">{state.errors.name[0]}</p>}
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="type">Transaction Type</Label>
@@ -144,6 +150,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                         <SelectItem value="debit">Debit (Withdraw)</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {state?.errors?.type && <p className="text-sm text-destructive">{state.errors.type[0]}</p>}
                             </div>
                         </div>
 
@@ -158,10 +165,12 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 <div className="space-y-2">
                                     <Label htmlFor="amountStartsAfter">Amount Starts After</Label>
                                     <Input id="amountStartsAfter" name="amountStartsAfter" placeholder="e.g., تم تحويل" required value={amountStartsAfter} onChange={e => setAmountStartsAfter(e.target.value)} dir="rtl" />
+                                    {state?.errors?.amountStartsAfter && <p className="text-sm text-destructive">{state.errors.amountStartsAfter[0]}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="amountEndsBefore">Amount Ends Before</Label>
                                     <Input id="amountEndsBefore" name="amountEndsBefore" placeholder="e.g., لحساب" required value={amountEndsBefore} onChange={e => setAmountEndsBefore(e.target.value)} dir="rtl" />
+                                    {state?.errors?.amountEndsBefore && <p className="text-sm text-destructive">{state.errors.amountEndsBefore[0]}</p>}
                                 </div>
                             </div>
                         </div>
@@ -172,9 +181,10 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 <div className="space-y-2">
                                     <Label htmlFor="personStartsAfter">Person Starts After</Label>
                                     <Input id="personStartsAfter" name="personStartsAfter" placeholder="e.g., لحساب" required value={personStartsAfter} onChange={e => setPersonStartsAfter(e.target.value)} dir="rtl" />
+                                    {state?.errors?.personStartsAfter && <p className="text-sm text-destructive">{state.errors.personStartsAfter[0]}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="personEndsBefore">Person Ends Before</Label>
+                                    <Label htmlFor="personEndsBefore">Person Ends Before (Optional)</Label>
                                     <Input id="personEndsBefore" name="personEndsBefore" placeholder="e.g., رصيدك" value={personEndsBefore} onChange={e => setPersonEndsBefore(e.target.value)} dir="rtl" />
                                 </div>
                             </div>
