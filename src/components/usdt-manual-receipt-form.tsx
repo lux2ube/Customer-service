@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, ModernUsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createQuickUsdtReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
+import { createQuickUsdtReceipt, type UsdtManualReceiptState, searchClients } from '@/lib/actions/financial-records';
 import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
@@ -31,34 +31,79 @@ function SubmitButton({ isEditing }: { isEditing: boolean}) {
     );
 }
 
-function ClientSelector({ clients, selectedClientId, onSelect, disabled = false }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void, disabled?: boolean }) {
+function ClientSelector({
+  value,
+  onValueChange,
+  selectedClient,
+  onSelect,
+  disabled = false
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  selectedClient: Client | null;
+  onSelect: (client: Client | null) => void;
+  disabled?: boolean;
+}) {
     const [open, setOpen] = React.useState(false);
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        if (!open) return;
+        if (value.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        
+        debounceTimeoutRef.current = setTimeout(async () => {
+            const results = await searchClients(value);
+            setSearchResults(results);
+            setIsLoading(false);
+        }, 300);
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [value, open]);
+    
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        onValueChange(client.name);
+        setOpen(false);
+    };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
-                    {selectedClientId ? clients.find(c => c.id === selectedClientId)?.name : "Select a client..."}
+                    {value || "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                 <Command>
-                    <CommandInput placeholder="Search clients..." />
+                    <CommandInput placeholder="Search clients..." value={value} onValueChange={onValueChange} />
                     <CommandList>
                         <CommandEmpty>No client found.</CommandEmpty>
                         <CommandGroup>
-                            {clients.map(client => (
-                                <CommandItem
-                                    key={client.id}
-                                    value={client.name}
-                                    onSelect={() => {
-                                        onSelect(client.id);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClientId === client.id ? "opacity-100" : "opacity-0")} />
-                                    {client.name}
+                             {searchResults.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -76,14 +121,22 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const actionWithId = createQuickUsdtReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
-    const [selectedClientId, setSelectedClientId] = React.useState(record?.clientId || '');
+    const [date, setDate] = React.useState<Date | undefined>();
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [clientSearch, setClientSearch] = React.useState("");
 
     React.useEffect(() => {
         if (!record) {
             setDate(new Date());
+        } else {
+            setDate(parseISO(record.date));
+            const initialClient = clients.find(c => c.id === record.clientId);
+            if(initialClient) {
+                setSelectedClient(initialClient);
+                setClientSearch(initialClient.name);
+            }
         }
-    }, [record]);
+    }, [record, clients]);
 
     React.useEffect(() => {
         if (state?.success) {
@@ -95,7 +148,8 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                 router.push('/modern-usdt-records');
             } else {
                  formRef.current?.reset();
-                setSelectedClientId('');
+                setSelectedClient(null);
+                setClientSearch("");
                 setDate(new Date());
             }
         } else if (state?.message) {
@@ -151,9 +205,14 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                     </div>
                      <div className="space-y-2">
                         <Label htmlFor="clientId">Received From (Client)</Label>
-                         <ClientSelector clients={clients} selectedClientId={selectedClientId} onSelect={setSelectedClientId} />
-                        <input type="hidden" name="clientId" value={selectedClientId} />
-                        <input type="hidden" name="clientName" value={clients.find(c => c.id === selectedClientId)?.name || ''} />
+                         <ClientSelector 
+                           value={clientSearch}
+                           onValueChange={setClientSearch}
+                           selectedClient={selectedClient}
+                           onSelect={setSelectedClient}
+                         />
+                        <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
+                        <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 

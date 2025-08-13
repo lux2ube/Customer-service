@@ -42,20 +42,28 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
     );
 }
 
-function ClientSelector({ selectedClient, onSelect, disabled = false }: { selectedClient: Client | null, onSelect: (client: Client | null) => void, disabled?: boolean }) {
+function ClientSelector({
+  value,
+  onValueChange,
+  selectedClient,
+  onSelect,
+  disabled = false
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  selectedClient: Client | null;
+  onSelect: (client: Client | null) => void;
+  disabled?: boolean;
+}) {
     const [open, setIsOpen] = React.useState(false);
-    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
-        setInputValue(selectedClient?.name || '');
-    }, [selectedClient]);
-
-    React.useEffect(() => {
-        if (inputValue.length < 2) {
+        if (!open) return;
+        if (value.length < 2) {
             setSearchResults([]);
             return;
         }
@@ -66,12 +74,9 @@ function ClientSelector({ selectedClient, onSelect, disabled = false }: { select
         }
         
         debounceTimeoutRef.current = setTimeout(async () => {
-            const results = await searchClients(inputValue);
+            const results = await searchClients(value);
             setSearchResults(results);
             setIsLoading(false);
-            if (results.length > 0) {
-              setIsOpen(true);
-            }
         }, 300);
 
         return () => {
@@ -79,14 +84,14 @@ function ClientSelector({ selectedClient, onSelect, disabled = false }: { select
                 clearTimeout(debounceTimeoutRef.current);
             }
         };
-    }, [inputValue]);
+    }, [value, open]);
     
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
 
     const handleSelect = (client: Client) => {
         onSelect(client);
+        onValueChange(client.name);
         setIsOpen(false);
-        setInputValue(client.name);
     };
 
     return (
@@ -96,8 +101,8 @@ function ClientSelector({ selectedClient, onSelect, disabled = false }: { select
                     <Command>
                         <CommandInput
                             placeholder="Search client by name or phone..."
-                            value={inputValue}
-                            onValueChange={setInputValue}
+                            value={value}
+                            onValueChange={onValueChange}
                             disabled={disabled}
                         />
                     </Command>
@@ -107,7 +112,7 @@ function ClientSelector({ selectedClient, onSelect, disabled = false }: { select
                 <Command>
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && value.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
@@ -133,8 +138,10 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
     const actionWithId = createCashReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashReceiptFormState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === record?.clientId) || null);
+    const [date, setDate] = React.useState<Date | undefined>();
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
+    const [clientSearch, setClientSearch] = React.useState("");
+
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
     const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
     const [amountUsd, setAmountUsd] = React.useState(record?.amountUsd || 0);
@@ -145,8 +152,15 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
     React.useEffect(() => {
         if (!record) {
             setDate(new Date());
+        } else {
+            setDate(parseISO(record.date));
+            const initialClient = clients.find(c => c.id === record.clientId);
+            if(initialClient) {
+                setSelectedClient(initialClient);
+                setClientSearch(initialClient.name);
+            }
         }
-    }, [record]);
+    }, [record, clients]);
 
     React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
@@ -198,6 +212,7 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
             } else {
                 formRef.current?.reset();
                 setSelectedClient(null);
+                setClientSearch("");
                 setSelectedBankAccountId('');
                 setAmount('');
                 setSenderName('');
@@ -268,9 +283,14 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
 
                     <div className="space-y-2">
                         <Label htmlFor="clientId">Credit to Client Account</Label>
-                         <ClientSelector selectedClient={selectedClient} onSelect={setSelectedClient} />
+                        <ClientSelector
+                          value={clientSearch}
+                          onValueChange={setClientSearch}
+                          selectedClient={selectedClient}
+                          onSelect={setSelectedClient}
+                        />
                         <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
-                         {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
+                        {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                     </div>
 
                     <div className="space-y-2">
