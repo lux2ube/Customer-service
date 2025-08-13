@@ -47,17 +47,15 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
     if (isEditing) {
         const recordSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
         if (recordSnapshot.exists()) {
-            existingRecord = recordSnapshot.val();
+            existingRecord = { id: recordId, ...recordSnapshot.val() };
         } else {
             return { message: 'Record to edit not found.', success: false };
         }
     }
     
-    // Merge existing data for disabled fields if we are editing
-    const rawData = {
-        ...existingRecord,
-        ...Object.fromEntries(formData.entries()),
-    };
+    // For editing, only take the editable fields from the form
+    const formValues = Object.fromEntries(formData.entries());
+    const rawData = isEditing ? { ...existingRecord, ...formValues } : formValues;
 
     const validatedFields = isEditing
         ? EditUsdtManualReceiptSchema.safeParse(rawData)
@@ -147,7 +145,7 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
         return { success: true, message: `USDT Receipt ${isEditing ? 'updated' : 'recorded'} successfully.` };
     } catch (error) {
         console.error("Create USDT Manual Receipt Error:", error);
-        return { message: 'Database Error: Failed to record receipt.', success: false };
+        return { message: 'Database Error: Could not record receipt.', success: false };
     }
 }
 
@@ -188,16 +186,15 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (isEditing) {
         const recordSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
         if (recordSnapshot.exists()) {
-            existingRecord = recordSnapshot.val();
+             existingRecord = { id: recordId, ...recordSnapshot.val() };
         } else {
             return { message: 'Record to edit not found.', success: false };
         }
     }
 
-    const rawData = {
-        ...existingRecord,
-        ...Object.fromEntries(formData.entries()),
-    };
+    // For editing, only take the editable fields from the form
+    const formValues = Object.fromEntries(formData.entries());
+    const rawData = isEditing ? { ...existingRecord, ...formValues } : formValues;
 
     const validatedFields = isEditing 
         ? EditUsdtManualPaymentSchema.safeParse(rawData)
