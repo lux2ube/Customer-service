@@ -371,7 +371,8 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             console.error("Error updating cash receipt:", e);
             return { message: 'Database Error: Could not update cash receipt.', success: false };
         }
-
+        // This was the missing return. The function would fall through if isEditing was true.
+        redirect('/modern-cash-records');
     } else {
         const validatedFields = FullCashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
@@ -495,6 +496,8 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
         } catch (e: any) {
             return { message: 'Database Error: Could not update cash payment.', success: false };
         }
+        // This was the missing return. The function would fall through if isEditing was true.
+        redirect('/modern-cash-records');
     } else {
         const validatedFields = FullCashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
@@ -704,7 +707,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             const record = clientCashRecords[recordId];
             if (record.clientId === clientId && record.status !== 'Used' && record.status !== 'Cancelled') {
                  allRecords.push({
-                    id: record.id,
+                    id: recordId,
                     date: record.date,
                     type: record.type,
                     category: 'fiat',
@@ -729,7 +732,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             const record = clientUsdtRecords[recordId];
             if (record.clientId === clientId && record.status !== 'Used' && record.status !== 'Cancelled') {
                  allRecords.push({
-                    id: record.id,
+                    id: recordId,
                     date: record.date,
                     type: record.type,
                     category: 'crypto',
@@ -843,3 +846,5 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         return { success: false, message: "A database error occurred." };
     }
 }
+
+    
