@@ -6,12 +6,13 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, ModernCashRecord } from '../types';
 import { parseSmsWithCustomRules } from '../custom-sms-parser';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
 import { format } from 'date-fns';
+import { getNextSequentialId } from './helpers';
 
 
 // --- SMS Processing Actions ---
@@ -135,26 +136,23 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const incomingSmsRef = ref(db, 'incoming');
     const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
-    const transactionsRef = ref(db, 'sms_transactions');
+    const modernCashRecordsRef = ref(db, 'modern_cash_records');
     const rulesRef = ref(db, 'sms_parsing_rules');
 
     try {
-        const promiseResults = await Promise.all([
-            get(incomingSmsRef),
-            get(smsEndpointsRef),
-            get(chartOfAccountsRef),
-            get(transactionsRef),
-            get(rulesRef),
-        ]);
-
         const [
             incomingSnapshot,
             endpointsSnapshot,
             accountsSnapshot,
-            smsTransactionsSnapshot,
+            modernCashRecordsSnapshot,
             rulesSnapshot,
-        ] = promiseResults;
-        
+        ] = await Promise.all([
+            get(incomingSmsRef),
+            get(smsEndpointsRef),
+            get(chartOfAccountsRef),
+            get(modernCashRecordsRef),
+            get(rulesRef),
+        ]);
 
         if (!incomingSnapshot.exists()) {
             return { message: "No new SMS messages to process.", error: false };
@@ -165,12 +163,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
         
-        const allSmsTransactions: SmsTransaction[] = smsTransactionsSnapshot.exists() ? Object.values(smsTransactionsSnapshot.val()) : [];
+        const allModernCashRecords: ModernCashRecord[] = modernCashRecordsSnapshot.exists() ? Object.values(modernCashRecordsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
-            allSmsTransactions
-                .filter(tx => tx.raw_sms && tx.parsed_at && new Date(tx.parsed_at).getTime() > twentyFourHoursAgo)
-                .map(tx => tx.raw_sms.trim())
+            allModernCashRecords
+                .filter(rec => rec.rawSms && rec.createdAt && new Date(rec.createdAt).getTime() > twentyFourHoursAgo)
+                .map(rec => rec.rawSms!.trim())
         );
         
         const updates: { [key: string]: any } = {};
@@ -211,9 +209,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             }
 
             processedCount++;
-            const newTxId = push(transactionsRef).key;
-            if (!newTxId) return;
-
+            
             let parsed: ParsedSms | null = null;
             
             if (customRules.length > 0) {
@@ -227,39 +223,55 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 }
             }
             
+            const newRecordId = await getNextSequentialId('modernCashRecordId');
+            
             if (parsed) {
                 successCount++;
-                updates[`/sms_transactions/${newTxId}`] = {
-                    client_name: parsed.person,
-                    account_id: accountId,
-                    account_name: account.name,
-                    amount: parsed.amount,
+                const newRecord: ModernCashRecord = {
+                    id: newRecordId,
+                    date: new Date().toISOString(),
+                    type: parsed.type === 'credit' ? 'inflow' : 'outflow',
+                    source: 'SMS',
+                    status: 'Pending',
+                    clientId: null,
+                    clientName: null,
+                    accountId: accountId,
+                    accountName: account.name,
+                    senderName: parsed.type === 'credit' ? parsed.person : undefined,
+                    recipientName: parsed.type === 'debit' ? parsed.person : undefined,
+                    amount: parsed.amount!,
                     currency: account.currency,
-                    type: parsed.type,
-                    status: 'parsed',
-                    parsed_at: new Date().toISOString(),
-                    raw_sms: trimmedSmsBody,
+                    amountUsd: 0, // This will be calculated on matching/use
+                    rawSms: trimmedSmsBody,
+                    createdAt: new Date().toISOString(),
                 };
+                updates[`/modern_cash_records/${newRecordId}`] = newRecord;
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
-                updates[`/sms_transactions/${newTxId}`] = {
-                    client_name: 'Parsing Failed',
-                    account_id: accountId,
-                    account_name: account.name,
-                    amount: null,
+                const newRecord: ModernCashRecord = {
+                    id: newRecordId,
+                    date: new Date().toISOString(),
+                    type: 'inflow', // Default to inflow for review
+                    source: 'SMS',
+                    status: 'Cancelled', // Mark as 'Cancelled' or a new 'ParsingFailed' status
+                    clientId: null,
+                    clientName: null,
+                    accountId: accountId,
+                    accountName: account.name,
+                    senderName: 'Parsing Failed',
+                    amount: 0,
                     currency: account.currency,
-                    type: null,
-                    status: 'rejected',
-                    parsed_at: new Date().toISOString(),
-                    raw_sms: trimmedSmsBody,
+                    amountUsd: 0,
+                    rawSms: trimmedSmsBody,
+                    createdAt: new Date().toISOString(),
                 };
+                updates[`/modern_cash_records/${newRecordId}`] = newRecord;
             }
         };
 
         for (const endpointId in allIncoming) {
             const messagesNode = allIncoming[endpointId];
-            
             if (typeof messagesNode === 'object' && messagesNode !== null) {
                 const messagePromises = Object.keys(messagesNode).map(messageId => 
                     processMessageAndUpdate(messagesNode[messageId], endpointId, messageId)
@@ -274,8 +286,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             await update(ref(db), updates);
         }
         
-        revalidatePath('/sms/transactions');
-        revalidatePath('/cash-receipts');
+        revalidatePath('/modern-cash-records');
         let message = `Processed ${processedCount} message(s): ${successCount} successfully parsed, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;
