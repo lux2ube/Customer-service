@@ -201,7 +201,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 </CardContent>
                             </Card>
                         )}
-                    </CardFooter>
+                    </CardContent>
                     <CardFooter className="flex justify-between">
                          <Button type="button" variant="outline" onClick={handleTestRule}><TestTube2 className="mr-2 h-4 w-4"/> Test Rule</Button>
                         <SubmitButton />
@@ -263,6 +263,4 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
             </AlertDialog>
         </div>
     );
-
-    
-
+}
