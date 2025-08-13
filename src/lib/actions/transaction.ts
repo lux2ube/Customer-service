@@ -360,8 +360,8 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
                 clientId: clientId,
                 clientName: clientSnapshot.val().name,
                 notes: note || existingRecord.notes,
-                remittanceNumber: remittanceNumber || existingRecord.notes, // Assuming notes field was used for this
-                status: 'Pending',
+                remittanceNumber: remittanceNumber || existingRecord.notes,
+                status: existingRecord.source === 'SMS' ? 'Matched' : 'Pending' as ModernCashRecord['status'],
             };
             await update(ref(db, `modern_cash_records/${recordId}`), updatedData);
             revalidatePath('/modern-cash-records');
@@ -423,7 +423,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
                 debit_account: bankAccountId,
                 credit_account: clientAccountId,
                 debit_amount: amount,
-                credit_amount: amountUsd,
+                credit_amount: amount, // Credit amount is in the currency of the credited account (client account is USD)
                 amount_usd: amountUsd,
                 createdAt: new Date().toISOString(),
                 debit_account_name: bankAccount.name,
@@ -485,8 +485,8 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
                 clientId: clientId,
                 clientName: clientSnapshot.val().name,
                 notes: note || existingRecord.notes,
-                remittanceNumber: remittanceNumber || existingRecord.notes,
-                status: 'Pending',
+                remittanceNumber: remittanceNumber || existingRecord.notes, // Assuming notes field was used for this
+                status: existingRecord.source === 'SMS' ? 'Matched' : 'Pending' as ModernCashRecord['status'],
             };
             await update(ref(db, `modern_cash_records/${paymentId}`), updatedData);
             revalidatePath('/modern-cash-records');
@@ -543,7 +543,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: date || new Date().toISOString(),
-                description: `Cash Payment to ${recipientName || client.name} for ${client.name} - Ref: ${newPaymentId}`,
+                description: `Cash Payment to ${recipientName || client.name} from ${client.name} - Ref: ${newPaymentId}`,
                 debit_account: clientAccountId,
                 credit_account: bankAccountId,
                 debit_amount: amountUsd,
@@ -702,7 +702,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         const clientCashRecords: Record<string, ModernCashRecord> = cashSnapshot.val();
         for (const recordId in clientCashRecords) {
             const record = clientCashRecords[recordId];
-            if (record.clientId === clientId && record.status === 'Pending') {
+            if (record.clientId === clientId && record.status !== 'Used' && record.status !== 'Cancelled') {
                  allRecords.push({
                     id: record.id,
                     date: record.date,
@@ -727,13 +727,13 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         const clientUsdtRecords: Record<string, ModernUsdtRecord> = usdtSnapshot.val();
         for (const recordId in clientUsdtRecords) {
             const record = clientUsdtRecords[recordId];
-            if (record.clientId === clientId && record.status === 'Pending') {
+            if (record.clientId === clientId && record.status !== 'Used' && record.status !== 'Cancelled') {
                  allRecords.push({
                     id: record.id,
                     date: record.date,
                     type: record.type,
                     category: 'crypto',
-                    source: 'Manual', // Source was simplified here, might need revisit
+                    source: record.source,
                     amount: record.amount,
                     currency: 'USDT',
                     amountUsd: record.amount, // For USDT, amount is amountUsd
