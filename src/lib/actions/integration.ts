@@ -36,13 +36,20 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
         
-        const lastSyncedBlockSnapshot = await get(ref(db, `bsc_apis/${apiId}/lastSyncedBlock`));
-        const startBlock = lastSyncedBlockSnapshot.exists() ? lastSyncedBlockSnapshot.val() + 1 : 0;
-        
-        let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
-        if (startBlock > 0) {
-            apiUrl += `&startblock=${startBlock}`;
+        // Fetch all existing transaction hashes to prevent duplicates.
+        const existingRecordsSnapshot = await get(query(ref(db, 'modern_usdt_records'), orderByChild('source'), equalTo('BSCScan')));
+        const existingHashes = new Set<string>();
+        if (existingRecordsSnapshot.exists()) {
+            existingRecordsSnapshot.forEach(child => {
+                const record = child.val();
+                if (record.txHash) {
+                    existingHashes.add(record.txHash.toLowerCase());
+                }
+            });
         }
+        
+        // Fetch the most recent transactions from the API.
+        const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=desc&apikey=${apiKey}`;
         
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`BscScan API request failed: ${response.statusText}`);
@@ -55,18 +62,22 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             throw new Error(`BscScan API Error for ${configName}: ${data.message}`);
         }
         
+        const fetchedTransactions: any[] = (data.result || []).filter((tx: any) => 
+            !existingHashes.has(tx.hash.toLowerCase())
+        );
+
+        if (fetchedTransactions.length === 0) {
+            return { message: `No new transactions found for ${configName}.`, error: false };
+        }
+
+        // Sort the *new* transactions from oldest to newest to assign sequential IDs correctly.
+        fetchedTransactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+        
         const walletAccountRef = ref(db, `accounts/${accountId}`);
         const walletAccountSnapshot = await get(walletAccountRef);
         const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
         
-        const fetchedTransactions: any[] = data.result || [];
-        
-        if (fetchedTransactions.length === 0) {
-             return { message: `No new transactions found for ${configName}.`, error: false };
-        }
-        
         const updates: { [key: string]: any } = {};
-        let latestBlock = 0;
         
         for (const tx of fetchedTransactions) {
             const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
@@ -96,14 +107,6 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 blockNumber: parseInt(tx.blockNumber)
             };
             updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
-
-            if (parseInt(tx.blockNumber) > latestBlock) {
-                latestBlock = parseInt(tx.blockNumber);
-            }
-        }
-
-        if (latestBlock > 0) {
-            updates[`/bsc_apis/${apiId}/lastSyncedBlock`] = latestBlock;
         }
 
         if (Object.keys(updates).length > 0) {
