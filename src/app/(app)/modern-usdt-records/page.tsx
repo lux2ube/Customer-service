@@ -11,7 +11,7 @@ import { ModernUsdtRecordsTable } from "@/components/modern-usdt-records-table";
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, type SyncState } from '@/lib/actions';
+import { syncBscTransactions, deleteBscSyncedRecords, type SyncState } from '@/lib/actions';
 import type { BscApiSetting } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -27,6 +27,38 @@ function SyncBscButton() {
         </Button>
     )
 }
+
+function DeleteSyncedButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" variant="destructive" disabled={pending}>
+            <Trash2 className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
+            {pending ? 'Deleting...' : 'Delete Synced Records'}
+        </Button>
+    );
+}
+
+function DeleteSyncedForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState(deleteBscSyncedRecords, undefined);
+
+    React.useEffect(() => {
+        if (state?.message) {
+            toast({
+                title: state.error ? 'Deletion Failed' : 'Deletion Complete',
+                description: state.message,
+                variant: state.error ? 'destructive' : 'default',
+            });
+        }
+    }, [state, toast]);
+    
+    return (
+        <form action={formAction}>
+            <DeleteSyncedButton />
+        </form>
+    )
+}
+
 
 function SyncBscForm() {
     const { toast } = useToast();
@@ -108,6 +140,7 @@ export default function ModernUsdtRecordsPage() {
                             New Outflow
                         </Link>
                     </Button>
+                    <DeleteSyncedForm />
                 </div>
             </PageHeader>
             <Suspense fallback={<div>Loading records...</div>}>

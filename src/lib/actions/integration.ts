@@ -32,35 +32,20 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
         }
         const setting: BscApiSetting = apiSettingSnapshot.val();
-        const { apiKey, walletAddress, accountId, name: configName } = setting;
+        const { apiKey, walletAddress, accountId, name: configName, lastSyncedBlock = 0 } = setting;
+        
         if (!apiKey || !walletAddress) {
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
-        
-        // Correctly find the last synced block number for this specific account
-        const lastSyncedQuery = query(
-            ref(db, 'modern_usdt_records'),
-            orderByChild('accountId'),
-            equalTo(accountId)
-        );
-        const lastSyncedSnapshot = await get(lastSyncedQuery);
-        
-        let lastSyncedBlock = 0;
-        if (lastSyncedSnapshot.exists()) {
-            const recordsForAccount: Record<string, ModernUsdtRecord> = lastSyncedSnapshot.val();
-            for (const key in recordsForAccount) {
-                const record = recordsForAccount[key];
-                if (record.blockNumber && record.blockNumber > lastSyncedBlock) {
-                    lastSyncedBlock = record.blockNumber;
-                }
-            }
-        }
-        
+
         let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
+        
+        // If we have a last synced block, fetch transactions after it.
+        // Otherwise, fetch only the single most recent transaction to establish a starting point.
         if (lastSyncedBlock > 0) {
             apiUrl += `&startblock=${lastSyncedBlock + 1}`;
         } else {
-            apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
+             apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
         }
         
         const response = await fetch(apiUrl);
@@ -85,11 +70,14 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
         
         const updates: { [key: string]: any } = {};
-        
+        let highestBlock = lastSyncedBlock;
+
         for (const tx of fetchedTransactions) {
             const txBlockNumber = parseInt(tx.blockNumber);
             if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue;
 
+            highestBlock = Math.max(highestBlock, txBlockNumber);
+            
             const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
             if (syncedAmount <= 0.01) continue;
 
@@ -119,12 +107,17 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
         }
 
+        // Update the last synced block on the API configuration itself
+        if (highestBlock > lastSyncedBlock) {
+            updates[`/bsc_apis/${apiId}/lastSyncedBlock`] = highestBlock;
+        }
+
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
         }
 
         revalidatePath('/modern-usdt-records');
-        return { message: `${fetchedTransactions.length} new transaction(s) were successfully synced for ${configName}.`, error: false };
+        return { message: `${Object.keys(updates).filter(k => k.startsWith('/modern_usdt_records')).length} new transaction(s) were successfully synced for ${configName}.`, error: false };
 
     } catch (error: any) {
         console.error("BscScan Sync Error:", error);

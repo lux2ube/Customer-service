@@ -128,8 +128,6 @@ export async function updateCryptoFees(prevState: RateFormState, formData: FormD
 
 const ApiSettingsSchema = z.object({
     gemini_api_key: z.string().optional(),
-    bsc_api_key: z.string().optional(),
-    bsc_wallet_address: z.string().optional(),
 });
 
 export async function updateApiSettings(prevState: RateFormState, formData: FormData): Promise<RateFormState> {
@@ -581,6 +579,8 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
 
         // Also reset the counter
         updates['/counters/usdtRecordId' as any] = 0 as any;
+        updates['/bsc_apis/BSC1/lastSyncedBlock' as any] = 0 as any; // Reset for the main wallet
+        updates['/bsc_apis/BSC2/lastSyncedBlock' as any] = 0 as any; // Also reset for other wallets if they exist
 
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
