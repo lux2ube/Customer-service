@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
 import { Save, Trash2, TestTube2, AlertCircle } from 'lucide-react';
-import { useFormStatus, useActionState } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { createSmsParsingRule, deleteSmsParsingRule, type ParsingRuleFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { SmsParsingRule, ParsedSms } from '@/lib/types';
@@ -44,8 +44,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
 
     const [rules, setRules] = React.useState<SmsParsingRule[]>(initialRules);
     const [itemToDelete, setItemToDelete] = React.useState<SmsParsingRule | null>(null);
-
-    const [state, formAction] = useActionState<ParsingRuleFormState, FormData>(createSmsParsingRule, undefined);
+    const [state, setState] = React.useState<ParsingRuleFormState>();
 
     // Form state for testing
     const [ruleName, setRuleName] = React.useState('');
@@ -89,6 +88,11 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
         }
     }, [state, toast]);
 
+    const handleFormAction = async (formData: FormData) => {
+        const result = await createSmsParsingRule(undefined, formData);
+        setState(result);
+    };
+
     const handleDeleteClick = (item: SmsParsingRule) => {
         setItemToDelete(item);
     };
@@ -129,7 +133,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
     return (
         <div className="space-y-4">
             <Card>
-                <form action={formAction} ref={formRef}>
+                <form action={handleFormAction} ref={formRef}>
                     <CardHeader>
                         <CardTitle>Add New Parsing Rule</CardTitle>
                         <CardDescription>Define markers to extract data from a new SMS format. All markers are required.</CardDescription>
