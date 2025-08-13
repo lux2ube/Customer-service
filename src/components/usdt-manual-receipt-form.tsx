@@ -31,13 +31,13 @@ function SubmitButton({ isEditing }: { isEditing: boolean}) {
     );
 }
 
-function ClientSelector({ clients, selectedClientId, onSelect }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void }) {
+function ClientSelector({ clients, selectedClientId, onSelect, disabled = false }: { clients: Client[], selectedClientId: string, onSelect: (clientId: string) => void, disabled?: boolean }) {
     const [open, setOpen] = React.useState(false);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
                     {selectedClientId ? clients.find(c => c.id === selectedClientId)?.name : "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -102,6 +102,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     }, [state, toast, record, router]);
 
     const isEditing = !!record;
+    const isSyncedRecord = isEditing && record.source === 'BSCScan';
 
     return (
         <form action={formAction} ref={formRef}>
@@ -118,18 +119,18 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                             <Label>Date</Label>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")} disabled={isSyncedRecord}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {date ? format(date, "PPP") : <span>Pick a date</span>}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={isSyncedRecord} /></PopoverContent>
                             </Popover>
                             <input type="hidden" name="date" value={date?.toISOString()} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="cryptoWalletId">Received In (Crypto Wallet)</Label>
-                            <Select name="cryptoWalletId" required defaultValue={record?.accountId}>
+                            <Select name="cryptoWalletId" required defaultValue={record?.accountId} disabled={isSyncedRecord}>
                                 <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
                                 <SelectContent>
                                     {cryptoWallets.map(wallet => (
@@ -153,19 +154,19 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount (USDT)</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount} />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount} disabled={isSyncedRecord}/>
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="walletAddress">Client's Sending Wallet Address</Label>
-                            <Input id="walletAddress" name="walletAddress" placeholder="Optional" defaultValue={record?.clientWalletAddress}/>
+                            <Input id="walletAddress" name="walletAddress" placeholder="Optional" defaultValue={record?.clientWalletAddress} disabled={isSyncedRecord}/>
                         </div>
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="txid">Transaction Hash (TxID)</Label>
-                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash}/>
+                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash} disabled={isSyncedRecord}/>
                         </div>
                          <div className="space-y-2">
                             <Label>Status</Label>
