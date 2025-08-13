@@ -34,9 +34,8 @@ const UsdtManualReceiptSchema = z.object({
 });
 
 // A more flexible schema for editing, where some fields might not be submitted if they are disabled.
-const EditUsdtManualReceiptSchema = z.object({
+const EditUsdtRecordSchema = z.object({
     clientId: z.string().min(1, 'Please select a client.'),
-    clientName: z.string().min(1, 'Client name is required.'),
     status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
     notes: z.string().optional(),
 });
@@ -46,7 +45,7 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
 
     if (isEditing) {
         // --- EDITING LOGIC ---
-        const validatedFields = EditUsdtManualReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+        const validatedFields = EditUsdtRecordSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
             return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to save USDT receipt.', success: false };
         }
@@ -58,10 +57,16 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
             }
             const existingRecord: ModernUsdtRecord = { id: recordId, ...recordSnapshot.val() };
             
+            const clientSnapshot = await get(ref(db, `clients/${validatedFields.data.clientId}`));
+            if (!clientSnapshot.exists()) {
+                return { message: 'Selected client not found.', success: false };
+            }
+            const clientName = clientSnapshot.val().name;
+            
             const updatedData = {
-                ...existingRecord,
+                ...existingRecord, // Start with the original data
                 clientId: validatedFields.data.clientId,
-                clientName: validatedFields.data.clientName,
+                clientName: clientName,
                 status: validatedFields.data.status,
                 notes: validatedFields.data.notes,
             };
@@ -139,19 +144,13 @@ const UsdtManualPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
-const EditUsdtManualPaymentSchema = z.object({
-    clientId: z.string().min(1, 'Please select a client.'),
-    clientName: z.string().min(1, 'Client name is required.'),
-    status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
-    notes: z.string().optional(),
-});
 
 export async function createUsdtManualPayment(recordId: string | null, prevState: UsdtPaymentState, formData: FormData): Promise<UsdtPaymentState> {
     const isEditing = !!recordId;
 
     if (isEditing) {
         // --- EDITING LOGIC ---
-        const validatedFields = EditUsdtManualPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+        const validatedFields = EditUsdtRecordSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
             return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to save USDT payment.', success: false };
         }
@@ -163,10 +162,16 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             }
             const existingRecord: ModernUsdtRecord = { id: recordId, ...recordSnapshot.val() };
             
+            const clientSnapshot = await get(ref(db, `clients/${validatedFields.data.clientId}`));
+            if (!clientSnapshot.exists()) {
+                return { message: 'Selected client not found.', success: false };
+            }
+            const clientName = clientSnapshot.val().name;
+
             const updatedData = {
-                ...existingRecord,
+                ...existingRecord, // Start with the original data
                 clientId: validatedFields.data.clientId,
-                clientName: validatedFields.data.clientName,
+                clientName: clientName,
                 status: validatedFields.data.status,
                 notes: validatedFields.data.notes,
             };

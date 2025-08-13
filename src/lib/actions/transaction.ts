@@ -347,7 +347,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             if (!recordSnapshot.exists()) {
                 return { message: 'Record not found.', success: false };
             }
-            const existingRecord: ModernCashRecord = recordSnapshot.val();
+            const existingRecord: ModernCashRecord = { id: recordId, ...recordSnapshot.val() };
             const { clientId, note, remittanceNumber } = validatedFields.data;
 
             const clientSnapshot = await get(ref(db, `clients/${clientId}`));
@@ -474,7 +474,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
             const recordSnapshot = await get(ref(db, `modern_cash_records/${paymentId}`));
             if (!recordSnapshot.exists()) return { message: 'Record not found.', success: false };
 
-            const existingRecord: ModernCashRecord = recordSnapshot.val();
+            const existingRecord: ModernCashRecord = { id: paymentId, ...recordSnapshot.val() };
             const { clientId, note, remittanceNumber } = validatedFields.data;
 
             const clientSnapshot = await get(ref(db, `clients/${clientId}`));
@@ -517,7 +517,7 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
 
             const newPaymentId = await getNextSequentialId('modernCashRecordId');
             
-            const paymentData = {
+            const paymentData: Omit<ModernCashRecord, 'id'> = {
                 date: date || new Date().toISOString(),
                 clientId,
                 clientName: client.name,
@@ -714,6 +714,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     amountUsd: record.amountUsd,
                     status: record.status,
                     bankAccountName: record.accountName,
+                    senderName: record.senderName || record.recipientName,
                 });
             }
         }
