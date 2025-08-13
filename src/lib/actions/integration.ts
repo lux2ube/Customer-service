@@ -26,60 +26,55 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
     const { apiId } = validatedFields.data;
 
     try {
-        const apiSettingSnapshot = await get(ref(db, `bsc_apis/${apiId}`));
+        const apiSettingRef = ref(db, `bsc_apis/${apiId}`);
+        const apiSettingSnapshot = await get(apiSettingRef);
         if (!apiSettingSnapshot.exists()) {
             return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
         }
         const setting: BscApiSetting = apiSettingSnapshot.val();
-        const { apiKey, walletAddress, accountId, name: configName } = setting;
+        const { apiKey, walletAddress, accountId, name: configName, lastSyncedBlock = 0 } = setting;
         if (!apiKey || !walletAddress) {
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
         
-        // Fetch all existing transaction hashes to prevent duplicates.
-        const existingRecordsSnapshot = await get(query(ref(db, 'modern_usdt_records'), orderByChild('source'), equalTo('BSCScan')));
-        const existingHashes = new Set<string>();
-        if (existingRecordsSnapshot.exists()) {
-            existingRecordsSnapshot.forEach(child => {
-                const record = child.val();
-                if (record.txHash) {
-                    existingHashes.add(record.txHash.toLowerCase());
-                }
-            });
+        let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
+        if (lastSyncedBlock > 0) {
+            apiUrl += `&startblock=${lastSyncedBlock + 1}`;
+        } else {
+            // First time sync, get only the most recent transaction to start
+            apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
         }
-        
-        // Fetch the most recent transactions from the API.
-        const apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=desc&apikey=${apiKey}`;
         
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`BscScan API request failed: ${response.statusText}`);
 
         const data = await response.json();
         if (data.status !== "1") {
-             if (data.message === "No transactions found" || data.result?.length === 0) {
+             if (data.message === "No transactions found" || (Array.isArray(data.result) && data.result.length === 0)) {
                 return { message: `No new transactions found for ${configName}.`, error: false };
             }
             throw new Error(`BscScan API Error for ${configName}: ${data.message}`);
         }
         
-        const fetchedTransactions: any[] = (data.result || []).filter((tx: any) => 
-            !existingHashes.has(tx.hash.toLowerCase())
-        );
+        const fetchedTransactions: any[] = Array.isArray(data.result) ? data.result : [];
 
         if (fetchedTransactions.length === 0) {
             return { message: `No new transactions found for ${configName}.`, error: false };
         }
 
-        // Sort the *new* transactions from oldest to newest to assign sequential IDs correctly.
-        fetchedTransactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+        // API sorts by 'asc', no need for client-side sort
         
         const walletAccountRef = ref(db, `accounts/${accountId}`);
         const walletAccountSnapshot = await get(walletAccountRef);
         const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
         
         const updates: { [key: string]: any } = {};
+        let latestBlock = lastSyncedBlock;
         
         for (const tx of fetchedTransactions) {
+            const txBlockNumber = parseInt(tx.blockNumber);
+            if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue; // Skip already processed blocks if any overlap
+
             const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
             if (syncedAmount <= 0.01) continue;
 
@@ -104,12 +99,18 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 txHash: tx.hash,
                 notes: `Synced from ${configName}`,
                 createdAt: new Date().toISOString(),
-                blockNumber: parseInt(tx.blockNumber)
+                blockNumber: txBlockNumber
             };
             updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
+
+            if (txBlockNumber > latestBlock) {
+                latestBlock = txBlockNumber;
+            }
         }
 
         if (Object.keys(updates).length > 0) {
+            // Update the last synced block on the API setting itself
+            updates[`/bsc_apis/${apiId}/lastSyncedBlock`] = latestBlock;
             await update(ref(db), updates);
         }
 

@@ -148,8 +148,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Wallet Address</TableHead>
-                                    <TableHead>Linked Account ID</TableHead>
-                                    <TableHead>Created</TableHead>
+                                    <TableHead>Last Synced Block</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -159,8 +158,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                                         <TableRow key={item.id}>
                                             <TableCell className="font-medium">{item.name}</TableCell>
                                             <TableCell className="font-mono text-xs">{item.walletAddress}</TableCell>
-                                            <TableCell className="font-mono text-xs">{item.accountId}</TableCell>
-                                            <TableCell>{format(new Date(item.createdAt), 'PPP')}</TableCell>
+                                            <TableCell className="font-mono text-xs">{item.lastSyncedBlock || 'Not synced'}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(item)}>
                                                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -169,7 +167,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableRow><TableCell colSpan={5} className="h-24 text-center">No BSC API configurations found.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No BSC API configurations found.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
