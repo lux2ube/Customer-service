@@ -19,7 +19,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createQuickCashReceipt, type CashReceiptFormState } from '@/lib/actions/transaction';
+import { createQuickCashReceipt, type CashReceiptFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -55,7 +55,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
   const formRef = React.useRef<HTMLFormElement>(null);
   
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
-  const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+  const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
   const [loading, setLoading] = React.useState(true);
 
   const [state, formAction] = useActionState<CashReceiptFormState, FormData>(createQuickCashReceipt, undefined);
@@ -83,7 +83,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
             const data = snapshot.val();
             const lastEntryKey = Object.keys(data)[0];
             const lastEntry = data[lastEntryKey];
-            setFiatRates(lastEntry.rates || []);
+            setFiatRates(lastEntry.rates || {});
         }
     });
 
@@ -129,7 +129,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
             return;
         }
 
-        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientBuy > 0) {
             setAmountUsd(numericAmount / rateInfo.clientBuy);
         } else {
@@ -142,7 +142,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
         <input type="hidden" name="clientId" value={client.id} />
-        <input type="hidden" name="clientName" value={client.name} />
+        <input type="hidden" name="senderName" value={client.name} />
         <input type="hidden" name="amountUsd" value={amountUsd} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -183,3 +183,5 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
     </form>
   );
 }
+
+      

@@ -515,6 +515,51 @@ export async function createQuickCashPayment(prevState: CashPaymentFormState, fo
     }
 }
 
+export async function createQuickCashReceipt(prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const validatedFields = CashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!validatedFields.success) {
+        return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record receipt.' };
+    }
+    const { bankAccountId, clientId, amount, amountUsd, remittanceNumber } = validatedFields.data;
+
+    try {
+        const [bankAccountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            get(ref(db, `clients/${clientId}`)),
+        ]);
+        if (!bankAccountSnapshot.exists()) return { message: 'Error: Could not find bank account.', success: false };
+        if (!clientSnapshot.exists()) return { message: 'Error: Could not find client.', success: false };
+
+        const bankAccount = { id: bankAccountId, ...bankAccountSnapshot.val() } as Account;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+
+        const newReceiptId = await getNextSequentialId('modernCashRecordId');
+        const receiptData: ModernCashRecord = {
+            id: newReceiptId,
+            date: new Date().toISOString(),
+            type: 'inflow',
+            source: 'Manual',
+            status: 'Pending',
+            clientId,
+            clientName: client.name,
+            accountId: bankAccountId,
+            accountName: bankAccount.name,
+            senderName: client.name, // Assuming client is the sender for quick add
+            amount,
+            currency: bankAccount.currency!,
+            amountUsd,
+            createdAt: new Date().toISOString(),
+        };
+
+        await set(ref(db, `modern_cash_records/${newReceiptId}`), stripUndefined(receiptData));
+        revalidatePath('/transactions/modern'); // To refresh the modern transaction form
+        return { success: true, message: 'Cash receipt recorded successfully.' };
+    } catch (e: any) {
+        console.error("Error creating quick cash receipt:", e);
+        return { message: 'Database Error: Could not record cash receipt.', success: false };
+    }
+}
+
 
 export async function cancelCashPayment(paymentId: string): Promise<{ success: boolean; message?: string }> {
     if (!paymentId) {
@@ -658,3 +703,5 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         return { success: false, message: "A database error occurred." };
     }
 }
+
+      
