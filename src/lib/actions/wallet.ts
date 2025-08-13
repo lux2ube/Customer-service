@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification } from './helpers';
+import type { JournalEntry } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -163,6 +164,25 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 *Tx Link:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
         `;
         await sendTelegramNotification(message);
+
+        // --- Journal Entry for Auto Payment ---
+        if (client) {
+            const clientAccountId = `6001${String(client.id).slice(-4)}`;
+            const journalRef = push(ref(db, 'journal_entries'));
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: new Date().toISOString(),
+                description: `Auto USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
+                debit_account: clientAccountId,
+                credit_account: '1003', // Hardcoded USDT Wallet ID
+                debit_amount: amount,
+                credit_amount: amount,
+                amount_usd: amount,
+                createdAt: new Date().toISOString(),
+                debit_account_name: clientName,
+                credit_account_name: 'USDT Wallet',
+            };
+            await set(journalRef, journalEntry);
+        }
 
         revalidatePath('/wallet');
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };

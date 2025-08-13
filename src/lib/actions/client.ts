@@ -36,7 +36,9 @@ const ClientSchema = z.object({
 
 
 export async function createClient(clientId: string | null, formData: FormData): Promise<ClientFormState> {
-    const newId = clientId || push(ref(db, 'clients')).key;
+    const isEditing = !!clientId;
+    const newId = isEditing ? clientId : (await get(ref(db, 'clients'))).size + 1000001;
+
     if (!newId) {
         const errorMsg = "Could not generate a client ID.";
         throw new Error(errorMsg);
@@ -87,28 +89,41 @@ export async function createClient(clientId: string | null, formData: FormData):
     let finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
     
     const dataForFirebase = stripUndefined(finalData);
-    const isEditing = !!clientId;
 
     try {
-        const clientDbRef = ref(db, `clients/${clientId || newId}`);
+        const clientDbRef = ref(db, `clients/${newId}`);
         const snapshot = await get(clientDbRef);
         const existingData = snapshot.val() as Client | null;
         const existingDocs = existingData?.kyc_documents || [];
         
         dataForFirebase.kyc_documents = [...existingDocs, ...uploadedDocuments];
+        
+        const updates: { [key: string]: any } = {};
 
         if (isEditing) {
-            await update(clientDbRef, dataForFirebase);
+            updates[`/clients/${newId}`] = { ...existingData, ...dataForFirebase };
         } else {
-            await set(clientDbRef, {
+            updates[`/clients/${newId}`] = {
                 ...dataForFirebase,
                 createdAt: new Date().toISOString()
-            });
+            };
+            // Create a corresponding liability sub-account
+            const clientAccountId = `6001${String(newId).slice(-4)}`; // e.g. 60010001
+            updates[`/accounts/${clientAccountId}`] = {
+                name: validatedFields.data.name,
+                type: 'Liabilities',
+                isGroup: false,
+                parentId: '6000',
+                currency: 'USD',
+                priority: 999
+            };
         }
+        
+        await update(ref(db), updates);
         
         await logAction(
             isEditing ? 'update_client' : 'create_client',
-            { type: 'client', id: clientId || newId, name: validatedFields.data.name },
+            { type: 'client', id: String(newId), name: validatedFields.data.name },
             { new: dataForFirebase, old: existingData }
         );
 
@@ -116,13 +131,13 @@ export async function createClient(clientId: string | null, formData: FormData):
         return { message: 'Database Error: Failed to save client data. Check server logs.' }
     }
     
+    revalidatePath('/clients');
     if (clientId) {
         revalidatePath(`/clients/${clientId}/edit`);
     }
-    revalidatePath('/clients');
     revalidatePath('/logs');
     
-    return { success: true, message: 'Client saved successfully.', clientId: clientId || newId };
+    return { success: true, message: 'Client saved successfully.', clientId: String(newId) };
 }
 
 export async function manageClient(clientId: string, formData: FormData): Promise<ClientFormState> {

@@ -1,11 +1,12 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, push, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, ModernUsdtRecord } from '../types';
+import type { Client, Account, ModernUsdtRecord, JournalEntry } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -48,14 +49,22 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
     try {
         const { date, clientId, clientName, cryptoWalletId, amount, txid, walletAddress, notes, status } = validatedFields.data;
         
-        const walletSnapshot = await get(ref(db, `accounts/${cryptoWalletId}`));
+        const [walletSnapshot, clientSnapshot] = await Promise.all([
+             get(ref(db, `accounts/${cryptoWalletId}`)),
+             get(ref(db, `clients/${clientId}`))
+        ]);
         
         if (!walletSnapshot.exists()) {
             return { message: 'Crypto Wallet not found.', success: false };
         }
+        if (!clientSnapshot.exists()) {
+            return { message: 'Client not found.', success: false };
+        }
 
         const wallet = walletSnapshot.val() as Account;
         const newId = recordId || await getNextSequentialId('usdtRecordId');
+        
+        const updates: { [key: string]: any } = {};
 
         const receiptData: Omit<ModernUsdtRecord, 'id'> = {
             date,
@@ -75,11 +84,31 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
 
         const dbRef = ref(db, `modern_usdt_records/${newId}`);
         if(isEditing) {
-            await update(dbRef, stripUndefined(receiptData));
+            updates[`/modern_usdt_records/${newId}`] = stripUndefined(receiptData);
         } else {
-             await set(dbRef, stripUndefined(receiptData));
+             updates[`/modern_usdt_records/${newId}`] = stripUndefined(receiptData);
+        }
+        
+        // Journal Entry: Debit Asset (wallet), Credit Liability (client)
+        if (status === 'Confirmed') {
+            const clientAccountId = `6001${String(clientId).slice(-4)}`;
+            const journalRef = push(ref(db, 'journal_entries'));
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: date,
+                description: `Manual USDT Receipt from ${clientName} - Ref: ${newId}`,
+                debit_account: cryptoWalletId,
+                credit_account: clientAccountId,
+                debit_amount: amount,
+                credit_amount: amount,
+                amount_usd: amount,
+                createdAt: new Date().toISOString(),
+                debit_account_name: wallet.name,
+                credit_account_name: clientName,
+            };
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         }
 
+        await update(ref(db), updates);
 
         await logAction(
             isEditing ? 'update_usdt_receipt' : 'create_usdt_manual_receipt',
@@ -132,6 +161,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     
     try {
         const newId = recordId || await getNextSequentialId('usdtRecordId');
+        const updates: { [key: string]: any } = {};
 
         const paymentData: Omit<ModernUsdtRecord, 'id'> = {
             date,
@@ -149,12 +179,32 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             createdAt: new Date().toISOString(),
         };
         
-        const dbRef = ref(db, `modern_usdt_records/${newId}`);
         if (isEditing) {
-            await update(dbRef, stripUndefined(paymentData));
+            updates[`/modern_usdt_records/${newId}`] = stripUndefined(paymentData);
         } else {
-            await set(dbRef, stripUndefined(paymentData));
+            updates[`/modern_usdt_records/${newId}`] = stripUndefined(paymentData);
         }
+
+        // Journal Entry: Debit Liability (client), Credit Asset (wallet)
+        if (status === 'Confirmed') {
+            const clientAccountId = `6001${String(clientId).slice(-4)}`;
+            const journalRef = push(ref(db, 'journal_entries'));
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: date,
+                description: `Manual USDT Payment to ${clientName} - Ref: ${newId}`,
+                debit_account: clientAccountId,
+                credit_account: '1003', // Hardcoded USDT Wallet ID
+                debit_amount: amount,
+                credit_amount: amount,
+                amount_usd: amount,
+                createdAt: new Date().toISOString(),
+                debit_account_name: clientName,
+                credit_account_name: 'USDT Wallet',
+            };
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+        }
+
+        await update(ref(db), updates);
         
         await logAction(
             isEditing ? 'update_usdt_payment' : 'create_usdt_manual_payment',
