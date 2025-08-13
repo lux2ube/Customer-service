@@ -193,32 +193,35 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 </div>
                             </div>
                         </div>
-
-                        {testResult && (
-                             <Card className="bg-background">
-                                <CardHeader>
-                                    <CardTitle className="text-base">Test Result</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {'error' in testResult ? (
-                                        <div className="flex items-center gap-2 text-destructive">
-                                            <AlertCircle className="h-4 w-4" />
-                                            <p>{testResult.error}</p>
-                                        </div>
-                                    ) : (
-                                        <div className="font-mono text-sm space-y-1">
-                                            <p key="type">Type: <span className="font-semibold">{testResult.type}</span></p>
-                                            <p key="amount">Amount: <span className="font-semibold">{testResult.amount}</span></p>
-                                            <p key="person">Person: <span className="font-semibold">{testResult.person}</span></p>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
                     </CardContent>
-                    <CardFooter className="flex justify-between">
-                         <Button type="button" variant="outline" onClick={handleTestRule}><TestTube2 className="mr-2 h-4 w-4"/> Test Rule</Button>
-                        <SubmitButton />
+                    <CardFooter className="flex justify-between items-start flex-col sm:flex-row sm:items-center">
+                        <div className="flex-1 mb-4 sm:mb-0">
+                           {testResult && (
+                                <Card className="bg-background w-full">
+                                    <CardHeader className="p-3">
+                                        <CardTitle className="text-sm">Test Result</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-3 pt-0">
+                                        {'error' in testResult ? (
+                                            <div className="flex items-center gap-2 text-destructive">
+                                                <AlertCircle className="h-4 w-4" />
+                                                <p className="text-xs">{testResult.error}</p>
+                                            </div>
+                                        ) : (
+                                            <div className="font-mono text-xs space-y-1">
+                                                <p key="type">Type: <span className="font-semibold">{testResult.type}</span></p>
+                                                <p key="amount">Amount: <span className="font-semibold">{testResult.amount}</span></p>
+                                                <p key="person">Person: <span className="font-semibold">{testResult.person}</span></p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </div>
+                         <div className="flex gap-2">
+                            <Button type="button" variant="outline" onClick={handleTestRule}><TestTube2 className="mr-2 h-4 w-4"/> Test Rule</Button>
+                            <SubmitButton />
+                         </div>
                     </CardFooter>
                 </form>
             </Card>
