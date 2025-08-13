@@ -175,7 +175,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="personEndsBefore">Person Ends Before</Label>
-                                    <Input id="personEndsBefore" name="personEndsBefore" placeholder="e.g., رصيدك" required value={personEndsBefore} onChange={e => setPersonEndsBefore(e.target.value)} dir="rtl" />
+                                    <Input id="personEndsBefore" name="personEndsBefore" placeholder="e.g., رصيدك" value={personEndsBefore} onChange={e => setPersonEndsBefore(e.target.value)} dir="rtl" />
                                 </div>
                             </div>
                         </div>
@@ -201,7 +201,7 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
                                 </CardContent>
                             </Card>
                         )}
-                    </CardContent>
+                    </CardFooter>
                     <CardFooter className="flex justify-between">
                          <Button type="button" variant="outline" onClick={handleTestRule}><TestTube2 className="mr-2 h-4 w-4"/> Test Rule</Button>
                         <SubmitButton />
@@ -265,3 +265,4 @@ export function SmsParsingRuleManager({ initialRules }: { initialRules: SmsParsi
     );
 
     
+
