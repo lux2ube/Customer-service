@@ -134,13 +134,19 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
     const actionWithId = createCashPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === record?.clientId) || null);
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
     const [amount, setAmount] = React.useState<string | number>(record?.amount || '');
     const [amountUsd, setAmountUsd] = React.useState<number>(record?.amountUsd || 0);
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, any>>({});
+    
+    React.useEffect(() => {
+        if (!record) {
+            setDate(new Date());
+        }
+    }, [record]);
 
      React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));

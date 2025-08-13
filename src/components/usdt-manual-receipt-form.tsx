@@ -76,8 +76,14 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const actionWithId = createQuickUsdtReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClientId, setSelectedClientId] = React.useState(record?.clientId || '');
+
+    React.useEffect(() => {
+        if (!record) {
+            setDate(new Date());
+        }
+    }, [record]);
 
     React.useEffect(() => {
         if (state?.success) {

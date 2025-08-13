@@ -133,7 +133,7 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
     const actionWithId = createCashReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashReceiptFormState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(clients.find(c => c.id === record?.clientId) || null);
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
     const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
@@ -141,6 +141,12 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
     const [senderName, setSenderName] = React.useState(record?.senderName || '');
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
+    
+    React.useEffect(() => {
+        if (!record) {
+            setDate(new Date());
+        }
+    }, [record]);
 
     React.useEffect(() => {
         const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
