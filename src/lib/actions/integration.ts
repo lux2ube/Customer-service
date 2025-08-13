@@ -32,16 +32,34 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
         }
         const setting: BscApiSetting = apiSettingSnapshot.val();
-        const { apiKey, walletAddress, accountId, name: configName, lastSyncedBlock = 0 } = setting;
+        const { apiKey, walletAddress, accountId, name: configName } = setting;
         if (!apiKey || !walletAddress) {
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
+        }
+        
+        // Correctly find the last synced block number for this specific account
+        const lastSyncedQuery = query(
+            ref(db, 'modern_usdt_records'),
+            orderByChild('accountId'),
+            equalTo(accountId)
+        );
+        const lastSyncedSnapshot = await get(lastSyncedQuery);
+        
+        let lastSyncedBlock = 0;
+        if (lastSyncedSnapshot.exists()) {
+            const recordsForAccount: Record<string, ModernUsdtRecord> = lastSyncedSnapshot.val();
+            for (const key in recordsForAccount) {
+                const record = recordsForAccount[key];
+                if (record.blockNumber && record.blockNumber > lastSyncedBlock) {
+                    lastSyncedBlock = record.blockNumber;
+                }
+            }
         }
         
         let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
         if (lastSyncedBlock > 0) {
             apiUrl += `&startblock=${lastSyncedBlock + 1}`;
         } else {
-            // First time sync, get only the most recent transaction to start
             apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
         }
         
@@ -61,19 +79,16 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         if (fetchedTransactions.length === 0) {
             return { message: `No new transactions found for ${configName}.`, error: false };
         }
-
-        // API sorts by 'asc', no need for client-side sort
         
         const walletAccountRef = ref(db, `accounts/${accountId}`);
         const walletAccountSnapshot = await get(walletAccountRef);
         const cryptoWalletName = walletAccountSnapshot.exists() ? (walletAccountSnapshot.val() as Account).name : 'Synced USDT Wallet';
         
         const updates: { [key: string]: any } = {};
-        let latestBlock = lastSyncedBlock;
         
         for (const tx of fetchedTransactions) {
             const txBlockNumber = parseInt(tx.blockNumber);
-            if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue; // Skip already processed blocks if any overlap
+            if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue;
 
             const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
             if (syncedAmount <= 0.01) continue;
@@ -102,15 +117,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 blockNumber: txBlockNumber
             };
             updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
-
-            if (txBlockNumber > latestBlock) {
-                latestBlock = txBlockNumber;
-            }
         }
 
         if (Object.keys(updates).length > 0) {
-            // Update the last synced block on the API setting itself
-            updates[`/bsc_apis/${apiId}/lastSyncedBlock`] = latestBlock;
             await update(ref(db), updates);
         }
 
