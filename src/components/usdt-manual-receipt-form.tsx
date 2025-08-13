@@ -80,8 +80,7 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        onValueChange(client.name);
-        setOpen(false);
+        setIsOpen(false);
     };
 
     return (
@@ -93,7 +92,7 @@ function ClientSelector({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command>
+                <Command shouldFilter={false}>
                     <CommandInput placeholder="Search clients..." value={value} onValueChange={onValueChange} />
                     <CommandList>
                         <CommandEmpty>No client found.</CommandEmpty>
@@ -122,7 +121,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const actionWithId = createQuickUsdtReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>();
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
 
@@ -130,7 +129,6 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
         if (!record) {
             setDate(new Date());
         } else {
-            setDate(parseISO(record.date));
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
@@ -161,6 +159,12 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
             });
         }
     }, [state, toast, record, router]);
+    
+    React.useEffect(() => {
+        if (selectedClient) {
+            setClientSearch(selectedClient.name);
+        }
+    }, [selectedClient]);
 
     const isEditing = !!record;
     const isSyncedRecord = isEditing && record.source === 'BSCScan';
@@ -187,7 +191,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={isSyncedRecord} /></PopoverContent>
                             </Popover>
-                            <input type="hidden" name="date" value={date?.toISOString()} />
+                            <input type="hidden" name="date" value={date?.toISOString() || ''} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="cryptoWalletId">Received In (Crypto Wallet)</Label>

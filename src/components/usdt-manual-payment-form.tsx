@@ -79,12 +79,11 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        onValueChange(client.name);
-        setIsOpen(false);
+        setOpen(false);
     };
 
     return (
-        <Popover open={open} onOpenChange={setIsOpen}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
                     {value || "Select a client..."}
@@ -92,7 +91,7 @@ function ClientSelector({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command>
+                <Command shouldFilter={false}>
                     <CommandInput placeholder="Search clients..." value={value} onValueChange={onValueChange} />
                     <CommandList>
                         <CommandEmpty>No client found.</CommandEmpty>
@@ -121,7 +120,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdt
     const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>();
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
 
@@ -129,7 +128,6 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdt
         if (!record) {
             setDate(new Date());
         } else {
-            setDate(parseISO(record.date));
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
@@ -160,6 +158,12 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdt
             });
         }
     }, [state, toast, record, router]);
+
+    React.useEffect(() => {
+        if (selectedClient) {
+            setClientSearch(selectedClient.name);
+        }
+    }, [selectedClient]);
     
     const isEditing = !!record;
     const isSyncedRecord = isEditing && record.source === 'BSCScan';
@@ -184,7 +188,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdt
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={isSyncedRecord} /></PopoverContent>
                             </Popover>
-                            <input type="hidden" name="date" value={date?.toISOString()} />
+                            <input type="hidden" name="date" value={date?.toISOString() || ''} />
                         </div>
                         <div className="space-y-2">
                            <Label htmlFor="clientId">Paid To (Client)</Label>

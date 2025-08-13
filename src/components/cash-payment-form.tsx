@@ -90,7 +90,6 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        onValueChange(client.name);
         setIsOpen(false);
     };
 
@@ -98,7 +97,7 @@ function ClientSelector({
         <Popover open={open} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
                 <div className="relative w-full">
-                    <Command>
+                    <Command shouldFilter={false}>
                         <CommandInput
                             placeholder="Search client by name or phone..."
                             value={value}
@@ -139,7 +138,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
     const actionWithId = createCashPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>();
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
 
@@ -149,11 +148,10 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, any>>({});
     
-    React.useEffect(() => {
+     React.useEffect(() => {
         if (!record) {
             setDate(new Date());
         } else {
-            setDate(parseISO(record.date));
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
@@ -224,6 +222,12 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
             });
         }
     }, [state, toast, record, router]);
+    
+    React.useEffect(() => {
+        if (selectedClient) {
+            setClientSearch(selectedClient.name);
+        }
+    }, [selectedClient]);
 
     const isEditing = !!record;
     const isSmsRecord = isEditing && record.source === 'SMS';
@@ -249,7 +253,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
                             </Popover>
-                            <input type="hidden" name="date" value={date?.toISOString()} />
+                            <input type="hidden" name="date" value={date?.toISOString() || ''} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
