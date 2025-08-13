@@ -31,23 +31,24 @@ const financialStatements = [
         href: "/reports/balance-sheet",
     },
     {
-        title: "Cash Flow Statement",
-        description: "Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.",
-        icon: <AreaChart className="h-6 w-6 text-muted-foreground" />,
+        title: "Trial Balance",
+        description: "Summarizes all account debits and credits on a specific date to verify the ledger is balanced.",
+        icon: <BookCopy className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/trial-balance",
     },
 ];
 
 const clientReports = [
     {
+        title: "Client Balance Summary",
+        description: "Shows total credits, debits, and outstanding balances for each client, helping identify top clients and opportunities for growth.",
+        icon: <Users className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/client-balance-summary",
+    },
+    {
         title: "Accounts Receivable Aging",
         description: "Lists outstanding receivables by client, showing how long invoices have been unpaid.",
         icon: <Hourglass className="h-6 w-6 text-muted-foreground" />,
-    },
-    {
-        title: "Client Balance Summary",
-        description: "Shows total invoiced amounts, payments received, and outstanding balances for each client, helping identify top clients and opportunities for growth.",
-        icon: <Users className="h-6 w-6 text-muted-foreground" />,
-        href: "/reports/client-balance-summary",
     },
     {
         title: "Client Payment Performance",
@@ -81,10 +82,9 @@ const detailedReports = [
         icon: <List className="h-6 w-6 text-muted-foreground" />,
     },
     {
-        title: "Trial Balance",
-        description: "Summarizes all account debits and credits on a specific date to verify the ledger is balanced.",
-        icon: <BookCopy className="h-6 w-6 text-muted-foreground" />,
-        href: "/reports/trial-balance",
+        title: "Cash Flow Statement",
+        description: "Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.",
+        icon: <AreaChart className="h-6 w-6 text-muted-foreground" />,
     },
     {
         title: "Account Transactions",

@@ -1,9 +1,10 @@
+
 'use client';
 
 import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead, TableFooter } from '@/components/ui/table';
-import type { Transaction } from '@/lib/types';
+import type { JournalEntry, Client, Account } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Calendar as CalendarIcon } from 'lucide-react';
@@ -17,46 +18,77 @@ import { ExportButton } from './export-button';
 interface ClientSummary {
     clientId: string;
     clientName: string;
-    totalDeposits: number;
-    totalWithdrawals: number;
+    totalDebits: number;
+    totalCredits: number;
     netBalance: number;
 }
 
-export function ClientBalanceSummaryReport({ initialTransactions }: { initialTransactions: Transaction[] }) {
+export function ClientBalanceSummaryReport({ initialJournalEntries, initialClients, initialAccounts }: { initialJournalEntries: JournalEntry[], initialClients: Client[], initialAccounts: Account[] }) {
     const [search, setSearch] = React.useState('');
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
     }
+    
+    const clientSubAccounts = React.useMemo(() => {
+        const clientParent = initialAccounts.find(a => a.id === '6000');
+        if (!clientParent) return new Map<string, string>(); // Map from accountId to clientName
+        
+        return new Map(
+            initialAccounts
+                .filter(a => a.parentId === '6000')
+                .map(acc => [acc.id, acc.name])
+        );
+    }, [initialAccounts]);
+    
+     const clientIdToAccountIdMap = React.useMemo(() => {
+        const map = new Map<string, string>();
+        initialClients.forEach(client => {
+            const accountId = `6000${client.id}`;
+            if (clientSubAccounts.has(accountId)) {
+                map.set(client.id, accountId);
+            }
+        });
+        return map;
+    }, [initialClients, clientSubAccounts]);
+
 
     const clientSummaries = React.useMemo(() => {
         const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
         const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
-        const filteredTransactions = initialTransactions.filter(tx => {
-            if (!dateRange?.from) return true; // No date filter applied
-            const txDate = parseISO(tx.date);
-            return txDate >= fromDate && txDate <= toDate;
+        const filteredJournalEntries = initialJournalEntries.filter(entry => {
+            if (!dateRange?.from) return true;
+            const entryDate = parseISO(entry.date);
+            return entryDate >= fromDate && entryDate <= toDate;
         });
         
-        const summaryMap: Record<string, { clientName: string; deposits: number; withdrawals: number }> = {};
-
-        filteredTransactions.forEach(tx => {
-            if (tx.status !== 'Confirmed' || !tx.clientId) return;
-
-            if (!summaryMap[tx.clientId]) {
-                summaryMap[tx.clientId] = {
-                    clientName: tx.clientName || tx.clientId,
-                    deposits: 0,
-                    withdrawals: 0,
+        const summaryMap: Record<string, { clientName: string; debits: number; credits: number }> = {};
+        
+        initialClients.forEach(client => {
+            const accountId = clientIdToAccountIdMap.get(client.id);
+            if (accountId) {
+                summaryMap[client.id] = {
+                    clientName: client.name,
+                    debits: 0,
+                    credits: 0,
                 };
             }
+        });
 
-            if (tx.type === 'Deposit') {
-                summaryMap[tx.clientId].deposits += tx.amount_usd;
-            } else if (tx.type === 'Withdraw') {
-                summaryMap[tx.clientId].withdrawals += tx.amount_usd;
+        filteredJournalEntries.forEach(entry => {
+            const client = initialClients.find(c => `6000${c.id}` === entry.debit_account || `6000${c.id}` === entry.credit_account);
+            if (client) {
+                const summary = summaryMap[client.id];
+                if (!summary) return;
+
+                if (`6000${client.id}` === entry.debit_account) {
+                    summary.debits += entry.amount_usd;
+                }
+                 if (`6000${client.id}` === entry.credit_account) {
+                    summary.credits += entry.amount_usd;
+                }
             }
         });
         
@@ -65,15 +97,15 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
             return {
                 clientId,
                 clientName: data.clientName,
-                totalDeposits: data.deposits,
-                totalWithdrawals: data.withdrawals,
-                netBalance: data.deposits - data.withdrawals,
+                totalDebits: data.debits,
+                totalCredits: data.credits,
+                netBalance: data.credits - data.debits, // For liability accounts, credits are positive
             };
         });
 
         return summaries.sort((a, b) => b.netBalance - a.netBalance);
 
-    }, [initialTransactions, dateRange]);
+    }, [initialJournalEntries, dateRange, initialClients, clientIdToAccountIdMap]);
 
     const filteredSummaries = React.useMemo(() => {
          if (!search) return clientSummaries;
@@ -84,13 +116,12 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
     }, [clientSummaries, search]);
 
     const totals = React.useMemo(() => {
-        // This now correctly calculates totals based on the currently displayed (filtered) list.
         return filteredSummaries.reduce((acc, summary) => {
-            acc.deposits += summary.totalDeposits;
-            acc.withdrawals += summary.totalWithdrawals;
+            acc.debits += summary.totalDebits;
+            acc.credits += summary.totalCredits;
             acc.net += summary.netBalance;
             return acc;
-        }, { deposits: 0, withdrawals: 0, net: 0 });
+        }, { debits: 0, credits: 0, net: 0 });
     }, [filteredSummaries]);
 
     return (
@@ -139,13 +170,18 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
                             </PopoverContent>
                         </Popover>
                         <ExportButton 
-                            data={filteredSummaries}
+                            data={filteredSummaries.map(s => ({
+                                ...s,
+                                totalDebits: s.totalDebits.toFixed(2),
+                                totalCredits: s.totalCredits.toFixed(2),
+                                netBalance: s.netBalance.toFixed(2),
+                            }))}
                             filename={`client-balance-summary-${dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : 'start'}-to-${dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : 'end'}`}
                             headers={{
                                 clientId: "Client ID",
                                 clientName: "Client Name",
-                                totalDeposits: "Total Deposits (USD)",
-                                totalWithdrawals: "Total Withdrawals (USD)",
+                                totalCredits: "Total Credits (USD)",
+                                totalDebits: "Total Debits (USD)",
                                 netBalance: "Net Balance (USD)",
                             }}
                         />
@@ -156,8 +192,8 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Client Name</TableHead>
-                                <TableHead className="text-right">Total Deposits (USD)</TableHead>
-                                <TableHead className="text-right">Total Withdrawals (USD)</TableHead>
+                                <TableHead className="text-right">Total Credits (USD)</TableHead>
+                                <TableHead className="text-right">Total Debits (USD)</TableHead>
                                 <TableHead className="text-right">Net Balance (USD)</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -166,8 +202,8 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
                                 filteredSummaries.map(summary => (
                                     <TableRow key={summary.clientId}>
                                         <TableCell className="font-medium">{summary.clientName}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(summary.totalDeposits)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(summary.totalWithdrawals)}</TableCell>
+                                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(summary.totalCredits)}</TableCell>
+                                        <TableCell className="text-right font-mono text-red-600">{formatCurrency(summary.totalDebits)}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(summary.netBalance)}</TableCell>
                                     </TableRow>
                                 ))
@@ -182,8 +218,8 @@ export function ClientBalanceSummaryReport({ initialTransactions }: { initialTra
                         <TableFooter>
                             <TableRow className="bg-card-foreground/10 font-bold">
                                 <TableCell>Grand Totals</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totals.deposits)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totals.withdrawals)}</TableCell>
+                                <TableCell className="text-right font-mono text-green-600">{formatCurrency(totals.credits)}</TableCell>
+                                <TableCell className="text-right font-mono text-red-600">{formatCurrency(totals.debits)}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(totals.net)}</TableCell>
                             </TableRow>
                         </TableFooter>

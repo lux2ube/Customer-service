@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { format, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { Account, JournalEntry, Transaction } from '@/lib/types';
+import type { Account, JournalEntry } from '@/lib/types';
 import { Table, TableBody, TableCell, TableRow, TableFooter } from '@/components/ui/table';
 import { ExportButton } from './export-button';
 
@@ -45,7 +45,7 @@ const buildAccountTree = (accounts: Account[]) => {
 };
 
 
-export function BalanceSheetReport({ initialAccounts, initialJournalEntries, initialTransactions }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[], initialTransactions: Transaction[] }) {
+export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[] }) {
     const [date, setDate] = React.useState<Date | undefined>(new Date());
 
     const formatCurrency = (value: number) => {
@@ -57,7 +57,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
     const calculatedData = React.useMemo((): CalculatedReport => {
         const toDate = date ? endOfDay(date) : new Date();
 
-        // 1. Calculate balances for all non-group accounts from journal entries first
+        // 1. Calculate balances for all non-group accounts from journal entries
         const leafBalances: Record<string, number> = {};
         initialAccounts.forEach(acc => {
             if (!acc.isGroup) leafBalances[acc.id] = 0;
@@ -71,31 +71,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
             }
         });
 
-        // 2. Adjust asset balances based on transaction principals
-         initialTransactions.forEach(tx => {
-            if (tx.status !== 'Confirmed') return;
-            const txDate = parseISO(tx.date);
-             if (txDate <= toDate) {
-                if (tx.type === 'Deposit') {
-                    if (tx.bankAccountId && leafBalances[tx.bankAccountId] !== undefined) {
-                        leafBalances[tx.bankAccountId] += (tx.amount_usd - (tx.fee_usd || 0));
-                    }
-                    if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId] !== undefined) {
-                        leafBalances[tx.cryptoWalletId] -= (tx.amount_usdt - (tx.expense_usd || 0));
-                    }
-                }
-                else if (tx.type === 'Withdraw') {
-                    if (tx.bankAccountId && leafBalances[tx.bankAccountId] !== undefined) {
-                        leafBalances[tx.bankAccountId] -= (tx.amount_usd - (tx.expense_usd || 0));
-                    }
-                    if (tx.cryptoWalletId && leafBalances[tx.cryptoWalletId] !== undefined) {
-                        leafBalances[tx.cryptoWalletId] += (tx.amount_usdt - (tx.fee_usd || 0));
-                    }
-                }
-            }
-        });
-
-        // 3. Aggregate balances up to parent groups
+        // 2. Aggregate balances up to parent groups
         const allBalances = { ...leafBalances };
         const accountTree = buildAccountTree(initialAccounts);
 
@@ -111,7 +87,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
         }
         accountTree.forEach(aggregateBalances);
         
-        // 4. Calculate Net Income for the period to add to Equity
+        // 3. Calculate Net Income for the period to add to Equity
         let netIncome = 0;
         const incomeAccountIds = new Set(initialAccounts.filter(a => a.type === 'Income').map(a => a.id));
         const expenseAccountIds = new Set(initialAccounts.filter(a => a.type === 'Expenses').map(a => a.id));
@@ -123,7 +99,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
             if (expenseAccountIds.has(accountId)) netIncome -= balance;
         });
 
-        // 5. Build final report rows
+        // 4. Build final report rows
         const buildRows = (type: Account['type']): ReportRow[] => {
             const typeAccounts = initialAccounts.filter(a => a.type === type);
             const typeTree = buildAccountTree(typeAccounts);
@@ -169,7 +145,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries, ini
         const totalEquity = equityBaseTotal + netIncome;
         
         return { assetRows, totalAssets, liabilityRows, totalLiabilities, equityRows, totalEquity };
-    }, [date, initialAccounts, initialJournalEntries, initialTransactions]);
+    }, [date, initialAccounts, initialJournalEntries]);
 
     const exportableData = React.useMemo(() => {
         const { assetRows, liabilityRows, equityRows, totalAssets, totalLiabilities, totalEquity } = calculatedData;

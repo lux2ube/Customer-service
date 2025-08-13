@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { format, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { Account, JournalEntry, Transaction } from '@/lib/types';
+import type { Account, JournalEntry } from '@/lib/types';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead, TableFooter } from '@/components/ui/table';
 import { ExportButton } from './export-button';
 
@@ -26,7 +26,7 @@ interface CalculatedReport {
     totalCredits: number;
 }
 
-export function TrialBalanceReport({ initialAccounts, initialJournalEntries, initialTransactions }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[], initialTransactions: Transaction[] }) {
+export function TrialBalanceReport({ initialAccounts, initialJournalEntries }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[] }) {
     const [date, setDate] = React.useState<Date | undefined>(new Date());
 
     const formatCurrency = (value: number) => {
@@ -37,42 +37,17 @@ export function TrialBalanceReport({ initialAccounts, initialJournalEntries, ini
     const calculatedData = React.useMemo((): CalculatedReport => {
         const toDate = date ? endOfDay(date) : new Date();
 
-        // 1. Calculate balances for all non-group accounts
+        // 1. Calculate balances for all non-group accounts from journal entries
         const balances: Record<string, number> = {};
         initialAccounts.forEach(acc => {
             if (!acc.isGroup) balances[acc.id] = 0;
         });
 
-        // from journal entries
         initialJournalEntries.forEach(entry => {
             const entryDate = parseISO(entry.date);
             if (entryDate <= toDate) {
                 if (balances[entry.debit_account] !== undefined) balances[entry.debit_account] += entry.amount_usd;
                 if (balances[entry.credit_account] !== undefined) balances[entry.credit_account] -= entry.amount_usd;
-            }
-        });
-
-        // from transaction principals
-        initialTransactions.forEach(tx => {
-            if (tx.status !== 'Confirmed') return;
-            const txDate = parseISO(tx.date);
-            if (txDate <= toDate) {
-                if (tx.type === 'Deposit') {
-                    if (tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
-                        balances[tx.bankAccountId] += (tx.amount_usd - (tx.fee_usd || 0));
-                    }
-                    if (tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
-                        balances[tx.cryptoWalletId] -= (tx.amount_usdt - (tx.expense_usd || 0));
-                    }
-                }
-                else if (tx.type === 'Withdraw') {
-                    if (tx.bankAccountId && balances[tx.bankAccountId] !== undefined) {
-                        balances[tx.bankAccountId] -= (tx.amount_usd - (tx.expense_usd || 0));
-                    }
-                    if (tx.cryptoWalletId && balances[tx.cryptoWalletId] !== undefined) {
-                        balances[tx.cryptoWalletId] += (tx.amount_usdt - (tx.fee_usd || 0));
-                    }
-                }
             }
         });
         
@@ -111,7 +86,7 @@ export function TrialBalanceReport({ initialAccounts, initialJournalEntries, ini
 
 
         return { rows, totalDebits, totalCredits };
-    }, [date, initialAccounts, initialJournalEntries, initialTransactions]);
+    }, [date, initialAccounts, initialJournalEntries]);
 
 
     return (
