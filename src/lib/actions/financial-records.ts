@@ -170,10 +170,10 @@ export async function updateModernCashRecord(recordId: string, prevState: Modern
             updates.status = 'Matched';
         }
 
-        await update(recordRef, updates);
+        await set(recordRef, updates);
 
         revalidatePath('/modern-cash-records');
-        return { success: true, message: "Record updated successfully." };
+        redirect('/modern-cash-records');
 
     } catch (e) {
         console.error("Error updating modern cash record:", e);
@@ -223,10 +223,10 @@ export async function updateModernUsdtRecord(recordId: string, prevState: Modern
             notes: validatedFields.data.notes || originalRecord.notes,
         };
 
-        await update(recordRef, updates);
+        await set(recordRef, updates);
 
         revalidatePath('/modern-usdt-records');
-        return { success: true, message: "Record updated successfully." };
+        redirect('/modern-usdt-records');
 
     } catch (e) {
         console.error("Error updating modern USDT record:", e);
