@@ -12,7 +12,7 @@ import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
 import { format } from 'date-fns';
-import { getNextSequentialId } from './helpers';
+import { getNextSequentialId, stripUndefined } from './helpers';
 
 
 // --- SMS Processing Actions ---
@@ -218,8 +218,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             
             if (!parsed) {
                 const settings = (await get(ref(db, 'settings'))).val() as Settings;
-                if (settings?.gemini_api_key) {
-                    parsed = await parseSmsWithAi(trimmedSmsBody, settings.gemini_api_key);
+                if (settings?.api?.gemini_api_key) {
+                    parsed = await parseSmsWithAi(trimmedSmsBody, settings.api.gemini_api_key);
                 }
             }
             
@@ -240,12 +240,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     senderName: parsed.type === 'credit' ? parsed.person : undefined,
                     recipientName: parsed.type === 'debit' ? parsed.person : undefined,
                     amount: parsed.amount!,
-                    currency: account.currency,
+                    currency: account.currency!,
                     amountUsd: 0, // This will be calculated on matching/use
                     rawSms: trimmedSmsBody,
                     createdAt: new Date().toISOString(),
                 };
-                updates[`/modern_cash_records/${newRecordId}`] = newRecord;
+                updates[`/modern_cash_records/${newRecordId}`] = stripUndefined(newRecord);
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
@@ -266,7 +266,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     rawSms: trimmedSmsBody,
                     createdAt: new Date().toISOString(),
                 };
-                updates[`/modern_cash_records/${newRecordId}`] = newRecord;
+                updates[`/modern_cash_records/${newRecordId}`] = stripUndefined(newRecord);
             }
         };
 
