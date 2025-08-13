@@ -227,8 +227,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             
             if (parsed) {
                 successCount++;
-                const newRecord: ModernCashRecord = {
-                    id: newRecordId,
+                const newRecord: Omit<ModernCashRecord, 'id'> = {
                     date: new Date().toISOString(),
                     type: parsed.type === 'credit' ? 'inflow' : 'outflow',
                     source: 'SMS',
@@ -249,8 +248,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
-                const newRecord: ModernCashRecord = {
-                    id: newRecordId,
+                const newRecord: Omit<ModernCashRecord, 'id'> = {
                     date: new Date().toISOString(),
                     type: 'inflow', // Default to inflow for review
                     source: 'SMS',
