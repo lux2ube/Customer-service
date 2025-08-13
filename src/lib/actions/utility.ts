@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -559,35 +560,40 @@ export async function restructureRecordIds(prevState: SetupState, formData: Form
 
 export async function deleteBscSyncedRecords(): Promise<{ message: string; error: boolean }> {
     try {
-        const recordsRef = ref(db, 'modern_usdt_records');
-        const snapshot = await get(recordsRef);
+        const [recordsSnapshot, apisSnapshot] = await Promise.all([
+            get(ref(db, 'modern_usdt_records')),
+            get(ref(db, 'bsc_apis'))
+        ]);
 
-        if (!snapshot.exists()) {
-            return { message: "No records to delete.", error: false };
-        }
 
-        const updates: { [key: string]: null } = {};
+        const updates: { [key: string]: null | number } = {};
         let deletedCount = 0;
 
-        snapshot.forEach(childSnapshot => {
-            const record: ModernUsdtRecord = childSnapshot.val();
-            if (record.source === 'BSCScan') {
-                updates[`/modern_usdt_records/${childSnapshot.key}`] = null;
-                deletedCount++;
-            }
-        });
-
-        // Also reset the counter
-        updates['/counters/usdtRecordId' as any] = 0 as any;
-        updates['/bsc_apis/BSC1/lastSyncedBlock' as any] = 0 as any; // Reset for the main wallet
-        updates['/bsc_apis/BSC2/lastSyncedBlock' as any] = 0 as any; // Also reset for other wallets if they exist
+        if (recordsSnapshot.exists()) {
+            recordsSnapshot.forEach(childSnapshot => {
+                const record: ModernUsdtRecord = childSnapshot.val();
+                if (record.source === 'BSCScan') {
+                    updates[`/modern_usdt_records/${childSnapshot.key}`] = null;
+                    deletedCount++;
+                }
+            });
+        }
+        
+        // Reset all API config sync histories
+        if (apisSnapshot.exists()) {
+            apisSnapshot.forEach(childSnapshot => {
+                updates[`/bsc_apis/${childSnapshot.key}/lastSyncedBlock`] = 0;
+            });
+        }
+        
+        updates['/counters/usdtRecordId'] = 0;
 
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
         }
         
         revalidatePath('/modern-usdt-records');
-        return { message: `Successfully deleted ${deletedCount} synced records and reset the counter.`, error: false };
+        return { message: `Successfully deleted ${deletedCount} synced records and reset counters/sync history.`, error: false };
     } catch (e: any) {
         console.error("Error deleting synced records:", e);
         return { message: `An error occurred: ${e.message}`, error: true };

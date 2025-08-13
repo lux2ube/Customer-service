@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { ref, set, get, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
+import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, BscApiSetting, ModernUsdtRecord } from '../types';
 import { stripUndefined, getNextSequentialId } from './helpers';
@@ -40,11 +40,10 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
         let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
         
-        // If we have a last synced block, fetch transactions after it.
-        // Otherwise, fetch only the single most recent transaction to establish a starting point.
         if (lastSyncedBlock > 0) {
             apiUrl += `&startblock=${lastSyncedBlock + 1}`;
         } else {
+             // First time sync: get only the single most recent transaction to establish a starting point.
              apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
         }
         
@@ -71,10 +70,11 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         
         const updates: { [key: string]: any } = {};
         let highestBlock = lastSyncedBlock;
+        let newRecordsCount = 0;
 
         for (const tx of fetchedTransactions) {
             const txBlockNumber = parseInt(tx.blockNumber);
-            if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue;
+            if (txBlockNumber <= lastSyncedBlock) continue;
 
             highestBlock = Math.max(highestBlock, txBlockNumber);
             
@@ -105,9 +105,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 blockNumber: txBlockNumber
             };
             updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
+            newRecordsCount++;
         }
 
-        // Update the last synced block on the API configuration itself
         if (highestBlock > lastSyncedBlock) {
             updates[`/bsc_apis/${apiId}/lastSyncedBlock`] = highestBlock;
         }
@@ -117,7 +117,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         }
 
         revalidatePath('/modern-usdt-records');
-        return { message: `${Object.keys(updates).filter(k => k.startsWith('/modern_usdt_records')).length} new transaction(s) were successfully synced for ${configName}.`, error: false };
+        return { message: `${newRecordsCount} new transaction(s) were successfully synced for ${configName}.`, error: false };
 
     } catch (error: any) {
         console.error("BscScan Sync Error:", error);
