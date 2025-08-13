@@ -373,12 +373,33 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         };
 
         const finalData = stripUndefined(receiptData);
+        
+        const updates: { [key: string]: any } = {};
 
         if (isEditing) {
-            await update(ref(db, `modern_cash_records/${newReceiptId}`), finalData);
+            updates[`/modern_cash_records/${newReceiptId}`] = finalData;
         } else {
-            await set(ref(db, `modern_cash_records/${newReceiptId}`), finalData);
+            updates[`/modern_cash_records/${newReceiptId}`] = finalData;
         }
+        
+        // Journal Entry: Debit Asset (bank), Credit Liability (client)
+        const clientAccountId = `6000${clientId}`;
+        const journalRef = push(ref(db, 'journal_entries'));
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: date || new Date().toISOString(),
+            description: `Cash Receipt from ${senderName} for ${client.name} - Ref: ${newReceiptId}`,
+            debit_account: bankAccountId,
+            credit_account: clientAccountId,
+            debit_amount: amount,
+            credit_amount: amountUsd, // Assuming client account is in USD
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: bankAccount.name,
+            credit_account_name: client.name,
+        };
+        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+
+        await update(ref(db), updates);
         
         revalidatePath('/modern-cash-records');
         if (recordId) {
@@ -454,12 +475,33 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
         };
         
         const finalData = stripUndefined(paymentData);
+        
+        const updates: { [key: string]: any } = {};
 
         if (isEditing) {
-            await update(ref(db, `modern_cash_records/${newPaymentId}`), finalData);
+            updates[`/modern_cash_records/${newPaymentId}`] = finalData;
         } else {
-            await set(ref(db, `modern_cash_records/${newPaymentId}`), finalData);
+            updates[`/modern_cash_records/${newPaymentId}`] = finalData;
         }
+
+        // Journal Entry: Debit Liability (client), Credit Asset (bank)
+        const clientAccountId = `6000${clientId}`;
+        const journalRef = push(ref(db, 'journal_entries'));
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: date || new Date().toISOString(),
+            description: `Cash Payment to ${recipientName || client.name} for ${client.name} - Ref: ${newPaymentId}`,
+            debit_account: clientAccountId,
+            credit_account: bankAccountId,
+            debit_amount: amountUsd, // Assuming client account is in USD
+            credit_amount: amount,
+            amount_usd: amountUsd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: client.name,
+            credit_account_name: bankAccount.name,
+        };
+        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+        
+        await update(ref(db), updates);
         
         revalidatePath('/modern-cash-records');
         redirect('/modern-cash-records');

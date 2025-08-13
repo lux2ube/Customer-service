@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -108,7 +107,7 @@ export async function createClient(clientId: string | null, formData: FormData):
                 createdAt: new Date().toISOString()
             };
             // Create a corresponding liability sub-account
-            const clientAccountId = `6001${String(newId).slice(-4)}`; // e.g. 60010001
+            const clientAccountId = `6000${newId}`;
             updates[`/accounts/${clientAccountId}`] = {
                 name: validatedFields.data.name,
                 type: 'Liabilities',
@@ -529,3 +528,4 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
         return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }
+

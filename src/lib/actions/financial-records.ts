@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -91,7 +90,7 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
         
         // Journal Entry: Debit Asset (wallet), Credit Liability (client)
         if (status === 'Confirmed') {
-            const clientAccountId = `6001${String(clientId).slice(-4)}`;
+            const clientAccountId = `6000${clientId}`;
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: date,
@@ -187,7 +186,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
 
         // Journal Entry: Debit Liability (client), Credit Asset (wallet)
         if (status === 'Confirmed') {
-            const clientAccountId = `6001${String(clientId).slice(-4)}`;
+            const clientAccountId = `6000${clientId}`;
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: date,
@@ -223,3 +222,4 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         return { message: 'Database Error: Could not record payment.', success: false };
     }
 }
+

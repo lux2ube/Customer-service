@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -167,7 +166,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         // --- Journal Entry for Auto Payment ---
         if (client) {
-            const clientAccountId = `6001${String(client.id).slice(-4)}`;
+            const clientAccountId = `6000${client.id}`;
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: new Date().toISOString(),
