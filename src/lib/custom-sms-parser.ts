@@ -19,7 +19,7 @@ export function parseSmsWithCustomRules(smsBody: string, rules: SmsParsingRule[]
             // --- Extract Amount Independently ---
             const amountPattern = new RegExp(
                 escapeRegex(rule.amountStartsAfter) +
-                '\\s*([\\d,.]+?)\\s*' + // Capture group 1: The amount (non-greedy)
+                '\\s*([\\d,٫.]+?)\\s*' + // Capture group 1: The amount (non-greedy)
                 escapeRegex(rule.amountEndsBefore),
                 'i' // Case-insensitive
             );
@@ -42,7 +42,7 @@ export function parseSmsWithCustomRules(smsBody: string, rules: SmsParsingRule[]
                 // If personEndsBefore is empty, capture everything until the end of the string.
                  personPattern = new RegExp(
                     escapeRegex(rule.personStartsAfter) +
-                    '\\s*(.*)', // Capture group 1: The rest of the string (greedy)
+                    '\\s*([^\\d\\s.,]+(?:\\s+[^\\d\\s.,]+)*)', // Capture group 1: More robustly capture names, avoiding trailing numbers/symbols
                     'i' // Case-insensitive
                 );
             }
