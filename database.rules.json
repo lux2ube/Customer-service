@@ -10,7 +10,7 @@
       ".indexOn": ["createdAt", "clientId", "status"]
     },
     "modern_usdt_records": {
-      ".indexOn": ["accountId", "date", "source"]
+      ".indexOn": ["accountId", "date", "source", "blockNumber"]
     },
     "cash_receipts": {
       ".indexOn": ["clientId", "status"]
