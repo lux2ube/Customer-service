@@ -10,7 +10,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { Client, Account } from '@/lib/types';
-import { createQuickUsdtReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
+import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -48,7 +48,7 @@ export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createQuickUsdtReceipt, undefined);
+  const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createUsdtManualReceipt, undefined);
   
   React.useEffect(() => {
     setLoading(true);
@@ -87,6 +87,7 @@ export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
         <input type="hidden" name="clientId" value={client.id} />
         <input type="hidden" name="clientName" value={client.name} />
+        <input type="hidden" name="date" value={new Date().toISOString()} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
             <Label htmlFor="cryptoWalletId">Received In (System Wallet)</Label>
