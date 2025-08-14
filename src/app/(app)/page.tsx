@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -60,7 +61,7 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
                 isCredit ? "text-green-600" : "text-red-600"
             )}>
                 <p>{isCredit ? '' : '-'}{new Intl.NumberFormat('en-US').format(tx.amount_usd)}</p>
-                <p className="text-xs font-normal text-muted-foreground">{tx.currency}</p>
+                <p className="text-xs font-normal text-muted-foreground">USD</p>
             </div>
         </div>
     )
@@ -122,7 +123,7 @@ export default function DashboardPage() {
     const [totalDeposits, setTotalDeposits] = React.useState(0);
     const [totalWithdrawals, setTotalWithdrawals] = React.useState(0);
 
-    const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string, value: number }[]>([]);
+    const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string; value: number }[]>([]);
 
 
     React.useEffect(() => {
@@ -254,7 +255,7 @@ export default function DashboardPage() {
 
     const quickAccessActions = [
         { title: 'Add Client', icon: UserPlus, href: '/clients/add' },
-        { title: 'Add Transaction', icon: PlusCircle, href: '/transactions/add' },
+        { title: 'New Transaction', icon: PlusCircle, href: '/transactions/modern' },
         { title: 'Chart of Accounts', icon: Network, href: '/accounting/chart-of-accounts' },
         { title: 'Blacklist', icon: ShieldAlert, href: '/blacklist' },
     ];
@@ -286,7 +287,7 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
-                           <SyncForm />
+                           {/* These forms are now obsolete with the new workflow. You can add other system-wide actions here later. */}
                            <ProcessSmsForm />
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">

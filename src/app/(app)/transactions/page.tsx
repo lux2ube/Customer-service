@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -8,7 +9,7 @@ import { TransactionsTable } from "@/components/transactions-table";
 import { ExportButton } from '@/components/export-button';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Transaction, Client } from '@/lib/types';
+import type { Transaction } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -41,28 +42,25 @@ export default function TransactionsPage() {
     }, []);
 
     const handleRowClick = (txId: string) => {
-        router.push(`/transactions/${txId}/edit`);
+        // Since we don't have a dedicated edit page anymore, this can be removed or repurposed.
+        // For now, it does nothing.
     };
 
     const exportableData = exportData.map(tx => ({
         id: tx.id,
         date: tx.date,
-        clientName: tx.clientName || tx.clientId,
+        clientName: tx.clientName,
         type: tx.type,
-        amount: tx.amount,
-        currency: tx.currency,
         amount_usd: tx.amount_usd,
+        amount_usdt: tx.amount_usdt,
         status: tx.status,
-        hash: tx.hash,
-        remittance_number: tx.remittance_number,
-        notes: tx.notes,
     }));
 
     return (
         <div className="space-y-6">
             <PageHeader 
                 title="Transactions"
-                description="Manage all financial transactions."
+                description="View all consolidated financial transactions."
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <ExportButton 
@@ -73,17 +71,13 @@ export default function TransactionsPage() {
                             date: "Date",
                             clientName: "Client",
                             type: "Type",
-                            amount: "Amount",
-                            currency: "Currency",
                             amount_usd: "Amount (USD)",
+                            amount_usdt: "Amount (USDT)",
                             status: "Status",
-                            hash: "Hash",
-                            remittance_number: "Remittance #",
-                            notes: "Notes",
                         }}
                     />
                     <Button asChild>
-                        <Link href="/transactions/add">
+                        <Link href="/transactions/modern">
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Add New Transaction
                         </Link>

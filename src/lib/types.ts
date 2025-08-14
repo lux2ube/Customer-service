@@ -44,7 +44,7 @@ export interface ClientActivity {
     amount: number;
     currency: string;
     status: string;
-    source: 'Transaction' | 'Cash Receipt' | 'Cash Payment' | 'SMS';
+    source: 'Transaction' | 'Cash Record' | 'USDT Record';
     link?: string;
     bankAccountId?: string;
 }
@@ -76,33 +76,22 @@ export interface ServiceProvider {
 export interface Transaction {
     id: string;
     date: string;
-    type: 'Deposit' | 'Withdraw' | 'Modern' | 'Transfer';
+    type: 'Deposit' | 'Withdraw' | 'Transfer';
     clientId: string;
     clientName?: string; // For display
-    bankAccountId?: string;
-    bankAccountName?: string; // for display
-    cryptoWalletId?: string;
-    cryptoWalletName?: string; // for display
-    amount?: number;
-    currency?: string;
-    amount_usd: number;
+    amount_usd: number; // Total USD value of the inputs
     fee_usd: number;
     expense_usd?: number;
-    amount_usdt: number;
+    amount_usdt: number; // Final USDT amount after fees/expenses
     attachment_url?: string;
     invoice_image_url?: string;
     notes?: string;
-    remittance_number?: string;
-    hash?: string;
-    client_wallet_address?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     createdAt: string;
-    linkedSmsId?: string;
     linkedRecordIds?: string;
-    exchange_rate_commission?: number;
 }
 
-export interface ModernCashRecord {
+export interface CashRecord {
     id: string;
     date: string;
     type: 'inflow' | 'outflow';
@@ -122,7 +111,7 @@ export interface ModernCashRecord {
     createdAt: string;
 }
 
-export interface ModernUsdtRecord {
+export interface UsdtRecord {
     id: string;
     date: string;
     type: 'inflow' | 'outflow';
@@ -140,70 +129,21 @@ export interface ModernUsdtRecord {
     blockNumber?: number; // For sync logic
 }
 
-
-export interface CashReceipt {
-    id: string;
-    date: string;
-    bankAccountId: string;
-    bankAccountName: string;
-    clientId: string;
-    clientName: string;
-    senderName: string;
-    amount: number;
-    currency: string;
-    amountUsd: number;
-    remittanceNumber?: string;
-    note?: string;
-    status: 'Pending' | 'Used' | 'Cancelled';
-    createdAt: string;
+export interface UnifiedFinancialRecord {
+  id: string;
+  date: string;
+  type: 'inflow' | 'outflow';
+  category: 'fiat' | 'crypto';
+  source: 'Manual' | 'SMS' | 'BSCScan';
+  amount: number;
+  currency: string;
+  amountUsd: number;
+  status: string;
+  bankAccountName?: string; // from CashRecord
+  cryptoWalletName?: string; // from UsdtRecord
+  senderName?: string;
+  recipientName?: string;
 }
-
-export interface CashPayment {
-    id: string;
-    date: string;
-    bankAccountId: string;
-    bankAccountName: string;
-    clientId: string;
-    clientName: string;
-    recipientName: string;
-    amount: number;
-    currency: string;
-    amountUsd: number;
-    remittanceNumber?: string;
-    note?: string;
-    status: 'Confirmed' | 'Cancelled';
-    createdAt: string;
-    journalEntryId?: string;
-}
-
-export interface UsdtManualReceipt {
-    id: string;
-    date: string;
-    clientId: string;
-    clientName: string;
-    cryptoWalletId: string;
-    cryptoWalletName: string;
-    amount: number; // USDT amount
-    walletAddress?: string;
-    txid?: string;
-    notes?: string;
-    status: 'Completed' | 'Cancelled';
-    createdAt: string;
-}
-
-export interface UsdtPayment {
-    id: string;
-    date: string;
-    clientId: string;
-    clientName: string;
-    recipientAddress: string;
-    amount: number; // USDT amount
-    txid?: string;
-    notes?: string;
-    status: 'Completed' | 'Cancelled';
-    createdAt: string;
-}
-
 
 export interface Account {
     id: string;
@@ -236,7 +176,6 @@ export interface Settings {
 }
 
 export interface FiatRate {
-    currency: string;
     clientBuy: number;
     clientSell: number;
     systemBuy: number;
@@ -286,36 +225,6 @@ export interface SmsTransaction {
     matched_client_name?: string;
 }
 
-// For displaying combined funds in the new transaction form
-export interface UnifiedReceipt {
-    id: string;
-    date: string;
-    clientName: string;
-    senderName: string;
-    bankAccountName: string;
-    amount: number;
-    currency: string;
-    amountUsd: number;
-    remittanceNumber?: string;
-    source: 'Manual' | 'SMS';
-    status: CashReceipt['status'] | SmsTransaction['status'];
-    rawSms?: string;
-}
-
-export interface UnifiedFinancialRecord {
-  id: string;
-  date: string;
-  type: 'inflow' | 'outflow';
-  category: 'fiat' | 'crypto';
-  source: 'Manual' | 'SMS' | 'USDT' | 'Cash Payment' | 'USDT Payment' | 'Wallet';
-  amount: number;
-  currency: string;
-  amountUsd: number;
-  status: string;
-  bankAccountName?: string;
-  cryptoWalletName?: string;
-}
-
 export interface ParsedSms {
   parsed: boolean;
   type?: 'credit' | 'debit';
@@ -349,7 +258,7 @@ export interface AuditLog {
   timestamp: string;
   user: string; // For now, can be 'system' or an admin ID
   action: string;
-  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'usdt_receipt' | 'usdt_payment' | 'transaction' | 'modern_cash_record' | 'modern_usdt_record' | 'bsc_api';
+  entityType: 'client' | 'account' | 'service_provider' | 'bank_account' | 'transaction' | 'cash_record' | 'usdt_record' | 'bsc_api';
   entityId: string;
   entityName?: string;
   details?: Record<string, any> | string;
