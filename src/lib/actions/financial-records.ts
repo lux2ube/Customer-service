@@ -6,9 +6,94 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, push, update } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, ModernUsdtRecord, JournalEntry } from '../types';
+import type { Client, Account, ModernUsdtRecord, JournalEntry, CashRecord } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
+
+
+// --- Cash Inflow (Receipt) ---
+export type CashReceiptFormState = {
+  errors?: {
+    bankAccountId?: string[];
+    clientId?: string[];
+    amount?: string[];
+    senderName?: string[];
+  };
+  message?: string;
+  success?: boolean;
+} | undefined;
+
+
+const CashRecordSchema = z.object({
+  date: z.string({ invalid_type_error: 'Please select a date.' }),
+  bankAccountId: z.string().min(1, 'Please select a bank account.'),
+  clientId: z.string().nullable(),
+  senderName: z.string().optional(),
+  recipientName: z.string().optional(),
+  amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+  amountUsd: z.coerce.number(),
+  remittanceNumber: z.string().optional(),
+  note: z.string().optional(),
+  type: z.enum(['inflow', 'outflow']),
+});
+
+
+export async function createCashReceipt(recordId: string | null, prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
+    const validatedFields = CashRecordSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save cash record.',
+            success: false,
+        };
+    }
+    
+    try {
+        const { date, clientId, bankAccountId, amount, amountUsd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
+        
+        const [accountSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `accounts/${bankAccountId}`)),
+            clientId ? get(ref(db, `clients/${clientId}`)) : Promise.resolve(null)
+        ]);
+        
+        if (!accountSnapshot.exists()) return { message: 'Bank Account not found.', success: false };
+
+        const account = accountSnapshot.val() as Account;
+        const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
+        
+        const newId = recordId || await getNextSequentialId('modernCashRecordId');
+        
+        const recordData: Omit<CashRecord, 'id'> = {
+            date: date,
+            type: type,
+            source: 'Manual',
+            status: 'Matched', // Manual entries are considered matched
+            clientId: clientId,
+            clientName: clientName,
+            accountId: bankAccountId,
+            accountName: account.name,
+            senderName: senderName,
+            recipientName: recipientName,
+            amount: amount,
+            currency: account.currency!,
+            amountUsd: amountUsd,
+            notes: note,
+            createdAt: new Date().toISOString(),
+        };
+
+        await set(ref(db, `cash_records/${newId}`), stripUndefined(recordData));
+
+        revalidatePath('/modern-cash-records');
+        return { success: true, message: 'Cash record saved successfully.' };
+
+    } catch (error) {
+        console.error("Create Cash Record Error:", error);
+        return { message: 'Database Error: Could not record transaction.', success: false };
+    }
+}
+
+
 
 // --- USDT Manual Receipt ---
 export type UsdtManualReceiptState = {

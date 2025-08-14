@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, ModernCashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createCashPayment, type CashPaymentFormState, searchClients } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState, searchClients } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
@@ -130,8 +130,8 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const actionWithId = createCashPayment.bind(null, record?.id || null);
-    const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
+    const actionWithId = createCashReceipt.bind(null, record?.id || null);
+    const [state, formAction] = useActionState<CashReceiptFormState, FormData>(actionWithId, undefined);
     
     const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
@@ -233,6 +233,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
 
     return (
         <form action={formAction} ref={formRef}>
+            <input type="hidden" name="type" value="outflow" />
              <Card>
                 <CardHeader>
                     <CardTitle>{isEditing ? 'Edit' : 'New'} Cash Payment</CardTitle>

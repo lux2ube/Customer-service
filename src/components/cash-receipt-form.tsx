@@ -87,7 +87,7 @@ function ClientSelector({
     const handleSelect = (client: Client) => {
         onSelect(client);
         onValueChange(client.name);
-        setOpen(false);
+        setIsOpen(false);
     };
 
     return (
@@ -232,6 +232,7 @@ export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }:
 
     return (
         <form action={formAction} ref={formRef}>
+            <input type="hidden" name="type" value="inflow" />
              <Card>
                 <CardHeader>
                     <CardTitle>{isEditing ? 'Edit' : 'New'} Cash Receipt</CardTitle>
