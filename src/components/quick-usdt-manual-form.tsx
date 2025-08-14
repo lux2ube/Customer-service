@@ -82,7 +82,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
         <div className="space-y-2">
             <Label htmlFor="manual_amount">Amount (USDT)</Label>
             <Input id="manual_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
-            {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
+            {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
         </div>
         <div className="space-y-2">
             <Label htmlFor="txid">Transaction Hash (TxID)</Label>

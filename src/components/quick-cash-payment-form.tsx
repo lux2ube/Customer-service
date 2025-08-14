@@ -46,7 +46,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
   const formRef = React.useRef<HTMLFormElement>(null);
   
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
-  const [fiatRates, setFiatRates] = React.useState<FiatRate[]>([]);
+  const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
   const [loading, setLoading] = React.useState(true);
 
   const [state, formAction] = useActionState<CashPaymentFormState, FormData>(createQuickCashPayment, undefined);
@@ -74,7 +74,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
             const data = snapshot.val();
             const lastEntryKey = Object.keys(data)[0];
             const lastEntry = data[lastEntryKey];
-            setFiatRates(lastEntry.rates || []);
+            setFiatRates(lastEntry.rates || {});
         }
     });
 
@@ -120,7 +120,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
             return;
         }
 
-        const rateInfo = fiatRates.find(r => r.currency === selectedAccount.currency);
+        const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientSell > 0) {
             setAmountUsd(numericAmount / rateInfo.clientSell);
         } else {
