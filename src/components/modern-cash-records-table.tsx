@@ -17,13 +17,22 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +53,7 @@ export function ModernCashRecordsTable() {
   const [sourceFilter, setSourceFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+  const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -107,6 +117,7 @@ export function ModernCashRecordsTable() {
     }
 
   return (
+    <>
     <div className="space-y-4">
         <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
             <Input 
@@ -192,6 +203,11 @@ export function ModernCashRecordsTable() {
                                             <Pencil className="mr-2 h-4 w-4" /> Edit
                                         </Link>
                                     </DropdownMenuItem>
+                                     {record.source === 'SMS' && record.rawSms && (
+                                        <DropdownMenuItem onClick={() => setRawSmsToShow(record.rawSms!)}>
+                                            <MessageSquare className="mr-2 h-4 w-4" /> View SMS
+                                        </DropdownMenuItem>
+                                     )}
                                     <DropdownMenuItem>Cancel</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -205,5 +221,17 @@ export function ModernCashRecordsTable() {
             </Table>
         </div>
     </div>
+    <AlertDialog open={!!rawSmsToShow} onOpenChange={(open) => !open && setRawSmsToShow(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Raw SMS Content</AlertDialogTitle>
+                <AlertDialogDescription dir="rtl" className="font-mono bg-muted p-4 rounded-md text-foreground break-words">{rawSmsToShow}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogAction onClick={() => setRawSmsToShow(null)}>Close</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

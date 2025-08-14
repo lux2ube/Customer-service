@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -261,7 +260,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     amount: parsed.amount!,
                     currency: account.currency!,
                     amountUsd: parseFloat(amountUsd.toFixed(2)),
-                    rawSms: trimmedSmsBody,
+                    notes: trimmedSmsBody, // Store original SMS in notes
+                    rawSms: trimmedSmsBody, // Store original SMS in its own field
                     createdAt: new Date().toISOString(),
                 };
                 updates[`/modern_cash_records/${newRecordId}`] = stripUndefined(newRecord);
@@ -634,4 +634,3 @@ export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: 
         return { message: 'Database error: Failed to update SMS records.', error: true };
     }
 }
-

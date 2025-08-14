@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -346,6 +345,7 @@ export async function initializeDefaultCurrencies(prevState: RateFormState, form
 
 // --- One-time Database Setup ---
 export type SetupState = { message?: string; error?: boolean; } | undefined;
+export type CleanupState = { message?: string; error?: boolean; } | undefined;
 
 export async function assignSequentialSmsIds(prevState: SetupState, formData: FormData): Promise<SetupState> {
     try {
@@ -596,6 +596,22 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
         return { message: `Successfully deleted ${deletedCount} synced records and reset counters/sync history.`, error: false };
     } catch (e: any) {
         console.error("Error deleting synced records:", e);
+        return { message: `An error occurred: ${e.message}`, error: true };
+    }
+}
+
+export async function deleteAllModernCashRecords(prevState: CleanupState, formData: FormData): Promise<CleanupState> {
+    try {
+        const updates: { [key: string]: any } = {};
+        updates['/modern_cash_records'] = null;
+        updates['/counters/modernCashRecordId'] = 0;
+
+        await update(ref(db), updates);
+
+        revalidatePath('/modern-cash-records');
+        return { message: 'Successfully deleted all cash records and reset the ID counter.', error: false };
+    } catch (e: any) {
+        console.error("Error deleting cash records:", e);
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }

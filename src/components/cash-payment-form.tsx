@@ -45,15 +45,11 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
 function ClientSelector({
   value,
   onValueChange,
-  selectedClient,
-  onSelect,
-  disabled
+  onSelect
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  selectedClient: Client | null;
   onSelect: (client: Client | null) => void;
-  disabled?: boolean;
 }) {
     const [open, setIsOpen] = React.useState(false);
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
@@ -90,6 +86,7 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
+        onValueChange(client.name);
         setIsOpen(false);
     };
 
@@ -102,8 +99,6 @@ function ClientSelector({
                             placeholder="Search client by name or phone..."
                             value={value}
                             onValueChange={onValueChange}
-                            className="pr-10"
-                            disabled={disabled}
                         />
                     </Command>
                 </div>
@@ -116,7 +111,7 @@ function ClientSelector({
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
-                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", value === client.name ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
@@ -138,20 +133,21 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
     const actionWithId = createCashPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashPaymentFormState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
+    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
 
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
     const [amount, setAmount] = React.useState<string | number>(record?.amount || '');
     const [amountUsd, setAmountUsd] = React.useState<number>(record?.amountUsd || 0);
+    const [recipientName, setRecipientName] = React.useState(record?.recipientName || '');
+    const [notes, setNotes] = React.useState(record?.notes || '');
+
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, any>>({});
     
      React.useEffect(() => {
-        if (!record) {
-            setDate(new Date());
-        } else {
+        if (record) {
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
@@ -213,6 +209,8 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                 setClientSearch("");
                 setSelectedBankAccountId('');
                 setAmount('');
+                setRecipientName('');
+                setNotes('');
             }
         } else if (state?.message) {
             toast({
@@ -223,14 +221,14 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
         }
     }, [state, toast, record, router]);
     
-    React.useEffect(() => {
-        if (selectedClient) {
-            setClientSearch(selectedClient.name);
+    const handleClientSelect = (client: Client | null) => {
+        setSelectedClient(client);
+        if(client) {
+            setClientSearch(client.name);
         }
-    }, [selectedClient]);
-
+    };
+    
     const isEditing = !!record;
-    const isSmsRecord = isEditing && record.source === 'SMS';
     const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
     return (
@@ -246,7 +244,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                              <Label>Date</Label>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")} disabled={isSmsRecord}>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {date ? format(date, "PPP") : <span>Pick a date</span>}
                                     </Button>
@@ -257,7 +255,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
-                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId} disabled={isSmsRecord}>
+                            <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
                                 <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
                                 <SelectContent>
                                     {bankAccounts.map(account => (
@@ -275,7 +273,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="amount">Amount Paid ({selectedAccount?.currency || '...'})</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={isSmsRecord} />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                          <div className="space-y-2">
@@ -290,8 +288,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                         <ClientSelector
                           value={clientSearch}
                           onValueChange={setClientSearch}
-                          selectedClient={selectedClient}
-                          onSelect={setSelectedClient}
+                          onSelect={handleClientSelect}
                         />
                         <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                          {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
@@ -299,7 +296,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
 
                     <div className="space-y-2">
                         <Label htmlFor="recipientName">Recipient Name (if not a client)</Label>
-                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" defaultValue={record?.recipientName} disabled={isSmsRecord} />
+                        <Input id="recipientName" name="recipientName" placeholder="e.g., John Doe" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
@@ -309,7 +306,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Mo
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="note">Note</Label>
-                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" defaultValue={record?.notes} />
+                            <Textarea id="note" name="note" placeholder="Optional notes about the transaction" value={notes} onChange={(e) => setNotes(e.target.value)} />
                         </div>
                     </div>
                 </CardContent>

@@ -1,4 +1,5 @@
 
+'use server';
 
 import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
