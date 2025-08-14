@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -316,21 +317,23 @@ export type CashReceiptFormState = {
   success?: boolean;
 } | undefined;
 
-const FullCashReceiptSchema = z.object({
-    date: z.string().optional(),
-    bankAccountId: z.string().min(1, 'Please select a bank account.'),
-    clientId: z.string().min(1, 'Please select a client to credit.'),
-    senderName: z.string().min(1, 'Sender name is required.'),
-    amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
-    amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
-    remittanceNumber: z.string().optional(),
-    note: z.string().optional(),
+// Schema for editing an existing modern_cash_record
+const EditCashRecordSchema = z.object({
+  clientId: z.string().min(1, 'A client must be selected.'),
+  note: z.string().optional(),
+  remittanceNumber: z.string().optional(),
 });
 
-const EditCashRecordSchema = z.object({
-    clientId: z.string().min(1, 'A client must be selected.'),
-    note: z.string().optional(),
-    remittanceNumber: z.string().optional(),
+// Schema for creating a new cash receipt from scratch
+const FullCashReceiptSchema = z.object({
+  date: z.string().optional(),
+  bankAccountId: z.string().min(1, 'Please select a bank account.'),
+  clientId: z.string().min(1, 'Please select a client to credit.'),
+  senderName: z.string().min(1, 'Sender name is required.'),
+  amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+  amountUsd: z.coerce.number().gt(0, 'USD Amount must be greater than zero.'),
+  remittanceNumber: z.string().optional(),
+  note: z.string().optional(),
 });
 
 export async function createCashReceipt(recordId: string | null, prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
@@ -361,9 +364,10 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
                 clientName: clientSnapshot.val().name,
                 notes: note || existingRecord.notes,
                 remittanceNumber: remittanceNumber || existingRecord.notes,
-                status: existingRecord.source === 'SMS' ? 'Matched' : 'Pending' as ModernCashRecord['status'],
+                status: existingRecord.source === 'SMS' && existingRecord.status === 'Pending' ? 'Matched' : existingRecord.status,
             };
-            await update(ref(db, `modern_cash_records/${recordId}`), updatedData);
+            
+            await set(ref(db, `modern_cash_records/${recordId}`), updatedData);
             revalidatePath('/modern-cash-records');
             redirect('/modern-cash-records');
 
@@ -371,8 +375,6 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             console.error("Error updating cash receipt:", e);
             return { message: 'Database Error: Could not update cash receipt.', success: false };
         }
-        // This was the missing return. The function would fall through if isEditing was true.
-        redirect('/modern-cash-records');
     } else {
         const validatedFields = FullCashReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
@@ -487,17 +489,16 @@ export async function createCashPayment(paymentId: string | null, prevState: Cas
                 clientName: clientSnapshot.val().name,
                 notes: note || existingRecord.notes,
                 remittanceNumber: remittanceNumber || existingRecord.notes, // Assuming notes field was used for this
-                status: existingRecord.source === 'SMS' ? 'Matched' : 'Pending' as ModernCashRecord['status'],
+                status: existingRecord.source === 'SMS' && existingRecord.status === 'Pending' ? 'Matched' : existingRecord.status,
             };
-            await update(ref(db, `modern_cash_records/${paymentId}`), updatedData);
+            
+            await set(ref(db, `modern_cash_records/${paymentId}`), updatedData);
             revalidatePath('/modern-cash-records');
             redirect('/modern-cash-records');
 
         } catch (e: any) {
             return { message: 'Database Error: Could not update cash payment.', success: false };
         }
-        // This was the missing return. The function would fall through if isEditing was true.
-        redirect('/modern-cash-records');
     } else {
         const validatedFields = FullCashPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
         if (!validatedFields.success) {
@@ -846,5 +847,3 @@ export async function createModernTransaction(formData: FormData): Promise<{ suc
         return { success: false, message: "A database error occurred." };
     }
 }
-
-    
