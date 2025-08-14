@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -223,10 +222,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 }
             }
             
-            const newRecordId = await getNextSequentialId('modernCashRecordId');
-            
             if (parsed) {
                 successCount++;
+                const newRecordId = await getNextSequentialId('modernCashRecordId');
                 const newRecord: Omit<ModernCashRecord, 'id'> = {
                     date: new Date().toISOString(),
                     type: parsed.type === 'credit' ? 'inflow' : 'outflow',
@@ -248,23 +246,13 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
-                const newRecord: Omit<ModernCashRecord, 'id'> = {
-                    date: new Date().toISOString(),
-                    type: 'inflow', // Default to inflow for review
-                    source: 'SMS',
-                    status: 'Cancelled', // Mark as 'Cancelled' or a new 'ParsingFailed' status
-                    clientId: null,
-                    clientName: null,
-                    accountId: accountId,
-                    accountName: account.name,
-                    senderName: 'Parsing Failed',
-                    amount: 0,
-                    currency: account.currency,
-                    amountUsd: 0,
+                const failureRef = push(ref(db, 'sms_parsing_failures'));
+                updates[failureRef.path.toString()] = {
                     rawSms: trimmedSmsBody,
-                    createdAt: new Date().toISOString(),
+                    accountId,
+                    accountName: account.name,
+                    failedAt: new Date().toISOString(),
                 };
-                updates[`/modern_cash_records/${newRecordId}`] = stripUndefined(newRecord);
             }
         };
 
@@ -285,6 +273,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         revalidatePath('/modern-cash-records');
+        revalidatePath('/sms/parsing-failures');
         let message = `Processed ${processedCount} message(s): ${successCount} successfully parsed, ${failedCount} failed.`;
         if (duplicateCount > 0) {
             message += ` Skipped ${duplicateCount} duplicate message(s).`;

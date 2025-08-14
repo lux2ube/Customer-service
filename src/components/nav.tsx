@@ -39,6 +39,7 @@ import {
   Book,
   DollarSign,
   Plug,
+  FileWarning,
 } from 'lucide-react';
 
 const menuItems = [
@@ -71,6 +72,7 @@ const menuItems = [
   { type: 'divider', label: 'النظام' },
   { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
+  { href: '/sms/parsing-failures', label: 'SMS Parsing Failures', icon: FileWarning },
   { href: '/settings/bsc-apis', label: 'BSC API Settings', icon: Plug },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },

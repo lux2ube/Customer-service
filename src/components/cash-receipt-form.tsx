@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -23,10 +24,10 @@ import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
-function SubmitButton({ isEditing }: { isEditing: boolean }) {
+function SubmitButton({ isEditing, onFormSubmit }: { isEditing: boolean, onFormSubmit?: () => void }) {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} onClick={onFormSubmit}>
             {pending ? (
                 <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -55,7 +56,7 @@ function ClientSelector({
   onSelect: (client: Client | null) => void;
   disabled?: boolean;
 }) {
-    const [open, setIsOpen] = React.useState(false);
+    const [open, setOpen] = React.useState(false);
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
@@ -90,11 +91,11 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        setIsOpen(false);
+        setOpen(false);
     };
 
     return (
-        <Popover open={open} onOpenChange={setIsOpen}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <div className="relative w-full">
                     <Command shouldFilter={false}>
@@ -130,7 +131,7 @@ function ClientSelector({
     );
 }
 
-export function CashReceiptForm({ record, clients, bankAccounts }: { record?: ModernCashRecord, clients: Client[], bankAccounts: Account[] }) {
+export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }: { record?: ModernCashRecord, clients: Client[], bankAccounts: Account[], onFormSubmit?: () => void }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -315,7 +316,7 @@ export function CashReceiptForm({ record, clients, bankAccounts }: { record?: Mo
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <SubmitButton isEditing={isEditing} />
+                    <SubmitButton isEditing={isEditing} onFormSubmit={onFormSubmit} />
                 </CardFooter>
             </Card>
         </form>
