@@ -48,7 +48,7 @@ export function ModernCashRecordsTable() {
   const { toast } = useToast();
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('date'));
+    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -178,7 +178,7 @@ export function ModernCashRecordsTable() {
                                 {record.type}
                             </span>
                         </TableCell>
-                        <TableCell className="font-medium">{record.clientName}</TableCell>
+                        <TableCell className="font-medium">{record.clientName || "Unassigned"}</TableCell>
                         <TableCell>{record.senderName || record.recipientName}</TableCell>
                         <TableCell>{record.accountName}</TableCell>
                         <TableCell className="text-right font-mono">{new Intl.NumberFormat().format(record.amount)} {record.currency}</TableCell>

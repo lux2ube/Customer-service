@@ -137,6 +137,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const chartOfAccountsRef = ref(db, 'accounts');
     const modernCashRecordsRef = ref(db, 'modern_cash_records');
     const rulesRef = ref(db, 'sms_parsing_rules');
+    const failuresRef = ref(db, 'sms_parsing_failures');
 
     try {
         const [
@@ -246,7 +247,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 recentSmsBodies.add(trimmedSmsBody);
             } else {
                 failedCount++;
-                const failureRef = push(ref(db, 'sms_parsing_failures'));
+                const failureRef = push(ref(db, `sms_parsing_failures`));
                 updates[failureRef.path.toString()] = {
                     rawSms: trimmedSmsBody,
                     accountId,

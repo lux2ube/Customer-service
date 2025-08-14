@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import type { Client, ModernCashRecord } from '@/lib/types';
-import { updateModernCashRecord, type ModernCashRecordState, searchClients } from '@/lib/actions';
+import { updateModernCashRecord, searchClients } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { cn } from '@/lib/utils';
@@ -62,7 +62,7 @@ function ClientSelector({ clients, value, onValueChange, selectedClient, onSelec
 export function EditModernCashRecordForm({ record, clients }: { record: ModernCashRecord, clients: Client[] }) {
     const { toast } = useToast();
     const actionWithId = updateModernCashRecord.bind(null, record.id);
-    const [state, formAction] = useActionState<ModernCashRecordState, FormData>(actionWithId, undefined);
+    const [state, formAction] = useActionState(actionWithId, undefined);
     
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(() => clients.find(c => c.id === record.clientId) || null);
     const [clientSearch, setClientSearch] = React.useState(() => clients.find(c => c.id === record.clientId)?.name || "");
@@ -148,4 +148,3 @@ export function EditModernCashRecordForm({ record, clients }: { record: ModernCa
         </form>
     );
 }
-
