@@ -136,7 +136,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const incomingSmsRef = ref(db, 'incoming');
     const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
-    const modernCashRecordsRef = ref(db, 'modern_cash_records');
     const rulesRef = ref(db, 'sms_parsing_rules');
     const failuresRef = ref(db, 'sms_parsing_failures');
     const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
@@ -146,14 +145,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             incomingSnapshot,
             endpointsSnapshot,
             accountsSnapshot,
-            modernCashRecordsSnapshot,
             rulesSnapshot,
             fiatRatesSnapshot,
         ] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
-            get(modernCashRecordsRef),
             get(rulesRef),
             get(fiatRatesRef),
         ]);
@@ -173,6 +170,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             currentFiatRates = lastEntry.rates || {};
         }
         
+        const modernCashRecordsSnapshot = await get(ref(db, 'modern_cash_records'));
         const allModernCashRecords: ModernCashRecord[] = modernCashRecordsSnapshot.exists() ? Object.values(modernCashRecordsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
@@ -242,7 +240,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 if (currencyCode === 'USD') {
                     amountUsd = parsed.amount;
                 } else if (rateInfo) {
-                    // Use clientBuy for inflows (credit), clientSell for outflows (debit)
                     const rate = parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell;
                     if (rate > 0) {
                         amountUsd = parsed.amount / rate;
@@ -637,3 +634,4 @@ export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: 
         return { message: 'Database error: Failed to update SMS records.', error: true };
     }
 }
+
