@@ -1,11 +1,12 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove, runTransaction } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account, ModernUsdtRecord } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account, UsdtRecord } from '../types';
 import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
@@ -343,217 +344,22 @@ export async function initializeDefaultCurrencies(prevState: RateFormState, form
 }
 
 
-// --- One-time Database Setup ---
+// --- One-time Database Setup & Cleanup ---
 export type SetupState = { message?: string; error?: boolean; } | undefined;
 export type CleanupState = { message?: string; error?: boolean; } | undefined;
 
-export async function assignSequentialSmsIds(prevState: SetupState, formData: FormData): Promise<SetupState> {
+export async function deleteAllModernCashRecords(prevState: CleanupState, formData: FormData): Promise<CleanupState> {
     try {
-        const smsSnapshot = await get(ref(db, 'sms_transactions'));
-        if (!smsSnapshot.exists()) {
-            return { message: "No SMS records found to assign IDs.", error: false };
-        }
-        
-        const smsRecords: Record<string, SmsTransaction> = smsSnapshot.val();
-        const recordsToUpdate = Object.entries(smsRecords).filter(([, record]) => !record.transaction_id || !record.transaction_id.startsWith('S'));
-
-        if (recordsToUpdate.length === 0) {
-            return { message: "All SMS records already have sequential IDs.", error: false };
-        }
-        
-        const counterRef = ref(db, 'counters/smsRecordId');
-        let newCounterValue: number;
-        
-        try {
-            const transactionResult = await runTransaction(counterRef, (currentValue) => {
-                return (currentValue || 0) + recordsToUpdate.length;
-            });
-
-            if (!transactionResult.committed) {
-                throw new Error("Failed to update SMS counter in a transaction. The operation was aborted.");
-            }
-            newCounterValue = transactionResult.snapshot.val();
-        } catch (error: any) {
-            console.error("Firebase transaction failed:", error);
-            return { message: `Database transaction error: ${error.message}`, error: true };
-        }
-        
-        let currentId = newCounterValue - recordsToUpdate.length;
         const updates: { [key: string]: any } = {};
-
-        for (const [key] of recordsToUpdate) {
-            currentId++;
-            updates[`/sms_transactions/${key}/transaction_id`] = `S${currentId}`;
-        }
-
-        if (Object.keys(updates).length > 0) {
-            await update(ref(db), updates);
-        }
-        
-        revalidatePath('/sms/transactions');
-        return { message: `Successfully assigned unique IDs to ${recordsToUpdate.length} SMS records.`, error: false };
-
-    } catch (e: any) {
-        console.error("SMS ID Assignment Error:", e);
-        return { message: e.message || 'An unknown error occurred during assignment.', error: true };
-    }
-}
-
-
-export async function setupInitialClientIdsAndAccounts(prevState: SetupState, formData: FormData): Promise<SetupState> {
-    try {
-        const clientsRef = ref(db, 'clients');
-        const clientsSnapshot = await get(clientsRef);
-        if (!clientsSnapshot.exists()) {
-            return { message: 'No clients found to migrate.', error: false };
-        }
-
-        const oldClientsData: Record<string, Client> = clientsSnapshot.val();
-        const clientsArray: (Client & { id: string })[] = Object.keys(oldClientsData).map(key => ({
-            id: key,
-            ...oldClientsData[key],
-        }));
-
-        // Filter out clients that already have the new ID format and sort by creation date
-        const clientsToMigrate = clientsArray
-            .filter(c => !c.id.match(/^1\d{6,}$/))
-            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        if (clientsToMigrate.length === 0) {
-            return { message: "All clients already seem to have the new ID format.", error: false };
-        }
-
-        const accountsSnapshot = await get(ref(db, 'accounts'));
-        const allAccounts = accountsSnapshot.val() || {};
-
-        let lastClientId = 1000000;
-        const existingNewFormatIds = new Set(clientsArray.filter(c => c.id.match(/^1\d{6,}$/)).map(c => parseInt(c.id)));
-        if (existingNewFormatIds.size > 0) {
-            lastClientId = Math.max(...Array.from(existingNewFormatIds));
-        }
-
-        const updates: { [key: string]: any } = {};
-        const oldToNewIdMap: Record<string, string> = {};
-
-        for (const client of clientsToMigrate) {
-            lastClientId++;
-            const newClientId = String(lastClientId);
-            oldToNewIdMap[client.id] = newClientId;
-
-            // Prepare new client data
-            const newClientData = { ...client };
-            delete newClientData.id;
-            updates[`/clients/${newClientId}`] = newClientData;
-            updates[`/clients/${client.id}`] = null; // Delete old client record
-
-            // Prepare new account data for the client
-            const newAccountId = `6000${newClientId}`;
-            if (!allAccounts[newAccountId]) {
-                updates[`/accounts/${newAccountId}`] = {
-                    name: client.name || `Unnamed Client (${client.id})`,
-                    type: 'Liabilities',
-                    isGroup: false,
-                    parentId: '6000',
-                    currency: 'USD',
-                };
-            }
-        }
-        
-        // --- Update related records ---
-        const pathsToUpdate = ['transactions', 'cash_receipts', 'cash_payments', 'sms_transactions'];
-        const recordsToUpdateSnapshots = await Promise.all(pathsToUpdate.map(p => get(ref(db, p))));
-        
-        recordsToUpdateSnapshots.forEach((snapshot, index) => {
-            const path = pathsToUpdate[index];
-            if (snapshot.exists()) {
-                const records: Record<string, any> = snapshot.val();
-                for (const recordId in records) {
-                    const record = records[recordId];
-                    const oldIdKey = path === 'sms_transactions' ? 'matched_client_id' : 'clientId';
-                    
-                    if (record[oldIdKey] && oldToNewIdMap[record[oldIdKey]]) {
-                        const newId = oldToNewIdMap[record[oldIdKey]];
-                        updates[`/${path}/${recordId}/${oldIdKey}`] = newId;
-
-                        // Also update denormalized name if it exists
-                        const clientName = (clientsToMigrate.find(c => c.id === record[oldIdKey]))?.name || `Unnamed Client (${record[oldIdKey]})`;
-                        const nameKey = path === 'sms_transactions' ? 'matched_client_name' : 'clientName';
-                        updates[`/${path}/${recordId}/${nameKey}`] = clientName;
-                    }
-                }
-            }
-        });
+        updates['/cash_records'] = null; // Target the new unified path
+        updates['/counters/cashRecordId'] = 0; // Reset the correct counter
 
         await update(ref(db), updates);
-        
-        revalidatePath('/clients');
-        revalidatePath('/accounting/chart-of-accounts');
 
-        return { message: `Successfully migrated ${clientsToMigrate.length} clients to the new ID format.`, error: false };
-
+        revalidatePath('/cash-records'); // Revalidate the new page
+        return { message: 'Successfully deleted all cash records and reset the ID counter.', error: false };
     } catch (e: any) {
-        console.error("Database setup error:", e);
-        return { message: e.message || 'An unknown error occurred during setup.', error: true };
-    }
-}
-
-export async function restructureRecordIds(prevState: SetupState, formData: FormData): Promise<SetupState> {
-     const recordTypes = ['transactions', 'cash_receipts', 'cash_payments'];
-    let totalRestructured = 0;
-
-    try {
-        for (const recordType of recordTypes) {
-            const snapshot = await get(ref(db, recordType));
-            if (!snapshot.exists()) {
-                continue;
-            }
-
-            const records: [string, any][] = Object.entries(snapshot.val());
-            
-            // Filter out records that already have a numeric ID
-            const recordsToMigrate = records.filter(([id, record]) => isNaN(parseInt(id)));
-
-            if (recordsToMigrate.length === 0) continue;
-
-            // Sort by creation date to ensure sequential order is meaningful
-            recordsToMigrate.sort(([, a], [, b]) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
-
-            // Find the highest existing numeric ID to start from
-            const numericIds = records
-                .map(([id]) => parseInt(id))
-                .filter(id => !isNaN(id));
-            let counter = numericIds.length > 0 ? Math.max(...numericIds) : 0;
-            
-            const updates: { [key: string]: any } = {};
-
-            for (const [oldId, recordData] of recordsToMigrate) {
-                counter++;
-                const newId = String(counter);
-                
-                // Update the ID field within the object itself
-                const newRecordData = { ...recordData, id: newId };
-
-                updates[`/${recordType}/${newId}`] = newRecordData;
-                updates[`/${recordType}/${oldId}`] = null; // Delete the old record
-            }
-            
-            if (Object.keys(updates).length > 0) {
-                await update(ref(db), updates);
-                totalRestructured += recordsToMigrate.length;
-            }
-        }
-        
-        if (totalRestructured > 0) {
-            revalidatePath('/transactions');
-            revalidatePath('/cash-receipts');
-            revalidatePath('/cash-payments');
-            return { message: `Successfully restructured IDs for ${totalRestructured} records across the system.`, error: false };
-        } else {
-            return { message: 'No records found that require ID restructuring.', error: false };
-        }
-
-    } catch(e: any) {
-        console.error("ID Restructuring Error:", e);
+        console.error("Error deleting cash records:", e);
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }
@@ -561,7 +367,7 @@ export async function restructureRecordIds(prevState: SetupState, formData: Form
 export async function deleteBscSyncedRecords(): Promise<{ message: string; error: boolean }> {
     try {
         const [recordsSnapshot, apisSnapshot] = await Promise.all([
-            get(ref(db, 'modern_usdt_records')),
+            get(ref(db, 'usdt_records')),
             get(ref(db, 'bsc_apis'))
         ]);
 
@@ -571,9 +377,9 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
 
         if (recordsSnapshot.exists()) {
             recordsSnapshot.forEach(childSnapshot => {
-                const record: ModernUsdtRecord = childSnapshot.val();
+                const record: UsdtRecord = childSnapshot.val();
                 if (record.source === 'BSCScan') {
-                    updates[`/modern_usdt_records/${childSnapshot.key}`] = null;
+                    updates[`/usdt_records/${childSnapshot.key}`] = null;
                     deletedCount++;
                 }
             });
@@ -592,26 +398,10 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
             await update(ref(db), updates);
         }
         
-        revalidatePath('/modern-usdt-records');
+        revalidatePath('/usdt-records');
         return { message: `Successfully deleted ${deletedCount} synced records and reset counters/sync history.`, error: false };
     } catch (e: any) {
         console.error("Error deleting synced records:", e);
-        return { message: `An error occurred: ${e.message}`, error: true };
-    }
-}
-
-export async function deleteAllModernCashRecords(prevState: CleanupState, formData: FormData): Promise<CleanupState> {
-    try {
-        const updates: { [key: string]: any } = {};
-        updates['/modern_cash_records'] = null;
-        updates['/counters/modernCashRecordId'] = 0;
-
-        await update(ref(db), updates);
-
-        revalidatePath('/modern-cash-records');
-        return { message: 'Successfully deleted all cash records and reset the ID counter.', error: false };
-    } catch (e: any) {
-        console.error("Error deleting cash records:", e);
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }

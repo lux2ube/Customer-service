@@ -17,7 +17,7 @@ import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfW
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, matchSmsToClients, mergeDuplicateClients, setupInitialClientIdsAndAccounts, migrateBep20Addresses, type SyncState, type ProcessSmsState, type MatchSmsState, type MergeState, type SetupState, restructureRecordIds, setupClientParentAccount, assignSequentialSmsIds } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, setupInitialClientIdsAndAccounts, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, restructureRecordIds, setupClientParentAccount } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -94,20 +94,6 @@ function ProcessSmsForm() {
     return <form action={formAction}><ActionButton Icon={RefreshCw} text="Process Incoming SMS" pendingText="Processing..." /></form>;
 }
 
-function MatchClientsForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Matching Failed' : 'Matching Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={Users} text="Match SMS to Clients" pendingText="Matching..." /></form>;
-}
-
-function MergeClientsForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<MergeState, FormData>(mergeDuplicateClients, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Merge Failed' : 'Merge Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={Users2} text="Merge Duplicates" pendingText="Merging..." /></form>;
-}
-
 function RestructureIdsForm() {
     const { toast } = useToast();
     const [state, formAction] = useActionState<SetupState, FormData>(restructureRecordIds, undefined);
@@ -127,13 +113,6 @@ function SetupClientParentAccountForm() {
     const [state, formAction] = useActionState<SetupState, FormData>(setupClientParentAccount, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Setup Failed' : 'Setup Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={Network} text="Setup Client Accounts" pendingText="Setting up..." variant="destructive" /></form>;
-}
-
-function AssignSmsIdsForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SetupState, FormData>(assignSequentialSmsIds, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Assignment Failed' : 'Assignment Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={Database} text="Assign SMS IDs" pendingText="Assigning..." /></form>;
 }
 
 function MigrateBep20Form() {
@@ -323,14 +302,7 @@ export default function DashboardPage() {
                     <CardContent className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
                            <SyncForm />
-                           <AssignSmsIdsForm />
-                        </div>
-                         <div className="flex flex-wrap gap-2">
                            <ProcessSmsForm />
-                           <MatchClientsForm />
-                        </div>
-                         <div className="flex flex-wrap gap-2">
-                           <MergeClientsForm />
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
                            <MigrateClientIdsForm />

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -145,20 +146,20 @@ export default function ModernCashRecordsPage() {
     return (
         <>
             <PageHeader
-                title="Modern Cash Records"
+                title="Cash Records"
                 description="A unified ledger for all cash inflows and outflows from any source."
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <MatchClientsForm />
                     <ProcessSmsForm />
                     <Button asChild>
-                        <Link href="/modern-cash-records/inflow">
+                        <Link href="/cash-records/inflow">
                             <ArrowDownToLine className="mr-2 h-4 w-4" />
                             New Inflow
                         </Link>
                     </Button>
                      <Button asChild variant="outline">
-                        <Link href="/modern-cash-records/outflow">
+                        <Link href="/cash-records/outflow">
                             <ArrowUpFromLine className="mr-2 h-4 w-4" />
                             New Outflow
                         </Link>
@@ -172,3 +173,4 @@ export default function ModernCashRecordsPage() {
         </>
     );
 }
+
