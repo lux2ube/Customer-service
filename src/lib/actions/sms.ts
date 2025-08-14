@@ -4,9 +4,9 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set, update, get, remove } from 'firebase/database';
+import { push, ref, set, update, get, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, ModernCashRecord } from '../types';
+import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, ModernCashRecord, FiatRate } from '../types';
 import { parseSmsWithCustomRules } from '../custom-sms-parser';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
@@ -139,6 +139,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const modernCashRecordsRef = ref(db, 'modern_cash_records');
     const rulesRef = ref(db, 'sms_parsing_rules');
     const failuresRef = ref(db, 'sms_parsing_failures');
+    const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
 
     try {
         const [
@@ -147,12 +148,14 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             accountsSnapshot,
             modernCashRecordsSnapshot,
             rulesSnapshot,
+            fiatRatesSnapshot,
         ] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(modernCashRecordsRef),
             get(rulesRef),
+            get(fiatRatesRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -163,6 +166,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
+        
+        let currentFiatRates: Record<string, FiatRate> = {};
+        if (fiatRatesSnapshot.exists()) {
+            const lastEntry = Object.values(fiatRatesSnapshot.val())[0] as any;
+            currentFiatRates = lastEntry.rates || {};
+        }
         
         const allModernCashRecords: ModernCashRecord[] = modernCashRecordsSnapshot.exists() ? Object.values(modernCashRecordsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -224,8 +233,22 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 }
             }
             
-            if (parsed) {
+            if (parsed && parsed.amount) {
                 successCount++;
+                
+                let amountUsd = 0;
+                const currencyCode = account.currency;
+                const rateInfo = currentFiatRates[currencyCode];
+                if (currencyCode === 'USD') {
+                    amountUsd = parsed.amount;
+                } else if (rateInfo) {
+                    // Use clientBuy for inflows (credit), clientSell for outflows (debit)
+                    const rate = parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell;
+                    if (rate > 0) {
+                        amountUsd = parsed.amount / rate;
+                    }
+                }
+
                 const newRecordId = await getNextSequentialId('modernCashRecordId');
                 const newRecord: Omit<ModernCashRecord, 'id'> = {
                     date: new Date().toISOString(),
@@ -240,7 +263,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     recipientName: parsed.type === 'debit' ? parsed.person : undefined,
                     amount: parsed.amount!,
                     currency: account.currency!,
-                    amountUsd: 0, // This will be calculated on matching/use
+                    amountUsd: parseFloat(amountUsd.toFixed(2)),
                     rawSms: trimmedSmsBody,
                     createdAt: new Date().toISOString(),
                 };
@@ -340,7 +363,7 @@ const matchByFirstNameAndLastName = (clients: ClientWithId[], smsParsedName: str
 
 const scoreAndSelectBestMatch = (
     matches: ClientWithId[],
-    sms: SmsTransaction & { id: string },
+    sms: ModernCashRecord,
     allTransactions: (Transaction & { id: string })[],
 ): ClientWithId | null => {
     if (matches.length === 1) return matches[0];
@@ -357,7 +380,7 @@ const scoreAndSelectBestMatch = (
     }));
 
     // Score based on previous use of bank account
-    const clientTxHistory = allTransactions.filter(tx => tx.bankAccountId === sms.account_id && tx.status === 'Confirmed');
+    const clientTxHistory = allTransactions.filter(tx => tx.bankAccountId === sms.accountId && tx.status === 'Confirmed');
     
     scores.forEach(item => {
         const clientTxs = clientTxHistory.filter(tx => tx.clientId === item.client.id);
@@ -396,7 +419,7 @@ const escapeTelegramMarkdown = (text: string | number | null | undefined): strin
 export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
     try {
         const [smsSnapshot, clientsSnapshot, transactionsSnapshot, endpointsSnapshot] = await Promise.all([
-            get(ref(db, 'sms_transactions')),
+            get(ref(db, 'modern_cash_records')),
             get(ref(db, 'clients')),
             get(ref(db, 'transactions')),
             get(ref(db, 'sms_endpoints')),
@@ -406,7 +429,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             return { message: "No SMS, clients, or endpoints found to perform matching.", error: false };
         }
 
-        const allSmsData: Record<string, SmsTransaction> = smsSnapshot.val();
+        const allSmsData: Record<string, ModernCashRecord> = smsSnapshot.val();
         const allClientsData: Record<string, Client> = clientsSnapshot.val();
         const allTransactionsData: Record<string, Transaction> = transactionsSnapshot.val() || {};
         const allEndpointsData: Record<string, SmsEndpoint> = endpointsSnapshot.val();
@@ -417,7 +440,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
         const smsToMatch = Object.entries(allSmsData)
             .map(([id, sms]) => ({ id, ...sms }))
-            .filter(sms => sms.status === 'parsed' && new Date(sms.parsed_at).getTime() >= fortyEightHoursAgo);
+            .filter(sms => sms.source === 'SMS' && sms.status === 'Pending' && new Date(sms.createdAt).getTime() >= fortyEightHoursAgo);
         
         if (smsToMatch.length === 0) {
             return { message: "No new SMS messages to match.", error: false };
@@ -429,9 +452,10 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const rulePriority: NameMatchingRule[] = ['phone_number', 'first_and_second', 'full_name', 'part_of_full_name', 'first_and_last'];
 
         for (const sms of smsToMatch) {
-            if (!sms.client_name || !sms.account_id) continue;
+            const smsParsedName = sms.senderName || sms.recipientName;
+            if (!smsParsedName || !sms.accountId) continue;
             
-            const endpoint = Object.values(allEndpointsData).find(e => e.accountId === sms.account_id);
+            const endpoint = Object.values(allEndpointsData).find(e => e.accountId === sms.accountId);
             if (!endpoint || !endpoint.nameMatchingRules || endpoint.nameMatchingRules.length === 0) continue;
 
             const sortedRules = rulePriority.filter(rule => endpoint.nameMatchingRules!.includes(rule));
@@ -441,17 +465,17 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             for (const rule of sortedRules) {
                 switch(rule) {
                     case 'phone_number':
-                        potentialMatches = matchByPhoneNumber(clientsArray, sms.client_name);
+                        potentialMatches = matchByPhoneNumber(clientsArray, smsParsedName);
                         break;
                     case 'first_and_second':
-                        potentialMatches = matchByFirstNameAndSecondName(clientsArray, sms.client_name);
+                        potentialMatches = matchByFirstNameAndSecondName(clientsArray, smsParsedName);
                         break;
                     case 'full_name':
                     case 'part_of_full_name':
-                        potentialMatches = matchByFullNameOrPartial(clientsArray, sms.client_name);
+                        potentialMatches = matchByFullNameOrPartial(clientsArray, smsParsedName);
                         break;
                     case 'first_and_last':
-                        potentialMatches = matchByFirstNameAndLastName(clientsArray, sms.client_name);
+                        potentialMatches = matchByFirstNameAndLastName(clientsArray, smsParsedName);
                         break;
                 }
                 
@@ -461,9 +485,9 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             if (potentialMatches.length > 0) {
                 const finalMatch = scoreAndSelectBestMatch(potentialMatches, sms, transactionsArray);
                 if (finalMatch) {
-                    updates[`/sms_transactions/${sms.id}/status`] = 'matched';
-                    updates[`/sms_transactions/${sms.id}/matched_client_id`] = finalMatch.id;
-                    updates[`/sms_transactions/${sms.id}/matched_client_name`] = finalMatch.name;
+                    updates[`/modern_cash_records/${sms.id}/status`] = 'Matched';
+                    updates[`/modern_cash_records/${sms.id}/clientId`] = finalMatch.id;
+                    updates[`/modern_cash_records/${sms.id}/clientName`] = finalMatch.name;
                     matchedCount++;
                     
                     // Send notification on successful match
@@ -472,10 +496,10 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 *كوين كاش*
 لكم حوالة ${escapeTelegramMarkdown(sms.amount)} ${escapeTelegramMarkdown(sms.currency)}
 
-مقابل حوالة واردة عن طريق: ${escapeTelegramMarkdown(sms.account_name)}
+مقابل حوالة واردة عن طريق: ${escapeTelegramMarkdown(sms.accountName)}
 مبلغ الحوالة: ${escapeTelegramMarkdown(sms.amount)}
 عملة الحوالة: ${escapeTelegramMarkdown(sms.currency)}
-المستلم: ${escapeTelegramMarkdown(sms.account_name)}
+المستلم: ${escapeTelegramMarkdown(sms.accountName)}
 المرسل: ${escapeTelegramMarkdown(finalMatch.name)}
 
 رقم الحوالة: \`${sms.id}\`
@@ -491,8 +515,7 @@ ${escapeTelegramMarkdown(format(new Date(), 'Pp'))}
             await update(ref(db), updates);
         }
 
-        revalidatePath('/sms/transactions');
-        revalidatePath('/cash-receipts');
+        revalidatePath('/modern-cash-records');
         return { message: `Matching complete. Successfully matched ${matchedCount} SMS record(s).`, error: false };
 
      } catch(error: any) {
