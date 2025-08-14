@@ -4,13 +4,77 @@
 
 import { z } from 'zod';
 import { db, storage } from '../firebase';
-import { push, ref, set, update, get } from 'firebase/database';
+import { push, ref, set, update, get, query, orderByChild, limitToLast } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider } from '../types';
+import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider, CashRecord, UsdtRecord, UnifiedFinancialRecord } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
+
+export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
+    if (!clientId) return [];
+
+    try {
+        const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
+            get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
+            get(query(ref(db, 'usdt_records'), orderByChild('clientId'), equalTo(clientId))),
+        ]);
+
+        const unifiedRecords: UnifiedFinancialRecord[] = [];
+
+        if (cashRecordsSnapshot.exists()) {
+            const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
+            Object.entries(cashRecords).forEach(([id, record]) => {
+                if (record.status === 'Matched') {
+                    unifiedRecords.push({
+                        id,
+                        date: record.date,
+                        type: record.type,
+                        category: 'fiat',
+                        source: record.source,
+                        amount: record.amount,
+                        currency: record.currency,
+                        amountUsd: record.amountUsd,
+                        status: record.status,
+                        bankAccountName: record.accountName,
+                        senderName: record.senderName,
+                        recipientName: record.recipientName,
+                    });
+                }
+            });
+        }
+
+        if (usdtRecordsSnapshot.exists()) {
+            const usdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
+             Object.entries(usdtRecords).forEach(([id, record]) => {
+                if (record.status === 'Confirmed') { // USDT records are 'Confirmed' instead of 'Matched'
+                     unifiedRecords.push({
+                        id,
+                        date: record.date,
+                        type: record.type,
+                        category: 'crypto',
+                        source: record.source,
+                        amount: record.amount,
+                        currency: 'USDT',
+                        amountUsd: record.amount, // For USDT, amount is amountUsd
+                        status: record.status,
+                        cryptoWalletName: record.accountName,
+                    });
+                }
+            });
+        }
+        
+        unifiedRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return unifiedRecords;
+
+    } catch (error) {
+        console.error("Error fetching unified client records:", error);
+        return [];
+    }
+}
+
 
 export type TransactionFormState =
   | {
@@ -68,11 +132,13 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const allCashRecords = cashRecordsSnapshot.val() || {};
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
         const allLinkedRecords = linkedRecordIds.map(id => {
-            return { id, ...allCashRecords[id], ...allUsdtRecords[id] };
-        }).filter(r => r.status === 'Matched'); // Only use matched records
+            const record = allCashRecords[id] || allUsdtRecords[id];
+            return record ? { ...record, id } : null;
+        }).filter(r => r && (r.status === 'Matched' || r.status === 'Confirmed'));
+
 
         if (allLinkedRecords.length !== linkedRecordIds.length) {
-            return { message: 'One or more linked records were not found or are not in a "Matched" state.', success: false };
+            return { message: 'One or more linked records were not found or are not in a linkable state.', success: false };
         }
         
         let cryptoFees: CryptoFee | null = null;
@@ -84,7 +150,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             return { message: 'Crypto fees are not configured in settings.', success: false };
         }
         
-        const totalInflowUSD = allLinkedRecords.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
+        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
         
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
         const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
@@ -98,7 +164,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
              attachmentUrl = await getDownloadURL(fileRef);
         }
 
-        const newTransaction: Omit<Transaction, 'id'> = {
+        const newTransactionData: Partial<Transaction> = {
             date: new Date().toISOString(),
             type,
             clientId,
@@ -114,14 +180,12 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
 
         const updates: { [key: string]: any } = {};
-        updates[`/transactions/${newId}`] = stripUndefined(newTransaction);
+        updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
         
-        for (const recordId of linkedRecordIds) {
-            if (allCashRecords[recordId]) {
-                 updates[`/cash_records/${recordId}/status`] = 'Used';
-            } else if (allUsdtRecords[recordId]) {
-                 updates[`/usdt_records/${recordId}/status`] = 'Used';
-            }
+        for (const record of allLinkedRecords) {
+            if (!record) continue;
+            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}/status` : `/usdt_records/${record.id}/status`;
+            updates[recordPath] = 'Used';
         }
         
         await update(ref(db), updates);
