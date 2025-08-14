@@ -10,7 +10,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createQuickCashPayment, type CashPaymentFormState } from '@/lib/actions/transaction';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -49,7 +49,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
   const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
   const [loading, setLoading] = React.useState(true);
 
-  const [state, formAction] = useActionState<CashPaymentFormState, FormData>(createQuickCashPayment, undefined);
+  const [state, formAction] = useActionState<CashReceiptFormState, FormData>(createCashReceipt.bind(null, null), undefined);
   
   const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
   const [amount, setAmount] = React.useState('');
@@ -84,7 +84,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
     }
   }, []);
 
-  const stateRef = React.useRef<CashPaymentFormState>();
+  const stateRef = React.useRef<CashReceiptFormState>();
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
       if (state.success) {
@@ -132,8 +132,9 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
 
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+        <input type="hidden" name="type" value="outflow" />
         <input type="hidden" name="clientId" value={client.id} />
-        <input type="hidden" name="clientName" value={client.name} />
+        <input type="hidden" name="recipientName" value={client.name} />
         <input type="hidden" name="amountUsd" value={amountUsd} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
