@@ -379,3 +379,5 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
         </>
     );
 }
+
+    

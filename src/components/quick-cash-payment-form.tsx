@@ -10,7 +10,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -136,6 +136,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
         <input type="hidden" name="clientId" value={client.id} />
         <input type="hidden" name="recipientName" value={client.name} />
         <input type="hidden" name="amountUsd" value={amountUsd} />
+         <input type="hidden" name="date" value={new Date().toISOString()} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
             <Label htmlFor="bankAccountId">Paid From (Bank Account)</Label>
@@ -175,3 +176,5 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
     </form>
   );
 }
+
+    

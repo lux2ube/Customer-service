@@ -62,7 +62,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         const account = accountSnapshot.val() as Account;
         const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
         
-        const newId = recordId || await getNextSequentialId('modernCashRecordId');
+        const newId = recordId || await getNextSequentialId('cashRecordId');
         
         const recordData: Omit<CashRecord, 'id'> = {
             date: date,
@@ -119,7 +119,7 @@ const UsdtManualReceiptSchema = z.object({
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
 });
 
-export async function createQuickUsdtReceipt(recordId: string | null, prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
+export async function createUsdtManualReceipt(recordId: string | null, prevState: UsdtManualReceiptState, formData: FormData): Promise<UsdtManualReceiptState> {
     const validatedFields = UsdtManualReceiptSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to save USDT receipt.', success: false, };
@@ -147,7 +147,7 @@ export async function createQuickUsdtReceipt(recordId: string | null, prevState:
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(receiptData));
+        await set(ref(db, `usdt_records/${newId}`), stripUndefined(receiptData));
 
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT Receipt recorded successfully.' };
@@ -198,7 +198,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
         
-        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(paymentData));
+        await set(ref(db, `usdt_records/${newId}`), stripUndefined(paymentData));
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT manual payment recorded successfully.' };
     } catch (e: any) {
@@ -228,7 +228,7 @@ export async function updateModernCashRecord(recordId: string, prevState: Modern
     }
 
     try {
-        const recordRef = ref(db, `modern_cash_records/${recordId}`);
+        const recordRef = ref(db, `cash_records/${recordId}`);
         const recordSnapshot = await get(recordRef);
         if (!recordSnapshot.exists()) {
             return { message: "The record you are trying to edit does not exist.", success: false };
@@ -258,8 +258,8 @@ export async function updateModernCashRecord(recordId: string, prevState: Modern
         
         await set(recordRef, updates);
 
-        revalidatePath('/modern-cash-records');
-        redirect('/modern-cash-records');
+        revalidatePath('/cash-records');
+        redirect('/cash-records');
 
     } catch (e) {
         console.error("Error updating modern cash record:", e);
@@ -287,7 +287,7 @@ export async function updateModernUsdtRecord(recordId: string, prevState: Modern
     }
 
     try {
-        const recordRef = ref(db, `modern_usdt_records/${recordId}`);
+        const recordRef = ref(db, `usdt_records/${recordId}`);
         const recordSnapshot = await get(recordRef);
         if (!recordSnapshot.exists()) {
             return { message: "The record you are trying to edit does not exist.", success: false };
@@ -319,3 +319,5 @@ export async function updateModernUsdtRecord(recordId: string, prevState: Modern
         return { success: false, message: "A database error occurred." };
     }
 }
+
+  

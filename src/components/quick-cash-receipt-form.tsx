@@ -145,6 +145,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         <input type="hidden" name="clientId" value={client.id} />
         <input type="hidden" name="senderName" value={client.name} />
         <input type="hidden" name="amountUsd" value={amountUsd} />
+        <input type="hidden" name="date" value={new Date().toISOString()} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
             <Label htmlFor="bankAccountId">Received In (Bank Account)</Label>
@@ -186,3 +187,5 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
 }
 
       
+
+    

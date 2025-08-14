@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, ModernUsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createQuickUsdtReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
+import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
 import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
@@ -118,7 +118,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const actionWithId = createQuickUsdtReceipt.bind(null, record?.id || null);
+    const actionWithId = createUsdtManualReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
     const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
@@ -263,3 +263,5 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
         </form>
     );
 }
+
+    
