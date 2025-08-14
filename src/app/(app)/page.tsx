@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React from 'react';
@@ -17,7 +16,7 @@ import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfW
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, setupInitialClientIdsAndAccounts, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, restructureRecordIds, setupClientParentAccount } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -92,20 +91,6 @@ function ProcessSmsForm() {
     const [state, formAction] = useActionState<ProcessSmsState, FormData>(processIncomingSms, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Processing Failed' : 'Processing Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={RefreshCw} text="Process Incoming SMS" pendingText="Processing..." /></form>;
-}
-
-function RestructureIdsForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SetupState, FormData>(restructureRecordIds, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Restructure Failed' : 'Restructure Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={ListTree} text="Restructure IDs" pendingText="Restructuring..." variant="destructive" /></form>;
-}
-
-function MigrateClientIdsForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SetupState, FormData>(setupInitialClientIdsAndAccounts, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Migrate Client IDs" pendingText="Migrating..." variant="destructive" /></form>;
 }
 
 function SetupClientParentAccountForm() {
@@ -305,8 +290,6 @@ export default function DashboardPage() {
                            <ProcessSmsForm />
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
-                           <MigrateClientIdsForm />
-                           <RestructureIdsForm />
                            <SetupClientParentAccountForm />
                            <MigrateBep20Form />
                         </div>
