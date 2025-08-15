@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
-import type { JournalEntry, Account, ModernUsdtRecord, UsdtRecord } from '../types';
+import type { JournalEntry, Account, ModernUsdtRecord, UsdtRecord, Client } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -44,6 +44,9 @@ const SendRequestSchema = z.object({
         message: 'Amount must be greater than zero.',
     }),
     creditAccountId: z.string().min(1, 'A recording account must be selected.'),
+    clientId: z.string().min(1, "Client ID is missing."),
+    isNewAddress: z.string().transform(val => val === 'true').optional(),
+    serviceProviderId: z.string().optional(),
 });
 
 function getRpcUrl() {
@@ -109,7 +112,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         };
     }
     
-    const { recipientAddress, amount, creditAccountId } = validatedFields.data;
+    const { recipientAddress, amount, creditAccountId, clientId, isNewAddress, serviceProviderId } = validatedFields.data;
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
 
     if (!mnemonic) {
@@ -129,6 +132,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         status: 'pending',
         timestamp: Date.now(),
         creditAccountId: creditAccountId,
+        clientId: clientId,
     };
 
     await update(ref(db), updates);
@@ -156,7 +160,8 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         await update(ref(db, `send_requests/${requestId}`), { status: 'sent' });
         
-        const client = await findClientByAddress(recipientAddress);
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        const client = clientSnapshot.exists() ? { id: clientId, ...clientSnapshot.val() } as Client : null;
         const clientName = client ? client.name : 'Unknown Client';
         
         // Fetch recording account details for denormalization
@@ -181,6 +186,28 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
             createdAt: new Date().toISOString(),
         };
         updates[`/modern_usdt_records/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
+
+        // --- Save new address to client profile if needed ---
+        if (isNewAddress && client && serviceProviderId) {
+            const serviceProvidersSnapshot = await get(ref(db, `service_providers/${serviceProviderId}`));
+            if (serviceProvidersSnapshot.exists()) {
+                const providerDetails = serviceProvidersSnapshot.val();
+                const existingClientProviders = client.serviceProviders || [];
+                const newProviderEntry = {
+                    providerId: serviceProviderId,
+                    providerName: providerDetails.name,
+                    providerType: providerDetails.type,
+                    details: { Address: recipientAddress }
+                };
+                
+                // Avoid adding duplicates
+                const isAlreadySaved = existingClientProviders.some(p => p.details.Address === recipientAddress && p.providerId === serviceProviderId);
+                if (!isAlreadySaved) {
+                    updates[`/clients/${clientId}/serviceProviders`] = [...existingClientProviders, newProviderEntry];
+                }
+            }
+        }
+
 
         const message = `
 ✅ *USDT Sent Successfully*
