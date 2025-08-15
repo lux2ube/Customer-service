@@ -367,7 +367,7 @@ export async function deleteAllModernCashRecords(prevState: CleanupState, formDa
 export async function deleteBscSyncedRecords(): Promise<{ message: string; error: boolean }> {
     try {
         const [recordsSnapshot, apisSnapshot] = await Promise.all([
-            get(ref(db, 'usdt_records')),
+            get(ref(db, 'modern_usdt_records')),
             get(ref(db, 'bsc_apis'))
         ]);
 
@@ -379,7 +379,7 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
             recordsSnapshot.forEach(childSnapshot => {
                 const record: UsdtRecord = childSnapshot.val();
                 if (record.source === 'BSCScan') {
-                    updates[`/usdt_records/${childSnapshot.key}`] = null;
+                    updates[`/modern_usdt_records/${childSnapshot.key}`] = null;
                     deletedCount++;
                 }
             });
@@ -398,7 +398,7 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
             await update(ref(db), updates);
         }
         
-        revalidatePath('/usdt-records');
+        revalidatePath('/modern-usdt-records');
         return { message: `Successfully deleted ${deletedCount} synced records and reset counters/sync history.`, error: false };
     } catch (e: any) {
         console.error("Error deleting synced records:", e);

@@ -61,7 +61,7 @@ export function ModernUsdtRecordsTable() {
 
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'usdt_records'), orderByChild('createdAt'));
+    const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();

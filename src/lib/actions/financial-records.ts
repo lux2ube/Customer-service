@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -145,7 +146,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `usdt_records/${newId}`), stripUndefined(receiptData));
+        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(receiptData));
 
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT Receipt recorded successfully.' };
@@ -196,7 +197,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
         
-        await set(ref(db, `usdt_records/${newId}`), stripUndefined(paymentData));
+        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(paymentData));
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT manual payment recorded successfully.' };
     } catch (e: any) {

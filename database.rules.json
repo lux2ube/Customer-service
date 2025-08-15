@@ -1,4 +1,5 @@
 
+
 {
   "rules": {
     ".read": true,
@@ -12,11 +13,8 @@
     "transactions": {
       ".indexOn": ["createdAt", "clientId", "status"]
     },
-    "usdt_records": {
-      ".indexOn": ["createdAt"]
-    },
     "modern_usdt_records": {
-      ".indexOn": ["accountId", "date", "source", "blockNumber", "clientId"]
+      ".indexOn": ["accountId", "date", "source", "blockNumber", "clientId", "createdAt"]
     },
     "cash_receipts": {
       ".indexOn": ["clientId", "status"]
@@ -40,4 +38,5 @@
     }
   }
 }
+
 
