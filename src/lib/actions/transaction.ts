@@ -17,43 +17,26 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
     if (!clientId) return [];
 
     try {
+        const cashRecordsQuery = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
+        const usdtRecordsQuery = query(ref(db, 'usdt_records'), orderByChild('clientId'), equalTo(clientId));
+
         const [
-            clientSnapshot,
             cashRecordsSnapshot,
             usdtRecordsSnapshot
         ] = await Promise.all([
-            get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'cash_records')),
-            get(ref(db, 'usdt_records')),
+            get(cashRecordsQuery),
+            get(usdtRecordsQuery),
         ]);
 
-        if (!clientSnapshot.exists()) return [];
-
-        const client = { id: clientId, ...clientSnapshot.val() } as Client;
-        const normalizedClientName = normalizeArabic(client.name.toLowerCase()).replace(/\s+/g, ' ');
-        const clientWalletAddresses = new Set<string>();
-        if (client.serviceProviders) {
-            for (const provider of client.serviceProviders) {
-                if (provider.providerType === 'Crypto' && provider.details?.Address) {
-                    clientWalletAddresses.add(provider.details.Address.toLowerCase());
-                }
-            }
-        }
-
         const unifiedRecords: UnifiedFinancialRecord[] = [];
-        const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.exists() ? cashRecordsSnapshot.val() : {};
-        const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.exists() ? usdtRecordsSnapshot.val() : {};
 
         // --- Process Cash Records ---
-        for (const id in allCashRecords) {
-            const record = allCashRecords[id];
-            if (record.status === 'Used' || record.status === 'Cancelled') continue;
-
-            const isDirectMatch = record.clientId === clientId;
-            const senderName = record.senderName ? normalizeArabic(record.senderName.toLowerCase()).replace(/\s+/g, ' ') : '';
-            const isPendingSmsMatch = record.source === 'SMS' && record.status === 'Pending' && senderName && normalizedClientName.includes(senderName);
-
-            if (isDirectMatch || isPendingSmsMatch) {
+        if (cashRecordsSnapshot.exists()) {
+            const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
+            for (const id in allCashRecords) {
+                const record = allCashRecords[id];
+                if (record.status === 'Used' || record.status === 'Cancelled') continue;
+                
                 unifiedRecords.push({
                     id,
                     date: record.date,
@@ -72,16 +55,13 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         }
         
         // --- Process USDT Records ---
-        for (const id in allUsdtRecords) {
-            const record = allUsdtRecords[id];
-             if (record.status === 'Used' || record.status === 'Cancelled') continue;
+        if (usdtRecordsSnapshot.exists()) {
+            const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
+            for (const id in allUsdtRecords) {
+                const record = allUsdtRecords[id];
+                if (record.status === 'Used' || record.status === 'Cancelled') continue;
 
-            const isDirectMatch = record.clientId === clientId;
-            const isWalletMatch = record.clientWalletAddress && clientWalletAddresses.has(record.clientWalletAddress.toLowerCase());
-            const isUnassignedMatch = (!record.clientId || record.clientId === 'unassigned-bscscan') && isWalletMatch;
-
-            if (isDirectMatch || isUnassignedMatch) {
-                unifiedRecords.push({
+                 unifiedRecords.push({
                     id,
                     date: record.date,
                     type: record.type,
@@ -89,7 +69,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     source: record.source,
                     amount: record.amount,
                     currency: 'USDT',
-                    amountUsd: record.amount,
+                    amountUsd: record.amount, // For USDT, amount is same as amountUsd
                     status: record.status,
                     cryptoWalletName: record.accountName,
                     txHash: record.txHash,
