@@ -1,32 +1,19 @@
 
-
 {
   "rules": {
     ".read": true,
     ".write": true,
     "cash_records": {
-      ".indexOn": "clientId"
-    },
-    "modern_cash_records": {
-      ".indexOn": ["clientId"]
-    },
-    "sms_transactions": {
-      ".indexOn": ["parsed_at", "matched_client_id", "status"]
-    },
-    "transactions": {
-      ".indexOn": ["createdAt", "clientId", "status"]
+      ".indexOn": ["clientId", "source", "createdAt"]
     },
     "modern_usdt_records": {
-      ".indexOn": ["createdAt", "clientId"]
+      ".indexOn": ["clientId", "createdAt"]
     },
-    "cash_receipts": {
-      ".indexOn": ["clientId", "status"]
-    },
-    "cash_payments": {
+    "transactions": {
       ".indexOn": ["clientId"]
     },
-    "logs": {
-      ".indexOn": ["entityId", "timestamp"]
+    "send_requests": {
+        ".indexOn": "timestamp"
     },
     "rate_history": {
       "fiat_rates": {
@@ -41,6 +28,3 @@
     }
   }
 }
-
-
-

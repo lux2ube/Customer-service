@@ -19,7 +19,7 @@ async function getClient(id: string): Promise<Client | null> {
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
     const [cashRecordsSnap, usdtRecordsSnap, transactionsSnap] = await Promise.all([
         get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'usdt_records'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId))),
         get(query(ref(db, 'transactions'), orderByChild('clientId'), equalTo(clientId)))
     ]);
 
@@ -173,4 +173,3 @@ export default async function EditClientPage({ params }: { params: { id: string 
         </>
     );
 }
-
