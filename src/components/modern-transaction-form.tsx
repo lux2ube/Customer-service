@@ -201,7 +201,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                         <RadioGroup
                             value={transactionType || ''}
                             onValueChange={(value) => setTransactionType(value as any)}
-                            className="grid grid-cols-2 lg:grid-cols-3 gap-4"
+                            className="grid grid-cols-1 md:grid-cols-3 gap-4"
                         >
                              <div>
                                 <RadioGroupItem value="Deposit" id="type-deposit" className="peer sr-only" />
@@ -267,9 +267,9 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                                              <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><Send className="mr-2 h-4 w-4" />Auto Send USDT</Button>
                                                 </div>
-                                                <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                 <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                              </div>
                                         </>
                                     )}
