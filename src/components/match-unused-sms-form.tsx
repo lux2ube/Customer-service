@@ -1,12 +1,11 @@
-
 'use client';
 
 import * as React from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { Client, SmsTransaction } from '@/lib/types';
+import type { Client, SmsTransaction, CashRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
 import { linkSmsToClient } from '@/lib/actions';
 import { Loader2, Check } from 'lucide-react';
 import { format } from 'date-fns';
@@ -19,31 +18,26 @@ interface MatchUnusedSmsFormProps {
 }
 
 export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnusedSmsFormProps) {
-  const [smsList, setSmsList] = React.useState<SmsTransaction[]>([]);
+  const [smsList, setSmsList] = React.useState<CashRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
 
   React.useEffect(() => {
     setLoading(true);
-    const smsRef = ref(db, 'sms_transactions');
-    const unsubscribe = onValue(smsRef, (snapshot) => {
+    const recordsRef = query(ref(db, 'cash_records'), orderByChild('source'), equalTo('SMS'));
+    const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allSmsData: Record<string, Omit<SmsTransaction, 'id'>> = snapshot.val();
-        const allSmsList: SmsTransaction[] = Object.keys(allSmsData).map(id => ({
-          id,
-          ...allSmsData[id]
-        }));
-        
-        const unmatched = allSmsList.filter(sms => sms.status === 'parsed' || !sms.matched_client_id);
-        setSmsList(unmatched.sort((a,b) => new Date(b.parsed_at).getTime() - new Date(a.parsed_at).getTime()));
+        const allSmsRecords: CashRecord[] = Object.values(snapshot.val());
+        const unmatched = allSmsRecords.filter(sms => sms.status === 'Pending' && !sms.clientId);
+        setSmsList(unmatched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const handleMatch = async (smsId: string) => {
-    const result = await linkSmsToClient(smsId, client.id);
+  const handleMatch = async (recordId: string) => {
+    const result = await linkSmsToClient(recordId, client.id);
     if (result?.success) {
       toast({ title: 'Success', description: 'SMS matched to client.' });
       onSmsMatched();
@@ -68,10 +62,10 @@ export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnu
                   <div className="flex justify-between items-center text-sm">
                     <span className="font-semibold">{sms.amount?.toLocaleString()} {sms.currency}</span>
                     <span className="text-xs text-muted-foreground">
-                      {sms.parsed_at && !isNaN(new Date(sms.parsed_at).getTime()) ? format(new Date(sms.parsed_at), 'PP') : 'Invalid Date'}
+                      {sms.date && !isNaN(new Date(sms.date).getTime()) ? format(new Date(sms.date), 'PP') : 'Invalid Date'}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">From: {sms.client_name}</p>
+                  <p className="text-xs text-muted-foreground">From: {sms.senderName || 'Unknown'}</p>
                 </div>
                 <Button size="sm" onClick={() => handleMatch(sms.id)}>
                     <Check className="mr-2 h-4 w-4" /> Match

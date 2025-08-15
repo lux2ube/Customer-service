@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -379,5 +378,3 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
         </>
     );
 }
-
-    

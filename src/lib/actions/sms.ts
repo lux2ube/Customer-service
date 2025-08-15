@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -17,6 +16,7 @@ import { getNextSequentialId, stripUndefined } from './helpers';
 // --- SMS Processing Actions ---
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
+export type BulkUpdateState = { message?: string; error?: boolean; } | undefined;
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
@@ -107,7 +107,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(rulesRef),
-            get(fiatRatesRef),
+            get(fiatRatesSnapshot),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -252,7 +252,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             await update(ref(db), updates);
         }
         
-        revalidatePath('/cash-records');
+        revalidatePath('/modern-cash-records');
         revalidatePath('/sms/parsing-failures');
         let message = `Processed ${processedCount} message(s): ${successCount} successfully parsed, ${failedCount} failed.`;
         if (duplicateCount > 0) {
@@ -263,5 +263,74 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     } catch(error: any) {
         console.error("SMS Processing Error:", error);
         return { message: error.message || "An unknown error occurred during SMS processing.", error: true };
+    }
+}
+
+
+export async function linkSmsToClient(recordId: string, clientId: string) {
+    if (!recordId || !clientId) {
+        return { success: false, message: "Record ID and Client ID are required." };
+    }
+
+    try {
+        const [recordSnapshot, clientSnapshot] = await Promise.all([
+            get(ref(db, `cash_records/${recordId}`)),
+            get(ref(db, `clients/${clientId}`))
+        ]);
+
+        if (!recordSnapshot.exists()) return { success: false, message: "Record not found." };
+        if (!clientSnapshot.exists()) return { success: false, message: "Client not found." };
+        
+        const clientName = (clientSnapshot.val() as Client).name;
+        
+        const updates: { [key: string]: any } = {};
+        updates[`/cash_records/${recordId}/clientId`] = clientId;
+        updates[`/cash_records/${recordId}/clientName`] = clientName;
+        updates[`/cash_records/${recordId}/status`] = 'Matched';
+
+        await update(ref(db), updates);
+
+        revalidatePath('/modern-cash-records');
+        return { success: true, message: "SMS record linked to client." };
+    } catch (e: any) {
+        console.error("Error linking SMS to client:", e);
+        return { success: false, message: e.message || "An unexpected database error occurred." };
+    }
+}
+
+export async function updateSmsTransactionStatus(recordId: string, status: 'used' | 'rejected') {
+     if (!recordId || !status) {
+        return { success: false, message: "Record ID and status are required." };
+    }
+     try {
+        await update(ref(db, `cash_records/${recordId}`), { status });
+        revalidatePath('/modern-cash-records');
+        return { success: true };
+     } catch (e: any) {
+         console.error("Error updating SMS status:", e);
+        return { success: false, message: e.message || "An unexpected database error occurred." };
+     }
+}
+
+export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+    const smsIds = formData.getAll('smsIds') as string[];
+    const status = formData.get('status') as string;
+
+    if (!smsIds || smsIds.length === 0 || !status) {
+        return { error: true, message: 'No records or status provided for bulk update.' };
+    }
+
+    try {
+        const updates: { [key: string]: any } = {};
+        for (const id of smsIds) {
+            updates[`/cash_records/${id}/status`] = status;
+        }
+
+        await update(ref(db), updates);
+        revalidatePath('/modern-cash-records');
+        return { message: `${smsIds.length} record(s) updated to "${status}".` };
+    } catch (e: any) {
+        console.error("Bulk SMS Update Error:", e);
+        return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }

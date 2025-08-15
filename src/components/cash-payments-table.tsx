@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -26,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { CashPayment, SmsTransaction, Client } from '@/lib/types';
+import type { CashPayment, SmsTransaction, Client, CashRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
@@ -47,23 +46,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { CashReceiptBulkActions } from './cash-receipt-bulk-actions';
 import Link from 'next/link';
 
-const statuses: (SmsTransaction['status'] | CashPayment['status'])[] = ['pending', 'parsed', 'matched', 'used', 'rejected', 'Confirmed', 'Cancelled'];
+const statuses: (CashRecord['status'])[] = ['Pending', 'Matched', 'Used', 'Cancelled'];
 const sources = ['Manual', 'SMS'];
 
 // A unified type for the table
-export type UnifiedPayment = {
-    id: string;
-    date: string;
-    clientName: string; // The debited client
-    recipientName: string; // The original recipient (client_name from SMS)
-    bankAccountName: string;
-    amount: number;
-    currency: string;
-    remittanceNumber?: string;
-    source: 'Manual' | 'SMS';
-    status: CashPayment['status'] | SmsTransaction['status'];
-    rawSms?: string;
-}
+export type UnifiedPayment = CashRecord;
 
 function ManualLinkDialog({ sms, clients, onLink, onOpenChange }: { sms: UnifiedPayment | null, clients: Client[], onLink: (clientId: string) => void, onOpenChange: (open: boolean) => void }) {
     if (!sms) return null;
@@ -149,44 +136,21 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
     setPayments(initialPayments);
     setClients(initialClients);
 
-    const paymentsRef = ref(db, 'cash_payments/');
-    const smsRef = ref(db, 'sms_transactions/');
+    const paymentsRef = ref(db, 'cash_records/');
     const clientsRef = ref(db, 'clients/');
 
     const unsubPayments = onValue(paymentsRef, (snapshot) => {
-        const manualPayments: CashPayment[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
-        setPayments(currentPayments => {
-            const smsPart = currentPayments.filter(p => p.source === 'SMS');
-            const manualPart = manualPayments.map(p => ({
-                id: p.id, date: p.date, clientName: p.clientName, recipientName: p.recipientName,
-                bankAccountName: p.bankAccountName, amount: p.amount, currency: p.currency,
-                remittanceNumber: p.remittanceNumber, source: 'Manual', status: p.status,
-            }));
-            return [...smsPart, ...manualPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        });
+        const cashRecords: CashRecord[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
+        const paymentRecords = cashRecords.filter(r => r.type === 'outflow');
+        setPayments(paymentRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     });
-
-    const unsubSms = onValue(smsRef, (snapshot) => {
-        const smsDebits: SmsTransaction[] = snapshot.exists() ? Object.values(snapshot.val()).filter((sms: any) => sms.type === 'debit') : [];
-        setPayments(currentPayments => {
-             const manualPart = currentPayments.filter(p => p.source === 'Manual');
-             const smsPart = smsDebits.map((sms: any) => ({
-                id: sms.id, date: sms.parsed_at, clientName: sms.matched_client_name || 'Unmatched',
-                recipientName: sms.client_name, bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0,
-                currency: sms.currency || '', remittanceNumber: sms.transaction_id, source: 'SMS',
-                status: sms.status, rawSms: sms.raw_sms,
-            }));
-             return [...manualPart, ...smsPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        });
-    });
-
+    
     const unsubClients = onValue(clientsRef, (snapshot) => {
         setClients(snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : []);
     });
 
     return () => {
         unsubPayments();
-        unsubSms();
         unsubClients();
     };
   }, [initialPayments, initialClients]);
@@ -214,8 +178,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
             return (
                 (p.clientName && p.clientName.toLowerCase().includes(lowercasedSearch)) ||
                 (p.recipientName && p.recipientName.toLowerCase().includes(lowercasedSearch)) ||
-                (p.bankAccountName && p.bankAccountName.toLowerCase().includes(lowercasedSearch)) ||
-                (p.remittanceNumber && p.remittanceNumber.toLowerCase().includes(lowercasedSearch)) ||
+                (p.accountName && p.accountName.toLowerCase().includes(lowercasedSearch)) ||
                 p.amount.toString().includes(lowercasedSearch)
             );
         }
@@ -224,7 +187,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
     });
   }, [payments, search, statusFilter, sourceFilter, dateRange]);
 
-  const handleSmsStatusUpdate = async (id: string, status: SmsTransaction['status']) => {
+  const handleSmsStatusUpdate = async (id: string, status: CashRecord['status']) => {
     const result = await updateSmsTransactionStatus(id, status);
     if (result?.success) {
         toast({ title: "Status Updated", description: `Transaction marked as ${status}.`});
@@ -257,13 +220,10 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
   
   const getStatusVariant = (status: UnifiedPayment['status']) => {
         switch(status) {
-            case 'pending': return 'secondary';
-            case 'parsed': return 'secondary';
-            case 'matched': return 'default';
-            case 'used': return 'outline';
-            case 'rejected': return 'destructive';
+            case 'Pending': return 'secondary';
+            case 'Matched': return 'default';
+            case 'Used': return 'outline';
             case 'Cancelled': return 'destructive';
-            case 'Confirmed': return 'default';
             default: return 'secondary';
         }
     }
@@ -317,7 +277,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
         </div>
         
         {selectedPayments.length > 0 && (
-            <CashReceiptBulkActions // This component can be reused as it's designed for SMS actions
+            <CashReceiptBulkActions 
                 selectedReceipts={payments.filter(p => selectedPayments.includes(p.id))}
                 onActionComplete={() => setRowSelection({})}
             />
@@ -359,7 +319,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
                         <TableCell>{payment.date && !isNaN(new Date(payment.date).getTime()) ? format(new Date(payment.date), 'Pp') : 'N/A'}</TableCell>
                         <TableCell className="font-medium">{payment.clientName}</TableCell>
                         <TableCell>{payment.recipientName}</TableCell>
-                        <TableCell>{payment.bankAccountName}</TableCell>
+                        <TableCell>{payment.accountName}</TableCell>
                         <TableCell className="text-right font-mono">{new Intl.NumberFormat().format(payment.amount)} {payment.currency}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(payment.status)} className="capitalize">{payment.status}</Badge></TableCell>
                         <TableCell className="text-right">
@@ -369,15 +329,15 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
                                     {payment.source === 'SMS' && (
                                         <>
                                             <DropdownMenuItem onClick={() => setManualLinkSms(payment)}>Manually Link Client</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(payment.id, 'used')}>Mark as Used</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(payment.id, 'rejected')}>Mark as Rejected</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(payment.id, 'Used')}>Mark as Used</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(payment.id, 'Cancelled')}>Mark as Rejected</DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => setRawSmsToShow(payment.rawSms || 'No raw SMS content found.')}>View Raw SMS</DropdownMenuItem>
                                         </>
                                     )}
-                                    {payment.source === 'Manual' && payment.status === 'Confirmed' && (
+                                    {payment.source === 'Manual' && payment.status !== 'Cancelled' && (
                                         <>
                                             <DropdownMenuItem asChild>
-                                                <Link href={`/cash-payments/${payment.id}/edit`}>
+                                                <Link href={`/modern-cash-records/${payment.id}/edit`}>
                                                     <Pencil className="mr-2 h-4 w-4" /> Edit Payment
                                                 </Link>
                                             </DropdownMenuItem>
@@ -414,7 +374,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
              <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you sure you want to cancel this payment?</AlertDialogTitle>
-                    <AlertDialogDescription>This action will mark the payment as "Cancelled" and attempt to reverse the corresponding journal entry. This cannot be undone.</AlertDialogDescription>
+                    <AlertDialogDescription>This action will mark the payment as "Cancelled". This cannot be undone.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Close</AlertDialogCancel>

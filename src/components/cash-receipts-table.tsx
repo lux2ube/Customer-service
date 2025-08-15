@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -26,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { CashReceipt, SmsTransaction, Client } from '@/lib/types';
+import type { CashReceipt, SmsTransaction, Client, CashRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
@@ -46,23 +45,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Checkbox } from '@/components/ui/checkbox';
 import { CashReceiptBulkActions } from './cash-receipt-bulk-actions';
 
-const statuses: SmsTransaction['status'][] = ['pending', 'parsed', 'matched', 'used', 'rejected'];
+const statuses: CashRecord['status'][] = ['Pending', 'Matched', 'Used', 'Cancelled'];
 const sources = ['Manual', 'SMS'];
 
 // A unified type for the table
-export type UnifiedReceipt = {
-    id: string;
-    date: string;
-    clientName: string; // The credited client (matched_client_name for SMS)
-    senderName: string; // The original sender (client_name from SMS)
-    bankAccountName: string;
-    amount: number;
-    currency: string;
-    remittanceNumber?: string;
-    source: 'Manual' | 'SMS';
-    status: CashReceipt['status'] | SmsTransaction['status'];
-    rawSms?: string;
-}
+export type UnifiedReceipt = CashRecord;
 
 function ManualLinkDialog({ sms, clients, onLink, onOpenChange }: { sms: UnifiedReceipt | null, clients: Client[], onLink: (clientId: string) => void, onOpenChange: (open: boolean) => void }) {
     if (!sms) return null;
@@ -147,44 +134,21 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
     setReceipts(initialReceipts);
     setClients(initialClients);
 
-    const receiptsRef = ref(db, 'cash_receipts/');
-    const smsRef = ref(db, 'sms_transactions/');
+    const receiptsRef = ref(db, 'cash_records/');
     const clientsRef = ref(db, 'clients/');
 
     const unsubReceipts = onValue(receiptsRef, (snapshot) => {
-        const manualReceipts: CashReceipt[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
-        setReceipts(currentReceipts => {
-            const smsPart = currentReceipts.filter(r => r.source === 'SMS');
-            const manualPart = manualReceipts.map(r => ({
-                id: r.id, date: r.date, clientName: r.clientName, senderName: r.senderName,
-                bankAccountName: r.bankAccountName, amount: r.amount, currency: r.currency,
-                remittanceNumber: r.remittanceNumber, source: 'Manual', status: r.status, amountUsd: r.amountUsd
-            }));
-            return [...smsPart, ...manualPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        });
+        const cashRecords: CashRecord[] = snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : [];
+        const receiptRecords = cashRecords.filter(r => r.type === 'inflow');
+        setReceipts(receiptRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     });
-
-    const unsubSms = onValue(smsRef, (snapshot) => {
-        const smsCredits: SmsTransaction[] = snapshot.exists() ? Object.values(snapshot.val()).filter((sms: any) => sms.type === 'credit') : [];
-        setReceipts(currentReceipts => {
-             const manualPart = currentReceipts.filter(r => r.source === 'Manual');
-             const smsPart = smsCredits.map((sms: any) => ({
-                id: sms.id, date: sms.parsed_at, clientName: sms.matched_client_name || 'Unmatched',
-                senderName: sms.client_name, bankAccountName: sms.account_name || 'N/A', amount: sms.amount || 0,
-                currency: sms.currency || '', remittanceNumber: sms.transaction_id, source: 'SMS',
-                status: sms.status, rawSms: sms.raw_sms, amountUsd: 0
-            }));
-             return [...manualPart, ...smsPart].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        });
-    });
-
+    
     const unsubClients = onValue(clientsRef, (snapshot) => {
         setClients(snapshot.exists() ? Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })) : []);
     });
 
     return () => {
         unsubReceipts();
-        unsubSms();
         unsubClients();
     };
   }, [initialReceipts, initialClients]);
@@ -212,8 +176,7 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
             return (
                 (r.clientName && r.clientName.toLowerCase().includes(lowercasedSearch)) ||
                 (r.senderName && r.senderName.toLowerCase().includes(lowercasedSearch)) ||
-                (r.bankAccountName && r.bankAccountName.toLowerCase().includes(lowercasedSearch)) ||
-                (r.remittanceNumber && r.remittanceNumber.toLowerCase().includes(lowercasedSearch)) ||
+                (r.accountName && r.accountName.toLowerCase().includes(lowercasedSearch)) ||
                 r.amount.toString().includes(lowercasedSearch)
             );
         }
@@ -222,7 +185,7 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
     });
   }, [receipts, search, statusFilter, sourceFilter, dateRange]);
 
-  const handleSmsStatusUpdate = async (id: string, status: SmsTransaction['status']) => {
+  const handleSmsStatusUpdate = async (id: string, status: CashRecord['status']) => {
     const result = await updateSmsTransactionStatus(id, status);
     if (result?.success) {
         toast({ title: "Status Updated", description: `Transaction marked as ${status}.`});
@@ -244,13 +207,10 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
   
   const getStatusVariant = (status: UnifiedReceipt['status']) => {
         switch(status) {
-            case 'pending': return 'secondary';
-            case 'parsed': return 'secondary';
-            case 'matched': return 'default';
-            case 'used': return 'outline';
-            case 'rejected': return 'destructive';
+            case 'Pending': return 'secondary';
+            case 'Matched': return 'default';
+            case 'Used': return 'outline';
             case 'Cancelled': return 'destructive';
-            case 'Confirmed': return 'default';
             default: return 'secondary';
         }
     }
@@ -288,8 +248,6 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
                 <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
                     {statuses.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                    <SelectItem value="Confirmed">Confirmed</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
                 </SelectContent>
             </Select>
             <Popover>
@@ -346,9 +304,9 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
                             />
                         </TableCell>
                         <TableCell>{receipt.date && !isNaN(new Date(receipt.date).getTime()) ? format(new Date(receipt.date), 'Pp') : 'N/A'}</TableCell>
-                        <TableCell className="font-medium">{receipt.clientName}</TableCell>
+                        <TableCell className="font-medium">{receipt.clientName || 'Unassigned'}</TableCell>
                         <TableCell>{receipt.senderName}</TableCell>
-                        <TableCell>{receipt.bankAccountName}</TableCell>
+                        <TableCell>{receipt.accountName}</TableCell>
                         <TableCell className="text-right font-mono">{new Intl.NumberFormat().format(receipt.amount)} {receipt.currency}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(receipt.status)} className="capitalize">{receipt.status}</Badge></TableCell>
                         <TableCell className="text-right">
@@ -358,8 +316,8 @@ export function CashReceiptsTable({ initialReceipts, initialClients }: { initial
                                     {receipt.source === 'SMS' && (
                                         <>
                                             <DropdownMenuItem onClick={() => setManualLinkSms(receipt)}>Manually Link Client</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(receipt.id, 'used')}>Mark as Used</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(receipt.id, 'rejected')}>Mark as Rejected</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(receipt.id, 'Used')}>Mark as Used</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleSmsStatusUpdate(receipt.id, 'Cancelled')}>Mark as Rejected</DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => setRawSmsToShow(receipt.rawSms || 'No raw SMS content found.')}>View Raw SMS</DropdownMenuItem>
                                         </>
                                     )}
