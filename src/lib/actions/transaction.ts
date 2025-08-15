@@ -34,11 +34,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         // 2. Prepare client name match patterns for robust SMS matching
         const normalizedClientName = normalizeArabic(client.name.toLowerCase()).replace(/\s+/g, ' ');
         const clientNameParts = normalizedClientName.split(' ');
-        let clientMatchPattern = normalizedClientName;
-        if (clientNameParts.length > 1) {
-            clientMatchPattern = `${clientNameParts[0]} ${clientNameParts[1]}`;
-        }
-
+        
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
             get(ref(db, 'usdt_records')),
@@ -57,10 +53,9 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     record.status === 'Pending' &&
                     record.source === 'SMS' &&
                     senderName &&
-                    (normalizedClientName.includes(senderName) || clientMatchPattern.includes(senderName));
+                    normalizedClientName.includes(senderName);
 
-
-                if (isDirectMatch || isPendingSmsMatch) {
+                if ((isDirectMatch || isPendingSmsMatch) && record.status !== 'Used') {
                     unifiedRecords.push({
                         id,
                         date: record.date,
@@ -87,11 +82,11 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                 
                 const isWalletMatch =
                     record.status === 'Confirmed' &&
-                    record.clientId === null &&
+                    (record.clientId === null || record.clientId === 'unassigned-bscscan') &&
                     record.clientWalletAddress &&
                     clientWalletAddresses.has(record.clientWalletAddress.toLowerCase());
 
-                if (isDirectMatch || isWalletMatch) {
+                if ((isDirectMatch || isWalletMatch) && record.status !== 'Used') {
                     unifiedRecords.push({
                         id,
                         date: record.date,
