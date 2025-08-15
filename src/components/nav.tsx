@@ -1,11 +1,13 @@
 
-
 'use client';
 
 import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem
 } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -31,9 +33,6 @@ import {
   FileScan,
   HandCoins,
   ArrowLeftRight,
-  Globe,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   Repeat,
   Sparkles,
   Book,
@@ -41,6 +40,8 @@ import {
   Plug,
   FileWarning,
 } from 'lucide-react';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
+
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -74,6 +75,7 @@ const menuItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/about', label: 'About', icon: Info },
 ];
+
 
 export function Nav() {
   const pathname = usePathname();
