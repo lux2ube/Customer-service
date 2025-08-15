@@ -18,7 +18,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
     try {
         const cashRecordsQuery = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
-        const usdtRecordsQuery = query(ref(db, 'usdt_records'), orderByChild('clientId'), equalTo(clientId));
+        const usdtRecordsQuery = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
 
         const [
             cashRecordsSnapshot,
@@ -132,7 +132,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'cash_records')),
-            get(ref(db, 'usdt_records')),
+            get(ref(db, 'modern_usdt_records')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
         ]);
 
@@ -197,7 +197,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         for (const record of allLinkedRecords) {
             if (!record) continue;
-            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}` : `/usdt_records/${record.id}`;
+            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
             // If it was a pending SMS, also assign the client ID now.
             if (record.status === 'Pending') {
@@ -211,7 +211,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         revalidatePath('/transactions/modern');
         revalidatePath('/transactions');
         revalidatePath('/cash_records');
-        revalidatePath('/usdt_records');
+        revalidatePath('/modern-usdt-records');
         
         return { success: true, message: 'Transaction created successfully.' };
 
