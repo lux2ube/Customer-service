@@ -21,7 +21,6 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (!clientSnapshot.exists()) return [];
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        // 1. Get all of the client's crypto addresses from their service providers
         const clientWalletAddresses = new Set<string>();
         if (client.serviceProviders) {
             for (const provider of client.serviceProviders) {
@@ -31,9 +30,10 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
         
-        // 2. Prepare client name match patterns for robust SMS matching
         const normalizedClientName = normalizeArabic(client.name.toLowerCase()).replace(/\s+/g, ' ');
-        
+        const clientNameParts = normalizedClientName.split(' ');
+        const clientMatchPattern = clientNameParts.length > 1 ? `${clientNameParts[0]} ${clientNameParts[1]}`: normalizedClientName;
+
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
             get(ref(db, 'usdt_records')),
@@ -41,11 +41,10 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
 
-        // 3. Process Cash Records
         if (cashRecordsSnapshot.exists()) {
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
-                const isDirectMatch = record.status === 'Matched' && record.clientId === clientId;
+                const isDirectMatch = (record.status === 'Matched' || record.status === 'Confirmed') && record.clientId === clientId;
                 
                 const senderName = record.senderName ? normalizeArabic(record.senderName.toLowerCase()).replace(/\s+/g, ' ') : '';
                 const isPendingSmsMatch =
@@ -73,11 +72,10 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             });
         }
         
-        // 4. Process USDT Records
         if (usdtRecordsSnapshot.exists()) {
             const usdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             Object.entries(usdtRecords).forEach(([id, record]) => {
-                const isDirectMatch = record.status === 'Confirmed' && record.clientId === clientId;
+                const isDirectMatch = (record.status === 'Confirmed') && record.clientId === clientId;
                 
                 const isWalletMatch =
                     record.status === 'Confirmed' &&
