@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '../firebase';
@@ -119,10 +120,13 @@ export async function createJournalEntryFromTransaction(
         console.error(`Journal entry is not balanced. Debits: ${totalDebits}, Credits: ${totalCredits}`);
         return;
     }
+    
+    // We only create an entry if there's a non-zero amount.
+    if (Math.abs(totalDebits) < 0.01) {
+        return;
+    }
 
     try {
-        // We can create multiple entries if needed, or a single one with multiple legs if our model supports it.
-        // For now, let's assume a simple two-leg entry for income/expense.
         const entryRef = push(ref(db, 'journal_entries'));
         const debitLeg = legs.find(l => l.debit > 0);
         const creditLeg = legs.find(l => l.credit > 0);
@@ -140,7 +144,7 @@ export async function createJournalEntryFromTransaction(
             description: description,
             debit_account: debitLeg.accountId,
             credit_account: creditLeg.accountId,
-            debit_amount: debitLeg.debit, // These are in USD for this context
+            debit_amount: debitLeg.debit,
             credit_amount: creditLeg.credit,
             amount_usd: debitLeg.debit, // Total value of the entry
             createdAt: new Date().toISOString(),

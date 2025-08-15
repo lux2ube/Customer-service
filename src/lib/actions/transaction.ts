@@ -165,13 +165,22 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
         const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
-        
-        const baseAmountForFee = type === 'Deposit' ? totalInflowUSD : totalOutflowUSD; // Assuming fee is on the "getting" side
+
+        // --- Correct Fee Calculation ---
+        let baseAmountForFee = 0;
+        if (type === 'Deposit') { // Client gives fiat (inflow), gets USDT (outflow)
+            baseAmountForFee = totalInflowUSD;
+        } else if (type === 'Withdraw') { // Client gives USDT (inflow), gets fiat (outflow)
+            baseAmountForFee = totalInflowUSD; 
+        }
+
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
         const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
-        const difference = (totalOutflowUSD + calculatedFee) - totalInflowUSD;
+        // --- Calculate Difference/Exchange Gain/Loss ---
+        const expectedOutflow = totalInflowUSD - calculatedFee;
+        const difference = expectedOutflow - totalOutflowUSD; // Positive = profit, Negative = loss
 
         let attachmentUrl = '';
         if (attachment && attachment.size > 0) {
@@ -186,21 +195,21 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             type,
             clientId,
             clientName: client.name,
-            amount_usd: totalInflowUSD, // Total value client brought
+            amount_usd: totalInflowUSD,
             fee_usd: calculatedFee,
-            amount_usdt: totalOutflowUSD, // Total value client received
-            expense_usd: difference < 0 ? Math.abs(difference) : 0, // Expense if negative diff
+            amount_usdt: totalOutflowUSD,
+            expense_usd: difference < 0 ? Math.abs(difference) : 0,
             notes,
             status: 'Confirmed',
             createdAt: new Date().toISOString(),
             linkedRecordIds: linkedRecordIds.join(','),
             attachment_url: attachmentUrl || undefined,
+            exchange_rate_commission: difference > 0 ? difference : 0,
         };
         
         const updates: { [key: string]: any } = {};
         updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
         
-        // Mark records as Used
         for (const record of allLinkedRecords) {
             if (!record) continue;
             const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
@@ -213,19 +222,31 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         await update(ref(db), updates);
         
-        // Handle Accounting for the difference
+        // --- Accounting Entries ---
         const clientAccountId = `6000${clientId}`;
-        if (Math.abs(difference) > 0.01) {
-            const journalDescription = `Profit/Loss on Tx #${newId} for ${client.name}`;
-            let legs = [];
-            if (difference > 0) { // Income
-                 legs.push({ accountId: '4001', debit: 0, credit: difference }); // Credit to Income
-                 legs.push({ accountId: clientAccountId, debit: difference, credit: 0 }); // Debit Client Liability (reduce what we owe)
-            } else { // Expense/Discount
-                 legs.push({ accountId: '5001', debit: Math.abs(difference), credit: 0 }); // Debit Expense
-                 legs.push({ accountId: clientAccountId, credit: Math.abs(difference), debit: 0 }); // Credit Client Liability (increase what we owe)
+        
+        // 1. Journal for the Fee
+        if (calculatedFee > 0.001) {
+            const feeDesc = `Fee for Tx #${newId} (${type})`;
+            const feeLegs = [
+                { accountId: '4002', debit: 0, credit: calculatedFee }, // Credit Fee Income
+                { accountId: clientAccountId, debit: calculatedFee, credit: 0 }, // Debit Client Liability
+            ];
+            await createJournalEntryFromTransaction(feeDesc, feeLegs);
+        }
+
+        // 2. Journal for the Exchange Difference
+        if (Math.abs(difference) > 0.001) {
+            const diffDesc = `Exchange Gain/Loss on Tx #${newId}`;
+            let diffLegs = [];
+            if (difference > 0) { // Profit
+                 diffLegs.push({ accountId: '4001', debit: 0, credit: difference }); // Credit Exchange Income
+                 diffLegs.push({ accountId: clientAccountId, debit: difference, credit: 0 }); // Debit Client Liability (reduce what we owe)
+            } else { // Loss/Discount
+                 diffLegs.push({ accountId: '5001', debit: Math.abs(difference), credit: 0 }); // Debit Exchange Expense
+                 diffLegs.push({ accountId: clientAccountId, credit: Math.abs(difference), debit: 0 }); // Credit Client Liability (increase what we owe)
             }
-            await createJournalEntryFromTransaction(journalDescription, legs);
+            await createJournalEntryFromTransaction(diffDesc, diffLegs);
         }
         
 

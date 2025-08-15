@@ -118,40 +118,32 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
 
     const calculation = React.useMemo(() => {
         const selected = records.filter(r => selectedRecordIds.includes(r.id));
-        
-        if (!transactionType) return { totalInflowUSD: 0, totalOutflowUSD: 0, calculatedFee: 0, netResult: 0, netResultCurrency: 'USD' };
-        
-        const feeConfig = {
-            buy_fee: cryptoFees?.buy_fee_percent || 2,
-            sell_fee: cryptoFees?.sell_fee_percent || 2,
-            min_buy_fee: cryptoFees?.minimum_buy_fee || 1,
-            min_sell_fee: cryptoFees?.minimum_sell_fee || 1,
-        };
-        
-        let baseAmountForFee = 0;
-        let totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
-        let totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
-
-        if (transactionType === 'Deposit') {
-            const fiatInflows = selected.filter(r => r.type === 'inflow' && r.category === 'fiat');
-            baseAmountForFee = fiatInflows.reduce((sum, r) => sum + r.amountUsd, 0);
-        } else if (transactionType === 'Withdraw') {
-            const cryptoInflows = selected.filter(r => r.type === 'inflow' && r.category === 'crypto');
-            baseAmountForFee = cryptoInflows.reduce((sum, r) => sum + r.amountUsd, 0);
-        } else if (transactionType === 'Transfer') {
-             baseAmountForFee = totalInflowUSD;
+        if (!transactionType || !cryptoFees) {
+            return { totalInflowUSD: 0, totalOutflowUSD: 0, calculatedFee: 0, finalAmount: 0, finalCurrency: '' };
         }
 
-        const feePercent = (transactionType === 'Deposit' ? feeConfig.buy_fee : feeConfig.sell_fee) / 100;
-        const minFee = transactionType === 'Deposit' ? feeConfig.min_buy_fee : feeConfig.min_sell_fee;
+        const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
+        const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
+
+        let baseAmountForFee = 0;
+        let finalCurrency = 'USD';
+
+        if (transactionType === 'Deposit') {
+            baseAmountForFee = totalInflowUSD; // Fee on the fiat client gives
+            finalCurrency = 'USDT';
+        } else if (transactionType === 'Withdraw') {
+            baseAmountForFee = totalInflowUSD; // Fee on the USDT client gives
+            finalCurrency = selected.find(r => r.type === 'outflow')?.currency || 'USD';
+        }
+        
+        const feePercent = (transactionType === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
+        const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         
         const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
-        const netResult = totalInflowUSD - totalOutflowUSD - calculatedFee;
-        const netResultCurrency = transactionType === 'Deposit' ? 'USDT' : (transactionType === 'Withdraw' ? 'USD' : 'USD');
+        const finalAmount = totalInflowUSD - calculatedFee;
 
-
-        return { totalInflowUSD, totalOutflowUSD, calculatedFee, netResult, netResultCurrency };
+        return { totalInflowUSD, totalOutflowUSD, calculatedFee, finalAmount, finalCurrency };
     }, [selectedRecordIds, records, cryptoFees, transactionType]);
     
     const recordCategories = React.useMemo(() => {
@@ -178,7 +170,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
             formData.set('type', transactionType);
             selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
             
-            const result = await createModernTransaction(formData);
+            const result = await createModernTransaction(prevState, formData);
             if(result.success) {
                 toast({ title: 'Success', description: 'Transaction created successfully.' });
                 handleClientSelect(selectedClient); // Refresh records
@@ -322,16 +314,16 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                                 <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
                             </div>
                             <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Total Outflow</p>
-                                <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
-                            </div>
-                            <div className="p-2 border rounded-md">
                                 <p className="text-xs text-muted-foreground">Fee</p>
-                                <p className="font-bold">${calculation.calculatedFee.toFixed(2)}</p>
+                                <p className="font-bold text-red-600">${calculation.calculatedFee.toFixed(2)}</p>
                             </div>
-                            <div className="p-2 border rounded-md bg-muted">
-                                <p className="text-xs text-muted-foreground">Net {calculation.netResultCurrency} Result</p>
-                                <p className="font-bold text-primary">{calculation.netResult.toFixed(2)} {calculation.netResultCurrency}</p>
+                             <div className="p-2 border rounded-md bg-muted">
+                                <p className="text-xs text-muted-foreground">Client Will Receive</p>
+                                <p className="font-bold text-primary">{calculation.finalAmount.toFixed(2)} {calculation.finalCurrency}</p>
+                            </div>
+                             <div className="p-2 border rounded-md">
+                                <p className="text-xs text-muted-foreground">Actual Outflow</p>
+                                <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
                             </div>
                         </CardContent>
                     </Card>
