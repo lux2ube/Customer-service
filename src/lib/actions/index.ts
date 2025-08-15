@@ -1,17 +1,90 @@
 
-
 // This file serves as the single entry point for all server actions.
 // It re-exports all actions from the domain-specific modules.
 
-export * from './account';
-export * from './client';
-export * from './integration';
-export * from './sms';
-export * from './transaction';
-export * from './utility';
-export * from './wallet';
-export * from './document';
-export * from './service-provider';
-export * from './financial-records';
-export * from './bsc';
-export * from './parsing';
+// Account Management
+export {
+    createAccount,
+    deleteAccount,
+    updateAccountPriority,
+    createJournalEntry,
+    setupClientParentAccount
+} from './account';
+
+// Client Management
+export {
+    createClient,
+    manageClient,
+    searchClients,
+    findClientByAddress,
+    importClients,
+    batchUpdateClientForTransactions,
+    migrateBep20Addresses,
+} from './client';
+
+// External Integrations (BSCScan)
+export {
+    syncBscTransactions,
+    createBscApiSetting,
+    deleteBscApiSetting,
+    migrateExistingBscApi
+} from './integration';
+
+// SMS Processing & Management
+export {
+    createSmsEndpoint,
+    deleteSmsEndpoint,
+    processIncomingSms,
+    linkSmsToClient,
+    updateSmsTransactionStatus,
+    updateBulkSmsStatus,
+    createSmsParsingRule,
+    deleteSmsParsingRule
+} from './sms';
+
+// Core Transaction Logic
+export {
+    createModernTransaction,
+    getUnifiedClientRecords,
+} from './transaction';
+
+// Global Settings & Utilities
+export {
+    updateFiatRates,
+    updateCryptoRates,
+    updateCryptoFees,
+    updateApiSettings,
+    addBlacklistItem,
+    deleteBlacklistItem,
+    scanClientsWithBlacklist,
+    addCurrency,
+    deleteCurrency,
+    initializeDefaultCurrencies,
+    deleteAllModernCashRecords,
+    deleteBscSyncedRecords
+} from './utility';
+
+// Wallet (Live Sending)
+export {
+    getWalletDetails,
+    createSendRequest
+} from './wallet';
+
+// Document Processing (OCR)
+export {
+    processDocument
+} from './document';
+
+// Service Provider Management
+export {
+    createServiceProvider,
+    deleteServiceProvider
+} from './service-provider';
+
+// Unified Financial Records (Cash & USDT)
+export {
+    createCashReceipt,
+    createUsdtManualReceipt,
+    createUsdtManualPayment,
+    cancelCashPayment,
+} from './financial-records';
