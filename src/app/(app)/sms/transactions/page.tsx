@@ -3,20 +3,34 @@
 
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
-import { SmsTransactionsTable } from "@/components/sms-transactions-table";
-import { Suspense } from "react";
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, BookCopy } from 'lucide-react';
+import Link from 'next/link';
 
 export default function SmsTransactionsPage() {
     return (
         <>
             <PageHeader
                 title="Legacy SMS Transactions"
-                description="View and manage transactions parsed from incoming SMS messages. New records appear in Modern Cash Records."
+                description="This page is no longer in use."
             >
             </PageHeader>
-            <Suspense fallback={<div>Loading transactions...</div>}>
-                <SmsTransactionsTable />
-            </Suspense>
+            <Alert>
+                <BookCopy className="h-4 w-4" />
+                <AlertTitle>This View is Deprecated</AlertTitle>
+                <AlertDescription>
+                    All SMS transactions are now managed as part of the unified Modern Cash Records. 
+                    Please use that page to view and manage all cash inflows, including those from SMS.
+                </AlertDescription>
+                <div className="mt-4">
+                    <Button asChild>
+                        <Link href="/modern-cash-records">
+                            Go to Modern Cash Records <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
+                    </Button>
+                </div>
+            </Alert>
         </>
     );
 }

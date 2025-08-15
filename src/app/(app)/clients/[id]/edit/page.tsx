@@ -1,11 +1,14 @@
 
+'use client';
+
 import { PageHeader } from "@/components/page-header";
 import { ClientForm } from "@/components/client-form";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
-import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, get, query, orderByChild, equalTo, onValue } from 'firebase/database';
 import type { Client, Account, Transaction, AuditLog, CashRecord, UsdtRecord, ClientActivity, ServiceProvider } from '@/lib/types';
 import { notFound } from "next/navigation";
+import React from "react";
 
 async function getClient(id: string): Promise<Client | null> {
     const clientRef = ref(db, `clients/${id}`);
@@ -17,10 +20,9 @@ async function getClient(id: string): Promise<Client | null> {
 }
 
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
-    const [cashRecordsSnap, usdtRecordsSnap, transactionsSnap] = await Promise.all([
+    const [cashRecordsSnap, usdtRecordsSnap] = await Promise.all([
         get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'transactions'), orderByChild('clientId'), equalTo(clientId)))
+        get(query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId)))
     ]);
 
     const history: ClientActivity[] = [];
@@ -59,24 +61,6 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
         });
     }
 
-    if (transactionsSnap.exists()) {
-        const transactions: Record<string, Transaction> = transactionsSnap.val();
-        Object.keys(transactions).forEach(key => {
-            const tx = transactions[key];
-            history.push({
-                id: `tx-${key}`,
-                date: tx.date,
-                type: tx.type,
-                description: `Consolidated Transaction`,
-                amount: tx.amount_usd,
-                currency: 'USD',
-                status: tx.status,
-                source: 'Transaction',
-                link: `/transactions/${key}/invoice`,
-            });
-        });
-    }
-
     // Sort by date descending
     history.sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -87,18 +71,15 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
     return history;
 }
 
-
 async function getClientAuditLogs(clientId: string): Promise<AuditLog[]> {
     const logsRef = ref(db, 'logs');
-    // Fetch all logs and filter in code to avoid indexing issues.
-    const snapshot = await get(logsRef);
+    const snapshot = await get(query(logsRef, orderByChild('entityId'), equalTo(clientId)));
     if (!snapshot.exists()) {
         return [];
     }
-    const allLogs: Record<string, AuditLog> = snapshot.val();
-    return Object.keys(allLogs)
-        .map(key => ({ id: key, ...allLogs[key] }))
-        .filter(log => log.entityId === clientId && log.entityType === 'client')
+    return Object.keys(snapshot.val())
+        .map(key => ({ id: key, ...snapshot.val()[key] }))
+        .filter(log => log.entityType === 'client')
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
@@ -138,22 +119,52 @@ async function getServiceProviders(): Promise<ServiceProvider[]> {
 }
 
 
-export default async function EditClientPage({ params }: { params: { id: string } }) {
+export default function EditClientPage({ params }: { params: { id: string } }) {
     const { id } = params;
-    const client = await getClient(id);
+    const [client, setClient] = React.useState<Client | null>(null);
+    const [activityHistory, setActivityHistory] = React.useState<ClientActivity[]>([]);
+    const [otherClients, setOtherClients] = React.useState<Client[]>([]);
+    const [auditLogs, setAuditLogs] = React.useState<AuditLog[]>([]);
+    const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            const clientData = await getClient(id);
+            if (clientData) {
+                setClient(clientData);
+                const [history, others, logs, providers] = await Promise.all([
+                    getClientActivityHistory(id),
+                    getOtherClientsWithSameName(clientData),
+                    getClientAuditLogs(id),
+                    getServiceProviders()
+                ]);
+                setActivityHistory(history);
+                setOtherClients(others);
+                setAuditLogs(logs);
+                setServiceProviders(providers);
+            }
+            setLoading(false);
+        };
+        fetchData();
+    }, [id]);
+
+    if (loading) {
+        return (
+            <>
+                <PageHeader title="Edit Client" description="Loading client details..." />
+                <div>Loading form...</div>
+            </>
+        )
+    }
 
     if (!client) {
         notFound();
     }
-
-    const activityHistory = await getClientActivityHistory(id);
-    const otherClientsWithSameName = await getOtherClientsWithSameName(client);
-    const auditLogs = await getClientAuditLogs(id);
-    const serviceProviders = await getServiceProviders();
     
     const usedProviderIds = new Set(client?.serviceProviders?.map(sp => sp.providerId) || []);
     const usedServiceProviders = serviceProviders.filter(p => usedProviderIds.has(p.id));
-
 
     return (
         <>
@@ -165,7 +176,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
                 <ClientForm 
                     client={client} 
                     activityHistory={activityHistory}
-                    otherClientsWithSameName={otherClientsWithSameName} 
+                    otherClientsWithSameName={otherClients} 
                     auditLogs={auditLogs} 
                     usedServiceProviders={usedServiceProviders}
                 />

@@ -55,7 +55,6 @@ const menuItems = [
 
   { type: 'divider', label: 'المعاملات' },
   { href: '/transactions/modern', label: 'Modern Transaction', icon: HandCoins },
-  { href: '/transactions', label: 'Deposit / Withdraw', icon: Banknote },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
 
@@ -65,7 +64,6 @@ const menuItems = [
 
   { type: 'divider', label: 'الإدارة' },
   { href: '/clients', label: 'Clients', icon: Users },
-  { href: '/sms/transactions', label: 'SMS Transactions', icon: MessageCircle },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { href: '/logs', label: 'Audit Log', icon: History },
 

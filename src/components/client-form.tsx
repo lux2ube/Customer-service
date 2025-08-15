@@ -66,9 +66,9 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
         if (!activityHistory) return new Map<string, string>();
         const lastUsedMap = new Map<string, string>();
         activityHistory
-            .filter(tx => tx.source === 'Transaction' && tx.link)
+            .filter(tx => tx.source === 'USDT Record') // Updated source
              .forEach(tx => {
-                // We can't get client_wallet_address directly, this logic will be simplified.
+                // We can't get client_wallet_address directly from ClientActivity, this logic will be simplified.
             });
         return lastUsedMap;
     }, [activityHistory]);
