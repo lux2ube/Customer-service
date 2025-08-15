@@ -4,6 +4,9 @@
   "rules": {
     ".read": true,
     ".write": true,
+    "cash_records": {
+      ".indexOn": "clientId"
+    },
     "modern_cash_records": {
       ".indexOn": ["clientId"]
     },
@@ -14,7 +17,7 @@
       ".indexOn": ["createdAt", "clientId", "status"]
     },
     "modern_usdt_records": {
-      ".indexOn": ["accountId", "date", "source", "blockNumber", "clientId", "createdAt"]
+      ".indexOn": ["createdAt", "clientId"]
     },
     "cash_receipts": {
       ".indexOn": ["clientId", "status"]
@@ -38,5 +41,6 @@
     }
   }
 }
+
 
 
