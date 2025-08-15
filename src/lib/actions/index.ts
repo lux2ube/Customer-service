@@ -8,9 +8,14 @@ export {
     createAccount,
     deleteAccount,
     updateAccountPriority,
-    createJournalEntry,
     setupClientParentAccount
 } from './account';
+
+// Journal Entries
+export {
+    createJournalEntry,
+    createJournalEntryFromTransaction,
+} from './journal';
 
 // Client Management
 export {
@@ -95,3 +100,4 @@ export {
     createUsdtManualPayment,
     cancelCashPayment,
 } from './financial-records';
+

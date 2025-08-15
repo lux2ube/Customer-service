@@ -9,6 +9,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider, CashRecord, UsdtRecord, UnifiedFinancialRecord } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
+import { createJournalEntryFromTransaction } from './journal';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 import { normalizeArabic } from '../utils';
@@ -145,7 +146,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
         const allLinkedRecords = linkedRecordIds.map(id => {
             const record = allCashRecords[id] || allUsdtRecords[id];
-            return record ? { ...record, id } : null;
+            return record ? { ...record, id, recordType: allCashRecords[id] ? 'cash' : 'usdt' } : null;
         }).filter(r => r && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
 
 
@@ -163,11 +164,14 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
         
         const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
+        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
         
+        const baseAmountForFee = type === 'Deposit' ? totalInflowUSD : totalOutflowUSD; // Assuming fee is on the "getting" side
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
         const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
-        const calculatedFee = Math.max(totalInflowUSD * feePercent, totalInflowUSD > 0 ? minFee : 0);
-        const finalUsdtAmount = totalInflowUSD - calculatedFee;
+        const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
+        
+        const difference = (totalOutflowUSD + calculatedFee) - totalInflowUSD;
 
         let attachmentUrl = '';
         if (attachment && attachment.size > 0) {
@@ -182,24 +186,25 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             type,
             clientId,
             clientName: client.name,
-            amount_usd: totalInflowUSD,
+            amount_usd: totalInflowUSD, // Total value client brought
             fee_usd: calculatedFee,
-            amount_usdt: finalUsdtAmount,
+            amount_usdt: totalOutflowUSD, // Total value client received
+            expense_usd: difference < 0 ? Math.abs(difference) : 0, // Expense if negative diff
             notes,
             status: 'Confirmed',
             createdAt: new Date().toISOString(),
             linkedRecordIds: linkedRecordIds.join(','),
             attachment_url: attachmentUrl || undefined,
         };
-
+        
         const updates: { [key: string]: any } = {};
         updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
         
+        // Mark records as Used
         for (const record of allLinkedRecords) {
             if (!record) continue;
-            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
+            const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
-            // If it was a pending SMS, also assign the client ID now.
             if (record.status === 'Pending') {
                  updates[`${recordPath}/clientId`] = clientId;
                  updates[`${recordPath}/clientName`] = client.name;
@@ -207,6 +212,22 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
         
         await update(ref(db), updates);
+        
+        // Handle Accounting for the difference
+        const clientAccountId = `6000${clientId}`;
+        if (Math.abs(difference) > 0.01) {
+            const journalDescription = `Profit/Loss on Tx #${newId} for ${client.name}`;
+            let legs = [];
+            if (difference > 0) { // Income
+                 legs.push({ accountId: '4001', debit: 0, credit: difference }); // Credit to Income
+                 legs.push({ accountId: clientAccountId, debit: difference, credit: 0 }); // Debit Client Liability (reduce what we owe)
+            } else { // Expense/Discount
+                 legs.push({ accountId: '5001', debit: Math.abs(difference), credit: 0 }); // Debit Expense
+                 legs.push({ accountId: clientAccountId, credit: Math.abs(difference), debit: 0 }); // Credit Client Liability (increase what we owe)
+            }
+            await createJournalEntryFromTransaction(journalDescription, legs);
+        }
+        
 
         revalidatePath('/transactions/modern');
         revalidatePath('/transactions');
@@ -246,7 +267,3 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
-
-
-
-    

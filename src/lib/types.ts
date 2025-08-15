@@ -89,6 +89,16 @@ export interface Transaction {
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     createdAt: string;
     linkedRecordIds?: string;
+    // --- LEGACY FIELDS ---
+    bankAccountId?: string;
+    cryptoWalletId?: string;
+    currency?: string;
+    amount?: number;
+    remittance_number?: string;
+    hash?: string;
+    client_wallet_address?: string;
+    linkedSmsId?: string;
+    exchange_rate_commission?: number;
 }
 
 export interface CashRecord {

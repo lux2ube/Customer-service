@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Account } from '../types';
-import { stripUndefined, logAction, sendTelegramNotification } from './helpers';
+import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
 
 // --- Chart of Accounts Actions ---
@@ -191,99 +192,6 @@ export async function updateAccountPriority(accountId: string, parentId: string 
     revalidatePath('/accounting/chart-of-accounts');
 }
 
-export type JournalEntryFormState =
-  | {
-      errors?: {
-        date?: string[];
-        description?: string[];
-        debit_account?: string[];
-        credit_account?: string[];
-        debit_amount?: string[];
-        credit_amount?: string[];
-      };
-      message?: string;
-    }
-  | undefined;
-
-
-const JournalEntrySchema = z.object({
-    date: z.string({ invalid_type_error: 'Please select a date.' }),
-    description: z.string().min(1, { message: 'Description is required.' }),
-    debit_account: z.string().min(1, { message: 'Please select a debit account.' }),
-    credit_account: z.string().min(1, { message: 'Please select a credit account.' }),
-    debit_amount: z.coerce.number().gt(0, { message: 'Debit amount must be positive.' }),
-    credit_amount: z.coerce.number().gt(0, { message: 'Credit amount must be positive.' }),
-    amount_usd: z.coerce.number().gt(0, { message: 'USD amount must be positive.' }),
-});
-
-
-export async function createJournalEntry(prevState: JournalEntryFormState, formData: FormData) {
-    const validatedFields = JournalEntrySchema.safeParse(Object.fromEntries(formData.entries()));
-
-    if (!validatedFields.success) {
-        return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Failed to create journal entry. Please check the fields.',
-        };
-    }
-
-    const { date, description, debit_account, credit_account, debit_amount, credit_amount, amount_usd } = validatedFields.data;
-
-    if (debit_account === credit_account) {
-        return {
-            errors: {
-                debit_account: ['Debit and credit accounts cannot be the same.'],
-                credit_account: ['Debit and credit accounts must be the same.'],
-            },
-            message: 'Debit and credit accounts must be different.'
-        }
-    }
-
-    // Denormalize account names
-    let debit_account_name = '';
-    let credit_account_name = '';
-    try {
-        const debitSnapshot = await get(ref(db, `accounts/${debit_account}`));
-        if (debitSnapshot.exists()) debit_account_name = (debitSnapshot.val() as Account).name;
-        const creditSnapshot = await get(ref(db, `accounts/${credit_account}`));
-        if (creditSnapshot.exists()) credit_account_name = (creditSnapshot.val() as Account).name;
-    } catch(e) { console.error("Could not fetch account names for journal entry"); }
-
-
-    try {
-        const newEntryRef = push(ref(db, 'journal_entries'));
-        await set(newEntryRef, {
-            date,
-            description,
-            debit_account,
-            credit_account,
-            debit_amount,
-            credit_amount,
-            amount_usd,
-            debit_account_name,
-            credit_account_name,
-            createdAt: new Date().toISOString(),
-        });
-        
-        // Telegram Notification for Journal Entry
-        const notificationMessage = `
-*🔄 Journal Entry Created*
-*Description:* ${description}
-*Amount:* ${amount_usd.toFixed(2)} USD
-*From (Debit):* ${debit_account_name}
-*To (Credit):* ${credit_account_name}
-        `;
-        await sendTelegramNotification(notificationMessage);
-
-    } catch (error) {
-        return {
-            message: 'Database Error: Failed to create journal entry.'
-        }
-    }
-    
-    revalidatePath('/accounting/journal');
-    redirect('/accounting/journal');
-}
 
 export type SetupState = { message?: string; error?: boolean; } | undefined;
 
