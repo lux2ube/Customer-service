@@ -33,7 +33,7 @@ import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 
-export function ClientForm({ client, bankAccounts, activityHistory, otherClientsWithSameName, auditLogs }: { client?: Client, bankAccounts?: Account[], activityHistory?: ClientActivity[], otherClientsWithSameName?: Client[], auditLogs?: AuditLog[] }) {
+export function ClientForm({ client, activityHistory, otherClientsWithSameName, auditLogs }: { client?: Client, activityHistory?: ClientActivity[], otherClientsWithSameName?: Client[], auditLogs?: AuditLog[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
