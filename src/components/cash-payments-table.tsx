@@ -25,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { CashPayment, SmsTransaction, Client, CashRecord } from '@/lib/types';
+import type { Client, CashRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
@@ -211,7 +211,7 @@ export function CashPaymentsTable({ initialPayments, initialClients }: { initial
       if (!paymentToCancel) return;
       const result = await cancelCashPayment(paymentToCancel.id);
       if (result?.success) {
-          toast({ title: "Payment Cancelled", description: "The payment has been successfully cancelled and the journal entry reversed." });
+          toast({ title: "Payment Cancelled", description: "The payment has been successfully cancelled." });
       } else {
           toast({ variant: "destructive", title: "Error", description: result.message });
       }

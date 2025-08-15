@@ -1,4 +1,5 @@
 
+
 // This file serves as the single entry point for all server actions.
 // It re-exports all actions from the domain-specific modules.
 
@@ -23,12 +24,13 @@ export {
 } from './client';
 
 // External Integrations (BSCScan)
+export { syncBscTransactions } from './integration';
 export {
-    syncBscTransactions,
     createBscApiSetting,
     deleteBscApiSetting,
     migrateExistingBscApi
-} from './integration';
+} from './bsc';
+
 
 // SMS Processing & Management
 export {
@@ -88,3 +90,4 @@ export {
     createUsdtManualPayment,
     cancelCashPayment,
 } from './financial-records';
+

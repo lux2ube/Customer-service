@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { Client, SmsTransaction, CashRecord } from '@/lib/types';
+import type { Client, CashRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
 import { linkSmsToClient } from '@/lib/actions';
@@ -27,7 +27,7 @@ export function MatchUnusedSmsForm({ client, onSmsMatched, setIsOpen }: MatchUnu
     const recordsRef = query(ref(db, 'cash_records'), orderByChild('source'), equalTo('SMS'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allSmsRecords: CashRecord[] = Object.values(snapshot.val());
+        const allSmsRecords: CashRecord[] = Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] }));
         const unmatched = allSmsRecords.filter(sms => sms.status === 'Pending' && !sms.clientId);
         setSmsList(unmatched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       }

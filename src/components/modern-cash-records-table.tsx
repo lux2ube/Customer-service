@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -17,7 +18,7 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -27,6 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
     AlertDialog,
     AlertDialogAction,
+    AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
     AlertDialogFooter,
@@ -40,6 +42,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
+import { cancelCashPayment } from '@/lib/actions';
+
 
 const statuses = ['Pending', 'Matched', 'Used', 'Cancelled'];
 const sources = ['Manual', 'SMS'];
@@ -54,11 +58,13 @@ export function ModernCashRecordsTable() {
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
+  const [recordToCancel, setRecordToCancel] = React.useState<ModernCashRecord | null>(null);
+
 
   const { toast } = useToast();
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'modern_cash_records'), orderByChild('createdAt'));
+    const recordsRef = query(ref(db, 'cash_records'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -115,6 +121,17 @@ export function ModernCashRecordsTable() {
             default: return 'secondary';
         }
     }
+  
+  const handleCancelAction = async () => {
+    if (!recordToCancel) return;
+    const result = await cancelCashPayment(recordToCancel.id);
+     if (result?.success) {
+        toast({ title: "Record Cancelled", description: "The cash record has been successfully cancelled." });
+    } else {
+        toast({ variant: "destructive", title: "Error", description: result.message });
+    }
+    setRecordToCancel(null);
+  };
 
   return (
     <>
@@ -208,7 +225,11 @@ export function ModernCashRecordsTable() {
                                             <MessageSquare className="mr-2 h-4 w-4" /> View SMS
                                         </DropdownMenuItem>
                                      )}
-                                    <DropdownMenuItem>Cancel</DropdownMenuItem>
+                                    {record.status !== 'Cancelled' && (
+                                      <DropdownMenuItem onClick={() => setRecordToCancel(record)} className="text-destructive">
+                                        <Trash2 className="mr-2 h-4 w-4" /> Cancel
+                                      </DropdownMenuItem>
+                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </TableCell>
@@ -229,6 +250,19 @@ export function ModernCashRecordsTable() {
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogAction onClick={() => setRawSmsToShow(null)}>Close</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
+     <AlertDialog open={!!recordToCancel} onOpenChange={(open) => !open && setRecordToCancel(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>This will cancel the record. This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCancelAction}>Confirm</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>

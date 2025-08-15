@@ -1,16 +1,17 @@
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, SmsTransaction, ParsedSms, SmsParsingRule, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate } from '../types';
-import { parseSmsWithCustomRules } from '../custom-sms-parser';
+import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule } from '../types';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
 import { format } from 'date-fns';
 import { getNextSequentialId, stripUndefined } from './helpers';
+import { parseSmsWithCustomRules } from '../custom-sms-parser';
 
 
 // --- SMS Processing Actions ---
@@ -173,18 +174,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
             processedCount++;
             
-            let parsed: ParsedSms | null = null;
-            
-            if (customRules.length > 0) {
-                parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
-            }
-            
-            if (!parsed) {
-                const settings = (await get(ref(db, 'settings'))).val() as Settings;
-                if (settings?.api?.gemini_api_key) {
-                    parsed = await parseSmsWithAi(trimmedSmsBody, settings.api.gemini_api_key);
-                }
-            }
+            const parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
             
             if (parsed && parsed.amount) {
                 successCount++;
@@ -196,7 +186,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 if (currencyCode === 'USD') {
                     amountUsd = parsed.amount;
                 } else if (rateInfo) {
-                    // Use a fallback of 0 if rate is not available to prevent crashes
                     const rate = (parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell) || 0;
                     if (rate > 0) {
                         amountUsd = parsed.amount / rate;
@@ -298,7 +287,7 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
     }
 }
 
-export async function updateSmsTransactionStatus(recordId: string, status: 'used' | 'rejected') {
+export async function updateSmsTransactionStatus(recordId: string, status: 'Used' | 'Cancelled') {
      if (!recordId || !status) {
         return { success: false, message: "Record ID and status are required." };
     }
@@ -332,5 +321,64 @@ export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: 
     } catch (e: any) {
         console.error("Bulk SMS Update Error:", e);
         return { error: true, message: e.message || 'An unknown database error occurred.' };
+    }
+}
+
+export type ParsingRuleFormState = {
+  errors?: {
+    name?: string[];
+    type?: string[];
+    amountStartsAfter?: string[];
+    amountEndsBefore?: string[];
+    personStartsAfter?: string[];
+    personEndsBefore?: string[];
+  };
+  message?: string;
+} | undefined;
+
+
+const SmsParsingRuleSchema = z.object({
+  name: z.string().min(1, 'Rule name is required.'),
+  type: z.enum(['credit', 'debit']),
+  amountStartsAfter: z.string().min(1, 'This marker is required.'),
+  amountEndsBefore: z.string().min(1, 'This marker is required.'),
+  personStartsAfter: z.string().min(1, 'This marker is required.'),
+  personEndsBefore: z.string().optional(), // This one is optional
+});
+
+
+export async function createSmsParsingRule(prevState: ParsingRuleFormState, formData: FormData): Promise<ParsingRuleFormState> {
+    const validatedFields = SmsParsingRuleSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Failed to save rule. Please check the fields.',
+        };
+    }
+    
+    try {
+        const newRuleRef = push(ref(db, 'sms_parsing_rules'));
+        await set(newRuleRef, {
+            ...validatedFields.data,
+            createdAt: new Date().toISOString(),
+        });
+        revalidatePath('/sms/parsing');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to save parsing rule.' };
+    }
+}
+
+export async function deleteSmsParsingRule(id: string): Promise<{ message?: string }> {
+    if (!id) {
+        return { message: 'Invalid rule ID.' };
+    }
+    try {
+        await remove(ref(db, `sms_parsing_rules/${id}`));
+        revalidatePath('/sms/parsing');
+        return {};
+    } catch (error) {
+        return { message: 'Database error: Failed to delete rule.' };
     }
 }
