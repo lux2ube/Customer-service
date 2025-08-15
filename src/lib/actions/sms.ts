@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -127,7 +126,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let currentFiatRates: Record<string, FiatRate> = {};
         if (fiatRatesSnapshot.exists()) {
             const lastEntry = Object.values(fiatRatesSnapshot.val())[0] as any;
-            currentFiatRates = lastEntry.rates || {};
+            currentFiatRates = lastEntry; // Corrected to read from the flat structure
         }
         
         const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
@@ -225,12 +224,17 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             } else {
                 failedCount++;
                 const failureRef = push(ref(db, `sms_parsing_failures`));
-                updates[failureRef.path.toString()] = {
-                    rawSms: trimmedSmsBody,
-                    accountId,
-                    accountName: account.name,
-                    failedAt: new Date().toISOString(),
-                };
+                // **CRITICAL FIX**: Check if failureRef is not null before using its path
+                if (failureRef.key) {
+                    updates[`/sms_parsing_failures/${failureRef.key}`] = {
+                        rawSms: trimmedSmsBody,
+                        accountId,
+                        accountName: account.name,
+                        failedAt: new Date().toISOString(),
+                    };
+                } else {
+                    console.error("Failed to generate a key for parsing failure log.");
+                }
             }
         };
 
@@ -288,6 +292,7 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         await update(ref(db), updates);
 
         revalidatePath('/modern-cash-records');
+        revalidatePath('/cash-receipts');
         return { success: true, message: "SMS record linked to client." };
     } catch (e: any) {
         console.error("Error linking SMS to client:", e);
@@ -302,6 +307,7 @@ export async function updateSmsTransactionStatus(recordId: string, status: 'Used
      try {
         await update(ref(db, `cash_records/${recordId}`), { status });
         revalidatePath('/modern-cash-records');
+        revalidatePath('/cash-receipts');
         return { success: true };
      } catch (e: any) {
          console.error("Error updating SMS status:", e);
@@ -325,6 +331,7 @@ export async function updateBulkSmsStatus(prevState: BulkUpdateState, formData: 
 
         await update(ref(db), updates);
         revalidatePath('/modern-cash-records');
+        revalidatePath('/cash-receipts');
         return { message: `${smsIds.length} record(s) updated to "${status}".` };
     } catch (e: any) {
         console.error("Bulk SMS Update Error:", e);
@@ -390,3 +397,5 @@ export async function deleteSmsParsingRule(id: string): Promise<{ message?: stri
         return { message: 'Database error: Failed to delete rule.' };
     }
 }
+
+    
