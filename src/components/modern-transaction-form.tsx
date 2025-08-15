@@ -267,7 +267,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                                              <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><Send className="mr-2 h-4 w-4" />Auto Send USDT</Button>
+                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
                                                  <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                              </div>
@@ -449,3 +449,4 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+
