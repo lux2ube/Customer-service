@@ -15,7 +15,7 @@ import { Calendar } from './ui/calendar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, ModernCashRecord } from '@/lib/types';
+import type { Client, Account, CashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState, searchClients } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
@@ -126,7 +126,7 @@ function ClientSelector({
     );
 }
 
-export function CashPaymentForm({ record, clients, bankAccounts }: { record?: ModernCashRecord, clients: Client[], bankAccounts: Account[] }) {
+export function CashPaymentForm({ record, clients, bankAccounts }: { record?: CashRecord, clients: Client[], bankAccounts: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);

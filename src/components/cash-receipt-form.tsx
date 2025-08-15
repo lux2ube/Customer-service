@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, FiatRate, ModernCashRecord } from '@/lib/types';
+import type { Client, Account, FiatRate, CashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState, searchClients } from '@/lib/actions';
 import { db } from '@/lib/firebase';
@@ -126,7 +126,7 @@ function ClientSelector({
     );
 }
 
-export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }: { record?: ModernCashRecord, clients: Client[], bankAccounts: Account[], onFormSubmit?: () => void }) {
+export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }: { record?: CashRecord, clients: Client[], bankAccounts: Account[], onFormSubmit?: () => void }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);

@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -289,4 +288,44 @@ export interface BscApiSetting {
     accountId: string;
     createdAt: string;
     lastSyncedBlock?: number;
+}
+
+
+// This is the old type, it can be removed once all components are updated
+export interface ModernCashRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'SMS';
+    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string;
+    accountName: string;
+    senderName?: string; // For inflows
+    recipientName?: string; // For outflows
+    amount: number;
+    currency: string;
+    amountUsd: number;
+    notes?: string;
+    rawSms?: string;
+    createdAt: string;
+}
+
+export interface ModernUsdtRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'BSCScan';
+    status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string; // The system's internal crypto wallet account ID
+    accountName: string; // The system's internal crypto wallet name
+    amount: number; // The USDT amount
+    notes?: string;
+    txHash?: string;
+    clientWalletAddress?: string; // The external client wallet address
+    createdAt: string;
+    blockNumber?: number; // For sync logic
 }

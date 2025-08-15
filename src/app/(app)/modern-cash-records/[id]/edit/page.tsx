@@ -5,13 +5,13 @@ import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
-import type { Client, ModernCashRecord, Account } from '@/lib/types';
+import type { Client, CashRecord, Account } from '@/lib/types';
 import { notFound } from "next/navigation";
 import { CashReceiptForm } from "@/components/cash-receipt-form";
 import { CashPaymentForm } from "@/components/cash-payment-form";
 
 async function getPageData(recordId: string) {
-    const recordRef = ref(db, `modern_cash_records/${recordId}`);
+    const recordRef = ref(db, `cash_records/${recordId}`);
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
 
@@ -25,7 +25,7 @@ async function getPageData(recordId: string) {
         return { record: null, clients: [], bankAccounts: [] };
     }
     
-    const record: ModernCashRecord = { id: recordId, ...recordSnapshot.val() };
+    const record: CashRecord = { id: recordId, ...recordSnapshot.val() };
     
     const clients: Client[] = [];
     if (clientsSnapshot.exists()) {

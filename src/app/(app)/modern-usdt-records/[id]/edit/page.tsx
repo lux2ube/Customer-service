@@ -1,16 +1,15 @@
 
-
 import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
-import type { Client, ModernUsdtRecord, Account } from '@/lib/types';
+import type { Client, UsdtRecord, Account } from '@/lib/types';
 import { notFound } from "next/navigation";
 import { UsdtManualReceiptForm } from "@/components/usdt-manual-receipt-form";
 import { UsdtManualPaymentForm } from "@/components/usdt-manual-payment-form";
 
 async function getPageData(recordId: string) {
-    const recordRef = ref(db, `modern_usdt_records/${recordId}`);
+    const recordRef = ref(db, `usdt_records/${recordId}`);
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
 
@@ -24,7 +23,7 @@ async function getPageData(recordId: string) {
         return { record: null, clients: [], cryptoWallets: [] };
     }
     
-    const record: ModernUsdtRecord = { id: recordId, ...recordSnapshot.val() };
+    const record: UsdtRecord = { id: recordId, ...recordSnapshot.val() };
     
     const clients: Client[] = [];
     if (clientsSnapshot.exists()) {

@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, Account, ModernUsdtRecord } from '@/lib/types';
+import type { Client, Account, UsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
@@ -114,7 +114,7 @@ function ClientSelector({
     );
 }
 
-export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { record?: ModernUsdtRecord, clients: Client[], cryptoWallets: Account[] }) {
+export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { record?: UsdtRecord, clients: Client[], cryptoWallets: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -263,5 +263,3 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
         </form>
     );
 }
-
-    
