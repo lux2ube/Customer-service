@@ -51,7 +51,7 @@ function ClientSelector({
   onValueChange: (value: string) => void;
   onSelect: (client: Client | null) => void;
 }) {
-    const [open, setIsOpen] = React.useState(false);
+    const [open, setOpen] = React.useState(false);
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
@@ -87,11 +87,11 @@ function ClientSelector({
     const handleSelect = (client: Client) => {
         onSelect(client);
         onValueChange(client.name);
-        setIsOpen(false);
+        setOpen(false);
     };
 
     return (
-        <Popover open={open} onOpenChange={setIsOpen}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <div className="relative w-full">
                     <Command shouldFilter={false}>

@@ -80,7 +80,7 @@ function ClientSelector({
 
     const handleSelect = (client: Client) => {
         onSelect(client);
-        setIsOpen(false);
+        setOpen(false);
     };
 
     return (

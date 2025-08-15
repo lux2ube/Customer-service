@@ -87,7 +87,7 @@ function ClientSelector({
     const handleSelect = (client: Client) => {
         onSelect(client);
         onValueChange(client.name);
-        setIsOpen(false);
+        setOpen(false);
     };
 
     return (
