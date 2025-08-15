@@ -33,7 +33,6 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         
         // 2. Prepare client name match patterns for robust SMS matching
         const normalizedClientName = normalizeArabic(client.name.toLowerCase()).replace(/\s+/g, ' ');
-        const clientNameParts = normalizedClientName.split(' ');
         
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
