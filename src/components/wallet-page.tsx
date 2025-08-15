@@ -11,7 +11,7 @@ import { Button } from './ui/button';
 import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
-import type { SendRequest, Client } from '@/lib/types';
+import type { SendRequest, Client, Account } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
@@ -23,6 +23,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { ethers } from 'ethers';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 function SendButton() {
     const { pending } = useFormStatus();
@@ -98,7 +99,7 @@ function WalletInfoCard({ details, onRefresh }: { details: WalletDetailsState, o
     )
 }
 
-function SendForm() {
+function SendForm({ usdtAccounts }: { usdtAccounts: Account[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
     const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
@@ -152,7 +153,7 @@ function SendForm() {
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
         if (client) {
-            const primaryAddress = client.bep20_addresses?.[0];
+            const primaryAddress = client.serviceProviders?.find(sp => sp.providerType === 'Crypto')?.details['Address'];
             setSelectedAddress(primaryAddress);
             setAddressInput(primaryAddress || '');
         } else {
@@ -182,6 +183,23 @@ function SendForm() {
             </CardHeader>
             <form ref={formRef} action={formAction}>
                 <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="creditAccountId">Recording Account</Label>
+                        <Select name="creditAccountId" required>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a USDT wallet to record this to..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {usdtAccounts.map(account => (
+                                    <SelectItem key={account.id} value={account.id}>
+                                        {account.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
+                    </div>
+
                      <div className="space-y-2">
                         <Label htmlFor="client">Client</Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
@@ -204,7 +222,7 @@ function SendForm() {
                         {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
                     </div>
 
-                    {selectedClient && selectedClient.bep20_addresses && selectedClient.bep20_addresses.length > 1 && (
+                    {selectedClient && selectedClient.serviceProviders && (
                          <div className="space-y-2 pl-2">
                              <Label>Choose from saved addresses:</Label>
                              <RadioGroup
@@ -215,10 +233,10 @@ function SendForm() {
                                 value={selectedAddress}
                                 className="space-y-2"
                              >
-                                 {selectedClient.bep20_addresses.map(address => (
-                                     <div key={address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
-                                         <RadioGroupItem value={address} id={address} />
-                                         <Label htmlFor={address} className="font-mono text-xs break-all">{address}</Label>
+                                 {selectedClient.serviceProviders.filter(sp => sp.providerType === 'Crypto' && sp.details.Address).map(sp => (
+                                     <div key={sp.details.Address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
+                                         <RadioGroupItem value={sp.details.Address} id={sp.details.Address} />
+                                         <Label htmlFor={sp.details.Address} className="font-mono text-xs break-all">{sp.details.Address}</Label>
                                      </div>
                                  ))}
                              </RadioGroup>
@@ -397,7 +415,7 @@ function TransactionHistory() {
     )
 }
 
-export function WalletView() {
+export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
     const [walletDetails, setWalletDetails] = React.useState<WalletDetailsState>({ loading: true });
 
     const refreshDetails = React.useCallback(async () => {
@@ -414,7 +432,7 @@ export function WalletView() {
         <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-1 flex flex-col gap-6">
                <WalletInfoCard details={walletDetails} onRefresh={refreshDetails} />
-               <SendForm />
+               <SendForm usdtAccounts={usdtAccounts} />
             </div>
             <div className="md:col-span-2">
                 <TransactionHistory />

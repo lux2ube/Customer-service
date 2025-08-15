@@ -3,12 +3,12 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set, update } from 'firebase/database';
+import { push, ref, set, update, get } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification } from './helpers';
-import type { JournalEntry } from '../types';
+import type { JournalEntry, Account } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -32,6 +32,7 @@ export type SendRequestState = {
     errors?: {
         recipientAddress?: string[];
         amount?: string[];
+        creditAccountId?: string[];
     };
 };
 
@@ -42,6 +43,7 @@ const SendRequestSchema = z.object({
     amount: z.coerce.number().gt(0, {
         message: 'Amount must be greater than zero.',
     }),
+    creditAccountId: z.string().min(1, 'A recording account must be selected.'),
 });
 
 function getRpcUrl() {
@@ -99,6 +101,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     const validatedFields = SendRequestSchema.safeParse({
         recipientAddress: formData.get('recipientAddress'),
         amount: formData.get('amount'),
+        creditAccountId: formData.get('creditAccountId'),
     });
 
     if (!validatedFields.success) {
@@ -109,7 +112,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         };
     }
     
-    const { recipientAddress, amount } = validatedFields.data;
+    const { recipientAddress, amount, creditAccountId } = validatedFields.data;
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
 
     if (!mnemonic) {
@@ -127,6 +130,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         amount: amount,
         status: 'pending',
         timestamp: Date.now(),
+        creditAccountId,
     });
 
     try {
@@ -154,12 +158,16 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         const client = await findClientByAddress(recipientAddress);
         const clientName = client ? client.name : 'Unknown Client';
         
+        const creditAccountSnapshot = await get(ref(db, `accounts/${creditAccountId}`));
+        const creditAccountName = creditAccountSnapshot.exists() ? (creditAccountSnapshot.val() as Account).name : creditAccountId;
+        
         const message = `
 ✅ *USDT Sent Successfully*
 
 *To Client:* ${escapeTelegramMarkdown(clientName)}
 *Address:* \`${recipientAddress}\`
 *Amount:* ${escapeTelegramMarkdown(amount.toFixed(2))} USDT
+*From Account:* ${escapeTelegramMarkdown(creditAccountName)}
 *Tx Link:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
         `;
         await sendTelegramNotification(message);
@@ -172,13 +180,13 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
                 date: new Date().toISOString(),
                 description: `Auto USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
                 debit_account: clientAccountId,
-                credit_account: '1003', // Hardcoded USDT Wallet ID
+                credit_account: creditAccountId,
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
                 createdAt: new Date().toISOString(),
                 debit_account_name: clientName,
-                credit_account_name: 'USDT Wallet',
+                credit_account_name: creditAccountName,
             };
             await set(journalRef, journalEntry);
         }
