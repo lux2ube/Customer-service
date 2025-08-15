@@ -109,6 +109,7 @@ function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId
     const [addressInput, setAddressInput] = React.useState('');
 
     const activeProvider = React.useMemo(() => {
+        if (!recordingAccountId) return null;
         return serviceProviders.find(p => p.accountIds.includes(recordingAccountId));
     }, [serviceProviders, recordingAccountId]);
 
@@ -281,7 +282,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
                     <CommandInput placeholder="Search client by name or phone..." value={inputValue} onValueChange={setInputValue} />
                     <CommandList>
                         {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
-                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
+                        {!isLoading && searchResults.length > 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={`${client.name} ${getPhone(client.phone)}`} onSelect={() => handleSelect(client)}>
@@ -447,18 +448,24 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
     React.useEffect(() => {
         refreshDetails();
         const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
-        get(settingRef).then(snapshot => {
-            if (snapshot.exists()) {
+        const unsub = onValue(settingRef, (snapshot) => {
+             if (snapshot.exists()) {
                 setRecordingAccountId(snapshot.val());
             }
         });
+
         const providersRef = ref(db, 'service_providers');
-        get(providersRef).then(snapshot => {
-            if (snapshot.exists()) {
+        const unsubProviders = onValue(providersRef, (snapshot) => {
+             if (snapshot.exists()) {
                 const data = snapshot.val();
                 setServiceProviders(Object.keys(data).map(key => ({ id: key, ...data[key]})));
             }
-        })
+        });
+        
+        return () => {
+            unsub();
+            unsubProviders();
+        }
     }, [refreshDetails]);
 
     return (
