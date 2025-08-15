@@ -53,9 +53,8 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
 
     try {
         const historyRef = push(ref(db, 'rate_history/fiat_rates'));
-        // Save the rates object directly, with a timestamp.
         await set(historyRef, {
-            ...rates,
+            rates: rates, // Keep the rates nested under a "rates" key
             timestamp: new Date().toISOString()
         });
         

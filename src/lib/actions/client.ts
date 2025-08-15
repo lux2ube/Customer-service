@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, BlacklistItem, KycDocument, ServiceProvider, ClientServiceProvider } from '../types';
+import type { Client, BlacklistItem, KycDocument, ServiceProvider, ClientServiceProvider, Transaction } from '../types';
 import { normalizeArabic } from '../utils';
 import { stripUndefined, logAction } from './helpers';
 import { redirect } from 'next/navigation';
@@ -409,7 +410,7 @@ export async function findUnassignedTransactionsByAddress(walletAddress: string)
             const tx = allTxs[txId];
             if (
                 tx.clientId === 'unassigned-bscscan' &&
-                tx.client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
+                (tx as any).client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
             ) {
                 count++;
             }
@@ -444,7 +445,7 @@ export async function batchUpdateClientForTransactions(clientId: string, walletA
             const tx = allTxs[txId];
             if (
                 tx.clientId === 'unassigned-bscscan' &&
-                tx.client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
+                (tx as any).client_wallet_address?.toLowerCase() === walletAddress.toLowerCase()
             ) {
                 updates[`/transactions/${txId}/clientId`] = clientId;
                 updates[`/transactions/${txId}/clientName`] = clientName;
@@ -528,4 +529,3 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
         return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }
-

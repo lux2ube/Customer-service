@@ -104,12 +104,14 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             accountsSnapshot,
             rulesSnapshot,
             fiatRatesSnapshot,
+            settingsSnapshot
         ] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(rulesRef),
             get(fiatRatesRef),
+            get(ref(db, 'settings/api')),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -120,14 +122,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.val() || {};
         const allChartOfAccounts: Record<string, Account> = accountsSnapshot.val() || {};
         const customRules: SmsParsingRule[] = rulesSnapshot.exists() ? Object.values(rulesSnapshot.val()) : [];
+        const apiSettings: Settings = settingsSnapshot.val() || {};
         
         let currentFiatRates: Record<string, FiatRate> = {};
         if (fiatRatesSnapshot.exists()) {
             const lastEntry = Object.values(fiatRatesSnapshot.val())[0] as any;
-            // The `rates` property is no longer nested.
-            // We remove the timestamp to get just the currency rate objects.
-            delete lastEntry.timestamp; 
-            currentFiatRates = lastEntry || {};
+            currentFiatRates = lastEntry.rates || {};
         }
         
         const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
@@ -178,7 +178,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
 
             processedCount++;
             
-            const parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
+            let parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
+            
+            // If custom rules fail, fall back to AI
+            if (!parsed && apiSettings.gemini_api_key) {
+                parsed = await parseSmsWithAi(trimmedSmsBody, apiSettings.gemini_api_key);
+            }
             
             if (parsed && parsed.amount) {
                 successCount++;

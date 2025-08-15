@@ -1,3 +1,4 @@
+
 'use server';
 
 import { genkit, GenkitError } from 'genkit';
@@ -13,21 +14,21 @@ const ParsedSmsSchema = z.object({
   person: z.string().optional().describe("The name of the other person/entity in the transaction."),
 });
 
-const prompt = `أنت خبير في تحليل رسائل SMS المالية باللغة العربية. مهمتك هي استخراج التفاصيل من الرسالة التالية.
+const prompt = `You are an expert financial SMS parser for Arabic messages. Your task is to extract transaction details from the following SMS.
 
-الرسالة:
+SMS Body:
 "{{{smsBody}}}"
 
-التعليمات:
-1.  حدد نوع العملية:
-    - إذا كانت الرسالة تحتوي على كلمات مثل "أودع", "استلمت", "إضافة", "اضيف", "لحسابك", "وصل", فهذه عملية "credit" (إيداع).
-    - إذا كانت الرسالة تحتوي على كلمات مثل "حولت", "تم تحويل", "خصم", "سحب", فهذه عملية "debit" (سحب).
-2.  استخرج المبلغ (amount) كرقم فقط. تجاهل الفواصل.
-3.  استخرج اسم الشخص الآخر في المعاملة (person). قد يأتي الاسم بعد كلمات مثل "من", "لـ", "لحساب", "إلى", أو قد يكون في بداية الجملة مثل "أودع/". في بعض الأحيان يكون الشخص عبارة عن رقم هاتف مثل "جوالي رقم 733969608".
-4.  إذا لم تتمكن من تحديد أي من هذه التفاصيل بشكل مؤكد، أو إذا كانت الرسالة لا تبدو كمعاملة مالية، أعد كائن JSON مع {"parsed": false}.
-5.  يجب أن يكون الرد الخاص بك بتنسيق JSON حصريًا، مطابقًا للمخطط المحدد.
+Instructions:
+1.  Determine the transaction type:
+    - "credit" (deposit/inflow) for words like: "أودع", "استلمت", "إضافة", "اضيف", "لحسابك", "وصل".
+    - "debit" (withdrawal/outflow) for words like: "حولت", "تم تحويل", "خصم", "سحب".
+2.  Extract the numerical amount. Ignore commas and symbols.
+3.  Extract the name of the other person or entity. The name may follow keywords like "من", "لـ", "لحساب", "إلى", or appear at the beginning like "أودع/". Sometimes the name is a phone number.
+4.  If you cannot reliably determine the type, amount, AND person, or if it is not a financial transaction, return a JSON object with {"parsed": false}.
+5.  Your response MUST be a JSON object matching the specified schema.
 
-أمثلة لفهمك:
+Examples:
 - "تم تحويل10100لحساب عمار محمد رصيدك14٫83YER" -> {"parsed": true, "type": "debit", "amount": 10100, "person": "عمار محمد"}
 - "أودع/محمد احمد لحسابك35000 YER" -> {"parsed": true, "type": "credit", "amount": 35000, "person": "محمد احمد"}
 - "استلمت 6,000.00 من صدام حسن احمد" -> {"parsed": true, "type": "credit", "amount": 6000, "person": "صدام حسن احمد"}
