@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -225,5 +226,32 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         
         revalidatePath('/wallet');
         return { error: true, message: `Transaction failed: ${errorMessage}` };
+    }
+}
+
+export type WalletSettingsState = {
+    success?: boolean;
+    error?: boolean;
+    message?: string;
+} | undefined;
+
+const WalletSettingsSchema = z.object({
+  defaultRecordingAccountId: z.string().min(1, 'An account must be selected.'),
+});
+
+export async function updateWalletSettings(prevState: WalletSettingsState, formData: FormData): Promise<WalletSettingsState> {
+    const validatedFields = WalletSettingsSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return { error: true, message: "Invalid data provided." };
+    }
+
+    try {
+        await set(ref(db, 'settings/wallet/defaultRecordingAccountId'), validatedFields.data.defaultRecordingAccountId);
+        revalidatePath('/wallet');
+        return { success: true, message: 'Default recording account saved.' };
+    } catch (e: any) {
+        console.error("Error updating wallet settings:", e);
+        return { error: true, message: "Database error: Could not save setting." };
     }
 }

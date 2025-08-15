@@ -8,12 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste } from 'lucide-react';
+import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
+import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, updateWalletSettings, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
 import type { SendRequest, Client, Account } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, limitToLast, orderByChild } from 'firebase/database';
+import { ref, onValue, query, limitToLast, orderByChild, get } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from './ui/table';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -399,27 +399,53 @@ function TransactionHistory() {
     )
 }
 
+function SaveButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending} size="sm">
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Default
+        </Button>
+    )
+}
+
 function RecordingAccountSetup({ usdtAccounts, onAccountSelect, selectedAccountId }: { usdtAccounts: Account[], onAccountSelect: (id: string) => void, selectedAccountId: string }) {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState(updateWalletSettings, undefined);
+
+    React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: "Success", description: state.message });
+        } else if (state?.error) {
+            toast({ title: "Error", description: state.message, variant: "destructive" });
+        }
+    }, [state, toast]);
+
     return (
         <Card>
-            <CardHeader>
-                <CardTitle>Recording Account</CardTitle>
-                <CardDescription>Select the internal USDT account to record these send operations against.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                 <Select onValueChange={onAccountSelect} value={selectedAccountId}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select a USDT wallet..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {usdtAccounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>
-                                {account.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </CardContent>
+             <form action={formAction}>
+                <CardHeader>
+                    <CardTitle>Recording Account</CardTitle>
+                    <CardDescription>Select the internal USDT account to record these send operations against.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Select onValueChange={onAccountSelect} value={selectedAccountId} name="defaultRecordingAccountId">
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select a USDT wallet..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {usdtAccounts.map(account => (
+                                <SelectItem key={account.id} value={account.id}>
+                                    {account.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                    <SaveButton />
+                </CardFooter>
+            </form>
         </Card>
     )
 }
@@ -436,6 +462,13 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
 
     React.useEffect(() => {
         refreshDetails();
+        // Fetch the saved default recording account
+        const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
+        get(settingRef).then(snapshot => {
+            if (snapshot.exists()) {
+                setRecordingAccountId(snapshot.val());
+            }
+        });
     }, [refreshDetails]);
 
     return (

@@ -73,7 +73,8 @@ export {
 // Wallet (Live Sending)
 export {
     getWalletDetails,
-    createSendRequest
+    createSendRequest,
+    updateWalletSettings
 } from './wallet';
 
 // Document Processing (OCR)
