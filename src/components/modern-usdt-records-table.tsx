@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, ExternalLink, Pencil } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -30,6 +30,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
+import { cancelCashPayment } from '@/lib/actions'; // This should be a generic cancel action
+
 
 const statuses: ModernUsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
 const sources: ModernUsdtRecord['source'][] = ['Manual', 'BSCScan'];
@@ -43,9 +56,12 @@ export function ModernUsdtRecordsTable() {
   const [sourceFilter, setSourceFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+  const [recordToCancel, setRecordToCancel] = React.useState<ModernUsdtRecord | null>(null);
+  const { toast } = useToast();
+
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'usdt_records'), orderByChild('date'));
+    const recordsRef = query(ref(db, 'usdt_records'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -103,8 +119,21 @@ export function ModernUsdtRecordsTable() {
             default: return 'secondary';
         }
     }
+    
+    const handleCancelAction = async () => {
+        if (!recordToCancel) return;
+        // This needs a generic cancel action for different record types
+        // For now, we'll assume a generic cancellation logic
+        toast({
+            title: "Action Not Implemented",
+            description: "Cancelling USDT records is not yet supported.",
+            variant: "destructive"
+        });
+        setRecordToCancel(null);
+    }
 
   return (
+    <>
     <div className="space-y-4">
         <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
             <Input 
@@ -175,7 +204,7 @@ export function ModernUsdtRecordsTable() {
                                 {record.type}
                             </span>
                         </TableCell>
-                        <TableCell className="font-medium">{record.clientName}</TableCell>
+                        <TableCell className="font-medium">{record.clientName || "Unassigned"}</TableCell>
                         <TableCell>{record.accountName}</TableCell>
                         <TableCell className="text-right font-mono">{new Intl.NumberFormat().format(record.amount)} USDT</TableCell>
                         <TableCell><Badge variant={getStatusVariant(record.status)} className="capitalize">{record.status}</Badge></TableCell>
@@ -195,7 +224,11 @@ export function ModernUsdtRecordsTable() {
                                             </a>
                                         </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem>Cancel</DropdownMenuItem>
+                                    {record.status !== 'Cancelled' && (
+                                      <DropdownMenuItem onClick={() => setRecordToCancel(record)} className="text-destructive">
+                                        <Trash2 className="mr-2 h-4 w-4" /> Cancel
+                                      </DropdownMenuItem>
+                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </TableCell>
@@ -208,5 +241,19 @@ export function ModernUsdtRecordsTable() {
             </Table>
         </div>
     </div>
+    
+     <AlertDialog open={!!recordToCancel} onOpenChange={(open) => !open && setRecordToCancel(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>This will cancel the record. This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCancelAction}>Confirm</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
