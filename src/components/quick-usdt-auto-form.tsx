@@ -25,6 +25,7 @@ interface QuickUsdtAutoFormProps {
   onPaymentSent: () => void;
   setIsOpen: (open: boolean) => void;
   usdtAccounts: Account[];
+  serviceProviders: ServiceProvider[];
 }
 
 function SubmitButton({ disabled }: { disabled?: boolean }) {
@@ -37,7 +38,7 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
     );
 }
 
-export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts }: QuickUsdtAutoFormProps) {
+export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -45,22 +46,9 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
   
   const [addressInput, setAddressInput] = React.useState('');
   const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
-  const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = React.useState<string>('');
   
   const stateRef = React.useRef<SendRequestState>();
-
-  React.useEffect(() => {
-    const fetchProviders = async () => {
-        const providersRef = ref(db, 'service_providers');
-        const snapshot = await get(providersRef);
-        if (snapshot.exists()) {
-            const providers: ServiceProvider[] = Object.values(snapshot.val());
-            setServiceProviders(providers.filter(p => p.type === 'Crypto'));
-        }
-    }
-    fetchProviders();
-  }, []);
 
   const clientCryptoAddresses = React.useMemo(() => {
         if (!client || !client.serviceProviders || !selectedProviderId) return [];

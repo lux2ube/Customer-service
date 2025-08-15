@@ -4,15 +4,17 @@ import { ModernTransactionForm } from "@/components/modern-transaction-form";
 import { Suspense } from "react";
 import { db } from "@/lib/firebase";
 import { get, ref } from "firebase/database";
-import type { Client, Account } from "@/lib/types";
+import type { Client, Account, ServiceProvider } from "@/lib/types";
 
-async function getPageData(): Promise<{ clients: Client[], usdtAccounts: Account[] }> {
+async function getPageData(): Promise<{ clients: Client[], usdtAccounts: Account[], serviceProviders: ServiceProvider[] }> {
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
+    const providersRef = ref(db, 'service_providers');
     
-    const [clientsSnapshot, accountsSnapshot] = await Promise.all([
+    const [clientsSnapshot, accountsSnapshot, providersSnapshot] = await Promise.all([
         get(clientsRef),
-        get(accountsRef)
+        get(accountsRef),
+        get(providersRef)
     ]);
 
     const clients: Client[] = [];
@@ -31,12 +33,18 @@ async function getPageData(): Promise<{ clients: Client[], usdtAccounts: Account
         }
     }
     
-    return { clients, usdtAccounts };
+    const serviceProviders: ServiceProvider[] = [];
+    if (providersSnapshot.exists()) {
+        const data = providersSnapshot.val();
+        serviceProviders.push(...Object.keys(data).map(key => ({ id: key, ...data[key] })));
+    }
+
+    return { clients, usdtAccounts, serviceProviders };
 }
 
 
 export default async function ModernTransactionPage() {
-    const { clients, usdtAccounts } = await getPageData();
+    const { clients, usdtAccounts, serviceProviders } = await getPageData();
 
     return (
         <>
@@ -45,7 +53,11 @@ export default async function ModernTransactionPage() {
                 description="Create a new transaction by linking multiple financial records for a client."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ModernTransactionForm initialClients={clients} usdtAccounts={usdtAccounts} />
+                <ModernTransactionForm 
+                    initialClients={clients} 
+                    usdtAccounts={usdtAccounts}
+                    serviceProviders={serviceProviders}
+                />
             </Suspense>
         </>
     );
