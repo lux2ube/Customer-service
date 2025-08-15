@@ -11,7 +11,7 @@ import { Button } from './ui/button';
 import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, updateWalletSettings, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
-import type { SendRequest, Client, Account } from '@/lib/types';
+import type { SendRequest, Client, Account, ServiceProvider } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild, get } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
@@ -99,7 +99,7 @@ function WalletInfoCard({ details, onRefresh }: { details: WalletDetailsState, o
     )
 }
 
-function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: string; usdtAccounts: Account[] }) {
+function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId: string; serviceProviders: ServiceProvider[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
     const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
@@ -107,6 +107,14 @@ function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: st
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
     const [addressInput, setAddressInput] = React.useState('');
+    const [selectedProviderId, setSelectedProviderId] = React.useState<string>(
+        serviceProviders.find(p => p.type === 'Crypto')?.id || ''
+    );
+
+    const clientCryptoAddresses = React.useMemo(() => {
+        if (!selectedClient || !selectedClient.serviceProviders || !selectedProviderId) return [];
+        return selectedClient.serviceProviders.filter(sp => sp.providerId === selectedProviderId && sp.details.Address);
+    }, [selectedClient, selectedProviderId]);
 
     React.useEffect(() => {
         if (state?.error) {
@@ -128,38 +136,10 @@ function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: st
         }
     }, [state, toast]);
     
-    React.useEffect(() => {
-        const handleAddressChange = async () => {
-            if (ethers.isAddress(addressInput)) {
-                const foundClient = await findClientByAddress(addressInput);
-                if (foundClient) {
-                    setSelectedClient(foundClient);
-                    setSelectedAddress(addressInput);
-                } else {
-                    toast({
-                        variant: 'destructive',
-                        title: 'Client Not Found',
-                        description: 'No client is associated with this address.',
-                    });
-                }
-            }
-        };
-        const timerId = setTimeout(() => {
-            if (addressInput) handleAddressChange();
-        }, 500); // Debounce to avoid too many requests
-        return () => clearTimeout(timerId);
-    }, [addressInput, toast]);
-
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
-        if (client) {
-            const primaryAddress = client.serviceProviders?.find(sp => sp.providerType === 'Crypto')?.details['Address'];
-            setSelectedAddress(primaryAddress);
-            setAddressInput(primaryAddress || '');
-        } else {
-            setSelectedAddress(undefined);
-            setAddressInput('');
-        }
+        setAddressInput('');
+        setSelectedAddress(undefined);
     };
     
     const handlePaste = async () => {
@@ -167,6 +147,8 @@ function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: st
             const text = await navigator.clipboard.readText();
             if (ethers.isAddress(text)) {
                 setAddressInput(text);
+                 const foundClient = await findClientByAddress(text);
+                 if (foundClient) setSelectedClient(foundClient);
             } else {
                 toast({ variant: 'destructive', title: 'Invalid Address', description: 'The pasted text is not a valid BSC address.'});
             }
@@ -206,9 +188,9 @@ function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: st
                         {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
                     </div>
 
-                    {selectedClient && selectedClient.serviceProviders && (
+                    {selectedClient && clientCryptoAddresses.length > 0 && (
                          <div className="space-y-2 pl-2">
-                             <Label>Choose from saved addresses:</Label>
+                             <Label>Choose from client's saved addresses for this provider:</Label>
                              <RadioGroup
                                 onValueChange={(value) => {
                                     setSelectedAddress(value);
@@ -217,7 +199,7 @@ function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: st
                                 value={selectedAddress}
                                 className="space-y-2"
                              >
-                                 {selectedClient.serviceProviders.filter(sp => sp.providerType === 'Crypto' && sp.details.Address).map(sp => (
+                                 {clientCryptoAddresses.map(sp => (
                                      <div key={sp.details.Address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
                                          <RadioGroupItem value={sp.details.Address} id={sp.details.Address} />
                                          <Label htmlFor={sp.details.Address} className="font-mono text-xs break-all">{sp.details.Address}</Label>
@@ -453,6 +435,7 @@ function RecordingAccountSetup({ usdtAccounts, onAccountSelect, selectedAccountI
 export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
     const [walletDetails, setWalletDetails] = React.useState<WalletDetailsState>({ loading: true });
     const [recordingAccountId, setRecordingAccountId] = React.useState<string>('');
+    const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
 
     const refreshDetails = React.useCallback(async () => {
         setWalletDetails({ loading: true });
@@ -462,13 +445,18 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
 
     React.useEffect(() => {
         refreshDetails();
-        // Fetch the saved default recording account
         const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
         get(settingRef).then(snapshot => {
             if (snapshot.exists()) {
                 setRecordingAccountId(snapshot.val());
             }
         });
+        const providersRef = ref(db, 'service_providers');
+        get(providersRef).then(snapshot => {
+            if (snapshot.exists()) {
+                setServiceProviders(Object.values(snapshot.val()));
+            }
+        })
     }, [refreshDetails]);
 
     return (
@@ -476,7 +464,7 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
             <div className="md:col-span-1 flex flex-col gap-6">
                <WalletInfoCard details={walletDetails} onRefresh={refreshDetails} />
                <RecordingAccountSetup usdtAccounts={usdtAccounts} selectedAccountId={recordingAccountId} onAccountSelect={setRecordingAccountId} />
-               <SendForm usdtAccounts={usdtAccounts} recordingAccountId={recordingAccountId} />
+               <SendForm serviceProviders={serviceProviders} recordingAccountId={recordingAccountId} />
             </div>
             <div className="md:col-span-2">
                 <TransactionHistory />

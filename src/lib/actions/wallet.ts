@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
-import type { JournalEntry, Account } from '../types';
+import type { JournalEntry, Account, ModernUsdtRecord } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -43,6 +43,7 @@ const SendRequestSchema = z.object({
     amount: z.coerce.number().gt(0, {
         message: 'Amount must be greater than zero.',
     }),
+    creditAccountId: z.string().min(1, 'A recording account must be selected.'),
 });
 
 function getRpcUrl() {
@@ -107,7 +108,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         };
     }
     
-    const { recipientAddress, amount } = validatedFields.data;
+    const { recipientAddress, amount, creditAccountId } = validatedFields.data;
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
 
     if (!mnemonic) {
@@ -125,7 +126,8 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         to: recipientAddress,
         amount: amount,
         status: 'pending',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        creditAccountId: creditAccountId,
     };
 
     await update(ref(db), updates);
@@ -155,6 +157,29 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         const client = await findClientByAddress(recipientAddress);
         const clientName = client ? client.name : 'Unknown Client';
         
+        // Fetch recording account details for denormalization
+        const creditAccountSnapshot = await get(ref(db, `accounts/${creditAccountId}`));
+        const creditAccountName = creditAccountSnapshot.exists() ? (creditAccountSnapshot.val() as Account).name : creditAccountId;
+        
+        // Create an outflow record in modern_usdt_records
+        const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
+        const outflowRecord: Omit<ModernUsdtRecord, 'id'> = {
+            date: new Date().toISOString(),
+            type: 'outflow',
+            source: 'Manual',
+            status: 'Confirmed',
+            clientId: client ? client.id : null,
+            clientName: clientName,
+            accountId: creditAccountId,
+            accountName: creditAccountName,
+            amount: amount,
+            txHash: tx.hash,
+            clientWalletAddress: recipientAddress,
+            notes: 'Sent from Wallet Page',
+            createdAt: new Date().toISOString(),
+        };
+        updates[`/modern_usdt_records/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
+
         const message = `
 ✅ *USDT Sent Successfully*
 
@@ -173,18 +198,21 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
                 date: new Date().toISOString(),
                 description: `Auto USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
                 debit_account: clientAccountId,
-                credit_account: '1003', // Hardcoded credit to USDT Wallet for now
+                credit_account: creditAccountId,
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
                 createdAt: new Date().toISOString(),
                 debit_account_name: clientName,
-                credit_account_name: 'USDT Wallet'
+                credit_account_name: creditAccountName
             };
-            await set(journalRef, journalEntry);
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         }
 
+        await update(ref(db), updates);
+
         revalidatePath('/wallet');
+        revalidatePath('/modern-usdt-records');
 
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
 
