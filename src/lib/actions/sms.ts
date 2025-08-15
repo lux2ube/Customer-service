@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -108,7 +109,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(rulesRef),
-            get(fiatRatesSnapshot),
+            get(fiatRatesRef),
         ]);
 
         if (!incomingSnapshot.exists()) {
@@ -123,7 +124,10 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let currentFiatRates: Record<string, FiatRate> = {};
         if (fiatRatesSnapshot.exists()) {
             const lastEntry = Object.values(fiatRatesSnapshot.val())[0] as any;
-            currentFiatRates = lastEntry.rates || {};
+            // The `rates` property is no longer nested.
+            // We remove the timestamp to get just the currency rate objects.
+            delete lastEntry.timestamp; 
+            currentFiatRates = lastEntry || {};
         }
         
         const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
@@ -254,7 +258,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         return { message: error.message || "An unknown error occurred during SMS processing.", error: true };
     }
 }
-
 
 export async function linkSmsToClient(recordId: string, clientId: string) {
     if (!recordId || !clientId) {

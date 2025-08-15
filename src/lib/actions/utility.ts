@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, remove, runTransaction } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashReceipt, CashPayment, SmsTransaction, Account, UsdtRecord } from '../types';
+import type { Client, Transaction, BlacklistItem, FiatRate, CryptoFee, Settings, Currency, CashRecord, UsdtRecord } from '../types';
 import { logAction } from './helpers';
 
 // --- Rate & Fee Actions ---
@@ -53,8 +53,9 @@ export async function updateFiatRates(prevState: RateFormState, formData: FormDa
 
     try {
         const historyRef = push(ref(db, 'rate_history/fiat_rates'));
+        // Save the rates object directly, with a timestamp.
         await set(historyRef, {
-            rates: rates,
+            ...rates,
             timestamp: new Date().toISOString()
         });
         
