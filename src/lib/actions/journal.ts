@@ -144,8 +144,8 @@ export async function createJournalEntryFromTransaction(
             description: description,
             debit_account: debitLeg.accountId,
             credit_account: creditLeg.accountId,
-            debit_amount: debitLeg.debit,
-            credit_amount: creditLeg.credit,
+            debit_amount: debitLeg.debit, // Use USD value for consistency in journal
+            credit_amount: creditLeg.credit, // Use USD value
             amount_usd: debitLeg.debit, // Total value of the entry
             createdAt: new Date().toISOString(),
             debit_account_name: debitAccSnap.exists() ? (debitAccSnap.val() as Account).name : debitLeg.accountId,

@@ -119,31 +119,28 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
     const calculation = React.useMemo(() => {
         const selected = records.filter(r => selectedRecordIds.includes(r.id));
         if (!transactionType || !cryptoFees) {
-            return { totalInflowUSD: 0, totalOutflowUSD: 0, calculatedFee: 0, finalAmount: 0, finalCurrency: '' };
+            return { totalInflowUSD: 0, totalOutflowUSD: 0, fee: 0, difference: 0 };
         }
 
         const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
         const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
-
-        let baseAmountForFee = 0;
-        let finalCurrency = 'USD';
-
-        if (transactionType === 'Deposit') {
-            baseAmountForFee = totalInflowUSD; // Fee on the fiat client gives
-            finalCurrency = 'USDT';
-        } else if (transactionType === 'Withdraw') {
-            baseAmountForFee = totalInflowUSD; // Fee on the USDT client gives
-            finalCurrency = selected.find(r => r.type === 'outflow')?.currency || 'USD';
-        }
         
+        let baseAmountForFee = 0;
+        if (transactionType === 'Deposit') { // Fee is on the fiat the client gives
+            baseAmountForFee = totalInflowUSD;
+        } else if (transactionType === 'Withdraw') { // Fee is on the USDT the client gives
+            const usdtInflow = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amountUsd, 0);
+            baseAmountForFee = usdtInflow;
+        }
+
         const feePercent = (transactionType === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
         const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         
-        const calculatedFee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
-        
-        const finalAmount = totalInflowUSD - calculatedFee;
+        const fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
 
-        return { totalInflowUSD, totalOutflowUSD, calculatedFee, finalAmount, finalCurrency };
+        const difference = (totalOutflowUSD + fee) - totalInflowUSD;
+        
+        return { totalInflowUSD, totalOutflowUSD, fee, difference };
     }, [selectedRecordIds, records, cryptoFees, transactionType]);
     
     const recordCategories = React.useMemo(() => {
@@ -170,7 +167,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
             formData.set('type', transactionType);
             selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
             
-            const result = await createModernTransaction(prevState, formData);
+            const result = await createModernTransaction(undefined, formData);
             if(result.success) {
                 toast({ title: 'Success', description: 'Transaction created successfully.' });
                 handleClientSelect(selectedClient); // Refresh records
@@ -314,18 +311,23 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                                 <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
                             </div>
                             <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Fee</p>
-                                <p className="font-bold text-red-600">${calculation.calculatedFee.toFixed(2)}</p>
-                            </div>
-                             <div className="p-2 border rounded-md bg-muted">
-                                <p className="text-xs text-muted-foreground">Client Will Receive</p>
-                                <p className="font-bold text-primary">{calculation.finalAmount.toFixed(2)} {calculation.finalCurrency}</p>
-                            </div>
-                             <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Actual Outflow</p>
+                                <p className="text-xs text-muted-foreground">Total Outflow</p>
                                 <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
                             </div>
+                            <div className="p-2 border rounded-md">
+                                <p className="text-xs text-muted-foreground">Fee</p>
+                                <p className="font-bold">${calculation.fee.toFixed(2)}</p>
+                            </div>
+                            <div className={cn("p-2 border rounded-md", calculation.difference.toFixed(2) !== '0.00' ? 'border-amber-500 bg-amber-50' : '')}>
+                                <p className="text-xs text-muted-foreground">Difference</p>
+                                <p className="font-bold">${calculation.difference.toFixed(2)}</p>
+                            </div>
                         </CardContent>
+                        <CardFooter>
+                            <p className="text-xs text-muted-foreground">
+                                Formula: (Outflow + Fee) - Inflow = Difference. A non-zero difference will be recorded as Income or Expense.
+                            </p>
+                        </CardFooter>
                     </Card>
                 )}
 
@@ -441,4 +443,5 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+
 

@@ -79,16 +79,17 @@ export interface Transaction {
     type: 'Deposit' | 'Withdraw' | 'Transfer';
     clientId: string;
     clientName?: string; // For display
-    amount_usd: number; // Total USD value of the inputs
+    amount_usd: number; // Total USD value of the INFLOWS
     fee_usd: number;
-    expense_usd?: number;
-    amount_usdt: number; // Final USDT amount after fees/expenses
+    expense_usd?: number; // Captures negative difference (loss/discount)
+    amount_usdt: number; // Represents the total USD value of the OUTFLOWS
     attachment_url?: string;
     invoice_image_url?: string;
     notes?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
     createdAt: string;
     linkedRecordIds?: string;
+    exchange_rate_commission?: number; // Captures positive difference (profit)
     // --- LEGACY FIELDS ---
     bankAccountId?: string;
     cryptoWalletId?: string;
@@ -98,7 +99,6 @@ export interface Transaction {
     hash?: string;
     client_wallet_address?: string;
     linkedSmsId?: string;
-    exchange_rate_commission?: number;
 }
 
 export interface CashRecord {
