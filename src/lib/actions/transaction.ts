@@ -19,14 +19,15 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
     try {
         const clientSnapshot = await get(ref(db, `clients/${clientId}`));
         if (!clientSnapshot.exists()) return [];
-        const client = clientSnapshot.val() as Client;
+        const client = { id: clientId, ...clientSnapshot.val() } as Client;
+
         const normalizedClientName = normalizeArabic(client.name.toLowerCase());
         const clientNameParts = normalizedClientName.split(/\s+/);
-        // Use the first two names for broader matching, or just the first if that's all there is.
-        const clientMatchPattern = clientNameParts.length > 1 
-            ? `${clientNameParts[0]} ${clientNameParts[1]}` 
+        const clientMatchPattern = clientNameParts.length > 1
+            ? `${clientNameParts[0]} ${clientNameParts[1]}`
             : clientNameParts[0];
-
+            
+        const clientWalletAddresses = new Set((client.bep20_addresses || []).map(addr => addr.toLowerCase()));
 
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
@@ -38,16 +39,13 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (cashRecordsSnapshot.exists()) {
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
-                // Condition 1: The record is already directly matched to this client.
                 const isDirectMatch = record.status === 'Matched' && record.clientId === clientId;
-                
-                // Condition 2: The record is a pending SMS and the sender name contains the client's first two names.
-                const isPendingSmsMatch = 
+                const isPendingSmsMatch =
                     record.status === 'Pending' &&
                     record.source === 'SMS' &&
                     record.senderName &&
                     normalizeArabic(record.senderName.toLowerCase()).includes(clientMatchPattern);
-                
+
                 if (isDirectMatch || isPendingSmsMatch) {
                     unifiedRecords.push({
                         id,
@@ -69,9 +67,17 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
         if (usdtRecordsSnapshot.exists()) {
             const usdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
-             Object.entries(usdtRecords).forEach(([id, record]) => {
-                if (record.status === 'Confirmed' && record.clientId === clientId) {
-                     unifiedRecords.push({
+            Object.entries(usdtRecords).forEach(([id, record]) => {
+                const isDirectMatch = record.status === 'Confirmed' && record.clientId === clientId;
+                
+                const isWalletMatch =
+                    record.status === 'Confirmed' &&
+                    record.clientId === null &&
+                    record.clientWalletAddress &&
+                    clientWalletAddresses.has(record.clientWalletAddress.toLowerCase());
+
+                if (isDirectMatch || isWalletMatch) {
+                    unifiedRecords.push({
                         id,
                         date: record.date,
                         type: record.type,
@@ -86,8 +92,8 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                 }
             });
         }
-        
-        unifiedRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        unifiedRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         return unifiedRecords;
 
@@ -257,3 +263,6 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     }
 }
 
+
+
+    
