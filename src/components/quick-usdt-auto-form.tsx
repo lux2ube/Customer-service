@@ -9,11 +9,16 @@ import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, ServiceProvider } from '@/lib/types';
 import { createSendRequest, type SendRequestState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, ClipboardPaste } from 'lucide-react';
 import { ethers } from 'ethers';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select';
+import { get } from 'firebase/database';
+import { db } from '@/lib/firebase';
+import { ref } from 'firebase/database';
+
 
 interface QuickUsdtAutoFormProps {
   client: Client;
@@ -22,10 +27,10 @@ interface QuickUsdtAutoFormProps {
   usdtAccounts: Account[];
 }
 
-function SubmitButton() {
+function SubmitButton({ disabled }: { disabled?: boolean }) {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || disabled}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
             {pending ? 'Sending...' : 'Send from Wallet'}
         </Button>
@@ -38,10 +43,29 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
 
   const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
   
-  const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(client?.bep20_addresses?.[0]);
-  const [addressInput, setAddressInput] = React.useState(client?.bep20_addresses?.[0] || '');
+  const [addressInput, setAddressInput] = React.useState('');
+  const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
+  const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = React.useState<string>('');
   
   const stateRef = React.useRef<SendRequestState>();
+
+  React.useEffect(() => {
+    const fetchProviders = async () => {
+        const providersRef = ref(db, 'service_providers');
+        const snapshot = await get(providersRef);
+        if (snapshot.exists()) {
+            const providers: ServiceProvider[] = Object.values(snapshot.val());
+            setServiceProviders(providers.filter(p => p.type === 'Crypto'));
+        }
+    }
+    fetchProviders();
+  }, []);
+
+  const clientCryptoAddresses = React.useMemo(() => {
+        if (!client || !client.serviceProviders || !selectedProviderId) return [];
+        return client.serviceProviders.filter(sp => sp.providerId === selectedProviderId && sp.details.Address);
+  }, [client, selectedProviderId]);
 
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
@@ -62,6 +86,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
         const text = await navigator.clipboard.readText();
         if (ethers.isAddress(text)) {
           setAddressInput(text);
+          setSelectedAddress(text);
         } else {
             toast({ variant: 'destructive', title: 'Invalid Address', description: 'The pasted text is not a valid BSC address.'});
         }
@@ -72,7 +97,22 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
 
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+        <input type="hidden" name="clientId" value={client.id} />
         <div className="space-y-4 py-4">
+             <div className="space-y-2">
+                <Label>Service Provider</Label>
+                <Select onValueChange={setSelectedProviderId} value={selectedProviderId}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select a service provider..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {serviceProviders.map(provider => (
+                             <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
             <div className="space-y-2">
                 <Label>Recipient Address</Label>
                 <div className="flex items-center gap-2">
@@ -82,16 +122,31 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
                 {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
             </div>
 
-            {client.bep20_addresses && client.bep20_addresses.length > 0 && (
-                <RadioGroup onValueChange={setAddressInput} value={addressInput} className="space-y-2">
-                    {client.bep20_addresses.map(address => (
-                        <div key={address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
-                            <RadioGroupItem value={address} id={`auto-${address}`} />
-                            <Label htmlFor={`auto-${address}`} className="font-mono text-xs break-all">{address}</Label>
+            {clientCryptoAddresses.length > 0 && (
+                <RadioGroup onValueChange={(value) => { setAddressInput(value); setSelectedAddress(value); }} value={selectedAddress} className="space-y-2">
+                    {clientCryptoAddresses.map(address => (
+                        <div key={address.details.Address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
+                            <RadioGroupItem value={address.details.Address} id={`auto-${address.details.Address}`} />
+                            <Label htmlFor={`auto-${address.details.Address}`} className="font-mono text-xs break-all">{address.details.Address}</Label>
                         </div>
                     ))}
                 </RadioGroup>
             )}
+
+            <div className="space-y-2">
+                <Label>Send From (Internal Account)</Label>
+                 <Select name="creditAccountId" required>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select an internal USDT wallet..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {usdtAccounts.map(account => (
+                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                 {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
+            </div>
 
             <div className="space-y-2">
                 <Label htmlFor="auto_amount">Amount (USDT)</Label>

@@ -33,6 +33,7 @@ export type SendRequestState = {
     errors?: {
         recipientAddress?: string[];
         amount?: string[];
+        creditAccountId?: string[];
     };
 };
 
