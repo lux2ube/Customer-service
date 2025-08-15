@@ -1,9 +1,12 @@
 
+'use client';
+
+import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { ModernTransactionForm } from "@/components/modern-transaction-form";
 import { Suspense } from "react";
 import { db } from "@/lib/firebase";
-import { get, ref } from "firebase/database";
+import { get, ref, onValue } from "firebase/database";
 import type { Client, Account, ServiceProvider } from "@/lib/types";
 
 async function getPageData(): Promise<{ clients: Client[], usdtAccounts: Account[], serviceProviders: ServiceProvider[] }> {
@@ -43,8 +46,33 @@ async function getPageData(): Promise<{ clients: Client[], usdtAccounts: Account
 }
 
 
-export default async function ModernTransactionPage() {
-    const { clients, usdtAccounts, serviceProviders } = await getPageData();
+export default function ModernTransactionPage() {
+    const [clients, setClients] = React.useState<Client[]>([]);
+    const [usdtAccounts, setUsdtAccounts] = React.useState<Account[]>([]);
+    const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
+    const [defaultRecordingAccountId, setDefaultRecordingAccountId] = React.useState<string>('');
+    const [loading, setLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+        const fetchData = async () => {
+            const data = await getPageData();
+            setClients(data.clients);
+            setUsdtAccounts(data.usdtAccounts);
+            setServiceProviders(data.serviceProviders);
+            
+            const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
+            const unsub = onValue(settingRef, (snapshot) => {
+                 if (snapshot.exists()) {
+                    setDefaultRecordingAccountId(snapshot.val());
+                }
+                setLoading(false);
+            });
+            
+            return () => unsub();
+        };
+        fetchData();
+    }, []);
+
 
     return (
         <>
@@ -53,12 +81,16 @@ export default async function ModernTransactionPage() {
                 description="Create a new transaction by linking multiple financial records for a client."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                <ModernTransactionForm 
-                    initialClients={clients} 
-                    usdtAccounts={usdtAccounts}
-                    serviceProviders={serviceProviders}
-                />
+                {!loading && (
+                    <ModernTransactionForm 
+                        initialClients={clients} 
+                        usdtAccounts={usdtAccounts}
+                        serviceProviders={serviceProviders}
+                        defaultRecordingAccountId={defaultRecordingAccountId}
+                    />
+                )}
             </Suspense>
         </>
     );
 }
+

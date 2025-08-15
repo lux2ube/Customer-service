@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -26,6 +27,7 @@ interface QuickUsdtAutoFormProps {
   setIsOpen: (open: boolean) => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
+  defaultRecordingAccountId: string;
 }
 
 function SubmitButton({ disabled }: { disabled?: boolean }) {
@@ -38,7 +40,7 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
     );
 }
 
-export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders }: QuickUsdtAutoFormProps) {
+export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders, defaultRecordingAccountId }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -46,11 +48,11 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
   
   const [addressInput, setAddressInput] = React.useState('');
   const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
-  const [recordingAccountId, setRecordingAccountId] = React.useState<string>('');
 
   const activeProvider = React.useMemo(() => {
-    return serviceProviders.find(p => p.accountIds.includes(recordingAccountId));
-  }, [serviceProviders, recordingAccountId]);
+    if (!defaultRecordingAccountId) return null;
+    return serviceProviders.find(p => p.accountIds.includes(defaultRecordingAccountId));
+  }, [serviceProviders, defaultRecordingAccountId]);
 
   const clientCryptoAddresses = React.useMemo(() => {
         if (!client || !client.serviceProviders || !activeProvider) return [];
@@ -90,22 +92,9 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
         <input type="hidden" name="clientId" value={client.id} />
-        <div className="space-y-4 py-4">
-            <div className="space-y-2">
-                <Label>Send From (Internal Account)</Label>
-                 <Select name="creditAccountId" required onValueChange={setRecordingAccountId} value={recordingAccountId}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select an internal USDT wallet..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {usdtAccounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                 {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
-            </div>
+        <input type="hidden" name="creditAccountId" value={defaultRecordingAccountId} />
 
+        <div className="space-y-4 py-4">
             <div className="space-y-2">
                 <Label>Recipient Address</Label>
                 <div className="flex items-center gap-2">
@@ -136,7 +125,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
              <DialogClose asChild>
                 <Button type="button" variant="secondary">Cancel</Button>
             </DialogClose>
-            <SubmitButton disabled={!recordingAccountId || !activeProvider} />
+            <SubmitButton disabled={!defaultRecordingAccountId || !activeProvider} />
         </DialogFooter>
     </form>
   );

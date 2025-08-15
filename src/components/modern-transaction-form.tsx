@@ -66,7 +66,7 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
     );
 }
 
-export function ModernTransactionForm({ initialClients, usdtAccounts, serviceProviders }: { initialClients: Client[], usdtAccounts: Account[], serviceProviders: ServiceProvider[] }) {
+export function ModernTransactionForm({ initialClients, usdtAccounts, serviceProviders, defaultRecordingAccountId }: { initialClients: Client[], usdtAccounts: Account[], serviceProviders: ServiceProvider[], defaultRecordingAccountId: string }) {
     const [transactionType, setTransactionType] = React.useState<Transaction['type'] | 'Auto-Send'>('Deposit');
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
@@ -187,7 +187,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
             }
         }}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
@@ -316,7 +316,7 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                     </Card>
                 )}
 
-                {transactionType === 'Auto-Send' && selectedClient && <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} isOpen={true} setIsOpen={() => {}} onRecordCreated={() => {}} />}
+                {transactionType === 'Auto-Send' && selectedClient && <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} isOpen={true} setIsOpen={() => {}} onRecordCreated={() => {}} defaultRecordingAccountId={defaultRecordingAccountId} />}
 
 
                 {/* Step 4 */}

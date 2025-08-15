@@ -24,9 +24,10 @@ interface QuickAddUsdtOutflowProps {
   onRecordCreated: () => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
+  defaultRecordingAccountId: string;
 }
 
-export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated, usdtAccounts, serviceProviders }: QuickAddUsdtOutflowProps) {
+export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated, usdtAccounts, serviceProviders, defaultRecordingAccountId }: QuickAddUsdtOutflowProps) {
   if (!client) return null;
 
   return (
@@ -48,7 +49,7 @@ export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated
             <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
            <TabsContent value="auto">
-            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} />
+            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} />
           </TabsContent>
           <TabsContent value="match">
              <MatchUnassignedBscTxForm client={client} onTxMatched={onRecordCreated} setIsOpen={setIsOpen} />
