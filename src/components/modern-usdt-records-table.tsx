@@ -45,7 +45,7 @@ export function ModernUsdtRecordsTable() {
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('date'));
+    const recordsRef = query(ref(db, 'usdt_records'), orderByChild('date'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
