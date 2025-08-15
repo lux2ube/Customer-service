@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -40,7 +41,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
-import { updateSmsTransactionStatus, linkSmsToClient } from '@/lib/actions/sms';
+import { updateSmsTransactionStatus, linkSmsToClient } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';

@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { db, storage } from '../firebase';
-import { push, ref, set, update, get, query, orderByChild, limitToLast } from 'firebase/database';
+import { push, ref, set, update, get, query, orderByChild, limitToLast, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider, CashRecord, UsdtRecord, UnifiedFinancialRecord } from '../types';
@@ -165,6 +165,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
 
         const newTransactionData: Partial<Transaction> = {
+            id: newId,
             date: new Date().toISOString(),
             type,
             clientId,
@@ -200,5 +201,31 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     } catch (e: any) {
         console.error("Error creating modern transaction:", e);
         return { message: 'Database Error: Could not create transaction.', success: false };
+    }
+}
+
+
+export type BulkUpdateState = { message?: string; error?: boolean; } | undefined;
+
+export async function updateBulkTransactions(prevState: BulkUpdateState, formData: FormData): Promise<BulkUpdateState> {
+    const transactionIds = formData.getAll('transactionIds') as string[];
+    const status = formData.get('status') as string;
+
+    if (!transactionIds || transactionIds.length === 0 || !status) {
+        return { error: true, message: 'No records or status provided for bulk update.' };
+    }
+
+    try {
+        const updates: { [key: string]: any } = {};
+        for (const id of transactionIds) {
+            updates[`/transactions/${id}/status`] = status;
+        }
+
+        await update(ref(db), updates);
+        revalidatePath('/transactions');
+        return { message: `${transactionIds.length} transaction(s) updated to "${status}".` };
+    } catch (e: any) {
+        console.error("Bulk Transaction Update Error:", e);
+        return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }

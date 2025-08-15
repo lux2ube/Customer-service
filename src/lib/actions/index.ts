@@ -24,7 +24,10 @@ export {
 } from './client';
 
 // External Integrations (BSCScan)
-export { syncBscTransactions } from './integration';
+export { 
+    syncBscTransactions,
+} from './integration';
+
 export {
     createBscApiSetting,
     deleteBscApiSetting,
@@ -48,6 +51,7 @@ export {
 export {
     createModernTransaction,
     getUnifiedClientRecords,
+    updateBulkTransactions,
 } from './transaction';
 
 // Global Settings & Utilities
@@ -90,4 +94,3 @@ export {
     createUsdtManualPayment,
     cancelCashPayment,
 } from './financial-records';
-

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -37,11 +38,11 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
 export function CashReceiptBulkActions({ selectedReceipts, onActionComplete }: CashReceiptBulkActionsProps) {
     const { toast } = useToast();
     const [action, setAction] = React.useState<'changeSmsStatus' | null>(null);
-    const [statusToSet, setStatusToSet] = React.useState<'used' | 'rejected'>('used');
+    const [statusToSet, setStatusToSet] = React.useState<'Used' | 'Cancelled'>('Used');
     const formRef = React.useRef<HTMLFormElement>(null);
     
     // Filter for SMS records that can be actioned upon
-    const actionablesmsIds = selectedReceipts.filter(r => r.source === 'SMS' && (r.status === 'parsed' || r.status === 'matched')).map(r => r.id);
+    const actionablesmsIds = selectedReceipts.filter(r => r.source === 'SMS' && (r.status === 'Pending' || r.status === 'Matched')).map(r => r.id);
 
     const [state, formAction] = React.useActionState<BulkUpdateState, FormData>(updateBulkSmsStatus, undefined);
 
@@ -59,12 +60,12 @@ export function CashReceiptBulkActions({ selectedReceipts, onActionComplete }: C
         }
     }, [state, toast, onActionComplete]);
     
-    const handleStatusAction = (status: 'used' | 'rejected') => {
+    const handleStatusAction = (status: 'Used' | 'Cancelled') => {
         if (actionablesmsIds.length === 0) {
             toast({
                 variant: "destructive",
                 title: "No eligible SMS selected",
-                description: "This action only applies to SMS receipts with 'parsed' or 'matched' status.",
+                description: "This action only applies to SMS receipts with 'Pending' or 'Matched' status.",
             });
             return;
         }
@@ -81,13 +82,13 @@ export function CashReceiptBulkActions({ selectedReceipts, onActionComplete }: C
                     <Button variant="outline" size="sm">Actions <ChevronDown className="ml-2 h-4 w-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => handleStatusAction('used')}>
+                    <DropdownMenuItem onSelect={() => handleStatusAction('Used')}>
                         <Pencil className="mr-2 h-4 w-4"/>
                         <span>Mark SMS as Used</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleStatusAction('rejected')}>
+                    <DropdownMenuItem onSelect={() => handleStatusAction('Cancelled')}>
                         <Trash2 className="mr-2 h-4 w-4 text-destructive"/>
-                        <span className="text-destructive">Mark SMS as Rejected</span>
+                        <span className="text-destructive">Mark SMS as Cancelled</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
