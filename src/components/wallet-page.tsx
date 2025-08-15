@@ -11,7 +11,7 @@ import { Button } from './ui/button';
 import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, updateWalletSettings, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
-import type { SendRequest, Client, Account, ServiceProvider } from '@/lib/types';
+import type { SendRequest, Client, Account, ServiceProvider } from '../types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild, get } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
