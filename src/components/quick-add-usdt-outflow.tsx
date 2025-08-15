@@ -13,16 +13,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { QuickUsdtManualForm } from './quick-usdt-manual-form';
 import { QuickUsdtAutoForm } from './quick-usdt-auto-form';
 import { MatchUnassignedBscTxForm } from './match-unassigned-bsc-tx-form';
-import type { Client } from '@/lib/types';
+import type { Client, Account } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { get, ref } from 'firebase/database';
 
 interface QuickAddUsdtOutflowProps {
   client: Client | null;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onRecordCreated: () => void;
+  usdtAccounts: Account[];
 }
 
-export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated }: QuickAddUsdtOutflowProps) {
+export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated, usdtAccounts }: QuickAddUsdtOutflowProps) {
   if (!client) return null;
 
   return (
@@ -44,7 +47,7 @@ export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated
             <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
            <TabsContent value="auto">
-            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} />
+            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} />
           </TabsContent>
           <TabsContent value="match">
              <MatchUnassignedBscTxForm client={client} onTxMatched={onRecordCreated} setIsOpen={setIsOpen} />

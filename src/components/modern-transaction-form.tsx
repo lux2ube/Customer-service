@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/lib/types';
+import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction, Account } from '@/lib/types';
 import { createModernTransaction, searchClients, getUnifiedClientRecords } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
@@ -66,7 +66,7 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
     );
 }
 
-export function ModernTransactionForm({ initialClients }: { initialClients: Client[] }) {
+export function ModernTransactionForm({ initialClients, usdtAccounts }: { initialClients: Client[], usdtAccounts: Account[] }) {
     const [transactionType, setTransactionType] = React.useState<Transaction['type'] | 'Auto-Send'>('Deposit');
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
@@ -187,7 +187,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
             }
         }}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddUsdtOutflow client={selectedClient} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
@@ -316,7 +316,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                     </Card>
                 )}
 
-                {transactionType === 'Auto-Send' && selectedClient && <QuickUsdtOutflow client={selectedClient} isOpen={true} setIsOpen={() => {}} onRecordCreated={() => {}} />}
+                {transactionType === 'Auto-Send' && selectedClient && <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} isOpen={true} setIsOpen={() => {}} onRecordCreated={() => {}} />}
 
 
                 {/* Step 4 */}
@@ -458,6 +458,4 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
-
-
 
