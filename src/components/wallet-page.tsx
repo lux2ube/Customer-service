@@ -25,10 +25,10 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { ethers } from 'ethers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
-function SendButton() {
+function SendButton({ disabled }: { disabled?: boolean }) {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} className="w-full">
+        <Button type="submit" disabled={pending || disabled} className="w-full">
             {pending ? (
                 <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -99,7 +99,7 @@ function WalletInfoCard({ details, onRefresh }: { details: WalletDetailsState, o
     )
 }
 
-function SendForm({ usdtAccounts }: { usdtAccounts: Account[] }) {
+function SendForm({ recordingAccountId, usdtAccounts }: { recordingAccountId: string; usdtAccounts: Account[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
     const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
@@ -182,24 +182,8 @@ function SendForm({ usdtAccounts }: { usdtAccounts: Account[] }) {
                 <CardDescription>Select a client or paste an address, then enter the amount to send.</CardDescription>
             </CardHeader>
             <form ref={formRef} action={formAction}>
+                 <input type="hidden" name="creditAccountId" value={recordingAccountId} />
                 <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="creditAccountId">Recording Account</Label>
-                        <Select name="creditAccountId" required>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a USDT wallet to record this to..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {usdtAccounts.map(account => (
-                                    <SelectItem key={account.id} value={account.id}>
-                                        {account.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
-                    </div>
-
                      <div className="space-y-2">
                         <Label htmlFor="client">Client</Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
@@ -250,7 +234,7 @@ function SendForm({ usdtAccounts }: { usdtAccounts: Account[] }) {
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <SendButton />
+                    <SendButton disabled={!recordingAccountId} />
                 </CardFooter>
             </form>
         </Card>
@@ -299,7 +283,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         setInputValue(client.name);
     };
     
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
 
     return (
         <Popover open={open} onOpenChange={setIsOpen}>
@@ -415,8 +399,34 @@ function TransactionHistory() {
     )
 }
 
+function RecordingAccountSetup({ usdtAccounts, onAccountSelect, selectedAccountId }: { usdtAccounts: Account[], onAccountSelect: (id: string) => void, selectedAccountId: string }) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Recording Account</CardTitle>
+                <CardDescription>Select the internal USDT account to record these send operations against.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <Select onValueChange={onAccountSelect} value={selectedAccountId}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select a USDT wallet..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {usdtAccounts.map(account => (
+                            <SelectItem key={account.id} value={account.id}>
+                                {account.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </CardContent>
+        </Card>
+    )
+}
+
 export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
     const [walletDetails, setWalletDetails] = React.useState<WalletDetailsState>({ loading: true });
+    const [recordingAccountId, setRecordingAccountId] = React.useState<string>('');
 
     const refreshDetails = React.useCallback(async () => {
         setWalletDetails({ loading: true });
@@ -432,7 +442,8 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
         <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-1 flex flex-col gap-6">
                <WalletInfoCard details={walletDetails} onRefresh={refreshDetails} />
-               <SendForm usdtAccounts={usdtAccounts} />
+               <RecordingAccountSetup usdtAccounts={usdtAccounts} selectedAccountId={recordingAccountId} onAccountSelect={setRecordingAccountId} />
+               <SendForm usdtAccounts={usdtAccounts} recordingAccountId={recordingAccountId} />
             </div>
             <div className="md:col-span-2">
                 <TransactionHistory />
