@@ -21,7 +21,6 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (!clientSnapshot.exists()) return [];
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
-        // --- Correctly extract all wallet addresses from the new serviceProviders structure ---
         const clientWalletAddresses = new Set<string>();
         if (client.serviceProviders) {
             for (const provider of client.serviceProviders) {
@@ -30,17 +29,12 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                 }
             }
         }
-        // Also include the legacy addresses for backward compatibility
         if (client.bep20_addresses) {
             client.bep20_addresses.forEach(addr => clientWalletAddresses.add(addr.toLowerCase()));
         }
 
         const normalizedClientName = normalizeArabic(client.name.toLowerCase());
-        const clientNameParts = normalizedClientName.split(/\s+/);
-        const clientMatchPattern = clientNameParts.length > 1
-            ? `${clientNameParts[0]} ${clientNameParts[1]}`
-            : clientNameParts[0];
-
+        
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
             get(ref(db, 'usdt_records')),
@@ -52,11 +46,13 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
                 const isDirectMatch = record.status === 'Matched' && record.clientId === clientId;
+                
+                const smsSenderName = record.senderName ? normalizeArabic(record.senderName.toLowerCase()) : '';
                 const isPendingSmsMatch =
                     record.status === 'Pending' &&
                     record.source === 'SMS' &&
-                    record.senderName &&
-                    normalizeArabic(record.senderName.toLowerCase()).includes(clientMatchPattern);
+                    smsSenderName &&
+                    normalizedClientName.includes(smsSenderName);
 
                 if (isDirectMatch || isPendingSmsMatch) {
                     unifiedRecords.push({
@@ -97,7 +93,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                         source: record.source,
                         amount: record.amount,
                         currency: 'USDT',
-                        amountUsd: record.amount,
+                        amountUsd: record.amount, // For USDT, amount is amountUsd
                         status: record.status,
                         cryptoWalletName: record.accountName,
                     });
