@@ -7,8 +7,8 @@ import { push, ref, set, update, get } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
-import { sendTelegramNotification } from './helpers';
-import type { JournalEntry, Account } from '../types';
+import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
+import type { JournalEntry, Account, ModernUsdtRecord } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -124,14 +124,17 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     if (!requestId) {
         return { error: true, message: 'Could not generate request ID.' };
     }
-
-    await set(newRequestRef, {
+    
+    const updates: {[key: string]: any} = {};
+    updates[`/send_requests/${requestId}`] = {
         to: recipientAddress,
         amount: amount,
         status: 'pending',
         timestamp: Date.now(),
         creditAccountId,
-    });
+    };
+
+    await update(ref(db), updates);
 
     try {
         const rpcUrl = getRpcUrl();
@@ -172,6 +175,25 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         `;
         await sendTelegramNotification(message);
 
+        // --- Create USDT Record for this auto payment ---
+        const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
+        const newRecordData: Omit<ModernUsdtRecord, 'id'> = {
+            date: new Date().toISOString(),
+            type: 'outflow',
+            source: 'Manual', // Considered manual as it's triggered from the UI
+            status: 'Confirmed',
+            clientId: client?.id || null,
+            clientName: client?.name || 'Unassigned',
+            accountId: creditAccountId,
+            accountName: creditAccountName,
+            amount: amount,
+            clientWalletAddress: recipientAddress,
+            txHash: tx.hash,
+            notes: `Auto-sent from Wallet Page by system_user`,
+            createdAt: new Date().toISOString(),
+        };
+        await set(ref(db, `/modern_usdt_records/${newUsdtRecordId}`), stripUndefined(newRecordData));
+        
         // --- Journal Entry for Auto Payment ---
         if (client) {
             const clientAccountId = `6000${client.id}`;
@@ -192,6 +214,8 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         }
 
         revalidatePath('/wallet');
+        revalidatePath('/modern-usdt-records');
+
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
 
     } catch (e: any) {
