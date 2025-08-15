@@ -46,31 +46,27 @@ const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/modern', label: 'Modern Hub', icon: Sparkles },
   
-  { type: 'divider', label: 'العمليات المالية' },
-  { href: '/modern-cash-records', label: 'Modern Cash Records', icon: BookCopy },
-  { href: '/modern-usdt-records', label: 'Modern USDT Records', icon: DollarSign },
-
-  { type: 'divider', label: 'التنفيذ' },
-  { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
-
-  { type: 'divider', label: 'المعاملات' },
-  { href: '/transactions/modern', label: 'Modern Transaction', icon: HandCoins },
+  { type: 'divider', label: 'Financial' },
+  { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
 
-  { type: 'divider', label: 'المحاسبة والتقارير' },
+  { type: 'divider', label: 'Records' },
+  { href: '/modern-cash-records', label: 'Cash Records', icon: BookCopy },
+  { href: '/modern-usdt-records', label: 'USDT Records', icon: DollarSign },
+  { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
+
+  { type: 'divider', label: 'Management' },
+  { href: '/clients', label: 'Clients', icon: Users },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-
-  { type: 'divider', label: 'الإدارة' },
-  { href: '/clients', label: 'Clients', icon: Users },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
   { href: '/logs', label: 'Audit Log', icon: History },
 
-  { type: 'divider', label: 'النظام' },
-  { href: '/sms/settings', label: 'SMS Gateway Setup', icon: Settings2 },
+  { type: 'divider', label: 'System' },
+  { href: '/sms/settings', label: 'SMS Gateway', icon: Settings2 },
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
-  { href: '/sms/parsing-failures', label: 'SMS Parsing Failures', icon: FileWarning },
+  { href: '/sms/parsing-failures', label: 'SMS Failures', icon: FileWarning },
   { href: '/settings/bsc-apis', label: 'BSC API Settings', icon: Plug },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },
