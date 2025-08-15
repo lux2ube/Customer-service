@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -23,11 +22,12 @@ export type ServiceProviderFormState =
 const ServiceProviderSchema = z.object({
   name: z.string().min(1, { message: 'Provider name is required.' }),
   type: z.enum(['Bank', 'Crypto']),
-  accountIds: z.array(z.string()).min(1, { message: 'At least one account must be selected.' }),
+  // Use .getAll() on the form to collect these
+  accountIds: z.preprocess((val) => (Array.isArray(val) ? val : [val].filter(Boolean)), z.array(z.string()).min(1, { message: 'At least one account must be selected.' })),
   
   // Formulas as stringified JSON
-  bankFormula: z.string().transform((str) => JSON.parse(str)).pipe(z.array(z.string())).optional(),
-  cryptoFormula: z.string().transform((str) => JSON.parse(str)).pipe(z.array(z.string())).optional(),
+  bankFormula: z.string().transform((str) => str ? JSON.parse(str) : []).pipe(z.array(z.string())).optional(),
+  cryptoFormula: z.string().transform((str) => str ? JSON.parse(str) : []).pipe(z.array(z.string())).optional(),
   
   // Optional Fiat Rate Overrides
   fiatRates_YER_clientBuy: z.coerce.number().optional(),
@@ -43,10 +43,8 @@ const ServiceProviderSchema = z.object({
 });
 
 export async function createServiceProvider(providerId: string | null, prevState: ServiceProviderFormState, formData: FormData) {
-    const rawData = Object.fromEntries(formData.entries());
-    // Use getAll to ensure accountIds is always an array
     const dataToValidate = {
-        ...rawData,
+        ...Object.fromEntries(formData.entries()),
         accountIds: formData.getAll('accountIds'),
     };
     
