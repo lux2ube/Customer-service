@@ -13,7 +13,7 @@ import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction } from '@/l
 import { createModernTransaction, searchClients, getUnifiedClientRecords } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -67,7 +67,7 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
 }
 
 export function ModernTransactionForm({ initialClients }: { initialClients: Client[] }) {
-    const [transactionType, setTransactionType] = React.useState<Transaction['type']>('Deposit');
+    const [transactionType, setTransactionType] = React.useState<Transaction['type'] | 'Auto-Send'>('Deposit');
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
     const [loadingRecords, setLoadingRecords] = React.useState(false);
@@ -170,8 +170,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 toast({ variant: 'destructive', title: 'Error', description: 'Please select a client.' });
                 return;
             }
-             if (!transactionType) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Please select a transaction type.' });
+             if (!transactionType || transactionType === 'Auto-Send') {
+                toast({ variant: 'destructive', title: 'Error', description: 'Please select a valid transaction type.' });
                 return;
             }
             formData.set('clientId', selectedClient.id);
@@ -200,8 +200,8 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                     <CardContent>
                         <RadioGroup
                             value={transactionType || ''}
-                            onValueChange={(value) => setTransactionType(value as Transaction['type'])}
-                            className="grid grid-cols-2 lg:grid-cols-3 gap-4"
+                            onValueChange={(value) => setTransactionType(value as any)}
+                            className="grid grid-cols-2 lg:grid-cols-4 gap-4"
                         >
                              <div>
                                 <RadioGroupItem value="Deposit" id="type-deposit" className="peer sr-only" />
@@ -224,6 +224,13 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                     Internal Transfer
                                 </Label>
                              </div>
+                             <div>
+                                <RadioGroupItem value="Auto-Send" id="type-autosend" className="peer sr-only" />
+                                <Label htmlFor="type-autosend" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                                    <Send className="mb-3 h-6 w-6" />
+                                    Auto Send USDT
+                                </Label>
+                             </div>
                         </RadioGroup>
                     </CardContent>
                 </Card>
@@ -241,7 +248,7 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                 )}
 
                 {/* Step 3 */}
-                {selectedClient && (
+                {selectedClient && transactionType !== 'Auto-Send' && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Step 3: Link Financial Records</CardTitle>
@@ -308,6 +315,9 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                         </CardContent>
                     </Card>
                 )}
+
+                {transactionType === 'Auto-Send' && selectedClient && <QuickUsdtOutflow client={selectedClient} isOpen={true} setIsOpen={() => {}} onRecordCreated={() => {}} />}
+
 
                 {/* Step 4 */}
                 {selectedRecordIds.length > 0 && (
@@ -448,5 +458,6 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+
 
 

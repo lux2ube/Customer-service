@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 export interface KycDocument {
@@ -271,6 +272,7 @@ export interface SendRequest {
     timestamp: number;
     txHash?: string;
     error?: string;
+    creditAccountId: string;
 }
 
 export interface TransactionFlag {

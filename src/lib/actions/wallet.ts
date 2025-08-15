@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
-import type { JournalEntry, Account, ModernUsdtRecord } from '../types';
+import type { JournalEntry, Account } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -33,7 +33,6 @@ export type SendRequestState = {
     errors?: {
         recipientAddress?: string[];
         amount?: string[];
-        creditAccountId?: string[];
     };
 };
 
@@ -44,7 +43,6 @@ const SendRequestSchema = z.object({
     amount: z.coerce.number().gt(0, {
         message: 'Amount must be greater than zero.',
     }),
-    creditAccountId: z.string().min(1, 'A recording account must be selected.'),
 });
 
 function getRpcUrl() {
@@ -99,11 +97,7 @@ function escapeTelegramMarkdown(text: string): string {
 }
 
 export async function createSendRequest(prevState: SendRequestState, formData: FormData): Promise<SendRequestState> {
-    const validatedFields = SendRequestSchema.safeParse({
-        recipientAddress: formData.get('recipientAddress'),
-        amount: formData.get('amount'),
-        creditAccountId: formData.get('creditAccountId'),
-    });
+    const validatedFields = SendRequestSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
         return {
@@ -113,7 +107,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         };
     }
     
-    const { recipientAddress, amount, creditAccountId } = validatedFields.data;
+    const { recipientAddress, amount } = validatedFields.data;
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
 
     if (!mnemonic) {
@@ -131,8 +125,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         to: recipientAddress,
         amount: amount,
         status: 'pending',
-        timestamp: Date.now(),
-        creditAccountId,
+        timestamp: Date.now()
     };
 
     await update(ref(db), updates);
@@ -162,40 +155,17 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         const client = await findClientByAddress(recipientAddress);
         const clientName = client ? client.name : 'Unknown Client';
         
-        const creditAccountSnapshot = await get(ref(db, `accounts/${creditAccountId}`));
-        const creditAccountName = creditAccountSnapshot.exists() ? (creditAccountSnapshot.val() as Account).name : creditAccountId;
-        
         const message = `
 ✅ *USDT Sent Successfully*
 
 *To Client:* ${escapeTelegramMarkdown(clientName)}
 *Address:* \`${recipientAddress}\`
 *Amount:* ${escapeTelegramMarkdown(amount.toFixed(2))} USDT
-*From Account:* ${escapeTelegramMarkdown(creditAccountName)}
 *Tx Link:* [View on BscScan](https://bscscan.com/tx/${tx.hash})
         `;
         await sendTelegramNotification(message);
 
-        // --- Create USDT Record for this auto payment ---
-        const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
-        const newRecordData: Omit<ModernUsdtRecord, 'id'> = {
-            date: new Date().toISOString(),
-            type: 'outflow',
-            source: 'Manual', // Considered manual as it's triggered from the UI
-            status: 'Confirmed',
-            clientId: client?.id || null,
-            clientName: client?.name || 'Unassigned',
-            accountId: creditAccountId,
-            accountName: creditAccountName,
-            amount: amount,
-            clientWalletAddress: recipientAddress,
-            txHash: tx.hash,
-            notes: `Auto-sent from Wallet Page by system_user`,
-            createdAt: new Date().toISOString(),
-        };
-        await set(ref(db, `/modern_usdt_records/${newUsdtRecordId}`), stripUndefined(newRecordData));
-        
-        // --- Journal Entry for Auto Payment ---
+        // Journal Entry for Auto Payment
         if (client) {
             const clientAccountId = `6000${client.id}`;
             const journalRef = push(ref(db, 'journal_entries'));
@@ -203,19 +173,18 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
                 date: new Date().toISOString(),
                 description: `Auto USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
                 debit_account: clientAccountId,
-                credit_account: creditAccountId,
+                credit_account: '1003', // Hardcoded credit to USDT Wallet for now
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
                 createdAt: new Date().toISOString(),
                 debit_account_name: clientName,
-                credit_account_name: creditAccountName,
+                credit_account_name: 'USDT Wallet'
             };
             await set(journalRef, journalEntry);
         }
 
         revalidatePath('/wallet');
-        revalidatePath('/modern-usdt-records');
 
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
 
@@ -228,6 +197,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         return { error: true, message: `Transaction failed: ${errorMessage}` };
     }
 }
+
 
 export type WalletSettingsState = {
     success?: boolean;

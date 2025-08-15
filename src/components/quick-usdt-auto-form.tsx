@@ -9,7 +9,7 @@ import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import type { Client } from '@/lib/types';
+import type { Client, Account } from '@/lib/types';
 import { createSendRequest, type SendRequestState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2, ClipboardPaste } from 'lucide-react';
@@ -19,6 +19,7 @@ interface QuickUsdtAutoFormProps {
   client: Client;
   onPaymentSent: () => void;
   setIsOpen: (open: boolean) => void;
+  usdtAccounts: Account[];
 }
 
 function SubmitButton() {
@@ -31,7 +32,7 @@ function SubmitButton() {
     );
 }
 
-export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen }: QuickUsdtAutoFormProps) {
+export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 

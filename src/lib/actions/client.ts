@@ -290,6 +290,9 @@ export async function findClientByAddress(address: string): Promise<Client | nul
 
         for (const clientId in allClientsData) {
             const client = allClientsData[clientId];
+            if (client.bep20_addresses?.some(addr => addr.toLowerCase() === lowercasedAddress)) {
+                return { id: clientId, ...client };
+            }
             if (client.serviceProviders) {
                 for (const provider of client.serviceProviders) {
                     if (provider.providerType === 'Crypto' && provider.details.Address?.toLowerCase() === lowercasedAddress) {
