@@ -21,13 +21,25 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (!clientSnapshot.exists()) return [];
         const client = { id: clientId, ...clientSnapshot.val() } as Client;
 
+        // --- Correctly extract all wallet addresses from the new serviceProviders structure ---
+        const clientWalletAddresses = new Set<string>();
+        if (client.serviceProviders) {
+            for (const provider of client.serviceProviders) {
+                if (provider.providerType === 'Crypto' && provider.details?.Address) {
+                    clientWalletAddresses.add(provider.details.Address.toLowerCase());
+                }
+            }
+        }
+        // Also include the legacy addresses for backward compatibility
+        if (client.bep20_addresses) {
+            client.bep20_addresses.forEach(addr => clientWalletAddresses.add(addr.toLowerCase()));
+        }
+
         const normalizedClientName = normalizeArabic(client.name.toLowerCase());
         const clientNameParts = normalizedClientName.split(/\s+/);
         const clientMatchPattern = clientNameParts.length > 1
             ? `${clientNameParts[0]} ${clientNameParts[1]}`
             : clientNameParts[0];
-            
-        const clientWalletAddresses = new Set((client.bep20_addresses || []).map(addr => addr.toLowerCase()));
 
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
@@ -85,7 +97,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                         source: record.source,
                         amount: record.amount,
                         currency: 'USDT',
-                        amountUsd: record.amount, // For USDT, amount is amountUsd
+                        amountUsd: record.amount,
                         status: record.status,
                         cryptoWalletName: record.accountName,
                     });
