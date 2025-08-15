@@ -21,6 +21,12 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (!clientSnapshot.exists()) return [];
         const client = clientSnapshot.val() as Client;
         const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+        const clientNameParts = normalizedClientName.split(/\s+/);
+        // Use the first two names for broader matching, or just the first if that's all there is.
+        const clientMatchPattern = clientNameParts.length > 1 
+            ? `${clientNameParts[0]} ${clientNameParts[1]}` 
+            : clientNameParts[0];
+
 
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
             get(ref(db, 'cash_records')),
@@ -32,14 +38,17 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (cashRecordsSnapshot.exists()) {
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
-                const isMatched = record.status === 'Matched' && record.clientId === clientId;
+                // Condition 1: The record is already directly matched to this client.
+                const isDirectMatch = record.status === 'Matched' && record.clientId === clientId;
+                
+                // Condition 2: The record is a pending SMS and the sender name contains the client's first two names.
                 const isPendingSmsMatch = 
                     record.status === 'Pending' &&
                     record.source === 'SMS' &&
                     record.senderName &&
-                    normalizeArabic(record.senderName.toLowerCase()) === normalizedClientName;
+                    normalizeArabic(record.senderName.toLowerCase()).includes(clientMatchPattern);
                 
-                if (isMatched || isPendingSmsMatch) {
+                if (isDirectMatch || isPendingSmsMatch) {
                     unifiedRecords.push({
                         id,
                         date: record.date,
@@ -247,3 +256,4 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
+
