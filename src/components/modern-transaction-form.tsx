@@ -26,6 +26,7 @@ import { QuickAddCashInflow } from './quick-add-cash-inflow';
 import { QuickAddUsdtOutflow } from './quick-add-usdt-outflow';
 import { QuickAddUsdtInflow } from './quick-add-usdt-inflow';
 import { QuickAddCashOutflow } from './quick-add-cash-outflow';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -66,7 +67,7 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
     );
 }
 
-export function ModernTransactionForm({ initialClients, usdtAccounts, serviceProviders, defaultRecordingAccountId }: { initialClients: Client[], usdtAccounts: Account[], serviceProviders: ServiceProvider[], defaultRecordingAccountId: string }) {
+export function ModernTransactionForm({ initialClients, allAccounts, serviceProviders, defaultRecordingAccountId }: { initialClients: Client[], allAccounts: Account[], serviceProviders: ServiceProvider[], defaultRecordingAccountId: string }) {
     const [transactionType, setTransactionType] = React.useState<Transaction['type'] | null>(null);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
@@ -80,6 +81,10 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
     const [isQuickAddCashOutOpen, setIsQuickAddCashOutOpen] = React.useState(false);
 
     const { toast } = useToast();
+
+    const usdtAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'), [allAccounts]);
+    const incomeAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Income'), [allAccounts]);
+    const expenseAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Expenses'), [allAccounts]);
 
     React.useEffect(() => {
         const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
@@ -305,29 +310,54 @@ export function ModernTransactionForm({ initialClients, usdtAccounts, servicePro
                         <CardHeader>
                             <CardTitle>Step 4: Calculations Summary</CardTitle>
                         </CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                            <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Total Inflow</p>
-                                <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
+                        <CardContent className="space-y-4">
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="p-2 border rounded-md">
+                                    <p className="text-xs text-muted-foreground">Total Inflow</p>
+                                    <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
+                                </div>
+                                <div className="p-2 border rounded-md">
+                                    <p className="text-xs text-muted-foreground">Total Outflow</p>
+                                    <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
+                                </div>
+                                <div className="p-2 border rounded-md">
+                                    <p className="text-xs text-muted-foreground">Fee</p>
+                                    <p className="font-bold">${calculation.fee.toFixed(2)}</p>
+                                </div>
+                                <div className={cn("p-2 border rounded-md", calculation.difference.toFixed(2) !== '0.00' ? 'border-amber-500 bg-amber-50' : '')}>
+                                    <p className="text-xs text-muted-foreground">Difference</p>
+                                    <p className="font-bold">${calculation.difference.toFixed(2)}</p>
+                                </div>
                             </div>
-                            <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Total Outflow</p>
-                                <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
-                            </div>
-                            <div className="p-2 border rounded-md">
-                                <p className="text-xs text-muted-foreground">Fee</p>
-                                <p className="font-bold">${calculation.fee.toFixed(2)}</p>
-                            </div>
-                            <div className={cn("p-2 border rounded-md", calculation.difference.toFixed(2) !== '0.00' ? 'border-amber-500 bg-amber-50' : '')}>
-                                <p className="text-xs text-muted-foreground">Difference</p>
-                                <p className="font-bold">${calculation.difference.toFixed(2)}</p>
-                            </div>
-                        </CardContent>
-                        <CardFooter>
-                            <p className="text-xs text-muted-foreground">
-                                Formula: (Outflow + Fee) - Inflow = Difference. A non-zero difference will be recorded as Income or Expense.
+                             <p className="text-xs text-muted-foreground pt-2">
+                                Formula: (Outflow + Fee) - Inflow = Difference.
                             </p>
-                        </CardFooter>
+                            {Math.abs(calculation.difference) > 0.001 && (
+                                <div className="pt-2">
+                                    {calculation.difference > 0 ? (
+                                        <div className="space-y-2">
+                                            <Label>Record Difference as Income</Label>
+                                            <Select name="incomeAccountId" required>
+                                                <SelectTrigger><SelectValue placeholder="Select an income account..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {incomeAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    ) : (
+                                         <div className="space-y-2">
+                                            <Label>Record Difference as Expense/Discount</Label>
+                                            <Select name="expenseAccountId" required>
+                                                <SelectTrigger><SelectValue placeholder="Select an expense account..." /></SelectTrigger>
+                                                <SelectContent>
+                                                     {expenseAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </CardContent>
                     </Card>
                 )}
 
@@ -443,5 +473,4 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
-
 

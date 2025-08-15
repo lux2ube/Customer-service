@@ -95,6 +95,8 @@ export type TransactionFormState =
         clientId?: string[];
         type?: string[];
         linkedRecordIds?: string[];
+        incomeAccountId?: string[];
+        expenseAccountId?: string[];
       };
       message?: string;
       success?: boolean;
@@ -108,6 +110,8 @@ const ModernTransactionSchema = z.object({
     linkedRecordIds: z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' }),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
+    incomeAccountId: z.string().optional(),
+    expenseAccountId: z.string().optional(),
 });
 
 export async function createModernTransaction(prevState: TransactionFormState, formData: FormData): Promise<TransactionFormState> {
@@ -117,6 +121,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         linkedRecordIds: formData.getAll('linkedRecordIds'),
         notes: formData.get('notes'),
         attachment: formData.get('attachment'),
+        incomeAccountId: formData.get('incomeAccountId'),
+        expenseAccountId: formData.get('expenseAccountId'),
     });
 
     if (!validatedFields.success) {
@@ -126,7 +132,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
     }
     
-    const { clientId, type, linkedRecordIds, notes, attachment } = validatedFields.data;
+    const { clientId, type, linkedRecordIds, notes, attachment, incomeAccountId, expenseAccountId } = validatedFields.data;
     const newId = await getNextSequentialId('globalRecordId');
     
     try {
@@ -175,10 +181,17 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
 
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
-        const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
+        const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         const fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
+
+        if (difference > 0 && !incomeAccountId) {
+            return { errors: { incomeAccountId: ['An income account must be selected for the gain.'] }, message: 'Missing income account.', success: false };
+        }
+        if (difference < 0 && !expenseAccountId) {
+            return { errors: { expenseAccountId: ['An expense account must be selected for the loss.'] }, message: 'Missing expense account.', success: false };
+        }
         
         let attachmentUrl = '';
         if (attachment && attachment.size > 0) {
@@ -195,7 +208,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             clientName: client.name,
             amount_usd: totalInflowUSD,
             fee_usd: fee,
-            amount_usdt: totalOutflowUSD, // amount_usdt now represents the outflow
+            amount_usdt: totalOutflowUSD, // amount_usdt now represents the total outflow
             expense_usd: difference < 0 ? Math.abs(difference) : 0,
             exchange_rate_commission: difference > 0 ? difference : 0,
             notes,
@@ -240,13 +253,13 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             if (difference > 0) { // Profit (Income)
                 diffDesc = `Exchange Gain on Tx #${newId}`;
                 diffLegs = [
-                    { accountId: '4001', debit: 0, credit: difference }, // Credit Exchange Income
+                    { accountId: incomeAccountId!, debit: 0, credit: difference }, // Credit Selected Income Account
                     { accountId: clientAccountId, debit: difference, credit: 0 }, // Debit Client Liability
                 ];
             } else { // Loss (Expense/Discount)
                 diffDesc = `Exchange Loss/Discount on Tx #${newId}`;
                 diffLegs = [
-                    { accountId: '5001', debit: Math.abs(difference), credit: 0 }, // Debit Exchange Expense
+                    { accountId: expenseAccountId!, debit: Math.abs(difference), credit: 0 }, // Debit Selected Expense Account
                     { accountId: clientAccountId, credit: Math.abs(difference), debit: 0 }, // Credit Client Liability
                 ];
             }
