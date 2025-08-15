@@ -43,14 +43,15 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (cashRecordsSnapshot.exists()) {
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
-                // Already matched to this client but not used
+                if (record.status === 'Used' || record.status === 'Cancelled' || record.type !== 'inflow') return;
+
                 const isDirectMatch = record.status === 'Matched' && record.clientId === clientId;
                 
-                // Pending SMS where sender name is likely this client
                 const senderName = record.senderName ? normalizeArabic(record.senderName.toLowerCase()).replace(/\s+/g, ' ') : '';
-                const isPendingSmsMatch = record.status === 'Pending' && record.source === 'SMS' && senderName && normalizedClientName.includes(senderName);
+                const clientMatchPattern = new RegExp(`\\b${senderName.split(' ').join('\\s*')}\\b`);
+                const isPendingSmsMatch = record.status === 'Pending' && record.source === 'SMS' && senderName && clientMatchPattern.test(normalizedClientName);
 
-                if ((isDirectMatch || isPendingSmsMatch) && record.status !== 'Used' && record.type === 'inflow') {
+                if (isDirectMatch || isPendingSmsMatch) {
                     unifiedRecords.push({
                         id,
                         date: record.date,
@@ -73,29 +74,27 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (usdtRecordsSnapshot.exists()) {
             const usdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             Object.entries(usdtRecords).forEach(([id, record]) => {
-                if (record.status === 'Used' || record.status === 'Cancelled') return;
+                 if (record.status === 'Used' || record.status === 'Cancelled') return;
 
-                // Match if directly assigned to this client OR if unassigned but wallet matches
-                const isDirectMatch = record.clientId === clientId;
-                const isWalletMatch = 
-                    (record.clientId === null || record.clientId === 'unassigned-bscscan') &&
-                    record.clientWalletAddress &&
-                    clientWalletAddresses.has(record.clientWalletAddress.toLowerCase());
-                
-                if(isDirectMatch || isWalletMatch) {
-                     unifiedRecords.push({
-                        id,
-                        date: record.date,
-                        type: record.type,
-                        category: 'crypto',
-                        source: record.source,
-                        amount: record.amount,
-                        currency: 'USDT',
-                        amountUsd: record.amount, // For USDT, amount is amountUsd
-                        status: record.status,
-                        cryptoWalletName: record.accountName,
-                    });
-                }
+                 const isDirectMatch = record.clientId === clientId;
+                 const isWalletMatch = record.clientWalletAddress && clientWalletAddresses.has(record.clientWalletAddress.toLowerCase());
+
+                 if(isDirectMatch || isWalletMatch) {
+                      unifiedRecords.push({
+                         id,
+                         date: record.date,
+                         type: record.type,
+                         category: 'crypto',
+                         source: record.source,
+                         amount: record.amount,
+                         currency: 'USDT',
+                         amountUsd: record.amount, // For USDT, amount is amountUsd
+                         status: record.status,
+                         cryptoWalletName: record.accountName,
+                         txHash: record.txHash,
+                         clientWalletAddress: record.clientWalletAddress,
+                     });
+                 }
             });
         }
 

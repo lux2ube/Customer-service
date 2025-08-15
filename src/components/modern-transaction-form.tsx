@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -35,7 +36,7 @@ function SubmitButton() {
     );
 }
 
-function FinancialRecordTable({ title, records, selectedIds, onSelectionChange, type, category }: { title: string, records: UnifiedFinancialRecord[], selectedIds: string[], onSelectionChange: (id: string, selected: boolean) => void, type: 'inflow' | 'outflow', category: 'fiat' | 'crypto' }) {
+function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { records: UnifiedFinancialRecord[], selectedIds: string[], onSelectionChange: (id: string, selected: boolean) => void }) {
     if (records.length === 0) {
         return <p className="text-xs text-muted-foreground text-center p-4 border rounded-md">No available records.</p>;
     }
@@ -261,14 +262,14 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                                     <Label>Client Gives (Fiat)</Label>
                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
-                                                <FinancialRecordTable title="" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
+                                                <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                             </div>
                                              <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (USDT)</Label>
                                                      <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
-                                                <FinancialRecordTable title="" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                                <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                              </div>
                                         </>
                                     )}
@@ -279,26 +280,26 @@ export function ModernTransactionForm({ initialClients }: { initialClients: Clie
                                                     <Label>Client Gives (USDT)</Label>
                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
-                                                <FinancialRecordTable title="" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
+                                                <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                             </div>
                                             <div className="space-y-2">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (Fiat)</Label>
                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
                                                 </div>
-                                                <FinancialRecordTable title="" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
+                                                <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                             </div>
                                         </>
                                     )}
                                     {transactionType === 'Transfer' && (
                                         <>
                                             <div className="space-y-4">
-                                                <FinancialRecordTable title="Client Gives (Fiat)" records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="fiat" />
-                                                <FinancialRecordTable title="Client Gives (USDT)" records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="inflow" category="crypto" />
+                                                <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                             </div>
                                              <div className="space-y-4">
-                                                <FinancialRecordTable title="Client Gets (Fiat)" records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="fiat" />
-                                                <FinancialRecordTable title="Client Gets (USDT)" records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} type="outflow" category="crypto" />
+                                                <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                             </div>
                                         </>
                                     )}
@@ -447,4 +448,5 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         </Popover>
     );
 }
+
 
