@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -9,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
-import type { JournalEntry, Account, ModernUsdtRecord } from '../types';
+import type { JournalEntry, Account, ModernUsdtRecord, UsdtRecord } from '../types';
 
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -65,8 +64,9 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
     try {
         const rpcUrl = getRpcUrl();
         const provider = new ethers.JsonRpcProvider(rpcUrl);
-        const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
-        const address = wallet.address;
+        const wallet = ethers.Wallet.fromPhrase(mnemonic);
+        const connectedWallet = wallet.connect(provider);
+        const address = connectedWallet.address;
 
         const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, provider);
 
@@ -136,8 +136,9 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
     try {
         const rpcUrl = getRpcUrl();
         const provider = new ethers.JsonRpcProvider(rpcUrl);
-        const wallet = ethers.Wallet.fromPhrase(mnemonic, provider);
-        const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, wallet);
+        const wallet = ethers.Wallet.fromPhrase(mnemonic);
+        const connectedWallet = wallet.connect(provider);
+        const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, connectedWallet);
 
         const amountToSend = ethers.parseUnits(amount.toString(), 18);
         
@@ -164,7 +165,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         
         // Create an outflow record in modern_usdt_records
         const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
-        const outflowRecord: Omit<ModernUsdtRecord, 'id'> = {
+        const outflowRecord: Omit<UsdtRecord, 'id'> = {
             date: new Date().toISOString(),
             type: 'outflow',
             source: 'Manual',

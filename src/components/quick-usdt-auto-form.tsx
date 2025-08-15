@@ -46,14 +46,18 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
   
   const [addressInput, setAddressInput] = React.useState('');
   const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
-  const [selectedProviderId, setSelectedProviderId] = React.useState<string>('');
-  
-  const stateRef = React.useRef<SendRequestState>();
+  const [recordingAccountId, setRecordingAccountId] = React.useState<string>('');
+
+  const activeProvider = React.useMemo(() => {
+    return serviceProviders.find(p => p.accountIds.includes(recordingAccountId));
+  }, [serviceProviders, recordingAccountId]);
 
   const clientCryptoAddresses = React.useMemo(() => {
-        if (!client || !client.serviceProviders || !selectedProviderId) return [];
-        return client.serviceProviders.filter(sp => sp.providerId === selectedProviderId && sp.details.Address);
-  }, [client, selectedProviderId]);
+        if (!client || !client.serviceProviders || !activeProvider) return [];
+        return client.serviceProviders.filter(sp => sp.providerId === activeProvider.id && sp.details.Address);
+  }, [client, activeProvider]);
+  
+  const stateRef = React.useRef<SendRequestState>();
 
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
@@ -87,18 +91,19 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
         <input type="hidden" name="clientId" value={client.id} />
         <div className="space-y-4 py-4">
-             <div className="space-y-2">
-                <Label>Service Provider</Label>
-                <Select onValueChange={setSelectedProviderId} value={selectedProviderId}>
+            <div className="space-y-2">
+                <Label>Send From (Internal Account)</Label>
+                 <Select name="creditAccountId" required onValueChange={setRecordingAccountId} value={recordingAccountId}>
                     <SelectTrigger>
-                        <SelectValue placeholder="Select a service provider..." />
+                        <SelectValue placeholder="Select an internal USDT wallet..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {serviceProviders.map(provider => (
-                             <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>
+                        {usdtAccounts.map(account => (
+                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
+                 {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
             </div>
 
             <div className="space-y-2">
@@ -122,21 +127,6 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
             )}
 
             <div className="space-y-2">
-                <Label>Send From (Internal Account)</Label>
-                 <Select name="creditAccountId" required>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select an internal USDT wallet..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {usdtAccounts.map(account => (
-                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                 {state?.errors?.creditAccountId && <p className="text-destructive text-sm">{state.errors.creditAccountId[0]}</p>}
-            </div>
-
-            <div className="space-y-2">
                 <Label htmlFor="auto_amount">Amount (USDT)</Label>
                 <Input id="auto_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
                 {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
@@ -146,7 +136,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
              <DialogClose asChild>
                 <Button type="button" variant="secondary">Cancel</Button>
             </DialogClose>
-            <SubmitButton />
+            <SubmitButton disabled={!recordingAccountId || !activeProvider} />
         </DialogFooter>
     </form>
   );

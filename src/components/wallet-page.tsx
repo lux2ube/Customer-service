@@ -107,14 +107,15 @@ function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);
     const [addressInput, setAddressInput] = React.useState('');
-    const [selectedProviderId, setSelectedProviderId] = React.useState<string>(
-        serviceProviders.find(p => p.type === 'Crypto')?.id || ''
-    );
+
+    const activeProvider = React.useMemo(() => {
+        return serviceProviders.find(p => p.accountIds.includes(recordingAccountId));
+    }, [serviceProviders, recordingAccountId]);
 
     const clientCryptoAddresses = React.useMemo(() => {
-        if (!selectedClient || !selectedClient.serviceProviders || !selectedProviderId) return [];
-        return selectedClient.serviceProviders.filter(sp => sp.providerId === selectedProviderId && sp.details.Address);
-    }, [selectedClient, selectedProviderId]);
+        if (!selectedClient || !selectedClient.serviceProviders || !activeProvider) return [];
+        return selectedClient.serviceProviders.filter(sp => sp.providerId === activeProvider.id && sp.details.Address);
+    }, [selectedClient, activeProvider]);
 
     React.useEffect(() => {
         if (state?.error) {
@@ -216,7 +217,7 @@ function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <SendButton disabled={!recordingAccountId} />
+                    <SendButton disabled={!recordingAccountId || !activeProvider} />
                 </CardFooter>
             </form>
         </Card>
@@ -454,7 +455,8 @@ export function WalletView({ usdtAccounts }: { usdtAccounts: Account[] }) {
         const providersRef = ref(db, 'service_providers');
         get(providersRef).then(snapshot => {
             if (snapshot.exists()) {
-                setServiceProviders(Object.values(snapshot.val()));
+                const data = snapshot.val();
+                setServiceProviders(Object.keys(data).map(key => ({ id: key, ...data[key]})));
             }
         })
     }, [refreshDetails]);
