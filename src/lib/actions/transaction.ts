@@ -11,14 +11,20 @@ import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientSe
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
+import { normalizeArabic } from '../utils';
 
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
 
     try {
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        if (!clientSnapshot.exists()) return [];
+        const client = clientSnapshot.val() as Client;
+        const normalizedClientName = normalizeArabic(client.name.toLowerCase());
+
         const [cashRecordsSnapshot, usdtRecordsSnapshot] = await Promise.all([
-            get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
-            get(query(ref(db, 'usdt_records'), orderByChild('clientId'), equalTo(clientId))),
+            get(ref(db, 'cash_records')),
+            get(ref(db, 'usdt_records')),
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
@@ -26,7 +32,14 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (cashRecordsSnapshot.exists()) {
             const cashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             Object.entries(cashRecords).forEach(([id, record]) => {
-                if (record.status === 'Matched') {
+                const isMatched = record.status === 'Matched' && record.clientId === clientId;
+                const isPendingSmsMatch = 
+                    record.status === 'Pending' &&
+                    record.source === 'SMS' &&
+                    record.senderName &&
+                    normalizeArabic(record.senderName.toLowerCase()) === normalizedClientName;
+                
+                if (isMatched || isPendingSmsMatch) {
                     unifiedRecords.push({
                         id,
                         date: record.date,
@@ -48,7 +61,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         if (usdtRecordsSnapshot.exists()) {
             const usdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
              Object.entries(usdtRecords).forEach(([id, record]) => {
-                if (record.status === 'Confirmed') { // USDT records are 'Confirmed' instead of 'Matched'
+                if (record.status === 'Confirmed' && record.clientId === clientId) {
                      unifiedRecords.push({
                         id,
                         date: record.date,
@@ -134,7 +147,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const allLinkedRecords = linkedRecordIds.map(id => {
             const record = allCashRecords[id] || allUsdtRecords[id];
             return record ? { ...record, id } : null;
-        }).filter(r => r && (r.status === 'Matched' || r.status === 'Confirmed'));
+        }).filter(r => r && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
 
 
         if (allLinkedRecords.length !== linkedRecordIds.length) {
@@ -185,8 +198,13 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         for (const record of allLinkedRecords) {
             if (!record) continue;
-            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}/status` : `/usdt_records/${record.id}/status`;
-            updates[recordPath] = 'Used';
+            const recordPath = allCashRecords[record.id] ? `/cash_records/${record.id}` : `/usdt_records/${record.id}`;
+            updates[`${recordPath}/status`] = 'Used';
+            // If it was a pending SMS, also assign the client ID now.
+            if (record.status === 'Pending') {
+                 updates[`${recordPath}/clientId`] = clientId;
+                 updates[`${recordPath}/clientName`] = client.name;
+            }
         }
         
         await update(ref(db), updates);
