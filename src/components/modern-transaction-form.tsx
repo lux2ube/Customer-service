@@ -97,6 +97,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         const fetchedRecords = await getUnifiedClientRecords(clientId);
         setRecords(fetchedRecords);
         setLoadingRecords(false);
+        return fetchedRecords;
     }, []);
 
     const handleClientSelect = React.useCallback((client: Client | null) => {
@@ -233,6 +234,14 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         setAutoProcessData({ amount: usdtAmount, address: latestAddress });
         setIsQuickAddUsdtOutOpen(true);
     };
+    
+    const onAutoProcessSuccess = async (newRecordId: string) => {
+        if (!selectedClient) return;
+        const freshRecords = await fetchAvailableFunds(selectedClient.id);
+        if (freshRecords.some(r => r.id === newRecordId)) {
+            setSelectedRecordIds(prev => [...prev, newRecordId]);
+        }
+    };
 
     return (
         <form action={async (formData) => {
@@ -257,7 +266,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             }
         }}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
+            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 

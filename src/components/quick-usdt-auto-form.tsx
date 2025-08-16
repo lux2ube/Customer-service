@@ -23,7 +23,7 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 interface QuickUsdtAutoFormProps {
   client: Client;
-  onPaymentSent: () => void;
+  onPaymentSent: (newRecordId: string) => void;
   setIsOpen: (open: boolean) => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
@@ -67,7 +67,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
     if (state && state !== stateRef.current) {
       if (state.success) {
         toast({ title: 'Success', description: state.message });
-        onPaymentSent();
+        onPaymentSent(state.newRecordId || '');
         setIsOpen(false);
         formRef.current?.reset();
       } else if (state.message) {

@@ -185,6 +185,7 @@ export type UsdtPaymentState = {
   };
   message?: string;
   success?: boolean;
+  newRecordId?: string;
 } | undefined;
 
 
@@ -218,7 +219,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         
         await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(paymentData));
         revalidatePath('/modern-usdt-records');
-        return { success: true, message: 'USDT manual payment recorded successfully.' };
+        return { success: true, message: 'USDT manual payment recorded successfully.', newRecordId: newId };
     } catch (e: any) {
         console.error("Error creating manual USDT payment:", e);
         return { message: 'Database Error: Could not record payment.', success: false };

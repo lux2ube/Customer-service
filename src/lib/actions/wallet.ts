@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -29,6 +30,7 @@ export type SendRequestState = {
     success?: boolean;
     error?: boolean;
     message?: string;
+    newRecordId?: string; // Add this to return the new record ID
     errors?: {
         recipientAddress?: string[];
         amount?: string[];
@@ -243,7 +245,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
         revalidatePath('/wallet');
         revalidatePath('/modern-usdt-records');
 
-        return { success: true, message: `Transaction successful! Hash: ${tx.hash}` };
+        return { success: true, message: `Transaction successful! Hash: ${tx.hash}`, newRecordId: newUsdtRecordId };
 
     } catch (e: any) {
         console.error("Error sending transaction:", e);

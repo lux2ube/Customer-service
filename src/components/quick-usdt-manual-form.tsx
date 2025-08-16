@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -9,14 +10,14 @@ import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import type { Client } from '@/lib/types';
-import { createUsdtManualPayment } from '@/lib/actions/financial-records';
+import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, ClipboardPaste } from 'lucide-react';
 import { ethers } from 'ethers';
 
 interface QuickUsdtManualFormProps {
   client: Client;
-  onPaymentCreated: () => void;
+  onPaymentCreated: (newRecordId: string) => void;
   setIsOpen: (open: boolean) => void;
 }
 
@@ -44,7 +45,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
     if (state && state !== stateRef.current) {
       if (state.success) {
         toast({ title: 'Success', description: state.message });
-        onPaymentCreated();
+        onPaymentCreated(state.newRecordId || '');
         setIsOpen(false);
         formRef.current?.reset();
       } else if (state.message) {
@@ -101,4 +102,3 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
     </form>
   );
 }
-
