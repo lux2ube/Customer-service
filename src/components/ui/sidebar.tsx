@@ -13,9 +13,6 @@ import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -24,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { DialogTitle } from "@radix-ui/react-dialog"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -207,6 +205,7 @@ const Sidebar = React.forwardRef<
             side={side}
             className="w-[var(--sidebar-width-mobile)] p-0"
           >
+            <DialogTitle className="sr-only">Mobile Sidebar</DialogTitle>
             <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
               {children}
             </div>
