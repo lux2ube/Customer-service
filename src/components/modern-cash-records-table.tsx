@@ -18,7 +18,7 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare, Trash2, ArrowRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -215,6 +215,13 @@ export function ModernCashRecordsTable() {
                            <DropdownMenu>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                    {(record.status === 'Matched' || record.status === 'Confirmed') && record.clientId && (
+                                        <DropdownMenuItem asChild>
+                                            <Link href={`/transactions/modern?type=${record.type === 'inflow' ? 'Deposit' : 'Withdraw'}&clientId=${record.clientId}&linkedRecordIds=${record.id}`}>
+                                                <ArrowRight className="mr-2 h-4 w-4" /> Process
+                                            </Link>
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem asChild>
                                         <Link href={`/modern-cash-records/${record.id}/edit`}>
                                             <Pencil className="mr-2 h-4 w-4" /> Edit

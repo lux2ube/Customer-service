@@ -28,6 +28,7 @@ import { QuickAddUsdtInflow } from './quick-add-usdt-inflow';
 import { QuickAddCashOutflow } from './quick-add-cash-outflow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { useSearchParams } from 'next/navigation';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -69,6 +70,7 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
 }
 
 export function ModernTransactionForm({ initialClients, allAccounts, serviceProviders, defaultRecordingAccountId }: { initialClients: Client[], allAccounts: Account[], serviceProviders: ServiceProvider[], defaultRecordingAccountId: string }) {
+    const searchParams = useSearchParams();
     const [transactionType, setTransactionType] = React.useState<Transaction['type'] | null>(null);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
@@ -105,6 +107,27 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         setRecords(fetchedRecords);
         setLoadingRecords(false);
     }, []);
+
+    // Effect to handle URL parameters on initial load
+    React.useEffect(() => {
+        const typeParam = searchParams.get('type') as Transaction['type'] | null;
+        const clientIdParam = searchParams.get('clientId');
+        const recordIdsParam = searchParams.get('linkedRecordIds');
+
+        if (typeParam) {
+            setTransactionType(typeParam);
+        }
+        if (clientIdParam) {
+            const client = initialClients.find(c => c.id === clientIdParam);
+            if (client) {
+                handleClientSelect(client);
+            }
+        }
+        if (recordIdsParam) {
+            setSelectedRecordIds(recordIdsParam.split(','));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     const handleClientSelect = async (client: Client | null) => {
         setSelectedClient(client);
@@ -232,7 +255,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                         <CardTitle>Step 2: Select a Client</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ClientSelector onSelect={handleClientSelect} />
+                        <ClientSelector onSelect={handleClientSelect} selectedClient={selectedClient} />
                     </CardContent>
                 </Card>
                 )}
@@ -403,13 +426,17 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
 }
 
 
-function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => void; }) {
+function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
-    const [inputValue, setInputValue] = React.useState("");
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || "");
     const [searchResults, setSearchResults] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        setInputValue(selectedClient?.name || '');
+    }, [selectedClient]);
 
     React.useEffect(() => {
         if (inputValue.length < 2) {
@@ -476,7 +503,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
                         <CommandGroup>
                             {searchResults.map(client => (
                                 <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
-                                    <Check className={cn("mr-2 h-4 w-4", inputValue === client.name ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span>{client.name}</span>
                                         <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
