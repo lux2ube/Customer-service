@@ -180,26 +180,36 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
         
         const totalInflowUSD = allLinkedRecords.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amount_usd, 0);
-        
-        const usdtOutflowAmount = allLinkedRecords.filter(r => r.type === 'outflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-        
         const totalOutflowUSD = allLinkedRecords.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amount_usd, 0);
         
         let fee = 0;
-        
-        if (type === 'Deposit' && usdtOutflowAmount > 0) {
-            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_buy_fee || 0;
-            const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
-            fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
+        let feePercent = 0;
+        let minFee = 0;
+        let baseAmountForFee = 0;
+
+        if (type === 'Deposit') {
+            // Fee is based on USDT OUTFLOW. USDT Outflow is what remains from the fiat inflow after the fee.
+            baseAmountForFee = totalInflowUSD;
+            feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
+            minFee = cryptoFees.minimum_buy_fee || 0;
+            if ((1 + feePercent) > 0) {
+                const calculatedFee = (baseAmountForFee * feePercent) / (1 + feePercent);
+                fee = Math.max(calculatedFee, baseAmountForFee > 0 ? minFee : 0);
+            }
         } else if (type === 'Withdraw') {
-             const usdtInflowAmount = allLinkedRecords.filter(r => r.type === 'inflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-             if (usdtInflowAmount > 0) {
-                const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-                const minFee = cryptoFees.minimum_sell_fee || 0;
-                const calculatedFee = usdtInflowAmount * feePercent;
-                fee = Math.max(calculatedFee, minFee);
-             }
+            // Fee is based on USDT INFLOW.
+            baseAmountForFee = allLinkedRecords.filter(r => r.type === 'inflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
+            feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+            minFee = cryptoFees.minimum_sell_fee || 0;
+            const calculatedFee = baseAmountForFee * feePercent;
+            fee = Math.max(calculatedFee, minFee);
+        } else if (type === 'Transfer') {
+             // For transfers, fee is on any USDT movement. We will assume a 'sell' fee for now.
+             baseAmountForFee = allLinkedRecords.filter(r => r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
+             feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+             minFee = cryptoFees.minimum_sell_fee || 0;
+             const calculatedFee = baseAmountForFee * feePercent;
+             fee = Math.max(calculatedFee, minFee);
         }
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
