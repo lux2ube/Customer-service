@@ -44,26 +44,24 @@ async function getPageData(): Promise<{ clients: Client[], allAccounts: Account[
 }
 
 
-export default function ModernTransactionPage() {
-    const [clients, setClients] = React.useState<Client[]>([]);
-    const [allAccounts, setAllAccounts] = React.useState<Account[]>([]);
-    const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
-    const [defaultRecordingAccountId, setDefaultRecordingAccountId] = React.useState<string>('');
-    const [loading, setLoading] = React.useState(true);
-    
+function FormLoader() {
+    const [data, setData] = React.useState<{
+        clients: Client[];
+        allAccounts: Account[];
+        serviceProviders: ServiceProvider[];
+        defaultRecordingAccountId: string;
+    } | null>(null);
+
     React.useEffect(() => {
         const fetchData = async () => {
-            const data = await getPageData();
-            setClients(data.clients);
-            setAllAccounts(data.allAccounts);
-            setServiceProviders(data.serviceProviders);
+            const pageData = await getPageData();
             
             const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
             const unsub = onValue(settingRef, (snapshot) => {
-                 if (snapshot.exists()) {
-                    setDefaultRecordingAccountId(snapshot.val());
-                }
-                setLoading(false);
+                 setData({
+                    ...pageData,
+                    defaultRecordingAccountId: snapshot.exists() ? snapshot.val() : ''
+                });
             });
             
             return () => unsub();
@@ -71,7 +69,21 @@ export default function ModernTransactionPage() {
         fetchData();
     }, []);
 
+    if (!data) {
+        return <div>Loading form...</div>;
+    }
 
+    return (
+        <ModernTransactionForm 
+            initialClients={data.clients} 
+            allAccounts={data.allAccounts}
+            serviceProviders={data.serviceProviders}
+            defaultRecordingAccountId={data.defaultRecordingAccountId}
+        />
+    );
+}
+
+export default function ModernTransactionPage() {
     return (
         <>
             <PageHeader
@@ -79,14 +91,7 @@ export default function ModernTransactionPage() {
                 description="Create a new transaction by linking multiple financial records for a client."
             />
             <Suspense fallback={<div>Loading form...</div>}>
-                {!loading && (
-                    <ModernTransactionForm 
-                        initialClients={clients} 
-                        allAccounts={allAccounts}
-                        serviceProviders={serviceProviders}
-                        defaultRecordingAccountId={defaultRecordingAccountId}
-                    />
-                )}
+                <FormLoader />
             </Suspense>
         </>
     );
