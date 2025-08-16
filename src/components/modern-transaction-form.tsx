@@ -129,8 +129,8 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             return { totalInflowUSD: 0, totalOutflowUSD: 0, fee: 0, difference: 0 };
         }
 
-        const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amountUsd, 0);
-        const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amountUsd, 0);
+        const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
+        const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
         
         let baseAmountForFee = 0;
         if (transactionType === 'Deposit') { // Fee is on the USDT they GET
@@ -235,7 +235,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                 </Card>
                 )}
 
-                {/* Step 3 */}
                 {selectedClient && (
                     <Card>
                         <CardHeader>

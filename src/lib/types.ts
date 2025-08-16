@@ -106,7 +106,7 @@ export interface CashRecord {
     recipientName?: string; // For outflows
     amount: number;
     currency: string;
-    amountUsd: number;
+    amount_usd: number;
     notes?: string;
     rawSms?: string;
     createdAt: string;
@@ -138,7 +138,7 @@ export interface UnifiedFinancialRecord {
   source: 'Manual' | 'SMS' | 'BSCScan';
   amount: number;
   currency: string;
-  amountUsd: number;
+  amount_usd: number;
   status: string;
   bankAccountName?: string; // from CashRecord
   cryptoWalletName?: string; // from UsdtRecord
