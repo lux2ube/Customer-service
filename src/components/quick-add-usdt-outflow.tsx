@@ -26,13 +26,32 @@ interface QuickAddUsdtOutflowProps {
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
   defaultRecordingAccountId: string;
+  autoProcessData?: { amount: number, address?: string } | null;
+  onDialogClose?: () => void;
 }
 
-export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated, usdtAccounts, serviceProviders, defaultRecordingAccountId }: QuickAddUsdtOutflowProps) {
+export function QuickAddUsdtOutflow({ 
+    client, 
+    isOpen, 
+    setIsOpen, 
+    onRecordCreated, 
+    usdtAccounts, 
+    serviceProviders, 
+    defaultRecordingAccountId,
+    autoProcessData,
+    onDialogClose
+}: QuickAddUsdtOutflowProps) {
   if (!client) return null;
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open && onDialogClose) {
+        onDialogClose();
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add USDT Outflow for {client.name}</DialogTitle>
@@ -40,7 +59,7 @@ export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated
             Choose to record manually, send live, or match an unassigned BSCScan transaction.
           </DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="auto" className="w-full">
+        <Tabs defaultValue={autoProcessData ? "auto" : "manual"} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="manual">Manual Record</TabsTrigger>
             <TabsTrigger value="auto">Auto Send</TabsTrigger>
@@ -50,7 +69,7 @@ export function QuickAddUsdtOutflow({ client, isOpen, setIsOpen, onRecordCreated
             <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
           </TabsContent>
            <TabsContent value="auto">
-            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} />
+            <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} autoProcessData={autoProcessData} />
           </TabsContent>
           <TabsContent value="match">
              <MatchUnassignedBscTxForm client={client} onTxMatched={onRecordCreated} setIsOpen={setIsOpen} />

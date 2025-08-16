@@ -13,7 +13,7 @@ import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction, Account, S
 import { createModernTransaction, searchClients, getUnifiedClientRecords } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste, Send, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste, Send, X, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -82,6 +82,9 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     const [isQuickAddUsdtOutOpen, setIsQuickAddUsdtOutOpen] = React.useState(false);
     const [isQuickAddUsdtInOpen, setIsQuickAddUsdtInOpen] = React.useState(false);
     const [isQuickAddCashOutOpen, setIsQuickAddCashOutOpen] = React.useState(false);
+    
+    const [autoProcessData, setAutoProcessData] = React.useState<{amount: number, address?: string} | null>(null);
+
 
     const { toast } = useToast();
 
@@ -138,7 +141,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             setSelectedRecordIds(recordIdsParam.split(','));
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, initialClients, handleClientSelect]);
+    }, [searchParams, initialClients]);
 
 
     const handleSelectionChange = (id: string, selected: boolean) => {
@@ -185,6 +188,25 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         }
     }, [records]);
 
+    const handleAutoProcess = () => {
+        const selectedFiatInflows = records.filter(r => selectedRecordIds.includes(r.id) && r.type === 'inflow' && r.category === 'fiat');
+        const usdtAmount = selectedFiatInflows.reduce((sum, r) => sum + (r.amount_usd || 0), 0);
+        
+        if (usdtAmount <= 0) {
+            toast({
+                variant: 'destructive',
+                title: 'No Fiat Inflow Selected',
+                description: 'Please select one or more cash/fiat inflow records to auto-process.'
+            });
+            return;
+        }
+        
+        const clientHasAddress = selectedClient?.serviceProviders?.some(p => p.providerType === 'Crypto' && p.details.Address);
+        const latestAddress = clientHasAddress ? selectedClient.serviceProviders.find(p => p.providerType === 'Crypto' && p.details.Address)?.details.Address : undefined;
+
+        setAutoProcessData({ amount: usdtAmount, address: latestAddress });
+        setIsQuickAddUsdtOutOpen(true);
+    };
 
     return (
         <form action={async (formData) => {
@@ -209,7 +231,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             }
         }}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
@@ -288,7 +310,10 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                                              <div className="space-y-2">
                                                  <div className="flex justify-between items-center mb-2">
                                                     <Label>Client Gets (USDT)</Label>
-                                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button type="button" variant="outline" size="sm" onClick={handleAutoProcess}><Bot className="mr-2 h-4 w-4" />Auto Process</Button>
+                                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
+                                                    </div>
                                                 </div>
                                                  <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                              </div>

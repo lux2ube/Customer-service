@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -27,6 +28,7 @@ interface QuickUsdtAutoFormProps {
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
   defaultRecordingAccountId: string;
+  autoProcessData?: { amount: number, address?: string } | null;
 }
 
 function SubmitButton({ disabled }: { disabled?: boolean }) {
@@ -39,14 +41,15 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
     );
 }
 
-export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders, defaultRecordingAccountId }: QuickUsdtAutoFormProps) {
+export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders, defaultRecordingAccountId, autoProcessData }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
   
-  const [addressInput, setAddressInput] = React.useState('');
-  const [isAddingNew, setIsAddingNew] = React.useState(false);
+  const [addressInput, setAddressInput] = React.useState(autoProcessData?.address || '');
+  const [amountInput, setAmountInput] = React.useState(autoProcessData?.amount?.toString() || '');
+  const [isAddingNew, setIsAddingNew] = React.useState(!autoProcessData?.address);
 
   const activeProvider = React.useMemo(() => {
     if (!defaultRecordingAccountId) return null;
@@ -144,7 +147,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
 
             <div className="space-y-2">
                 <Label htmlFor="auto_amount">Amount (USDT)</Label>
-                <Input id="auto_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
+                <Input id="auto_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required value={amountInput} onChange={e => setAmountInput(e.target.value)} />
                  {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
             </div>
              {!activeProvider && (
