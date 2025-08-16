@@ -89,6 +89,24 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     const incomeAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Income'), [allAccounts]);
     const expenseAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Expenses'), [allAccounts]);
 
+    const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
+        setLoadingRecords(true);
+        const fetchedRecords = await getUnifiedClientRecords(clientId);
+        setRecords(fetchedRecords);
+        setLoadingRecords(false);
+    }, []);
+
+    const handleClientSelect = React.useCallback((client: Client | null) => {
+        setSelectedClient(client);
+        setSelectedRecordIds([]); // Reset selections when client changes
+        if (client) {
+            fetchAvailableFunds(client.id);
+        } else {
+            setRecords([]);
+        }
+    }, [fetchAvailableFunds]);
+
+
     React.useEffect(() => {
         const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
         const unsubFees = onValue(feesRef, (snapshot) => {
@@ -99,13 +117,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             }
         });
         return () => unsubFees();
-    }, []);
-
-    const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
-        setLoadingRecords(true);
-        const fetchedRecords = await getUnifiedClientRecords(clientId);
-        setRecords(fetchedRecords);
-        setLoadingRecords(false);
     }, []);
 
     // Effect to handle URL parameters on initial load
@@ -120,26 +131,15 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         if (clientIdParam) {
             const client = initialClients.find(c => c.id === clientIdParam);
             if (client) {
-                handleClientSelect(client, true); // Pass true to indicate it's from a URL param
+                handleClientSelect(client);
             }
         }
         if (recordIdsParam) {
             setSelectedRecordIds(recordIdsParam.split(','));
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
+    }, [searchParams, initialClients, handleClientSelect]);
 
-    const handleClientSelect = async (client: Client | null, fromUrl = false) => {
-        setSelectedClient(client);
-        setSelectedRecordIds([]);
-        if (client) {
-            if (!fromUrl) { // Only fetch if not triggered by URL param, as that effect handles it
-                fetchAvailableFunds(client.id);
-            }
-        } else {
-            setRecords([]);
-        }
-    };
 
     const handleSelectionChange = (id: string, selected: boolean) => {
         // Defer state update to prevent flushSync error
