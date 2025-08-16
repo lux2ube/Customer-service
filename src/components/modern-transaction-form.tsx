@@ -13,7 +13,7 @@ import type { Client, UnifiedFinancialRecord, CryptoFee, Transaction, Account, S
 import { createModernTransaction, searchClients, getUnifiedClientRecords } from '@/lib/actions';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste, Send } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Save, ArrowDown, ArrowUp, PlusCircle, Repeat, ClipboardPaste, Send, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -120,7 +120,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         if (clientIdParam) {
             const client = initialClients.find(c => c.id === clientIdParam);
             if (client) {
-                handleClientSelect(client);
+                handleClientSelect(client, true); // Pass true to indicate it's from a URL param
             }
         }
         if (recordIdsParam) {
@@ -129,11 +129,13 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
 
-    const handleClientSelect = async (client: Client | null) => {
+    const handleClientSelect = async (client: Client | null, fromUrl = false) => {
         setSelectedClient(client);
         setSelectedRecordIds([]);
         if (client) {
-            fetchAvailableFunds(client.id);
+            if (!fromUrl) { // Only fetch if not triggered by URL param, as that effect handles it
+                fetchAvailableFunds(client.id);
+            }
         } else {
             setRecords([]);
         }
@@ -436,11 +438,17 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
 
     React.useEffect(() => {
         setInputValue(selectedClient?.name || '');
+         if (selectedClient) {
+            // When a client is selected (especially from URL), don't show the dropdown
+            setIsOpen(false);
+        }
     }, [selectedClient]);
 
     React.useEffect(() => {
-        if (inputValue.length < 2) {
+         // Don't trigger search if a client is already selected
+        if (selectedClient || inputValue.length < 2) {
             setSearchResults([]);
+            setIsOpen(false);
             return;
         }
 
@@ -463,7 +471,7 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
                 clearTimeout(debounceTimeoutRef.current);
             }
         };
-    }, [inputValue]);
+    }, [inputValue, selectedClient]);
 
     const handleSelect = (client: Client) => {
         onSelect(client);
@@ -471,6 +479,11 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         setInputValue(client.name);
     };
     
+    const handleClear = () => {
+        onSelect(null);
+        setInputValue('');
+    };
+
     const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
     
     const handlePaste = async () => {
@@ -487,12 +500,21 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
                             placeholder="Search client by name, phone, or paste address..."
                             value={inputValue}
                             onValueChange={setInputValue}
-                            className="pr-10"
+                            className="pr-16"
+                            disabled={!!selectedClient}
                         />
                     </Command>
-                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={handlePaste}>
-                        <ClipboardPaste className="h-4 w-4" />
-                    </Button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                        {selectedClient ? (
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleClear}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        ) : (
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handlePaste}>
+                                <ClipboardPaste className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
