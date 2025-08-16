@@ -164,7 +164,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         
         let baseAmountForFee = 0;
         if (transactionType === 'Deposit') { // Fee is on the USDT they GET
-            baseAmountForFee = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+             baseAmountForFee = totalInflowUSD;
         } else if (transactionType === 'Withdraw') { // Fee is on the USDT they GIVE
             baseAmountForFee = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
         }
@@ -172,7 +172,22 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         const feePercent = (transactionType === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
         const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         
-        const fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
+        let fee = 0;
+        if(transactionType === 'Deposit') {
+             // For deposits, the fee is part of the inflow. UsdtAmount = TotalInflow - Fee
+             // Fee = UsdtAmount * feePercent => Fee = (TotalInflow - Fee) * feePercent
+             // Fee = TotalInflow * feePercent - Fee * feePercent
+             // Fee * (1 + feePercent) = TotalInflow * feePercent
+             // Fee = (TotalInflow * feePercent) / (1 + feePercent)
+             if ((1 + feePercent) > 0) {
+                 const calculatedFee = (baseAmountForFee * feePercent) / (1 + feePercent);
+                 fee = Math.max(calculatedFee, baseAmountForFee > 0 ? minFee : 0);
+             }
+        } else {
+            // For withdrawals, fee is on top of the USDT received.
+            fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
+        }
+
 
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
         
@@ -190,9 +205,9 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
 
     const handleAutoProcess = () => {
         const selectedFiatInflows = records.filter(r => selectedRecordIds.includes(r.id) && r.type === 'inflow' && r.category === 'fiat');
-        const usdtAmount = selectedFiatInflows.reduce((sum, r) => sum + (r.amount_usd || 0), 0);
+        const totalFiatInflowUsd = selectedFiatInflows.reduce((sum, r) => sum + (r.amount_usd || 0), 0);
         
-        if (usdtAmount <= 0) {
+        if (totalFiatInflowUsd <= 0 || !cryptoFees) {
             toast({
                 variant: 'destructive',
                 title: 'No Fiat Inflow Selected',
@@ -201,6 +216,17 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             return;
         }
         
+        const feePercent = cryptoFees.buy_fee_percent / 100;
+        const minFee = cryptoFees.minimum_buy_fee;
+
+        let fee = 0;
+        if ((1 + feePercent) > 0) {
+            const calculatedFee = (totalFiatInflowUsd * feePercent) / (1 + feePercent);
+            fee = Math.max(calculatedFee, totalFiatInflowUsd > 0 ? minFee : 0);
+        }
+        
+        const usdtAmount = totalFiatInflowUsd - fee;
+
         const clientHasAddress = selectedClient?.serviceProviders?.some(p => p.providerType === 'Crypto' && p.details.Address);
         const latestAddress = clientHasAddress ? selectedClient.serviceProviders.find(p => p.providerType === 'Crypto' && p.details.Address)?.details.Address : undefined;
 
@@ -461,19 +487,20 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-    React.useEffect(() => {
-        setInputValue(selectedClient?.name || '');
-         if (selectedClient) {
-            // When a client is selected (especially from URL), don't show the dropdown
+     React.useEffect(() => {
+        if(selectedClient) {
+            setInputValue(selectedClient.name);
             setIsOpen(false);
+        } else {
+            setInputValue("");
         }
     }, [selectedClient]);
 
     React.useEffect(() => {
-         // Don't trigger search if a client is already selected
-        if (selectedClient || inputValue.length < 2) {
+        if (selectedClient) return;
+
+        if (inputValue.length < 2) {
             setSearchResults([]);
-            setIsOpen(false);
             return;
         }
 
