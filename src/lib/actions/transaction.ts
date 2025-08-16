@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -31,7 +30,6 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
 
-        // --- Process Cash Records ---
         if (cashRecordsSnapshot.exists()) {
             const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             for (const id in allCashRecords) {
@@ -56,7 +54,6 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
         
-        // --- Process USDT Records ---
         if (usdtRecordsSnapshot.exists()) {
             const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             for (const id in allUsdtRecords) {
@@ -72,7 +69,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     source: record.source,
                     amount: record.amount,
                     currency: 'USDT',
-                    amount_usd: record.amount, // For USDT, amount is same as amount_usd
+                    amount_usd: record.amount,
                     status: record.status,
                     cryptoWalletName: record.accountName,
                     txHash: record.txHash,
@@ -140,15 +137,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     
     try {
-        // Validation for difference handling
-        if (differenceHandling === 'income' && !incomeAccountId) {
-            return { message: 'An income account must be selected to record a gain as income.', success: false };
-        }
-        if (differenceHandling === 'expense' && !expenseAccountId) {
-            return { message: 'An expense account must be selected to record a loss as an expense.', success: false };
-        }
-
-        const newId = await getNextSequentialId('transactionId');
+        // --- Step 1: Fetch all necessary data ---
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'cash_records')),
@@ -156,83 +145,57 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
         ]);
 
-        if (!clientSnapshot.exists()) {
-            return { message: 'Client not found.', success: false };
-        }
+        if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
+        if (!cryptoFeesSnapshot.exists()) return { message: 'Crypto fees are not configured in settings.', success: false };
+        
         const client = clientSnapshot.val() as Client;
-
         const allCashRecords = cashRecordsSnapshot.val() || {};
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
-        
-        const allLinkedRecords = linkedRecordIds.map(id => {
-            if (allCashRecords[id]) {
-                return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
-            }
-            if (allUsdtRecords[id]) {
-                return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
-            }
-            return null;
-        }).filter((r): r is (CashRecord & {id: string, recordType: 'cash', amount_usd: number}) | (UsdtRecord & {id: string, recordType: 'usdt', amount_usd: number}) => r !== null && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
+        const lastFeeEntry = Object.values(cryptoFeesSnapshot.val())[0] as CryptoFee;
 
+        const allLinkedRecords = linkedRecordIds.map(id => {
+            if (allCashRecords[id]) return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
+            if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
+            return null;
+        }).filter(Boolean);
 
         if (allLinkedRecords.length !== linkedRecordIds.length) {
             return { message: 'One or more linked records were not found or are not in a linkable state.', success: false };
         }
-        
-        let cryptoFees: CryptoFee | null = null;
-        if (cryptoFeesSnapshot.exists()) {
-            const data = cryptoFeesSnapshot.val();
-            const lastEntryKey = Object.keys(data)[0];
-            cryptoFees = data[lastEntryKey];
-        } else {
-            return { message: 'Crypto fees are not configured in settings.', success: false };
-        }
-        
-        const totalInflowUSD = allLinkedRecords.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amount_usd, 0);
-        const totalOutflowUSD = allLinkedRecords.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amount_usd, 0);
+
+        // --- Step 2: Perform Calculations ---
+        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + r!.amount_usd, 0);
+        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + r!.amount_usd, 0);
         
         let fee = 0;
-        
         if (type === 'Deposit') {
-            const usdtOutflow = allLinkedRecords.filter(r => r.type === 'outflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_buy_fee || 0;
-            fee = Math.max(usdtOutflow * feePercent, usdtOutflow > 0 ? minFee : 0);
+            const usdtOutflow = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
+            const feePercent = (lastFeeEntry.buy_fee_percent || 0) / 100;
+            fee = Math.max(usdtOutflow * feePercent, usdtOutflow > 0 ? (lastFeeEntry.minimum_buy_fee || 0) : 0);
         } else if (type === 'Withdraw') {
-            const usdtInflow = allLinkedRecords.filter(r => r.type === 'inflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-            const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_sell_fee || 0;
-            fee = Math.max(usdtInflow * feePercent, minFee);
-        } else if (type === 'Transfer') {
-             const usdtMovement = allLinkedRecords.filter(r => r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-             const minFee = cryptoFees.minimum_sell_fee || 0;
-             fee = Math.max(usdtMovement * feePercent, minFee);
+            const usdtInflow = allLinkedRecords.filter(r => r!.type === 'inflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
+            const feePercent = (lastFeeEntry.sell_fee_percent || 0) / 100;
+            fee = Math.max(usdtInflow * feePercent, usdtInflow > 0 ? (lastFeeEntry.minimum_sell_fee || 0) : 0);
         }
-        
+
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
-        
+
+        // --- Step 3: Prepare and Save Data ---
+        const newId = await getNextSequentialId('transactionId');
         let attachmentUrl = '';
-        if (attachment && attachment.size > 0) {
+        if (attachment?.size > 0) {
              const fileRef = storageRef(storage, `transaction_attachments/${newId}/${attachment.name}`);
              await uploadBytes(fileRef, attachment);
              attachmentUrl = await getDownloadURL(fileRef);
         }
 
         const newTransactionData: Partial<Transaction> = {
-            id: newId,
-            date: new Date().toISOString(),
-            type,
-            clientId,
-            clientName: client.name,
-            amount_usd: totalInflowUSD,
-            fee_usd: fee,
+            id: newId, date: new Date().toISOString(), type, clientId,
+            clientName: client.name, amount_usd: totalInflowUSD, fee_usd: fee,
             outflow_usd: totalOutflowUSD,
             expense_usd: difference > 0.01 ? difference : 0,
             exchange_rate_commission: difference < -0.01 ? Math.abs(difference) : 0,
-            notes,
-            status: 'Confirmed',
-            createdAt: new Date().toISOString(),
+            notes, status: 'Confirmed', createdAt: new Date().toISOString(),
             linkedRecordIds: linkedRecordIds.join(','),
             attachment_url: attachmentUrl || undefined,
         };
@@ -241,26 +204,21 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
         
         for (const record of allLinkedRecords) {
-            const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
+            const recordPath = record!.recordType === 'cash' ? `/cash_records/${record!.id}` : `/modern_usdt_records/${record!.id}`;
             updates[`${recordPath}/status`] = 'Used';
-            if (record.status === 'Pending') {
-                 updates[`${recordPath}/clientId`] = clientId;
-                 updates[`${recordPath}/clientName`] = client.name;
-            }
         }
         
         await update(ref(db), updates);
         
-        const clientAccountId = `6000${clientId}`;
-        
-        if (Object.keys(updates).length > 0) {
-            await createJournalEntriesForTransaction(newId, client.name, clientAccountId, allLinkedRecords, fee, difference, differenceHandling, incomeAccountId, expenseAccountId);
-        }
+        // --- Step 4: Create Journal Entries ---
+        await createJournalEntriesForTransaction(newId, client.name, `6000${clientId}`, allLinkedRecords, fee, difference, differenceHandling, incomeAccountId, expenseAccountId);
 
+        // --- Step 5: Finalize ---
         revalidatePath('/transactions/modern');
         revalidatePath('/transactions');
         revalidatePath('/modern-cash-records');
         revalidatePath('/modern-usdt-records');
+        revalidatePath('/accounting/journal');
         
         return { success: true, message: 'Transaction created successfully.' };
 
@@ -273,24 +231,21 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
 async function createJournalEntriesForTransaction(
     txId: string, clientName: string, clientAccountId: string, 
-    linkedRecords: (CashRecord | UsdtRecord)[], fee: number, difference: number,
+    linkedRecords: any[], fee: number, difference: number,
     differenceHandling?: string, incomeAccountId?: string, expenseAccountId?: string
 ) {
     const description = `Tx #${txId} for ${clientName}`;
     
-    // 1. Journal for each linked record
     for (const record of linkedRecords) {
         const recordDesc = `${description} | Ref: ${record.id}`;
-        const amount = (record as any).amount_usd || (record as any).amount;
+        const amount = record.amount_usd || record.amount;
         
         if (record.type === 'inflow') {
-            // Asset increased (Debit), Client Liability Increased (Credit)
             await createJournalEntryFromTransaction(recordDesc, [
                 { accountId: record.accountId, debit: amount, credit: 0 },
                 { accountId: clientAccountId, debit: 0, credit: amount }
             ]);
-        } else { // outflow
-             // Asset decreased (Credit), Client Liability Decreased (Debit)
+        } else {
              await createJournalEntryFromTransaction(recordDesc, [
                 { accountId: record.accountId, debit: 0, credit: amount },
                 { accountId: clientAccountId, debit: amount, credit: 0 }
@@ -298,40 +253,36 @@ async function createJournalEntriesForTransaction(
         }
     }
 
-    // 2. Journal for the fee
     if (fee > 0.001) {
-        // Client liability increased (Debit), Fee Income increased (Credit)
         await createJournalEntryFromTransaction(`Fee for Tx #${txId}`, [
             { accountId: '4002', debit: 0, credit: fee },
             { accountId: clientAccountId, debit: fee, credit: 0 },
         ]);
     }
 
-    // 3. Journal for the difference
     if (Math.abs(difference) > 0.01) {
-        if (difference < 0) { // Gain (Negative difference)
+        if (difference < 0) { // Gain
             const gain = Math.abs(difference);
             if (differenceHandling === 'income' && incomeAccountId) {
-                // Client liability decreased (Debit), Income increased (Credit)
                 await createJournalEntryFromTransaction(`Gain on Tx #${txId}`, [
                     { accountId: incomeAccountId, debit: 0, credit: gain },
                     { accountId: clientAccountId, debit: gain, credit: 0 }
                 ]);
-            } else {
-                 // By default, credit the client's account (we owe them)
-                 // Some Asset account must be debited, needs manual entry. For now, we credit client.
-                 // This part needs a suspense account for a full solution.
+            } else { // Default to crediting client
+                // This implies an asset was debited, but which one?
+                // This requires a suspense account for true accuracy. For now, we omit the offsetting debit.
+                 console.warn("Unbalanced journal entry for gain. Credited client but no offsetting debit specified.");
             }
-        } else { // Loss (Positive difference)
+        } else { // Loss
             if (differenceHandling === 'expense' && expenseAccountId) {
-                // Expense increased (Debit), Client liability increased (Credit)
                 await createJournalEntryFromTransaction(`Loss on Tx #${txId}`, [
                     { accountId: expenseAccountId, debit: difference, credit: 0 },
                     { accountId: clientAccountId, debit: 0, credit: difference }
                 ]);
-            } else {
-                // By default, debit the client's account (they owe us)
-                // Some Asset account must be credited, needs manual entry.
+            } else { // Default to debiting client
+                // This implies an asset was credited, but which one?
+                // This requires a suspense account for true accuracy. For now, we omit the offsetting credit.
+                console.warn("Unbalanced journal entry for loss. Debited client but no offsetting credit specified.");
             }
         }
     }

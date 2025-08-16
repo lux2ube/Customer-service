@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -102,7 +101,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
 
     const handleClientSelect = React.useCallback((client: Client | null) => {
         setSelectedClient(client);
-        setSelectedRecordIds([]); // Reset selections when client changes
+        setSelectedRecordIds([]);
         if (client) {
             fetchAvailableFunds(client.id);
         } else {
@@ -123,7 +122,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         return () => unsubFees();
     }, []);
 
-    // Effect to handle URL parameters on initial load
     React.useEffect(() => {
         const typeParam = searchParams.get('type') as Transaction['type'] | null;
         const clientIdParam = searchParams.get('clientId');
@@ -141,12 +139,10 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         if (recordIdsParam) {
             setSelectedRecordIds(recordIdsParam.split(','));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, initialClients]);
+    }, [searchParams, initialClients, handleClientSelect]);
 
 
     const handleSelectionChange = (id: string, selected: boolean) => {
-        // Defer state update to prevent flushSync error
         setTimeout(() => {
             setSelectedRecordIds(prev =>
                 selected ? [...prev, id] : prev.filter(recId => recId !== id)
@@ -163,27 +159,16 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
         const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
         
-        let baseAmountForFee = 0;
         let fee = 0;
 
-        if (transactionType === 'Deposit') {
-             // Fee is based on USDT OUTFLOW. USDT Outflow is what the client gets.
-            baseAmountForFee = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+        if (type === 'Deposit') {
+            const usdtOutflow = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_buy_fee || 0;
-            fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
-        } else if (transactionType === 'Withdraw') {
-            // Fee is based on USDT INFLOW.
-            baseAmountForFee = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+            fee = Math.max(usdtOutflow * feePercent, usdtOutflow > 0 ? (cryptoFees.minimum_buy_fee || 0) : 0);
+        } else if (type === 'Withdraw') {
+            const usdtInflow = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_sell_fee || 0;
-            fee = Math.max(baseAmountForFee * feePercent, minFee);
-        } else if (type === 'Transfer') {
-             // For transfers, fee is on any USDT movement. We will assume a 'sell' fee for now.
-             baseAmountForFee = selected.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
-             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-             const minFee = cryptoFees.minimum_sell_fee || 0;
-             fee = Math.max(baseAmountForFee * feePercent, minFee);
+            fee = Math.max(usdtInflow * feePercent, usdtInflow > 0 ? (cryptoFees.minimum_sell_fee || 0) : 0);
         }
 
 
@@ -214,16 +199,21 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             return;
         }
         
-        const feePercent = cryptoFees.buy_fee_percent / 100;
-        const minFee = cryptoFees.minimum_buy_fee;
+        const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
+        const minFee = cryptoFees.minimum_buy_fee || 0;
 
         let fee = 0;
+        let usdtAmount = 0;
+
         if ((1 + feePercent) > 0) {
-            const calculatedFee = (totalFiatInflowUsd * feePercent) / (1 + feePercent);
-            fee = Math.max(calculatedFee, totalFiatInflowUsd > 0 ? minFee : 0);
+            fee = (totalFiatInflowUsd * feePercent) / (1 + feePercent);
+            if (totalFiatInflowUsd > 0 && fee < minFee) {
+                fee = minFee;
+            }
+            usdtAmount = totalFiatInflowUsd - fee;
+        } else {
+            usdtAmount = totalFiatInflowUsd;
         }
-        
-        const usdtAmount = totalFiatInflowUsd - fee;
 
         const clientHasAddress = selectedClient?.serviceProviders?.some(p => p.providerType === 'Crypto' && p.details.Address);
         const latestAddress = clientHasAddress ? selectedClient.serviceProviders.find(p => p.providerType === 'Crypto' && p.details.Address)?.details.Address : undefined;
@@ -234,10 +224,8 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     
     const onAutoProcessSuccess = async (newRecordId: string) => {
         if (!selectedClient) return;
-        const freshRecords = await fetchAvailableFunds(selectedClient.id);
-        if (freshRecords.some(r => r.id === newRecordId)) {
-            setSelectedRecordIds(prev => [...prev, newRecordId]);
-        }
+        await fetchAvailableFunds(selectedClient.id);
+        setSelectedRecordIds(prev => [...prev, newRecordId]);
     };
 
     return (
@@ -255,10 +243,10 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
             
             const result = await createModernTransaction(undefined, formData);
-            if(result.success) {
+            if(result?.success) {
                 toast({ title: 'Success', description: 'Transaction created successfully.' });
-                handleClientSelect(selectedClient); // Refresh records
-            } else {
+                handleClientSelect(selectedClient);
+            } else if(result?.message) {
                 toast({ variant: 'destructive', title: 'Error', description: result.message });
             }
         }}>
@@ -268,7 +256,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
             <div className="space-y-4">
-                {/* Step 1 */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Step 1: Select Transaction Type</CardTitle>
@@ -304,7 +291,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                     </CardContent>
                 </Card>
                 
-                {/* Step 2 */}
                 {transactionType && (
                 <Card>
                     <CardHeader>
@@ -388,7 +374,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                 )}
 
 
-                {/* Step 4 */}
                 {selectedRecordIds.length > 0 && (
                     <Card>
                         <CardHeader>
@@ -419,15 +404,11 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                             {Math.abs(calculation.difference) > 0.01 && (
                                 <div className="pt-4 border-t mt-4">
                                      <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
-                                    {calculation.difference < -0.01 ? ( // We gained money (negative difference)
-                                        <RadioGroup name="differenceHandling" defaultValue="credit" className="mt-2 space-y-2">
+                                    {calculation.difference < -0.01 ? (
+                                        <RadioGroup name="differenceHandling" defaultValue="income" className="mt-2 space-y-2">
                                             <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="credit" id="diff-credit" />
-                                                <Label htmlFor="diff-credit" className="font-normal">Credit Client Account (We owe client)</Label>
-                                            </div>
-                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="income" id="diff-income" />
-                                                <Label htmlFor="diff-income" className="font-normal">Record as Income</Label>
+                                                <Label htmlFor="diff-income" className="font-normal">Record as Income (Gain)</Label>
                                             </div>
                                             <Select name="incomeAccountId">
                                                 <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select income account..." /></SelectTrigger>
@@ -436,12 +417,8 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                                                 </SelectContent>
                                             </Select>
                                         </RadioGroup>
-                                    ) : ( // We lost money (positive difference)
-                                         <RadioGroup name="differenceHandling" defaultValue="debit" className="mt-2 space-y-2">
-                                             <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="debit" id="diff-debit" />
-                                                <Label htmlFor="diff-debit" className="font-normal">Debit Client Account (Client owes us)</Label>
-                                            </div>
+                                    ) : (
+                                         <RadioGroup name="differenceHandling" defaultValue="expense" className="mt-2 space-y-2">
                                              <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="expense" id="diff-expense" />
                                                 <Label htmlFor="diff-expense" className="font-normal">Record as an Expense/Discount</Label>
@@ -460,7 +437,6 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                     </Card>
                 )}
 
-                 {/* Step 5 */}
                  {selectedRecordIds.length > 0 && (
                     <Card>
                         <CardHeader><CardTitle>Step 5: Final Details</CardTitle></CardHeader>
@@ -600,4 +576,3 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
-
