@@ -19,7 +19,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
