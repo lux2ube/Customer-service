@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -116,9 +115,11 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     };
 
     const handleSelectionChange = (id: string, selected: boolean) => {
-        setSelectedRecordIds(prev =>
-            selected ? [...prev, id] : prev.filter(recId => recId !== id)
-        );
+        setTimeout(() => {
+             setSelectedRecordIds(prev =>
+                selected ? [...prev, id] : prev.filter(recId => recId !== id)
+            );
+        }, 0);
     };
 
     const calculation = React.useMemo(() => {
