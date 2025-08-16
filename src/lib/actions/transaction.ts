@@ -178,7 +178,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         let baseAmountForFee = 0;
         if (type === 'Deposit') { // Fee is on the USDT they GET
-             baseAmountForFee = totalOutflowUSD;
+             baseAmountForFee = totalInflowUSD;
         } else if (type === 'Withdraw') { // Fee is on the USDT they GIVE
             baseAmountForFee = allLinkedRecords.filter(r => r!.type === 'inflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
         }
@@ -194,8 +194,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
              // Fee * (1 + feePercent) = TotalInflow * feePercent
              // Fee = (TotalInflow * feePercent) / (1 + feePercent)
              if ((1 + feePercent) > 0) {
-                 const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
-                 fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
+                 const calculatedFee = (baseAmountForFee * feePercent) / (1 + feePercent);
+                 fee = Math.max(calculatedFee, baseAmountForFee > 0 ? minFee : 0);
              }
         } else {
             // For withdrawals, fee is on top of the USDT received.
