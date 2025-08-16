@@ -163,7 +163,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                 return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             }
             return null;
-        }).filter(r => r !== null && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
+        }).filter((r): r is (CashRecord & {id: string, recordType: 'cash', amount_usd: number}) | (UsdtRecord & {id: string, recordType: 'usdt', amount_usd: number}) => r !== null && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
 
 
         if (allLinkedRecords.length !== linkedRecordIds.length) {
@@ -179,21 +179,27 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             return { message: 'Crypto fees are not configured in settings.', success: false };
         }
         
-        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + r!.amount_usd, 0);
+        const totalInflowUSD = allLinkedRecords.filter(r => r.type === 'inflow').reduce((sum, r) => sum + r.amount_usd, 0);
         
-        const usdtOutflowRecords = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'usdt');
-        const usdtOutflowAmount = usdtOutflowRecords.reduce((sum, r) => sum + r!.amount, 0);
-        const usdtOutflowUsd = usdtOutflowRecords.reduce((sum, r) => sum + r!.amount_usd, 0);
-        const fiatOutflowUsd = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'cash').reduce((sum, r) => sum + r!.amount_usd, 0);
-        const totalOutflowUSD = usdtOutflowUsd + fiatOutflowUsd;
+        const usdtOutflowAmount = allLinkedRecords.filter(r => r.type === 'outflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
+        
+        const totalOutflowUSD = allLinkedRecords.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amount_usd, 0);
         
         let fee = 0;
         
         if (type === 'Deposit' && usdtOutflowAmount > 0) {
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_buy_fee || 0;
-            const calculatedFee = usdtOutflowAmount * feePercent;
-            fee = Math.max(calculatedFee, usdtOutflowAmount > 0 ? minFee : 0);
+            const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
+            fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
+        } else if (type === 'Withdraw') {
+             const usdtInflowAmount = allLinkedRecords.filter(r => r.type === 'inflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
+             if (usdtInflowAmount > 0) {
+                const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+                const minFee = cryptoFees.minimum_sell_fee || 0;
+                const calculatedFee = usdtInflowAmount * feePercent;
+                fee = Math.max(calculatedFee, minFee);
+             }
         }
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
@@ -234,7 +240,6 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
         
         for (const record of allLinkedRecords) {
-            if (!record) continue;
             const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
             if (record.status === 'Pending') {
@@ -247,42 +252,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         const clientAccountId = `6000${clientId}`;
         
-        // 1. Journal for the Fee
-        if (fee > 0.001) {
-            const feeDesc = `Fee for Tx #${newId} (${type})`;
-            const feeLegs = [
-                { accountId: '4002', debit: 0, credit: fee }, // Credit Fee Income
-                { accountId: clientAccountId, debit: fee, credit: 0 }, // Debit Client Liability
-            ];
-            await createJournalEntryFromTransaction(feeDesc, feeLegs);
-        }
-
-        // 2. Journal for the Exchange Difference
-        if (Math.abs(difference) > 0.01) {
-            let diffDesc = `Difference on Tx #${newId}`;
-            let diffLegs: { accountId: string; debit: number; credit: number; }[] = [];
-            
-            if (difference < -0.01) { // We gained money
-                const gain = Math.abs(difference);
-                if (differenceHandling === 'income' && incomeAccountId) {
-                    diffLegs.push({ accountId: incomeAccountId, debit: 0, credit: gain });
-                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); 
-                } else if (differenceHandling === 'credit') {
-                    // This case doesn't require a separate journal entry as it's part of the main transaction balance
-                }
-            } else { // We lost money
-                const loss = difference;
-                 if (differenceHandling === 'expense' && expenseAccountId) {
-                    diffLegs.push({ accountId: expenseAccountId, debit: loss, credit: 0 });
-                    diffLegs.push({ accountId: clientAccountId, debit: 0, credit: loss }); 
-                 } else if (differenceHandling === 'debit') {
-                     // This case doesn't require a separate journal entry as it's part of the main transaction balance
-                 }
-            }
-
-            if(diffLegs.length > 0) {
-                await createJournalEntryFromTransaction(diffDesc, diffLegs);
-            }
+        if (Object.keys(updates).length > 0) {
+            await createJournalEntriesForTransaction(newId, client.name, clientAccountId, allLinkedRecords, fee, difference, differenceHandling, incomeAccountId, expenseAccountId);
         }
 
         revalidatePath('/transactions/modern');
@@ -295,6 +266,56 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     } catch (e: any) {
         console.error("Error creating modern transaction:", e);
         return { message: 'Database Error: Could not create transaction.', success: false };
+    }
+}
+
+
+async function createJournalEntriesForTransaction(
+    txId: string, clientName: string, clientAccountId: string, 
+    linkedRecords: (CashRecord | UsdtRecord)[], fee: number, difference: number,
+    differenceHandling?: string, incomeAccountId?: string, expenseAccountId?: string
+) {
+    const description = `Tx #${txId} for ${clientName}`;
+    
+    for (const record of linkedRecords) {
+        const recordDesc = `${description} | Ref: ${record.id}`;
+        const amount = (record as any).amount_usd || (record as any).amount;
+        if (record.type === 'inflow') {
+            await createJournalEntryFromTransaction(recordDesc, [
+                { accountId: record.accountId, debit: amount, credit: 0 },
+                { accountId: clientAccountId, debit: 0, credit: amount }
+            ]);
+        } else { // outflow
+             await createJournalEntryFromTransaction(recordDesc, [
+                { accountId: record.accountId, debit: 0, credit: amount },
+                { accountId: clientAccountId, debit: amount, credit: 0 }
+            ]);
+        }
+    }
+
+    if (fee > 0.001) {
+        await createJournalEntryFromTransaction(`Fee for Tx #${txId}`, [
+            { accountId: '4002', debit: 0, credit: fee },
+            { accountId: clientAccountId, debit: fee, credit: 0 },
+        ]);
+    }
+
+    if (Math.abs(difference) > 0.01) {
+        if (difference < 0) { // Gain
+            if (differenceHandling === 'income' && incomeAccountId) {
+                await createJournalEntryFromTransaction(`Gain on Tx #${txId}`, [
+                    { accountId: incomeAccountId, debit: 0, credit: Math.abs(difference) },
+                    { accountId: clientAccountId, debit: Math.abs(difference), credit: 0 }
+                ]);
+            }
+        } else { // Loss
+            if (differenceHandling === 'expense' && expenseAccountId) {
+                await createJournalEntryFromTransaction(`Loss on Tx #${txId}`, [
+                    { accountId: expenseAccountId, debit: difference, credit: 0 },
+                    { accountId: clientAccountId, debit: 0, credit: difference }
+                ]);
+            }
+        }
     }
 }
 

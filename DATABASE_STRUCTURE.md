@@ -54,7 +54,27 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 3. `/accounts/{accountId}`
+### 3. `/transactions/{transactionId}` (New)
+
+**Primary store for consolidated, finalized transactions.** This is a new top-level node. A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential (e.g., T-1, T-2).
+
+-   **`id`**: `string` - The unique, sequential ID for the transaction.
+-   **`date`**: `string` (ISO 8601) - The date the transaction was created.
+-   **`type`**: `'Deposit' | 'Withdraw' | 'Transfer'` - The type of transaction.
+-   **`clientId`**: `string` - The ID of the client.
+-   **`clientName`**: `string` - Denormalized client name.
+-   **`amount_usd`**: `number` - Total USD value of all inflows.
+-   **`outflow_usd`**: `number` - Total USD value of all outflows.
+-   **`fee_usd`**: `number` - Calculated fee in USD.
+-   **`status`**: `'Pending' | 'Confirmed' | 'Cancelled'` - The status of the transaction.
+-   **`linkedRecordIds`**: `string` - A comma-separated list of IDs from `cash_records` and `usdt_records`.
+-   **`notes`**: `string` (optional) - Any additional notes for the transaction.
+-   **`attachment_url`**: `string` (optional) - URL for any uploaded attachment.
+-   **`createdAt`**: `string` (ISO 8601) - The timestamp when the transaction was created.
+
+---
+
+### 4. `/accounts/{accountId}`
 
 Stores the Chart of Accounts records. Each record can be a group (like "Assets") or a postable account (like "Cash - YER").
 
@@ -68,7 +88,7 @@ Stores the Chart of Accounts records. Each record can be a group (like "Assets")
 
 ---
 
-### 4. `/clients/{clientId}`
+### 5. `/clients/{clientId}`
 
 Stores all customer information. After the initial migration, `{clientId}` is a sequential number starting from `1000001`.
 
@@ -82,13 +102,14 @@ Stores all customer information. After the initial migration, `{clientId}` is a 
 
 ---
 
-### 5. `/counters`
+### 6. `/counters`
 
 Stores atomic counters for generating sequential IDs.
 
 -   **/`cashRecordId`**: `number` - The last used ID for the new unified cash records.
 -   **/`usdtRecordId`**: `number` - The last used ID for the new unified USDT records.
 -   **/`bscApiId`**: `number` - The last used ID for BSC API configurations.
+-   **/`transactionId`**: `number` - The last used ID for the new `transactions` table.
 
 ---
 
@@ -102,4 +123,3 @@ The following paths are no longer in active use by the new system but may be ret
 -   `/cash_receipts`
 -   `/usdt_receipts`
 -   `/cash_payments`
-
