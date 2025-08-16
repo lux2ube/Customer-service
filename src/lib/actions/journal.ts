@@ -118,38 +118,46 @@ export async function createJournalEntryFromTransaction(
     
     if (Math.abs(totalDebits - totalCredits) > 0.01) {
         console.error(`Journal entry is not balanced. Debits: ${totalDebits}, Credits: ${totalCredits}`);
-        return;
+        return; // Do not create unbalanced entries
     }
     
-    // We only create an entry if there's a non-zero amount.
     if (Math.abs(totalDebits) < 0.01) {
-        return;
+        return; // Don't create zero-value entries
     }
 
     try {
-        const entryRef = push(ref(db, 'journal_entries'));
-        const debitLeg = legs.find(l => l.debit > 0);
-        const creditLeg = legs.find(l => l.credit > 0);
-        
-        if (!debitLeg || !creditLeg) {
-            console.error("Could not create journal entry: Missing debit or credit leg.");
+        const allAccountSnapshots = await Promise.all(
+            legs.map(leg => get(ref(db, `accounts/${leg.accountId}`)))
+        );
+
+        const accountNames = new Map(
+            allAccountSnapshots.map((snap, i) => [legs[i].accountId, snap.exists() ? (snap.val() as Account).name : legs[i].accountId])
+        );
+
+        // For simplicity, we'll represent this as a single entry in the log,
+        // but in a real accounting system, this might be multiple entries.
+        // We pick the first debit and first credit leg for the main fields.
+        const firstDebitLeg = legs.find(l => l.debit > 0);
+        const firstCreditLeg = legs.find(l => l.credit > 0);
+
+        if (!firstDebitLeg || !firstCreditLeg) {
+            console.error("Cannot create journal entry: No debit or credit leg found.");
             return;
         }
 
-        const debitAccSnap = await get(ref(db, `accounts/${debitLeg.accountId}`));
-        const creditAccSnap = await get(ref(db, `accounts/${creditLeg.accountId}`));
-
+        const entryRef = push(ref(db, 'journal_entries'));
         const entryData: Omit<JournalEntry, 'id'> = {
             date: new Date().toISOString(),
             description: description,
-            debit_account: debitLeg.accountId,
-            credit_account: creditLeg.accountId,
-            debit_amount: debitLeg.debit, // Use USD value for consistency in journal
-            credit_amount: creditLeg.credit, // Use USD value
-            amount_usd: debitLeg.debit, // Total value of the entry
+            debit_account: firstDebitLeg.accountId,
+            credit_account: firstCreditLeg.accountId,
+            debit_amount: totalDebits, // Store total debit
+            credit_amount: totalCredits, // Store total credit
+            amount_usd: totalDebits, // Total value of the entry
             createdAt: new Date().toISOString(),
-            debit_account_name: debitAccSnap.exists() ? (debitAccSnap.val() as Account).name : debitLeg.accountId,
-            credit_account_name: creditAccSnap.exists() ? (creditAccSnap.val() as Account).name : creditLeg.accountId,
+            debit_account_name: accountNames.get(firstDebitLeg.accountId),
+            credit_account_name: accountNames.get(firstCreditLeg.accountId),
+            details: legs, // Store all legs for detailed auditing
         };
         await set(entryRef, stripUndefined(entryData));
         revalidatePath('/accounting/journal');

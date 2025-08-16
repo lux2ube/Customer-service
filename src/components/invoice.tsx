@@ -39,7 +39,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                  <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
-                        <p className="text-lg font-bold text-primary">{transaction.outflow_usd.toFixed(2)} USDT</p>
+                        <p className="text-lg font-bold text-primary">{transaction.amount_usd.toFixed(2)} USDT</p>
                     </div>
                     <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
@@ -71,7 +71,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-lg font-bold text-green-600">{transaction.amount_usd} Fiat</p>
+                        <p className="text-lg font-bold text-green-600">{transaction.outflow_usd} Fiat</p>
                     </div>
                      <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
@@ -115,7 +115,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                            <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
                            <div>
                                 <p className="text-muted-foreground">رقم الحوالة:</p>
-                                <p className="font-mono break-all">N/A</p>
+                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
                            </div>
                         </div>
                     </div>

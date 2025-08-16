@@ -170,6 +170,7 @@ export interface JournalEntry {
   createdAt: string;
   debit_account_name?: string; // For display
   credit_account_name?: string; // For display
+  details?: { accountId: string, debit: number, credit: number }[]; // For multi-leg entries
 }
 
 export interface Settings {

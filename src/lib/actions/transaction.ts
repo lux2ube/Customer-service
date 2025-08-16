@@ -107,7 +107,7 @@ export type TransactionFormState =
 const ModernTransactionSchema = z.object({
     clientId: z.string().min(1, 'A client must be selected.'),
     type: z.enum(['Deposit', 'Withdraw', 'Transfer']),
-    linkedRecordIds: z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' }),
+    linkedRecordIds: z.preprocess((val) => (Array.isArray(val) ? val : [val].filter(Boolean)), z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' })),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
     differenceHandling: z.enum(['income', 'expense']).optional(),
@@ -136,6 +136,14 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     }
     
     const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
+    
+    // Additional server-side validation for difference handling
+    if (differenceHandling === 'income' && !incomeAccountId) {
+        return { errors: { incomeAccountId: ["An income account must be selected to record a gain."] }, message: "Missing income account for gain." };
+    }
+    if (differenceHandling === 'expense' && !expenseAccountId) {
+        return { errors: { expenseAccountId: ["An expense account must be selected to record a loss."] }, message: "Missing expense account for loss." };
+    }
     
     try {
         // --- Step 1: Fetch all necessary data ---
@@ -177,8 +185,12 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             const usdtInflow = allLinkedRecords.filter(r => r!.type === 'inflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
             const feePercent = (lastFeeEntry.sell_fee_percent || 0) / 100;
             fee = Math.max(usdtInflow * feePercent, usdtInflow > 0 ? (lastFeeEntry.minimum_sell_fee || 0) : 0);
+        } else if (type === 'Transfer') {
+             const usdtMovement = allLinkedRecords.filter(r => r.recordType === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+            const feePercent = (lastFeeEntry.buy_fee_percent || 0) / 100;
+            fee = usdtMovement * feePercent;
         }
-
+        
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
 
         // --- Step 3: Prepare and Save Data ---
@@ -237,62 +249,50 @@ async function createJournalEntriesForTransaction(
 ) {
     const description = `Tx #${txId} for ${clientName}`;
     
-    for (const record of linkedRecords) {
-        const recordDesc = `${description} | Ref: ${record.id}`;
-        const amount = record.amount_usd || record.amount;
-        
-        if (record.type === 'inflow') {
-            await createJournalEntryFromTransaction(recordDesc, [
-                { accountId: record.accountId, debit: amount, credit: 0 },
-                { accountId: clientAccountId, debit: 0, credit: amount }
-            ]);
-        } else {
-             await createJournalEntryFromTransaction(recordDesc, [
-                { accountId: record.accountId, debit: 0, credit: amount },
-                { accountId: clientAccountId, debit: amount, credit: 0 }
-            ]);
-        }
+    // Leg 1: Process all inflows against the client account
+    for (const record of linkedRecords.filter(r => r.type === 'inflow')) {
+         await createJournalEntryFromTransaction(`${description} | Inflow`, [
+            { accountId: record.accountId, debit: record.amount_usd, credit: 0 },
+            { accountId: clientAccountId, debit: 0, credit: record.amount_usd },
+        ]);
     }
-
-    if (fee > 0.001) {
-        await createJournalEntryFromTransaction(`Fee for Tx #${txId}`, [
-            { accountId: '4002', debit: 0, credit: fee },
-            { accountId: clientAccountId, debit: fee, credit: 0 },
+    
+    // Leg 2: Process all outflows against the client account
+    for (const record of linkedRecords.filter(r => r.type === 'outflow')) {
+         await createJournalEntryFromTransaction(`${description} | Outflow`, [
+            { accountId: clientAccountId, debit: record.amount_usd, credit: 0 },
+            { accountId: record.accountId, debit: 0, credit: record.amount_usd },
         ]);
     }
 
+    // Leg 3: Process the fee
+    if (fee > 0.001) {
+        await createJournalEntryFromTransaction(`${description} | Fee`, [
+            { accountId: clientAccountId, debit: fee, credit: 0 },
+            { accountId: '4002', debit: 0, credit: fee }, // 4002 = Fee Income
+        ]);
+    }
+
+    // Leg 4: Handle the difference (gain or loss)
     if (Math.abs(difference) > 0.01) {
-        if (difference < 0) { // Gain
+        if (difference < 0) { // It's a gain for the system (we received more than we gave)
             const gain = Math.abs(difference);
             if (differenceHandling === 'income' && incomeAccountId) {
-                await createJournalEntryFromTransaction(`Gain on Tx #${txId}`, [
-                    { accountId: incomeAccountId, debit: 0, credit: gain },
-                    { accountId: clientAccountId, debit: gain, credit: 0 }
+                // The gain came from some asset, we credit the income account
+                const assetAccountId = linkedRecords.find(r => r.type === 'inflow')?.accountId; // Find an asset involved
+                 await createJournalEntryFromTransaction(`${description} | Gain`, [
+                    { accountId: assetAccountId || clientAccountId, debit: gain, credit: 0 }, // Should ideally be a specific asset
+                    { accountId: incomeAccountId, debit: 0, credit: gain }
                 ]);
-            } else {
-                // If no income account is specified for a gain, credit the client directly
-                await createJournalEntryFromTransaction(`Gain on Tx #${txId} (Client Credit)`, [
-                     // This needs a balancing debit, usually from an asset account.
-                     // Without knowing which asset over-delivered, this entry is incomplete.
-                     // For now, we credit the client, acknowledging an imbalance might need manual review.
-                    { accountId: clientAccountId, debit: 0, credit: gain }
-                ]);
-                 console.warn("Unbalanced journal entry for gain. Credited client but no offsetting debit specified.");
             }
-        } else { // Loss
+        } else { // It's a loss for the system (we gave more than we received)
+            const loss = difference;
             if (differenceHandling === 'expense' && expenseAccountId) {
-                await createJournalEntryFromTransaction(`Loss on Tx #${txId}`, [
-                    { accountId: expenseAccountId, debit: difference, credit: 0 },
-                    { accountId: clientAccountId, debit: 0, credit: difference }
+                const assetAccountId = linkedRecords.find(r => r.type === 'outflow')?.accountId; // Find an asset involved
+                await createJournalEntryFromTransaction(`${description} | Loss`, [
+                    { accountId: expenseAccountId, debit: loss, credit: 0 },
+                    { accountId: assetAccountId || clientAccountId, debit: 0, credit: loss }, // Credit the asset that was overpaid from
                 ]);
-            } else {
-                 // If no expense account is specified for a loss, debit the client directly
-                await createJournalEntryFromTransaction(`Loss on Tx #${txId} (Client Debit)`, [
-                    { accountId: clientAccountId, debit: difference, credit: 0 },
-                    // This needs a balancing credit.
-                    // For now, we debit the client, acknowledging an imbalance might need manual review.
-                ]);
-                console.warn("Unbalanced journal entry for loss. Debited client but no offsetting credit specified.");
             }
         }
     }
