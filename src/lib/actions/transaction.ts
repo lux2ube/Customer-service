@@ -37,6 +37,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             for (const id in allCashRecords) {
                 const record = allCashRecords[id];
                 if (record.status === 'Used' || record.status === 'Cancelled') continue;
+                if (record.status !== 'Matched' && record.status !== 'Pending' && record.status !== 'Confirmed') continue;
                 
                 unifiedRecords.push({
                     id,
@@ -61,6 +62,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
                 if (record.status === 'Used' || record.status === 'Cancelled') continue;
+                if (record.status !== 'Matched' && record.status !== 'Pending' && record.status !== 'Confirmed') continue;
 
                  unifiedRecords.push({
                     id,
@@ -171,8 +173,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             return { message: 'Crypto fees are not configured in settings.', success: false };
         }
         
-        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
-        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
+        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amount_usd || r!.amount), 0);
+        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amount_usd || r!.amount), 0);
         
         let baseAmountForFee = 0;
         if (type === 'Deposit') {

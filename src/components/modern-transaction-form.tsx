@@ -117,8 +117,9 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     };
 
     const handleSelectionChange = (id: string, selected: boolean) => {
+        // Defer state update to prevent flushSync error
         setTimeout(() => {
-             setSelectedRecordIds(prev =>
+            setSelectedRecordIds(prev =>
                 selected ? [...prev, id] : prev.filter(recId => recId !== id)
             );
         }, 0);
@@ -336,26 +337,9 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                             {Math.abs(calculation.difference) > 0.001 && (
                                 <div className="pt-4 border-t mt-4">
                                      <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
-                                    {calculation.difference > 0 ? ( // We lost money
-                                        <RadioGroup name="differenceHandling" defaultValue="debit" className="mt-2 space-y-2">
+                                    {calculation.difference < 0 ? ( // We gained money (negative difference)
+                                        <RadioGroup name="differenceHandling" defaultValue="credit" className="mt-2 space-y-2">
                                             <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="debit" id="diff-debit" />
-                                                <Label htmlFor="diff-debit" className="font-normal">Debit Client Account (Client owes us)</Label>
-                                            </div>
-                                             <div className="flex items-center space-x-2">
-                                                <RadioGroupItem value="expense" id="diff-expense" />
-                                                <Label htmlFor="diff-expense" className="font-normal">Record as an Expense/Discount</Label>
-                                            </div>
-                                            <Select name="expenseAccountId">
-                                                <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select expense account..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {expenseAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </RadioGroup>
-                                    ) : ( // We gained money
-                                         <RadioGroup name="differenceHandling" defaultValue="credit" className="mt-2 space-y-2">
-                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="credit" id="diff-credit" />
                                                 <Label htmlFor="diff-credit" className="font-normal">Credit Client Account (We owe client)</Label>
                                             </div>
@@ -363,10 +347,27 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                                                 <RadioGroupItem value="income" id="diff-income" />
                                                 <Label htmlFor="diff-income" className="font-normal">Record as Income</Label>
                                             </div>
-                                             <Select name="incomeAccountId">
+                                            <Select name="incomeAccountId">
                                                 <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select income account..." /></SelectTrigger>
                                                 <SelectContent>
                                                     {incomeAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </RadioGroup>
+                                    ) : ( // We lost money (positive difference)
+                                         <RadioGroup name="differenceHandling" defaultValue="debit" className="mt-2 space-y-2">
+                                             <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="debit" id="diff-debit" />
+                                                <Label htmlFor="diff-debit" className="font-normal">Debit Client Account (Client owes us)</Label>
+                                            </div>
+                                             <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="expense" id="diff-expense" />
+                                                <Label htmlFor="diff-expense" className="font-normal">Record as an Expense/Discount</Label>
+                                            </div>
+                                             <Select name="expenseAccountId">
+                                                <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select expense account..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {expenseAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                         </RadioGroup>
