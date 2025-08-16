@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, FiatRate, CashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast, get } from 'firebase/database';
@@ -167,8 +167,9 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
             const [accountsSnap, ratesSnap, clientsSnap] = await Promise.all([get(accountsRef), get(ratesRef), get(clientsRef)]);
 
             if (accountsSnap.exists()) {
-                const allAccounts: Account[] = Object.values(accountsSnap.val());
-                setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
+                const allAccountsData: Record<string, Account> = accountsSnap.val();
+                const allAccountsList: Account[] = Object.keys(allAccountsData).map(key => ({ id: key, ...allAccountsData[key] }));
+                setBankAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
             }
 
             if (ratesSnap.exists()) {
@@ -177,7 +178,7 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                 setFiatRates(data[lastKey].rates || {});
             }
             
-            if (record && record.clientId && clientsSnap.exists()) {
+            if (record?.clientId && clientsSnap.exists()) {
                 const allClients: Record<string, Client> = clientsSnap.val();
                 const initialClient = allClients[record.clientId];
                 if (initialClient) {
@@ -252,7 +253,7 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
     const isEditing = !!record;
     const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
-    if (loadingData && !record) {
+    if (loadingData && !isEditing) {
         return (
             <Card>
                 <CardHeader>
@@ -295,11 +296,17 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                             <Select name="bankAccountId" required value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
                                 <SelectTrigger><SelectValue placeholder="Select bank account..." /></SelectTrigger>
                                 <SelectContent>
-                                    {bankAccounts.map(account => (
-                                        <SelectItem key={account.id} value={account.id}>
-                                            {account.name} ({account.currency})
-                                        </SelectItem>
-                                    ))}
+                                    {loadingData ? (
+                                        <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
+                                    ) : (
+                                        bankAccounts.map(account => (
+                                            account && account.id && (
+                                                <SelectItem key={account.id} value={account.id}>
+                                                    {account.name} ({account.currency})
+                                                </SelectItem>
+                                            )
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
                             {state?.errors?.bankAccountId && <p className="text-sm text-destructive">{state.errors.bankAccountId[0]}</p>}
