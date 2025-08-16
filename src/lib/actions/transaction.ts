@@ -180,25 +180,20 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
         
         const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + r!.amount_usd, 0);
-        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + r!.amount_usd, 0);
+        
+        const usdtOutflowRecords = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'usdt');
+        const usdtOutflowAmount = usdtOutflowRecords.reduce((sum, r) => sum + r!.amount, 0);
+        const usdtOutflowUsd = usdtOutflowRecords.reduce((sum, r) => sum + r!.amount_usd, 0);
+        const fiatOutflowUsd = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'cash').reduce((sum, r) => sum + r!.amount_usd, 0);
+        const totalOutflowUSD = usdtOutflowUsd + fiatOutflowUsd;
         
         let fee = 0;
         
-        if (type === 'Deposit') {
+        if (type === 'Deposit' && usdtOutflowAmount > 0) {
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_buy_fee || 0;
-            if ((1 + feePercent) > 0) {
-                 const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
-                 fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
-            }
-        } else if (type === 'Withdraw') {
-            const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-            const minFee = cryptoFees.minimum_sell_fee || 0;
-            const usdtAmountFromClient = allLinkedRecords
-                .filter(r => r!.type === 'inflow' && r!.recordType === 'usdt')
-                .reduce((sum, r) => sum + r!.amount, 0);
-            const calculatedFee = usdtAmountFromClient * feePercent;
-            fee = Math.max(calculatedFee, usdtAmountFromClient > 0 ? minFee : 0);
+            const calculatedFee = usdtOutflowAmount * feePercent;
+            fee = Math.max(calculatedFee, usdtOutflowAmount > 0 ? minFee : 0);
         }
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
