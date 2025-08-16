@@ -72,7 +72,8 @@ export {
     deleteCurrency,
     initializeDefaultCurrencies,
     deleteAllModernCashRecords,
-    deleteBscSyncedRecords
+    deleteBscSyncedRecords,
+    backfillCashRecordUsd
 } from './utility';
 
 // Wallet (Live Sending)

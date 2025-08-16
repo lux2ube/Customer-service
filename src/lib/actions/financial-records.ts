@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -76,7 +77,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             recipientName: recipientName,
             amount: amount,
             currency: account.currency!,
-            amountUsd: amountUsd,
+            amount_usd: amountUsd,
             notes: note,
             createdAt: new Date().toISOString(),
         };

@@ -405,3 +405,75 @@ export async function deleteBscSyncedRecords(): Promise<{ message: string; error
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }
+
+export async function backfillCashRecordUsd(prevState: SetupState, formData: FormData): Promise<SetupState> {
+    try {
+        const [recordsSnapshot, fiatRatesSnapshot] = await Promise.all([
+            get(ref(db, 'cash_records')),
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp')))
+        ]);
+
+        if (!recordsSnapshot.exists()) {
+            return { message: 'No cash records to process.', error: false };
+        }
+        if (!fiatRatesSnapshot.exists()) {
+            return { message: 'No fiat rate history found. Cannot calculate USD values.', error: true };
+        }
+
+        const allRecords: Record<string, CashRecord> = recordsSnapshot.val();
+        const rateHistory: { timestamp: string, rates: Record<string, FiatRate> }[] = Object.values(fiatRatesSnapshot.val());
+
+        const updates: { [key: string]: number } = {};
+        let updatedCount = 0;
+
+        for (const recordId in allRecords) {
+            const record = allRecords[recordId];
+
+            // Skip if amount_usd already exists and is a valid number
+            if (typeof record.amount_usd === 'number') {
+                continue;
+            }
+
+            const recordDate = new Date(record.date);
+            
+            // Find the most recent rate before or on the record's date
+            let applicableRateInfo: { rates: Record<string, FiatRate> } | undefined;
+            for (let i = rateHistory.length - 1; i >= 0; i--) {
+                if (new Date(rateHistory[i].timestamp) <= recordDate) {
+                    applicableRateInfo = rateHistory[i];
+                    break;
+                }
+            }
+             // If no rate is found before the record, use the oldest one available
+            if (!applicableRateInfo) {
+                applicableRateInfo = rateHistory[0];
+            }
+
+            const rateData = applicableRateInfo.rates;
+            const currencyCode = record.currency;
+
+            if (currencyCode === 'USD') {
+                 updates[`/cash_records/${recordId}/amount_usd`] = record.amount;
+                 updatedCount++;
+            } else if (rateData && rateData[currencyCode]) {
+                const rate = record.type === 'inflow' ? rateData[currencyCode].clientBuy : rateData[currencyCode].clientSell;
+                if (rate > 0) {
+                    const amountUsd = record.amount / rate;
+                    updates[`/cash_records/${recordId}/amount_usd`] = parseFloat(amountUsd.toFixed(2));
+                    updatedCount++;
+                }
+            }
+        }
+        
+        if (updatedCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/modern-cash-records');
+        return { message: `Backfill complete. Updated ${updatedCount} cash records with USD values.`, error: false };
+
+    } catch (e: any) {
+        console.error("Error during amount_usd backfill:", e);
+        return { message: `An error occurred: ${e.message}`, error: true };
+    }
+}

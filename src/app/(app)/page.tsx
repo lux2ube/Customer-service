@@ -17,7 +17,7 @@ import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfW
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount } from '@/lib/actions';
+import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount, backfillCashRecordUsd } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
@@ -80,13 +80,6 @@ function ActionButton({ Icon, text, pendingText, variant = "outline" }: { Icon: 
     )
 }
 
-function SyncForm() {
-    const { toast } = useToast();
-    const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
-    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Sync Failed' : 'Sync Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
-    return <form action={formAction}><ActionButton Icon={RefreshCw} text="Sync with BSCScan" pendingText="Syncing..." /></form>;
-}
-
 function ProcessSmsForm() {
     const { toast } = useToast();
     const [state, formAction] = useActionState<ProcessSmsState, FormData>(processIncomingSms, undefined);
@@ -106,6 +99,13 @@ function MigrateBep20Form() {
     const [state, formAction] = useActionState<SetupState, FormData>(migrateBep20Addresses, undefined);
     React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Migration Failed' : 'Migration Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
     return <form action={formAction}><ActionButton Icon={Users} text="Migrate BEP20 Addresses" pendingText="Migrating..." /></form>;
+}
+
+function BackfillCashUsdForm() {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<SetupState, FormData>(backfillCashRecordUsd, undefined);
+    React.useEffect(() => { if (state?.message) toast({ title: state.error ? 'Backfill Failed' : 'Backfill Complete', description: state.message, variant: state.error ? 'destructive' : 'default' }); }, [state, toast]);
+    return <form action={formAction}><ActionButton Icon={DatabaseZap} text="Backfill Cash USD Values" pendingText="Processing..." /></form>;
 }
 
 export default function DashboardPage() {
@@ -287,8 +287,8 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
-                           {/* These forms are now obsolete with the new workflow. You can add other system-wide actions here later. */}
                            <ProcessSmsForm />
+                           <BackfillCashUsdForm />
                         </div>
                          <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
                            <SetupClientParentAccountForm />
