@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -125,8 +126,9 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         
         let currentFiatRates: Record<string, FiatRate> = {};
         if (fiatRatesSnapshot.exists()) {
-            const lastEntry = Object.values(fiatRatesSnapshot.val())[0] as any;
-            currentFiatRates = lastEntry; // Corrected to read from the flat structure
+            const lastEntryKey = Object.keys(fiatRatesSnapshot.val())[0];
+            const lastEntry = fiatRatesSnapshot.val()[lastEntryKey];
+            currentFiatRates = lastEntry.rates || {};
         }
         
         const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
@@ -214,7 +216,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     recipientName: parsed.type === 'debit' ? parsed.person : undefined,
                     amount: parsed.amount!,
                     currency: account.currency!,
-                    amountUsd: parseFloat(amountUsd.toFixed(2)),
+                    amount_usd: parseFloat(amountUsd.toFixed(2)),
                     notes: trimmedSmsBody, // Store original SMS in notes
                     rawSms: trimmedSmsBody, // And in its own field
                     createdAt: new Date().toISOString(),

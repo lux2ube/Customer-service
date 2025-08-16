@@ -4,9 +4,9 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { ref, set, get, push, update } from 'firebase/database';
+import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, UsdtRecord, JournalEntry, CashRecord } from '../types';
+import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -50,17 +50,31 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
     }
     
     try {
-        const { date, clientId, bankAccountId, amount, amountUsd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
+        let { date, clientId, bankAccountId, amount, amountUsd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
         
-        const [accountSnapshot, clientSnapshot] = await Promise.all([
+        const [accountSnapshot, clientSnapshot, fiatRatesSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
-            clientId ? get(ref(db, `clients/${clientId}`)) : Promise.resolve(null)
+            clientId ? get(ref(db, `clients/${clientId}`)) : Promise.resolve(null),
+            get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)))
         ]);
         
         if (!accountSnapshot.exists()) return { message: 'Bank Account not found.', success: false };
 
         const account = accountSnapshot.val() as Account;
         const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
+
+        // Server-side calculation of amount_usd as a fallback
+        if (amountUsd === 0 && account.currency && account.currency !== 'USD' && fiatRatesSnapshot.exists()) {
+             const lastRateEntryKey = Object.keys(fiatRatesSnapshot.val())[0];
+             const ratesData = fiatRatesSnapshot.val()[lastRateEntryKey].rates;
+             const rateInfo = ratesData[account.currency];
+             if (rateInfo) {
+                const rate = type === 'inflow' ? rateInfo.clientBuy : rateInfo.clientSell;
+                if (rate > 0) {
+                    amountUsd = amount / rate;
+                }
+             }
+        }
         
         const newId = recordId || await getNextSequentialId('cashRecordId');
         
@@ -226,3 +240,4 @@ export async function cancelCashPayment(recordId: string) {
         return { success: false, message: "Failed to cancel payment." };
     }
 }
+
