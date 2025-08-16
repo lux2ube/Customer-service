@@ -9,7 +9,7 @@ import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import type { Client } from '@/lib/types';
-import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions';
+import { createUsdtManualPayment } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, ClipboardPaste } from 'lucide-react';
 import { ethers } from 'ethers';
@@ -34,11 +34,11 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 
-  const [state, formAction] = useActionState<UsdtPaymentState, FormData>(createUsdtManualPayment, undefined);
+  const [state, formAction] = useActionState(createUsdtManualPayment.bind(null, null), undefined);
   
   const [addressInput, setAddressInput] = React.useState(client?.bep20_addresses?.[0] || '');
   
-  const stateRef = React.useRef<UsdtPaymentState>();
+  const stateRef = React.useRef<any>();
 
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
@@ -70,6 +70,9 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
       <input type="hidden" name="clientId" value={client.id} />
+      <input type="hidden" name="clientName" value={client.name} />
+      <input type="hidden" name="date" value={new Date().toISOString()} />
+      <input type="hidden" name="status" value="Confirmed" />
       <div className="space-y-4 py-4">
         <div className="space-y-2">
             <Label htmlFor="manual_recipientAddress">Recipient Address</Label>
@@ -98,3 +101,4 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
     </form>
   );
 }
+

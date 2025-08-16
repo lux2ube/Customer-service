@@ -10,7 +10,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/financial-records';
+import { createCashReceipt } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -49,7 +49,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
   const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
   const [loading, setLoading] = React.useState(true);
 
-  const [state, formAction] = useActionState<CashReceiptFormState, FormData>(createCashReceipt.bind(null, null), undefined);
+  const [state, formAction] = useActionState(createCashReceipt.bind(null, null), undefined);
   
   const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
   const [amount, setAmount] = React.useState('');
@@ -84,7 +84,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
     }
   }, []);
 
-  const stateRef = React.useRef<CashReceiptFormState>();
+  const stateRef = React.useRef<any>();
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
       if (state.success) {

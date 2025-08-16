@@ -101,9 +101,3 @@ export {
     cancelCashPayment,
 } from './financial-records';
 
-
-// Legacy Actions (to be removed)
-export type { TransactionFormState } from './transaction_legacy';
-export {
-    createTransaction
-} from './transaction_legacy';
