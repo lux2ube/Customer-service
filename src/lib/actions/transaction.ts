@@ -181,9 +181,11 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         if (type === 'Deposit') {
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_buy_fee || 0;
-            const usdtAmountToClient = totalOutflowUSD; // For deposit, this is what they get.
-            const calculatedFee = usdtAmountToClient * feePercent;
-            fee = Math.max(calculatedFee, minFee > 0 && usdtAmountToClient > 0 ? minFee : 0);
+            const usdtAmount = totalOutflowUSD; // For deposit, this is the amount they are GETTING
+            
+            const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
+            fee = Math.max(calculatedFee, usdtAmount > 0 ? minFee : 0);
+
         } else if (type === 'Withdraw') {
             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_sell_fee || 0;
@@ -191,15 +193,15 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                 .filter(r => r!.type === 'inflow' && r!.recordType === 'usdt')
                 .reduce((sum, r) => sum + r!.amount, 0);
             const calculatedFee = usdtAmountFromClient * feePercent;
-            fee = Math.max(calculatedFee, minFee > 0 && usdtAmountFromClient > 0 ? minFee : 0);
+            fee = Math.max(calculatedFee, usdtAmountFromClient > 0 ? minFee : 0);
         }
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
 
-        if (difference > 0 && differenceHandling === 'income' && !incomeAccountId) {
+        if (difference < -0.01 && differenceHandling === 'income' && !incomeAccountId) {
             return { errors: { incomeAccountId: ['An income account must be selected for the gain.'] }, message: 'Missing income account.', success: false };
         }
-        if (difference < 0 && differenceHandling === 'expense' && !expenseAccountId) {
+        if (difference > 0.01 && differenceHandling === 'expense' && !expenseAccountId) {
             return { errors: { expenseAccountId: ['An expense account must be selected for the loss.'] }, message: 'Missing expense account.', success: false };
         }
         
@@ -219,8 +221,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             amount_usd: totalInflowUSD,
             fee_usd: fee,
             amount_usdt: totalOutflowUSD,
-            expense_usd: difference < 0 ? Math.abs(difference) : 0,
-            exchange_rate_commission: difference > 0 ? difference : 0,
+            expense_usd: difference > 0.01 ? difference : 0,
+            exchange_rate_commission: difference < -0.01 ? Math.abs(difference) : 0,
             notes,
             status: 'Confirmed',
             createdAt: new Date().toISOString(),
@@ -256,21 +258,19 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
 
         // 2. Journal for the Exchange Difference
-        if (Math.abs(difference) > 0.001) {
+        if (Math.abs(difference) > 0.01) {
             let diffDesc: string;
             let diffLegs: { accountId: string; debit: number; credit: number; }[] = [];
             
             // We gained money (negative difference)
-            if (difference < 0) {
+            if (difference < -0.01) {
                 const gain = Math.abs(difference);
                 if (differenceHandling === 'income') {
                     diffDesc = `Exchange Gain on Tx #${newId}`;
                     diffLegs.push({ accountId: incomeAccountId!, debit: 0, credit: gain });
-                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 });
+                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); // Our liability to them decreases
                 } else { // Credit to Client
-                    diffDesc = `Overpayment credited to client on Tx #${newId}`;
-                    // This logic seems reversed. If we gain, and credit client, it's a liability for us.
-                    // This will be handled implicitly by the main transaction legs. No extra entry needed if it's a client credit.
+                    // This is handled by the main leg, no separate entry needed.
                 }
             } 
             // We lost money (positive difference)
@@ -279,10 +279,9 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                  if (differenceHandling === 'expense') {
                     diffDesc = `Exchange Loss/Discount on Tx #${newId}`;
                     diffLegs.push({ accountId: expenseAccountId!, debit: loss, credit: 0 });
-                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 });
+                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 }); // Our liability to them increases
                  } else { // Debit from Client
-                    diffDesc = `Underpayment debited from client on Tx #${newId}`;
-                    // This will be handled implicitly by the main transaction legs. No extra entry needed if it's a client debit.
+                    // This is handled by the main leg, no separate entry needed.
                  }
             }
 
