@@ -55,6 +55,7 @@ export {
 // Core Transaction Logic
 export {
     createModernTransaction,
+    confirmTransaction,
     getUnifiedClientRecords,
     updateBulkTransactions,
 } from './transaction';

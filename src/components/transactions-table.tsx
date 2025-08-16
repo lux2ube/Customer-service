@@ -15,7 +15,7 @@ import type { Transaction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Pencil, FileText } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Pencil, FileText, CheckCircle, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -29,6 +29,19 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { ExportButton } from './export-button';
 import Link from 'next/link';
+import { useActionState, useFormStatus } from 'react';
+import { confirmTransaction, type ConfirmState } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type SortableKeys = keyof Transaction;
 
@@ -36,6 +49,43 @@ const ITEMS_PER_PAGE = 50;
 
 const statuses: Transaction['status'][] = ['Pending', 'Confirmed', 'Cancelled'];
 const types: Transaction['type'][] = ['Deposit', 'Withdraw', 'Transfer'];
+
+
+function ConfirmButton() {
+    const { pending } = useFormStatus();
+    return (
+        <AlertDialogAction type="submit" disabled={pending}>
+             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+            {pending ? 'Confirming...' : 'Confirm'}
+        </AlertDialogAction>
+    );
+}
+
+
+function ConfirmTransactionForm({ transactionId, onConfirm }: { transactionId: string, onConfirm: () => void }) {
+    const { toast } = useToast();
+    const [state, formAction] = useActionState<ConfirmState, FormData>(confirmTransaction.bind(null, transactionId), undefined);
+
+    React.useEffect(() => {
+        if(state) {
+            toast({
+                title: state.error ? 'Error' : 'Success',
+                description: state.message,
+                variant: state.error ? 'destructive' : 'default',
+            });
+            if (!state.error) {
+                onConfirm();
+            }
+        }
+    }, [state, toast, onConfirm]);
+
+    return (
+        <form action={formAction}>
+            <ConfirmButton />
+        </form>
+    );
+}
+
 
 export function TransactionsTable() {
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
@@ -46,6 +96,7 @@ export function TransactionsTable() {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
+  const [transactionToConfirm, setTransactionToConfirm] = React.useState<string | null>(null);
 
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
@@ -314,6 +365,11 @@ export function TransactionsTable() {
                         <TableCell className="font-mono text-right">{formatCurrency(tx.outflow_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                         <TableCell className="text-right">
+                           {tx.status === 'Pending' && (
+                                <Button size="sm" onClick={() => setTransactionToConfirm(tx.id)}>
+                                    Confirm
+                                </Button>
+                           )}
                            <Button variant="ghost" size="icon" asChild>
                                <Link href={`/transactions/${tx.id}/invoice`} target="_blank">
                                    <FileText className="h-4 w-4" />
@@ -351,6 +407,20 @@ export function TransactionsTable() {
                 </Button>
             </div>
         </div>
+         <AlertDialog open={!!transactionToConfirm} onOpenChange={(open) => !open && setTransactionToConfirm(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Transaction?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will finalize the transaction, create journal entries, and mark all linked records as "Used". This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    {transactionToConfirm && <ConfirmTransactionForm transactionId={transactionToConfirm} onConfirm={() => setTransactionToConfirm(null)} />}
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
   );
 }

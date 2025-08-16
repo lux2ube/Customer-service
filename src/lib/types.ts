@@ -78,8 +78,8 @@ export interface Transaction {
     type: 'Deposit' | 'Withdraw' | 'Transfer';
     clientId: string;
     clientName?: string; // For display
-    amount_usd: number; // Total USD value of the INFLOWS from the client
-    outflow_usd: number; // Total USD value of the OUTFLOWS to the client
+    amount_usd: number; // Total USD value of all inflows
+    outflow_usd: number; // Total USD value of all outflows
     fee_usd: number;
     expense_usd?: number; // Captures negative difference (loss/discount)
     attachment_url?: string;
@@ -89,6 +89,7 @@ export interface Transaction {
     createdAt: string;
     linkedRecordIds?: string;
     exchange_rate_commission?: number; // Captures positive difference (profit)
+    remittance_number?: string;
 }
 
 export interface CashRecord {
@@ -96,7 +97,7 @@ export interface CashRecord {
     date: string;
     type: 'inflow' | 'outflow';
     source: 'Manual' | 'SMS';
-    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled';
+    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed';
     clientId: string | null;
     clientName: string | null;
     accountId: string;
@@ -298,40 +299,5 @@ export interface BscApiSetting {
 
 
 // This is the old type, it can be removed once all components are updated
-export interface ModernCashRecord {
-    id: string;
-    date: string;
-    type: 'inflow' | 'outflow';
-    source: 'Manual' | 'SMS';
-    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled';
-    clientId: string | null;
-    clientName: string | null;
-    accountId: string;
-    accountName: string;
-    senderName?: string; // For inflows
-    recipientName?: string; // For outflows
-    amount: number;
-    currency: string;
-    amountusd: number;
-    notes?: string;
-    rawSms?: string;
-    createdAt: string;
-}
-
-export interface ModernUsdtRecord {
-    id: string;
-    date: string;
-    type: 'inflow' | 'outflow';
-    source: 'Manual' | 'BSCScan';
-    status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
-    clientId: string | null;
-    clientName: string | null;
-    accountId: string; // The system's internal crypto wallet account ID
-    accountName: string; // The system's internal crypto wallet name
-    amount: number; // The USDT amount
-    notes?: string;
-    txHash?: string;
-    clientWalletAddress?: string; // The external client wallet address
-    createdAt: string;
-    blockNumber?: number; // For sync logic
-}
+export type ModernCashRecord = CashRecord;
+export type ModernUsdtRecord = UsdtRecord;
