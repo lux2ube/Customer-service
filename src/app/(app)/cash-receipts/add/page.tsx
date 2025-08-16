@@ -2,5 +2,5 @@
 import { redirect } from 'next/navigation';
 
 export default function AddCashReceiptPage() {
-    redirect('/cash-records/inflow');
+    redirect('/modern-cash-records/inflow');
 }

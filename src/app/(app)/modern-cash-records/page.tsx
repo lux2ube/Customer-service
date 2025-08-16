@@ -121,13 +121,13 @@ export default function ModernCashRecordsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                     <ProcessSmsForm />
                     <Button asChild>
-                        <Link href="/cash-records/inflow">
+                        <Link href="/modern-cash-records/inflow">
                             <ArrowDownToLine className="mr-2 h-4 w-4" />
                             New Inflow
                         </Link>
                     </Button>
                      <Button asChild variant="outline">
-                        <Link href="/cash-records/outflow">
+                        <Link href="/modern-cash-records/outflow">
                             <ArrowUpFromLine className="mr-2 h-4 w-4" />
                             New Outflow
                         </Link>
