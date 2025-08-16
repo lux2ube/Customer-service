@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -248,6 +249,10 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
 
     return (
         <form action={formAction}>
+            <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
+            <input type="hidden" name="type" value={transactionType || ''} />
+            {selectedRecordIds.map(id => <input key={id} type="hidden" name="linkedRecordIds" value={id} />)}
+
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />

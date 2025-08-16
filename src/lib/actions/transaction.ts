@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -109,7 +110,7 @@ const ModernTransactionSchema = z.object({
     linkedRecordIds: z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' }),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
-    differenceHandling: z.enum(['credit', 'income', 'debit', 'expense']).optional(),
+    differenceHandling: z.enum(['income', 'expense']).optional(),
     incomeAccountId: z.string().optional(),
     expenseAccountId: z.string().optional(),
 });
@@ -268,9 +269,14 @@ async function createJournalEntriesForTransaction(
                     { accountId: incomeAccountId, debit: 0, credit: gain },
                     { accountId: clientAccountId, debit: gain, credit: 0 }
                 ]);
-            } else { // Default to crediting client
-                // This implies an asset was debited, but which one?
-                // This requires a suspense account for true accuracy. For now, we omit the offsetting debit.
+            } else {
+                // If no income account is specified for a gain, credit the client directly
+                await createJournalEntryFromTransaction(`Gain on Tx #${txId} (Client Credit)`, [
+                     // This needs a balancing debit, usually from an asset account.
+                     // Without knowing which asset over-delivered, this entry is incomplete.
+                     // For now, we credit the client, acknowledging an imbalance might need manual review.
+                    { accountId: clientAccountId, debit: 0, credit: gain }
+                ]);
                  console.warn("Unbalanced journal entry for gain. Credited client but no offsetting debit specified.");
             }
         } else { // Loss
@@ -279,9 +285,13 @@ async function createJournalEntriesForTransaction(
                     { accountId: expenseAccountId, debit: difference, credit: 0 },
                     { accountId: clientAccountId, debit: 0, credit: difference }
                 ]);
-            } else { // Default to debiting client
-                // This implies an asset was credited, but which one?
-                // This requires a suspense account for true accuracy. For now, we omit the offsetting credit.
+            } else {
+                 // If no expense account is specified for a loss, debit the client directly
+                await createJournalEntryFromTransaction(`Loss on Tx #${txId} (Client Debit)`, [
+                    { accountId: clientAccountId, debit: difference, credit: 0 },
+                    // This needs a balancing credit.
+                    // For now, we debit the client, acknowledging an imbalance might need manual review.
+                ]);
                 console.warn("Unbalanced journal entry for loss. Debited client but no offsetting credit specified.");
             }
         }
