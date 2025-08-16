@@ -46,7 +46,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     source: record.source,
                     amount: record.amount,
                     currency: record.currency,
-                    amountUsd: record.amountUsd,
+                    amount_usd: record.amount_usd,
                     status: record.status,
                     bankAccountName: record.accountName,
                     senderName: record.senderName,
@@ -70,7 +70,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     source: record.source,
                     amount: record.amount,
                     currency: 'USDT',
-                    amountUsd: record.amount, // For USDT, amount is same as amountUsd
+                    amount_usd: record.amount, // For USDT, amount is same as amount_usd
                     status: record.status,
                     cryptoWalletName: record.accountName,
                     txHash: record.txHash,

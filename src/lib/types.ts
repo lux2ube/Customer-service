@@ -309,7 +309,7 @@ export interface ModernCashRecord {
     recipientName?: string; // For outflows
     amount: number;
     currency: string;
-    amountUsd: number;
+    amount_usd: number;
     notes?: string;
     rawSms?: string;
     createdAt: string;
