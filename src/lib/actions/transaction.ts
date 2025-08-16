@@ -137,9 +137,9 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     }
     
     const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
-    const newId = await getNextSequentialId('transactionId');
     
     try {
+        const newId = await getNextSequentialId('transactionId');
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'cash_records')),
@@ -154,10 +154,16 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         const allCashRecords = cashRecordsSnapshot.val() || {};
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
+        
         const allLinkedRecords = linkedRecordIds.map(id => {
-            const record = allCashRecords[id] || allUsdtRecords[id];
-            return record ? { ...record, id, recordType: allCashRecords[id] ? 'cash' : 'usdt' } : null;
-        }).filter(r => r && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
+            if (allCashRecords[id]) {
+                return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
+            }
+            if (allUsdtRecords[id]) {
+                return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
+            }
+            return null;
+        }).filter(r => r !== null && (r.status === 'Matched' || r.status === 'Confirmed' || r.status === 'Pending'));
 
 
         if (allLinkedRecords.length !== linkedRecordIds.length) {
@@ -173,19 +179,19 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             return { message: 'Crypto fees are not configured in settings.', success: false };
         }
         
-        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountusd || r!.amount), 0);
-        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountusd || r!.amount), 0);
+        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + r!.amount_usd, 0);
+        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + r!.amount_usd, 0);
         
         let fee = 0;
         
         if (type === 'Deposit') {
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_buy_fee || 0;
-            const usdtAmount = totalOutflowUSD; // For deposit, this is the amount they are GETTING
             
-            const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
-            fee = Math.max(calculatedFee, usdtAmount > 0 ? minFee : 0);
-
+            if ((1 + feePercent) > 0) {
+                 const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
+                 fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
+            }
         } else if (type === 'Withdraw') {
             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_sell_fee || 0;
@@ -259,29 +265,20 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         // 2. Journal for the Exchange Difference
         if (Math.abs(difference) > 0.01) {
-            let diffDesc: string;
+            let diffDesc = `Difference on Tx #${newId}`;
             let diffLegs: { accountId: string; debit: number; credit: number; }[] = [];
             
-            // We gained money (negative difference)
-            if (difference < -0.01) {
+            if (difference < -0.01) { // We gained money
                 const gain = Math.abs(difference);
-                if (differenceHandling === 'income') {
-                    diffDesc = `Exchange Gain on Tx #${newId}`;
-                    diffLegs.push({ accountId: incomeAccountId!, debit: 0, credit: gain });
-                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); // Our liability to them decreases
-                } else { // Credit to Client
-                    // This is handled by the main leg, no separate entry needed.
+                if (differenceHandling === 'income' && incomeAccountId) {
+                    diffLegs.push({ accountId: incomeAccountId, debit: 0, credit: gain });
+                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); // This should decrease our liability
                 }
-            } 
-            // We lost money (positive difference)
-            else {
+            } else { // We lost money
                 const loss = difference;
-                 if (differenceHandling === 'expense') {
-                    diffDesc = `Exchange Loss/Discount on Tx #${newId}`;
-                    diffLegs.push({ accountId: expenseAccountId!, debit: loss, credit: 0 });
-                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 }); // Our liability to them increases
-                 } else { // Debit from Client
-                    // This is handled by the main leg, no separate entry needed.
+                 if (differenceHandling === 'expense' && expenseAccountId) {
+                    diffLegs.push({ accountId: expenseAccountId, debit: loss, credit: 0 });
+                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 });
                  }
             }
 
@@ -292,7 +289,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         revalidatePath('/transactions/modern');
         revalidatePath('/transactions');
-        revalidatePath('/cash-records');
+        revalidatePath('/modern-cash-records');
         revalidatePath('/modern-usdt-records');
         
         return { success: true, message: 'Transaction created successfully.' };
