@@ -209,7 +209,7 @@ export function TransactionsTable() {
         Client: tx.clientName,
         Type: tx.type,
         Inflow_USD: tx.amount_usd.toFixed(2),
-        Outflow_USD: tx.amount_usdt.toFixed(2), // Represents total outflow
+        Outflow_USD: (tx.outflow_usd || 0).toFixed(2), // Represents total outflow
         Fee_USD: tx.fee_usd.toFixed(2),
         Difference_USD: (tx.exchange_rate_commission || 0 - (tx.expense_usd || 0)).toFixed(2),
         Status: tx.status,
@@ -282,7 +282,7 @@ export function TransactionsTable() {
                 <SortableHeader sortKey="clientName">Client</SortableHeader>
                 <SortableHeader sortKey="type">Type</SortableHeader>
                 <SortableHeader sortKey="amount_usd" className="text-right">Inflow (USD)</SortableHeader>
-                <SortableHeader sortKey="amount_usdt" className="text-right">Outflow (USD)</SortableHeader>
+                <SortableHeader sortKey="outflow_usd" className="text-right">Outflow (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -310,7 +310,7 @@ export function TransactionsTable() {
                             <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
                         </TableCell>
                         <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usd || 0)}</TableCell>
-                        <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usdt || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.outflow_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                         <TableCell className="text-right">
                            <Button variant="ghost" size="icon" asChild>

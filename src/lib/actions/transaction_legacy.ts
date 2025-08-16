@@ -44,7 +44,7 @@ const TransactionSchema = z.object({
   amount_usd: z.coerce.number(),
   fee_usd: z.coerce.number(),
   expense_usd: z.coerce.number().optional(),
-  amount_usdt: z.coerce.number(),
+  outflow_usd: z.coerce.number(),
   notes: z.string().optional(),
   remittance_number: z.string().optional(),
   hash: z.string().optional(),
@@ -70,7 +70,7 @@ export async function createTransaction(transactionId: string | null, formData: 
     amount_usd: formData.get('amount_usd'),
     fee_usd: formData.get('fee_usd'),
     expense_usd: formData.get('expense_usd'),
-    amount_usdt: formData.get('amount_usdt'),
+    outflow_usd: formData.get('outflow_usd'),
     notes: formData.get('notes'),
     remittance_number: formData.get('remittance_number'),
     hash: formData.get('hash'),
@@ -170,14 +170,14 @@ export async function createTransaction(transactionId: string | null, formData: 
             legs.push({ accountId: clientAccountId, debit: 0, credit: data.amount_usd }); // Credit Client Liability
 
             // We gave them USDT, which is an asset for us. This increases our liability.
-            legs.push({ accountId: data.cryptoWalletId, debit: 0, credit: data.amount_usdt }); // Credit USDT Asset
-            legs.push({ accountId: clientAccountId, debit: data.amount_usdt, credit: 0 }); // Debit Client Liability
+            legs.push({ accountId: data.cryptoWalletId, debit: 0, credit: data.outflow_usd }); // Credit USDT Asset
+            legs.push({ accountId: clientAccountId, debit: data.outflow_usd, credit: 0 }); // Debit Client Liability
 
         } else { // Withdraw
              journalDescription = `Withdrawal for ${clientName} (Tx: ${newTransactionId})`;
             // Client gave us USDT, asset increases, liability to them reduces.
-            legs.push({ accountId: data.cryptoWalletId, debit: data.amount_usdt, credit: 0 }); // Debit USDT Asset
-            legs.push({ accountId: clientAccountId, debit: 0, credit: data.amount_usdt }); // Credit Client Liability
+            legs.push({ accountId: data.cryptoWalletId, debit: data.outflow_usd, credit: 0 }); // Debit USDT Asset
+            legs.push({ accountId: clientAccountId, debit: 0, credit: data.outflow_usd }); // Credit Client Liability
             
             // We gave them fiat, asset decreases, liability increases.
             if(data.bankAccountId) legs.push({ accountId: data.bankAccountId, debit: 0, credit: data.amount_usd }); // Credit Bank Asset

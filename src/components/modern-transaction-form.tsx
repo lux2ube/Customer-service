@@ -419,10 +419,10 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
                              <p className="text-xs text-muted-foreground pt-2">
                                 Formula: (Outflow + Fee) - Inflow = Difference.
                             </p>
-                            {Math.abs(calculation.difference) > 0.001 && (
+                            {Math.abs(calculation.difference) > 0.01 && (
                                 <div className="pt-4 border-t mt-4">
                                      <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
-                                    {calculation.difference < 0 ? ( // We gained money (negative difference)
+                                    {calculation.difference < -0.01 ? ( // We gained money (negative difference)
                                         <RadioGroup name="differenceHandling" defaultValue="credit" className="mt-2 space-y-2">
                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="credit" id="diff-credit" />
@@ -506,7 +506,10 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
     }, [selectedClient]);
 
     React.useEffect(() => {
-        if (selectedClient) return;
+        if (selectedClient) {
+            setSearchResults([]);
+            return;
+        };
 
         if (inputValue.length < 2) {
             setSearchResults([]);

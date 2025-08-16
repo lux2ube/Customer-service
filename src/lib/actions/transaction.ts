@@ -187,7 +187,6 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         if (type === 'Deposit') {
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             const minFee = cryptoFees.minimum_buy_fee || 0;
-            
             if ((1 + feePercent) > 0) {
                  const calculatedFee = (totalInflowUSD * feePercent) / (1 + feePercent);
                  fee = Math.max(calculatedFee, totalInflowUSD > 0 ? minFee : 0);
@@ -226,7 +225,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             clientName: client.name,
             amount_usd: totalInflowUSD,
             fee_usd: fee,
-            amount_usdt: totalOutflowUSD,
+            outflow_usd: totalOutflowUSD,
             expense_usd: difference > 0.01 ? difference : 0,
             exchange_rate_commission: difference < -0.01 ? Math.abs(difference) : 0,
             notes,
@@ -272,13 +271,17 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                 const gain = Math.abs(difference);
                 if (differenceHandling === 'income' && incomeAccountId) {
                     diffLegs.push({ accountId: incomeAccountId, debit: 0, credit: gain });
-                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); // This should decrease our liability
+                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 }); 
+                } else if (differenceHandling === 'credit') {
+                    // This case doesn't require a separate journal entry as it's part of the main transaction balance
                 }
             } else { // We lost money
                 const loss = difference;
                  if (differenceHandling === 'expense' && expenseAccountId) {
                     diffLegs.push({ accountId: expenseAccountId, debit: loss, credit: 0 });
-                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 });
+                    diffLegs.push({ accountId: clientAccountId, debit: 0, credit: loss }); 
+                 } else if (differenceHandling === 'debit') {
+                     // This case doesn't require a separate journal entry as it's part of the main transaction balance
                  }
             }
 
