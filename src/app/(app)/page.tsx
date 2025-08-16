@@ -128,12 +128,12 @@ export default function DashboardPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
-        const transactionsRef = ref(db, 'transactions');
+        const transactionsRef = ref(db, 'modern_transactions');
         
         const unsubs: (() => void)[] = [];
 
         // Fetch last 5 transactions for display without relying on server-side sort
-        unsubs.push(onValue(query(ref(db, 'transactions'), limitToLast(20)), (snapshot) => {
+        unsubs.push(onValue(query(transactionsRef, limitToLast(20)), (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 const list: Transaction[] = Object.keys(data).map(key => ({
@@ -245,7 +245,7 @@ export default function DashboardPage() {
         
         // Mark loading as false after initial data load
         Promise.all([
-            get(query(ref(db, 'transactions'), limitToLast(5))), 
+            get(query(transactionsRef, limitToLast(5))), 
             get(transactionsRef), 
             get(clientsRef)
         ]).then(() => setLoading(false));

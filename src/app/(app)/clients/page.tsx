@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -26,7 +27,7 @@ export default function ClientsPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients/');
-        const transactionsRef = ref(db, 'transactions/');
+        const transactionsRef = ref(db, 'modern_transactions/');
         const accountsRef = ref(db, 'accounts/');
 
         const unsubs: (() => void)[] = [];

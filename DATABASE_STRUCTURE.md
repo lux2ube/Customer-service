@@ -54,9 +54,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 3. `/transactions/{transactionId}` (New)
+### 3. `/modern_transactions/{transactionId}` (New)
 
-**Primary store for consolidated, finalized transactions.** This is a new top-level node. A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential (e.g., T-1, T-2).
+**Primary store for consolidated, finalized transactions.** This is the new, modern transaction ledger. A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential (e.g., T-1, T-2).
 
 -   **`id`**: `string` - The unique, sequential ID for the transaction.
 -   **`date`**: `string` (ISO 8601) - The date the transaction was created.
@@ -71,6 +71,9 @@ The database is organized into several top-level keys, each representing a colle
 -   **`notes`**: `string` (optional) - Any additional notes for the transaction.
 -   **`attachment_url`**: `string` (optional) - URL for any uploaded attachment.
 -   **`createdAt`**: `string` (ISO 8601) - The timestamp when the transaction was created.
+-   **`exchange_rate_commission`**: `number` (optional) - Profit from exchange rate differences.
+-   **`expense_usd`**: `number` (optional) - Loss from exchange rate differences or discounts.
+
 
 ---
 
@@ -109,7 +112,7 @@ Stores atomic counters for generating sequential IDs.
 -   **/`cashRecordId`**: `number` - The last used ID for the new unified cash records.
 -   **/`usdtRecordId`**: `number` - The last used ID for the new unified USDT records.
 -   **/`bscApiId`**: `number` - The last used ID for BSC API configurations.
--   **/`transactionId`**: `number` - The last used ID for the new `transactions` table.
+-   **/`transactionId`**: `number` - The last used ID for the new `modern_transactions` table.
 
 ---
 
@@ -117,6 +120,7 @@ Stores atomic counters for generating sequential IDs.
 
 The following paths are no longer in active use by the new system but may be retained for historical data.
 
+-   `/transactions`
 -   `/modern_cash_records`
 -   `/modern_usdt_records`
 -   `/sms_transactions`

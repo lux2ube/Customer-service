@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
@@ -19,7 +20,7 @@ export function DashboardChart({ data }: DashboardChartProps) {
           <YAxis stroke="hsl(var(--foreground))" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
           <Tooltip 
             cursor={{ fill: 'hsl(var(--secondary))' }} 
-            content={<ChartTooltipContent />} 
+            content={<ChartTooltipContent formatter={(value) => `$${Number(value).toLocaleString()}`} />} 
           />
           <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
         </BarChart>

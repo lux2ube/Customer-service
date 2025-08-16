@@ -72,7 +72,6 @@ export interface ServiceProvider {
     };
 }
 
-
 export interface Transaction {
     id: string;
     date: string;

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -48,7 +49,7 @@ const menuItems = [
   
   { type: 'divider', label: 'Financial' },
   { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
-  { href: '/transactions', label: 'Transactions', icon: ListOrdered },
+  { href: '/transactions', label: 'Transaction List', icon: ListOrdered },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
 

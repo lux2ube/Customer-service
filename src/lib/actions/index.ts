@@ -102,3 +102,5 @@ export {
     cancelCashPayment,
 } from './financial-records';
 
+// Deprecated Actions
+export { createTransaction as createTransactionLegacy } from './transaction_legacy';

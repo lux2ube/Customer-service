@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -68,15 +69,8 @@ export function ClientsTable({
   
   const clientTransactionMap = React.useMemo(() => {
     const map = new Map<string, { bankAccountIds: Set<string>; cryptoWalletIds: Set<string> }>();
-    transactions.forEach(tx => {
-        if (!tx.clientId) return;
-        if (!map.has(tx.clientId)) {
-            map.set(tx.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
-        }
-        const clientEntry = map.get(tx.clientId)!;
-        if (tx.bankAccountId) clientEntry.bankAccountIds.add(tx.bankAccountId);
-        if (tx.cryptoWalletId) clientEntry.cryptoWalletIds.add(tx.cryptoWalletId);
-    });
+    // This logic needs to be updated to inspect the linked records of modern_transactions
+    // For now, this will be empty until that's implemented.
     return map;
   }, [transactions]);
 
@@ -112,15 +106,11 @@ export function ClientsTable({
     }
 
     if (bankAccountFilter !== 'all') {
-        filtered = filtered.filter(client => 
-            clientTransactionMap.get(client.id)?.bankAccountIds.has(bankAccountFilter)
-        );
+        // This filtering is currently disabled as the data source (clientTransactionMap) is not populated correctly yet.
     }
     
     if (cryptoWalletFilter !== 'all') {
-        filtered = filtered.filter(client => 
-            clientTransactionMap.get(client.id)?.cryptoWalletIds.has(cryptoWalletFilter)
-        );
+        // This filtering is currently disabled.
     }
 
     return filtered;
@@ -165,14 +155,14 @@ export function ClientsTable({
           onChange={(event) => setSearch(event.target.value)}
           className="max-w-xs"
         />
-        <Select value={bankAccountFilter} onValueChange={setBankAccountFilter}>
+        <Select value={bankAccountFilter} onValueChange={setBankAccountFilter} disabled>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by bank account..." /></SelectTrigger>
             <SelectContent>
                 <SelectItem value="all">All Bank Accounts</SelectItem>
                 {bankAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
             </SelectContent>
         </Select>
-        <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter}>
+        <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter} disabled>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by crypto wallet..." /></SelectTrigger>
             <SelectContent>
                 <SelectItem value="all">All Crypto Wallets</SelectItem>

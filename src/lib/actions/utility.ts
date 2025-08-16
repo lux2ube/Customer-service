@@ -477,5 +477,3 @@ export async function backfillCashRecordUsd(prevState: SetupState, formData: For
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }
-
-    
