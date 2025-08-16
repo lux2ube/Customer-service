@@ -2,7 +2,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus, useActionState } from 'react-dom';
+import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
@@ -246,20 +247,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     };
 
     return (
-        <form action={(formData) => {
-             if (!selectedClient) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Please select a client.' });
-                return;
-            }
-             if (!transactionType) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Please select a valid transaction type.' });
-                return;
-            }
-            formData.set('clientId', selectedClient.id);
-            formData.set('type', transactionType);
-            selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
-            formAction(formData);
-        }}>
+        <form action={formAction}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
             <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
