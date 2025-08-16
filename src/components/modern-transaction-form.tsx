@@ -161,16 +161,19 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         
         let fee = 0;
 
-        if (type === 'Deposit') {
+        if (transactionType === 'Deposit') {
             const usdtOutflow = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
             const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
             fee = Math.max(usdtOutflow * feePercent, usdtOutflow > 0 ? (cryptoFees.minimum_buy_fee || 0) : 0);
-        } else if (type === 'Withdraw') {
+        } else if (transactionType === 'Withdraw') {
             const usdtInflow = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
             fee = Math.max(usdtInflow * feePercent, usdtInflow > 0 ? (cryptoFees.minimum_sell_fee || 0) : 0);
+        } else if (transactionType === 'Transfer') {
+            const usdtMovement = selected.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100; // Use a default fee for transfers, e.g., buy fee
+            fee = usdtMovement * feePercent;
         }
-
 
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
         
@@ -242,7 +245,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             formData.set('type', transactionType);
             selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
             
-            const result = await createModernTransaction(undefined, formData);
+            const result = await createModernTransaction(prevState, formData);
             if(result?.success) {
                 toast({ title: 'Success', description: 'Transaction created successfully.' });
                 handleClientSelect(selectedClient);
