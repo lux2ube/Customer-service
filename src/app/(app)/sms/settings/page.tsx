@@ -44,7 +44,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle, 
 } from "@/components/ui/alert-dialog"
 import Link from 'next/link';
 
@@ -80,13 +80,16 @@ function AddEditEndpointDialog({ accounts, open, setOpen, endpointToEdit }: { ac
     }, [endpointToEdit]);
 
     const handleRuleChange = (ruleId: string, checked: boolean) => {
-        setSelectedRules(prev => {
-            if (checked) {
-                return [...prev, ruleId];
-            } else {
-                return prev.filter(id => id !== ruleId);
-            }
-        });
+        // Defer state update slightly to avoid flushSync error inside dialog
+        setTimeout(() => {
+            setSelectedRules(prev => {
+                if (checked) {
+                    return [...prev, ruleId];
+                } else {
+                    return prev.filter(id => id !== ruleId);
+                }
+            });
+        }, 0);
     };
     
     const [state, formAction] = useActionState<SmsEndpointState, FormData>(createSmsEndpoint, undefined);
