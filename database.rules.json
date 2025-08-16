@@ -9,6 +9,9 @@
     "modern_usdt_records": {
       ".indexOn": ["clientId", "createdAt"]
     },
+    "modern_transactions": {
+      ".indexOn": ["clientId"]
+    },
     "transactions": {
       ".indexOn": ["clientId"]
     },

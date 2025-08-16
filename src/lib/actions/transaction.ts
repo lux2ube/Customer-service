@@ -108,17 +108,14 @@ const ModernTransactionSchema = z.object({
     linkedRecordIds: z.preprocess((val) => (Array.isArray(val) ? val : [val].filter(Boolean)), z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' })),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
+    differenceHandling: z.enum(['income', 'expense']).optional(),
+    incomeAccountId: z.string().optional(),
+    expenseAccountId: z.string().optional(),
 });
 
 
 export async function createModernTransaction(prevState: TransactionFormState, formData: FormData): Promise<TransactionFormState> {
-    const validatedFields = ModernTransactionSchema.safeParse({
-        clientId: formData.get('clientId'),
-        type: formData.get('type'),
-        linkedRecordIds: formData.getAll('linkedRecordIds'),
-        notes: formData.get('notes'),
-        attachment: formData.get('attachment'),
-    });
+    const validatedFields = ModernTransactionSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
         return {
@@ -127,7 +124,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
     }
     
-    const { clientId, type, linkedRecordIds, notes, attachment } = validatedFields.data;
+    const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     
     try {
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
@@ -165,6 +162,15 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             }
         }
         
+        const difference = (totalOutflowUSD + fee) - totalInflowUSD;
+        let gain = 0;
+        let loss = 0;
+        if (differenceHandling === 'income' && difference < 0) {
+            gain = Math.abs(difference);
+        } else if (differenceHandling === 'expense' && difference > 0) {
+            loss = difference;
+        }
+
         const newId = await getNextSequentialId('transactionId');
         let attachmentUrl = '';
         if (attachment?.size > 0) {
@@ -177,13 +183,18 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             id: newId, date: new Date().toISOString(), type, clientId,
             clientName: client.name, amount_usd: totalInflowUSD, fee_usd: fee,
             outflow_usd: totalOutflowUSD,
-            notes, status: 'Pending', // <-- Always start as Pending
+            notes, status: 'Pending', 
             createdAt: new Date().toISOString(),
             linkedRecordIds: linkedRecordIds.join(','),
             attachment_url: attachmentUrl || undefined,
+            exchange_rate_commission: gain > 0 ? gain : undefined,
+            expense_usd: loss > 0 ? loss : undefined
         };
         
-        await set(ref(db, `modern_transactions/${newId}`), stripUndefined(newTransactionData));
+        const updates: { [key: string]: any } = {};
+        updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
+        
+        await update(ref(db), updates);
 
         revalidatePath('/transactions');
         return { success: true, message: 'Transaction created and is now pending confirmation.' };
@@ -231,17 +242,8 @@ export async function confirmTransaction(transactionId: string): Promise<Confirm
             return null;
         }).filter(Boolean);
 
-        // This is a simplified calculation. A full recalculation should be done for accuracy.
-        const difference = (transaction.outflow_usd + transaction.fee_usd) - transaction.amount_usd;
 
-        await createJournalEntriesForTransaction(
-            transaction.id, 
-            client.name, 
-            `6000${transaction.clientId}`, 
-            allLinkedRecords, 
-            transaction.fee_usd, 
-            difference
-        );
+        await createJournalEntriesForTransaction(transaction, client, allLinkedRecords);
 
         const updates: { [key: string]: any } = {};
         updates[`/modern_transactions/${transactionId}/status`] = 'Confirmed';
@@ -267,12 +269,9 @@ export async function confirmTransaction(transactionId: string): Promise<Confirm
 }
 
 
-async function createJournalEntriesForTransaction(
-    txId: string, clientName: string, clientAccountId: string, 
-    linkedRecords: any[], fee: number, difference: number,
-    differenceHandling?: string, incomeAccountId?: string, expenseAccountId?: string
-) {
-    const description = `Tx #${txId} for ${clientName}`;
+async function createJournalEntriesForTransaction(transaction: Transaction, client: Client, linkedRecords: any[]) {
+    const description = `Tx #${transaction.id} for ${client.name}`;
+    const clientAccountId = `6000${client.id}`;
     
     // Leg 1: Process all inflows against the client account
     for (const record of linkedRecords.filter(r => r.type === 'inflow')) {
@@ -291,30 +290,31 @@ async function createJournalEntriesForTransaction(
     }
 
     // Leg 3: Process the fee
-    if (fee > 0.001) {
+    if (transaction.fee_usd > 0.001) {
         await createJournalEntryFromTransaction(`${description} | Fee`, [
-            { accountId: clientAccountId, debit: fee, credit: 0 },
-            { accountId: '4002', debit: 0, credit: fee }, // 4002 = Fee Income
+            { accountId: clientAccountId, debit: transaction.fee_usd, credit: 0 },
+            { accountId: '4002', debit: 0, credit: transaction.fee_usd }, // 4002 = Fee Income
         ]);
     }
 
-    // Leg 4: Handle the difference (gain or loss)
-    if (Math.abs(difference) > 0.01) {
-        if (difference < 0) { // It's a gain for the system (we received more than we gave)
-            const gain = Math.abs(difference);
-            const chosenIncomeAccountId = incomeAccountId || '4003'; // Default to 4003 if not specified
-             await createJournalEntryFromTransaction(`${description} | Gain`, [
-                { accountId: clientAccountId, debit: gain, credit: 0 },
-                { accountId: chosenIncomeAccountId, debit: 0, credit: gain }
-            ]);
-        } else { // It's a loss for the system (we gave more than we received)
-            const loss = difference;
-            const chosenExpenseAccountId = expenseAccountId || '5002'; // Default to 5002 if not specified
-            await createJournalEntryFromTransaction(`${description} | Loss`, [
-                { accountId: chosenExpenseAccountId, debit: loss, credit: 0 },
-                { accountId: clientAccountId, debit: 0, credit: loss },
-            ]);
-        }
+    // Leg 4: Handle gain (commission)
+    if (transaction.exchange_rate_commission && transaction.exchange_rate_commission > 0.001) {
+        // A gain for us means the client's liability decreases
+        const gain = transaction.exchange_rate_commission;
+        await createJournalEntryFromTransaction(`${description} | Gain`, [
+            { accountId: clientAccountId, debit: gain, credit: 0 },
+            { accountId: '4003', debit: 0, credit: gain }, // 4003 = Exchange Rate Profit
+        ]);
+    }
+
+    // Leg 5: Handle loss (expense/discount)
+    if (transaction.expense_usd && transaction.expense_usd > 0.001) {
+        // A loss for us means the client's liability increases
+        const loss = transaction.expense_usd;
+        await createJournalEntryFromTransaction(`${description} | Loss`, [
+            { accountId: '5002', debit: loss, credit: 0 }, // 5002 = Discounts/Loss Expense
+            { accountId: clientAccountId, debit: 0, credit: loss },
+        ]);
     }
 }
 
@@ -343,3 +343,4 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
+
