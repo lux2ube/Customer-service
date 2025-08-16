@@ -115,6 +115,21 @@ const ModernTransactionSchema = z.object({
     differenceHandling: z.enum(['credit', 'income', 'debit', 'expense']).optional(),
     incomeAccountId: z.string().optional(),
     expenseAccountId: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.differenceHandling === 'income' && !data.incomeAccountId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['incomeAccountId'],
+            message: 'An income account must be selected to record a gain.',
+        });
+    }
+    if (data.differenceHandling === 'expense' && !data.expenseAccountId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['expenseAccountId'],
+            message: 'An expense account must be selected to record a loss.',
+        });
+    }
 });
 
 export async function createModernTransaction(prevState: TransactionFormState, formData: FormData): Promise<TransactionFormState> {
@@ -183,43 +198,29 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const totalOutflowUSD = allLinkedRecords.filter(r => r.type === 'outflow').reduce((sum, r) => sum + r.amount_usd, 0);
         
         let fee = 0;
-        let feePercent = 0;
-        let minFee = 0;
         let baseAmountForFee = 0;
 
         if (type === 'Deposit') {
-            // Fee is based on USDT OUTFLOW. USDT Outflow is what remains from the fiat inflow after the fee.
-            baseAmountForFee = totalInflowUSD;
-            feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
-            minFee = cryptoFees.minimum_buy_fee || 0;
-            if ((1 + feePercent) > 0) {
-                const calculatedFee = (baseAmountForFee * feePercent) / (1 + feePercent);
-                fee = Math.max(calculatedFee, baseAmountForFee > 0 ? minFee : 0);
-            }
+            // Fee is based on USDT OUTFLOW. USDT Outflow is what the client gets.
+            baseAmountForFee = allLinkedRecords.filter(r => r.type === 'outflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
+            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
+            const minFee = cryptoFees.minimum_buy_fee || 0;
+            fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         } else if (type === 'Withdraw') {
             // Fee is based on USDT INFLOW.
             baseAmountForFee = allLinkedRecords.filter(r => r.type === 'inflow' && r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-            feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-            minFee = cryptoFees.minimum_sell_fee || 0;
-            const calculatedFee = baseAmountForFee * feePercent;
-            fee = Math.max(calculatedFee, minFee);
+            const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+            const minFee = cryptoFees.minimum_sell_fee || 0;
+            fee = Math.max(baseAmountForFee * feePercent, minFee);
         } else if (type === 'Transfer') {
              // For transfers, fee is on any USDT movement. We will assume a 'sell' fee for now.
              baseAmountForFee = allLinkedRecords.filter(r => r.recordType === 'usdt').reduce((sum, r) => sum + r.amount, 0);
-             feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-             minFee = cryptoFees.minimum_sell_fee || 0;
-             const calculatedFee = baseAmountForFee * feePercent;
-             fee = Math.max(calculatedFee, minFee);
+             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+             const minFee = cryptoFees.minimum_sell_fee || 0;
+             fee = Math.max(baseAmountForFee * feePercent, minFee);
         }
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
-
-        if (difference < -0.01 && differenceHandling === 'income' && !incomeAccountId) {
-            return { errors: { incomeAccountId: ['An income account must be selected for the gain.'] }, message: 'Missing income account.', success: false };
-        }
-        if (difference > 0.01 && differenceHandling === 'expense' && !expenseAccountId) {
-            return { errors: { expenseAccountId: ['An expense account must be selected for the loss.'] }, message: 'Missing expense account.', success: false };
-        }
         
         let attachmentUrl = '';
         if (attachment && attachment.size > 0) {
@@ -354,3 +355,4 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
+

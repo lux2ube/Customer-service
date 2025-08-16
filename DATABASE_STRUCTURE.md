@@ -26,7 +26,7 @@ The database is organized into several top-level keys, each representing a colle
 -   **`recipientName`**: `string` (for outflows) - The name of the person/entity receiving the money.
 -   **`amount`**: `number` - The amount in the native currency of the account.
 -   **`currency`**: `string` - The currency code (e.g., 'YER', 'SAR').
--   **`amountUsd`**: `number` - The calculated USD value of the transaction.
+-   **`amountusd`**: `number` - The calculated USD value of the transaction.
 -   **`notes`**: `string` (optional) - Any additional notes. For SMS records, this defaults to the raw SMS text.
 -   **`rawSms`**: `string` (optional, for `source: 'SMS'`) - The original text of the SMS.
 -   **`createdAt`**: `string` (ISO 8601) - The timestamp when the record was created.
@@ -127,3 +127,4 @@ The following paths are no longer in active use by the new system but may be ret
 -   `/cash_receipts`
 -   `/usdt_receipts`
 -   `/cash_payments`
+

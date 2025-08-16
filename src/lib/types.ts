@@ -143,6 +143,8 @@ export interface UnifiedFinancialRecord {
   cryptoWalletName?: string; // from UsdtRecord
   senderName?: string;
   recipientName?: string;
+  txHash?: string;
+  clientWalletAddress?: string;
 }
 
 export interface Account {
@@ -331,3 +333,4 @@ export interface ModernUsdtRecord {
     createdAt: string;
     blockNumber?: number; // For sync logic
 }
+

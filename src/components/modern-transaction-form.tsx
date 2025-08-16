@@ -164,29 +164,26 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
         
         let baseAmountForFee = 0;
-        if (transactionType === 'Deposit') { // Fee is on the USDT they GET
-             baseAmountForFee = totalInflowUSD;
-        } else if (transactionType === 'Withdraw') { // Fee is on the USDT they GIVE
-            baseAmountForFee = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
-        }
-
-        const feePercent = (transactionType === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
-        const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
-        
         let fee = 0;
-        if(transactionType === 'Deposit') {
-             // For deposits, the fee is part of the inflow. UsdtAmount = TotalInflow - Fee
-             // Fee = UsdtAmount * feePercent => Fee = (TotalInflow - Fee) * feePercent
-             // Fee = TotalInflow * feePercent - Fee * feePercent
-             // Fee * (1 + feePercent) = TotalInflow * feePercent
-             // Fee = (TotalInflow * feePercent) / (1 + feePercent)
-             if ((1 + feePercent) > 0) {
-                 const calculatedFee = (baseAmountForFee * feePercent) / (1 + feePercent);
-                 fee = Math.max(calculatedFee, baseAmountForFee > 0 ? minFee : 0);
-             }
-        } else {
-            // For withdrawals, fee is on top of the USDT received.
+
+        if (transactionType === 'Deposit') {
+             // Fee is based on USDT OUTFLOW. USDT Outflow is what the client gets.
+            baseAmountForFee = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
+            const minFee = cryptoFees.minimum_buy_fee || 0;
             fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
+        } else if (transactionType === 'Withdraw') {
+            // Fee is based on USDT INFLOW.
+            baseAmountForFee = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+            const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+            const minFee = cryptoFees.minimum_sell_fee || 0;
+            fee = Math.max(baseAmountForFee * feePercent, minFee);
+        } else if (type === 'Transfer') {
+             // For transfers, fee is on any USDT movement. We will assume a 'sell' fee for now.
+             baseAmountForFee = selected.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
+             const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
+             const minFee = cryptoFees.minimum_sell_fee || 0;
+             fee = Math.max(baseAmountForFee * feePercent, minFee);
         }
 
 
@@ -603,3 +600,4 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
