@@ -20,10 +20,11 @@ import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
 import { searchClients } from '@/lib/actions/client';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast, get } from 'firebase/database';
 import { format, parseISO } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Skeleton } from './ui/skeleton';
 
 function SubmitButton({ isEditing, onFormSubmit }: { isEditing: boolean, onFormSubmit?: () => void }) {
     const { pending } = useFormStatus();
@@ -128,13 +129,16 @@ function ClientSelector({
     );
 }
 
-export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }: { record?: CashRecord, clients: Client[], bankAccounts: Account[], onFormSubmit?: () => void }) {
+export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord, onFormSubmit?: () => void }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
     const actionWithId = createCashReceipt.bind(null, record?.id || null);
     const [state, formAction] = useActionState<CashReceiptFormState, FormData>(actionWithId, undefined);
     
+    const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
+    const [loadingData, setLoadingData] = React.useState(true);
+
     const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
@@ -148,27 +152,43 @@ export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }:
     const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
     
      React.useEffect(() => {
-        if (record) {
-            const initialClient = clients.find(c => c.id === record.clientId);
-            if(initialClient) {
-                setSelectedClient(initialClient);
-                setClientSearch(initialClient.name);
-            }
+        if (record && selectedClient) {
+            setClientSearch(selectedClient.name);
         }
-    }, [record, clients]);
-
+    }, [record, selectedClient]);
+    
     React.useEffect(() => {
-        const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
-        const unsubFiat = onValue(fiatRatesRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                const lastEntryKey = Object.keys(data)[0];
-                const lastEntry = data[lastEntryKey];
-                setFiatRates(lastEntry.rates || {});
+        const fetchInitialData = async () => {
+            setLoadingData(true);
+            const accountsRef = ref(db, 'accounts');
+            const ratesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
+            const clientsRef = ref(db, 'clients');
+
+            const [accountsSnap, ratesSnap, clientsSnap] = await Promise.all([get(accountsRef), get(ratesRef), get(clientsRef)]);
+
+            if (accountsSnap.exists()) {
+                const allAccounts: Account[] = Object.values(accountsSnap.val());
+                setBankAccounts(allAccounts.filter(acc => !acc.isGroup && acc.type === 'Assets' && acc.currency && acc.currency !== 'USDT'));
             }
-        });
-        return () => unsubFiat();
-    }, []);
+
+            if (ratesSnap.exists()) {
+                const data = ratesSnap.val();
+                const lastKey = Object.keys(data)[0];
+                setFiatRates(data[lastKey].rates || {});
+            }
+            
+            if (record && record.clientId && clientsSnap.exists()) {
+                const allClients: Record<string, Client> = clientsSnap.val();
+                const initialClient = allClients[record.clientId];
+                if (initialClient) {
+                    setSelectedClient({id: record.clientId, ...initialClient});
+                }
+            }
+
+            setLoadingData(false);
+        };
+        fetchInitialData();
+    }, [record]);
 
     React.useEffect(() => {
         const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
@@ -232,6 +252,21 @@ export function CashReceiptForm({ record, clients, bankAccounts, onFormSubmit }:
     const isEditing = !!record;
     const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
+    if (loadingData && !record) {
+        return (
+            <Card>
+                <CardHeader>
+                    <Skeleton className="h-8 w-48" />
+                    <Skeleton className="h-4 w-64" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                </CardContent>
+            </Card>
+        );
+    }
+    
     return (
         <form action={formAction} ref={formRef}>
             <input type="hidden" name="type" value="inflow" />
