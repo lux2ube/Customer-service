@@ -106,7 +106,7 @@ export interface CashRecord {
     recipientName?: string; // For outflows
     amount: number;
     currency: string;
-    amount_usd: number;
+    amountusd: number;
     notes?: string;
     rawSms?: string;
     createdAt: string;
@@ -309,7 +309,7 @@ export interface ModernCashRecord {
     recipientName?: string; // For outflows
     amount: number;
     currency: string;
-    amount_usd: number;
+    amountusd: number;
     notes?: string;
     rawSms?: string;
     createdAt: string;

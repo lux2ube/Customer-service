@@ -47,7 +47,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     source: record.source,
                     amount: record.amount,
                     currency: record.currency,
-                    amount_usd: record.amount_usd,
+                    amount_usd: record.amountusd,
                     status: record.status,
                     bankAccountName: record.accountName,
                     senderName: record.senderName,
@@ -173,8 +173,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             return { message: 'Crypto fees are not configured in settings.', success: false };
         }
         
-        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amount_usd || r!.amount), 0);
-        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amount_usd || r!.amount), 0);
+        const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountusd || r!.amount), 0);
+        const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountusd || r!.amount), 0);
         
         let baseAmountForFee = 0;
         if (type === 'Deposit') {

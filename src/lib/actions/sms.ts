@@ -189,16 +189,16 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             if (parsed && parsed.amount) {
                 successCount++;
                 
-                let amountUsd = 0;
+                let amountusd = 0;
                 const currencyCode = account.currency;
                 const rateInfo = currentFiatRates[currencyCode];
 
                 if (currencyCode === 'USD') {
-                    amountUsd = parsed.amount;
+                    amountusd = parsed.amount;
                 } else if (rateInfo) {
                     const rate = (parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell) || 0;
                     if (rate > 0) {
-                        amountUsd = parsed.amount / rate;
+                        amountusd = parsed.amount / rate;
                     }
                 }
 
@@ -216,7 +216,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                     recipientName: parsed.type === 'debit' ? parsed.person : undefined,
                     amount: parsed.amount!,
                     currency: account.currency!,
-                    amount_usd: parseFloat(amountUsd.toFixed(2)),
+                    amountusd: parseFloat(amountusd.toFixed(2)),
                     notes: trimmedSmsBody, // Store original SMS in notes
                     rawSms: trimmedSmsBody, // And in its own field
                     createdAt: new Date().toISOString(),

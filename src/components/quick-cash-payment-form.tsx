@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -53,7 +54,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
   
   const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
   const [amount, setAmount] = React.useState('');
-  const [amountUsd, setAmountUsd] = React.useState(0);
+  const [amountusd, setAmountusd] = React.useState(0);
 
   React.useEffect(() => {
     setLoading(true);
@@ -94,7 +95,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
         formRef.current?.reset();
         setSelectedBankAccountId('');
         setAmount('');
-        setAmountUsd(0);
+        setAmountusd(0);
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
@@ -105,26 +106,26 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
   React.useEffect(() => {
         const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
         if (!selectedAccount || !selectedAccount.currency) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
 
         const numericAmount = parseFloat(amount);
         if (isNaN(numericAmount)) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
         
         if (selectedAccount.currency === 'USD') {
-            setAmountUsd(numericAmount);
+            setAmountusd(numericAmount);
             return;
         }
 
         const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientSell > 0) {
-            setAmountUsd(numericAmount / rateInfo.clientSell);
+            setAmountusd(numericAmount / rateInfo.clientSell);
         } else {
-            setAmountUsd(0);
+            setAmountusd(0);
         }
     }, [amount, selectedBankAccountId, bankAccounts, fiatRates]);
 
@@ -135,7 +136,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
         <input type="hidden" name="type" value="outflow" />
         <input type="hidden" name="clientId" value={client.id} />
         <input type="hidden" name="recipientName" value={client.name} />
-        <input type="hidden" name="amountUsd" value={amountUsd} />
+        <input type="hidden" name="amountusd" value={amountusd} />
          <input type="hidden" name="date" value={new Date().toISOString()} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -160,7 +161,7 @@ export function QuickCashPaymentForm({ client, onPaymentCreated, setIsOpen }: Qu
         </div>
         <div className="space-y-2">
             <Label>Equivalent Amount (USD)</Label>
-            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
+            <Input value={amountusd > 0 ? amountusd.toFixed(2) : '0.00'} readOnly disabled />
         </div>
             <div className="space-y-2">
             <Label htmlFor="remittanceNumber">Remittance Number</Label>

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -17,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, CashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createCashReceipt, type CashReceiptFormState, searchClients } from '@/lib/actions';
+import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
+import { searchClients } from '@/lib/actions/client';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
@@ -139,7 +141,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
 
     const [selectedBankAccountId, setSelectedBankAccountId] = React.useState(record?.accountId || '');
     const [amount, setAmount] = React.useState<string | number>(record?.amount || '');
-    const [amountUsd, setAmountUsd] = React.useState<number>(record?.amountUsd || 0);
+    const [amountusd, setAmountusd] = React.useState<number>(record?.amountusd || 0);
     const [recipientName, setRecipientName] = React.useState(record?.recipientName || '');
     const [notes, setNotes] = React.useState(record?.notes || '');
 
@@ -172,26 +174,26 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
     React.useEffect(() => {
         const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
         if (!selectedAccount || !selectedAccount.currency) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
 
         const numericAmount = parseFloat(String(amount));
         if (isNaN(numericAmount)) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
         
         if (selectedAccount.currency === 'USD') {
-            setAmountUsd(numericAmount);
+            setAmountusd(numericAmount);
             return;
         }
 
         const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientSell > 0) {
-            setAmountUsd(numericAmount / rateInfo.clientSell);
+            setAmountusd(numericAmount / rateInfo.clientSell);
         } else {
-            setAmountUsd(0);
+            setAmountusd(0);
         }
     }, [amount, selectedBankAccountId, bankAccounts, fiatRates]);
 
@@ -279,8 +281,8 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
                         </div>
                          <div className="space-y-2">
                             <Label>Equivalent Amount (USD)</Label>
-                            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
-                            <input type="hidden" name="amountUsd" value={amountUsd} />
+                            <Input value={amountusd > 0 ? amountusd.toFixed(2) : '0.00'} readOnly disabled />
+                            <input type="hidden" name="amountusd" value={amountusd} />
                         </div>
                     </div>
 

@@ -31,7 +31,7 @@ const CashRecordSchema = z.object({
   senderName: z.string().optional(),
   recipientName: z.string().optional(),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
-  amountUsd: z.coerce.number(),
+  amountusd: z.coerce.number(),
   remittanceNumber: z.string().optional(),
   note: z.string().optional(),
   type: z.enum(['inflow', 'outflow']),
@@ -39,7 +39,11 @@ const CashRecordSchema = z.object({
 
 
 export async function createCashReceipt(recordId: string | null, prevState: CashReceiptFormState, formData: FormData): Promise<CashReceiptFormState> {
-    const validatedFields = CashRecordSchema.safeParse(Object.fromEntries(formData.entries()));
+    const validatedFields = CashRecordSchema.safeParse({
+        ...Object.fromEntries(formData.entries()),
+        amountusd: formData.get('amountusd') || formData.get('amountUsd')
+    });
+
 
     if (!validatedFields.success) {
         return {
@@ -50,7 +54,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
     }
     
     try {
-        let { date, clientId, bankAccountId, amount, amountUsd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
+        let { date, clientId, bankAccountId, amount, amountusd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
         
         const [accountSnapshot, clientSnapshot, fiatRatesSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
@@ -63,15 +67,15 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         const account = accountSnapshot.val() as Account;
         const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
 
-        // Server-side calculation of amount_usd as a fallback
-        if (amountUsd === 0 && account.currency && account.currency !== 'USD' && fiatRatesSnapshot.exists()) {
+        // Server-side calculation of amountusd as a fallback
+        if (amountusd === 0 && account.currency && account.currency !== 'USD' && fiatRatesSnapshot.exists()) {
              const lastRateEntryKey = Object.keys(fiatRatesSnapshot.val())[0];
              const ratesData = fiatRatesSnapshot.val()[lastRateEntryKey].rates;
              const rateInfo = ratesData[account.currency];
              if (rateInfo) {
                 const rate = type === 'inflow' ? rateInfo.clientBuy : rateInfo.clientSell;
                 if (rate > 0) {
-                    amountUsd = amount / rate;
+                    amountusd = amount / rate;
                 }
              }
         }
@@ -91,7 +95,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             recipientName: recipientName,
             amount: amount,
             currency: account.currency!,
-            amount_usd: amountUsd,
+            amountusd: amountusd,
             notes: note,
             createdAt: new Date().toISOString(),
         };
@@ -240,4 +244,3 @@ export async function cancelCashPayment(recordId: string) {
         return { success: false, message: "Failed to cancel payment." };
     }
 }
-

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -428,8 +429,8 @@ export async function backfillCashRecordUsd(prevState: SetupState, formData: For
         for (const recordId in allRecords) {
             const record = allRecords[recordId];
 
-            // Skip if amount_usd already exists and is a valid number
-            if (typeof record.amount_usd === 'number') {
+            // Skip if amountusd already exists and is a valid number
+            if (typeof record.amountusd === 'number') {
                 continue;
             }
 
@@ -452,13 +453,13 @@ export async function backfillCashRecordUsd(prevState: SetupState, formData: For
             const currencyCode = record.currency;
 
             if (currencyCode === 'USD') {
-                 updates[`/cash_records/${recordId}/amount_usd`] = record.amount;
+                 updates[`/cash_records/${recordId}/amountusd`] = record.amount;
                  updatedCount++;
             } else if (rateData && rateData[currencyCode]) {
                 const rate = record.type === 'inflow' ? rateData[currencyCode].clientBuy : rateData[currencyCode].clientSell;
                 if (rate > 0) {
-                    const amountUsd = record.amount / rate;
-                    updates[`/cash_records/${recordId}/amount_usd`] = parseFloat(amountUsd.toFixed(2));
+                    const amountusd = record.amount / rate;
+                    updates[`/cash_records/${recordId}/amountusd`] = parseFloat(amountusd.toFixed(2));
                     updatedCount++;
                 }
             }
@@ -472,7 +473,7 @@ export async function backfillCashRecordUsd(prevState: SetupState, formData: For
         return { message: `Backfill complete. Updated ${updatedCount} cash records with USD values.`, error: false };
 
     } catch (e: any) {
-        console.error("Error during amount_usd backfill:", e);
+        console.error("Error during amountusd backfill:", e);
         return { message: `An error occurred: ${e.message}`, error: true };
     }
 }

@@ -444,7 +444,7 @@ function ClientSelector({ onSelect }: { onSelect: (client: Client | null) => voi
         setInputValue(client.name);
     };
     
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
     
     const handlePaste = async () => {
         const text = await navigator.clipboard.readText();

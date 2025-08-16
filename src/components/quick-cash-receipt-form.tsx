@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -19,7 +20,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import type { Client, Account, FiatRate } from '@/lib/types';
-import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions/financial-records';
+import { createCashReceipt } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -58,11 +59,11 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
   const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
   const [loading, setLoading] = React.useState(true);
 
-  const [state, formAction] = useActionState<CashReceiptFormState, FormData>(createCashReceipt.bind(null, null), undefined);
+  const [state, formAction] = useActionState(createCashReceipt.bind(null, null), undefined);
   
   const [selectedBankAccountId, setSelectedBankAccountId] = React.useState('');
   const [amount, setAmount] = React.useState('');
-  const [amountUsd, setAmountUsd] = React.useState(0);
+  const [amountusd, setAmountusd] = React.useState(0);
 
   React.useEffect(() => {
     setLoading(true);
@@ -93,7 +94,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
     }
   }, []);
 
-  const stateRef = React.useRef<CashReceiptFormState>();
+  const stateRef = React.useRef<any>();
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
       if (state.success) {
@@ -103,7 +104,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         formRef.current?.reset();
         setSelectedBankAccountId('');
         setAmount('');
-        setAmountUsd(0);
+        setAmountusd(0);
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
@@ -114,26 +115,26 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
   React.useEffect(() => {
         const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
         if (!selectedAccount || !selectedAccount.currency) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
 
         const numericAmount = parseFloat(amount);
         if (isNaN(numericAmount)) {
-            setAmountUsd(0);
+            setAmountusd(0);
             return;
         }
         
         if (selectedAccount.currency === 'USD') {
-            setAmountUsd(numericAmount);
+            setAmountusd(numericAmount);
             return;
         }
 
         const rateInfo = fiatRates[selectedAccount.currency];
         if (rateInfo && rateInfo.clientBuy > 0) {
-            setAmountUsd(numericAmount / rateInfo.clientBuy);
+            setAmountusd(numericAmount / rateInfo.clientBuy);
         } else {
-            setAmountUsd(0);
+            setAmountusd(0);
         }
     }, [amount, selectedBankAccountId, bankAccounts, fiatRates]);
 
@@ -144,7 +145,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         <input type="hidden" name="type" value="inflow" />
         <input type="hidden" name="clientId" value={client.id} />
         <input type="hidden" name="senderName" value={client.name} />
-        <input type="hidden" name="amountUsd" value={amountUsd} />
+        <input type="hidden" name="amountusd" value={amountusd} />
         <input type="hidden" name="date" value={new Date().toISOString()} />
         <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -169,7 +170,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         </div>
         <div className="space-y-2">
             <Label>Equivalent Amount (USD)</Label>
-            <Input value={amountUsd > 0 ? amountUsd.toFixed(2) : '0.00'} readOnly disabled />
+            <Input value={amountusd > 0 ? amountusd.toFixed(2) : '0.00'} readOnly disabled />
         </div>
             <div className="space-y-2">
             <Label htmlFor="remittanceNumber">Remittance Number</Label>
