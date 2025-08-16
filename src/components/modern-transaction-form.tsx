@@ -2,7 +2,7 @@
 'use client';
 
 import * as React from 'react';
-import { useFormStatus } from 'react-dom';
+import { useFormStatus, useActionState } from 'react-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Input } from './ui/input';
@@ -70,6 +70,8 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
 
 export function ModernTransactionForm({ initialClients, allAccounts, serviceProviders, defaultRecordingAccountId }: { initialClients: Client[], allAccounts: Account[], serviceProviders: ServiceProvider[], defaultRecordingAccountId: string }) {
     const searchParams = useSearchParams();
+    const [state, formAction] = useActionState(createModernTransaction, undefined);
+    
     const [transactionType, setTransactionType] = React.useState<Transaction['type'] | null>(null);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
@@ -121,6 +123,18 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
         });
         return () => unsubFees();
     }, []);
+
+    React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: 'Success', description: 'Transaction created successfully.' });
+            if (selectedClient) {
+                handleClientSelect(selectedClient); // Re-fetch records and reset selections
+            }
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: 'Error', description: state.message });
+        }
+    }, [state, toast, selectedClient, handleClientSelect]);
+
 
     React.useEffect(() => {
         const typeParam = searchParams.get('type') as Transaction['type'] | null;
@@ -232,8 +246,8 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
     };
 
     return (
-        <form action={async (formData) => {
-            if (!selectedClient) {
+        <form action={(formData) => {
+             if (!selectedClient) {
                 toast({ variant: 'destructive', title: 'Error', description: 'Please select a client.' });
                 return;
             }
@@ -244,14 +258,7 @@ export function ModernTransactionForm({ initialClients, allAccounts, serviceProv
             formData.set('clientId', selectedClient.id);
             formData.set('type', transactionType);
             selectedRecordIds.forEach(id => formData.append('linkedRecordIds', id));
-            
-            const result = await createModernTransaction(prevState, formData);
-            if(result?.success) {
-                toast({ title: 'Success', description: 'Transaction created successfully.' });
-                handleClientSelect(selectedClient);
-            } else if(result?.message) {
-                toast({ variant: 'destructive', title: 'Error', description: result.message });
-            }
+            formAction(formData);
         }}>
             <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
@@ -579,3 +586,5 @@ function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client |
         </Popover>
     );
 }
+
+    
