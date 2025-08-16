@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -13,7 +14,7 @@ import type { Transaction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -22,33 +23,40 @@ import { cn, normalizeArabic } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TransactionBulkActions } from './transaction-bulk-actions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { ExportButton } from './export-button';
+import Link from 'next/link';
 
 type SortableKeys = keyof Transaction;
-
-interface TransactionsTableProps {
-    transactions: Transaction[];
-    loading: boolean;
-    onFilteredDataChange: (data: Transaction[]) => void;
-    onRowClick: (txId: string) => void;
-    selectedTxId: string | null;
-}
 
 const ITEMS_PER_PAGE = 50;
 
 const statuses: Transaction['status'][] = ['Pending', 'Confirmed', 'Cancelled'];
-const types: Transaction['type'][] = ['Deposit', 'Withdraw'];
-const currencies: Transaction['currency'][] = ['USD', 'YER', 'SAR', 'USDT'];
+const types: Transaction['type'][] = ['Deposit', 'Withdraw', 'Transfer'];
 
-export function TransactionsTable({ transactions, loading, onFilteredDataChange, onRowClick, selectedTxId }: TransactionsTableProps) {
+export function TransactionsTable() {
+  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
-  const [currencyFilter, setCurrencyFilter] = React.useState('all');
 
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    const transactionsRef = ref(db, 'transactions/');
+    const unsubscribe = onValue(transactionsRef, (snapshot) => {
+        const data = snapshot.val();
+        setTransactions(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
+        setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleSort = (key: SortableKeys) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -67,29 +75,16 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
 
         filtered = filtered.filter(tx => {
             const clientName = normalizeArabic(tx.clientName?.toLowerCase() || '');
-            const clientNameWords = clientName.split(' ');
-            const clientNameMatch = searchTerms.every(term => 
-                clientNameWords.some(nameWord => nameWord.startsWith(term))
-            );
-
-            if (clientNameMatch) {
-                return true;
-            }
+            const clientNameMatch = searchTerms.every(term => clientName.includes(term));
             
-            const otherFieldsMatch = (
+            if (clientNameMatch) return true;
+            
+            return (
                 (tx.id && tx.id.toLowerCase().includes(normalizedSearch)) ||
                 (tx.type && tx.type.toLowerCase().includes(normalizedSearch)) ||
-                (tx.amount && tx.amount.toString().includes(normalizedSearch)) ||
-                (tx.currency && tx.currency.toLowerCase().includes(normalizedSearch)) ||
                 (tx.amount_usd && tx.amount_usd.toString().includes(normalizedSearch)) ||
-                (tx.status && tx.status.toLowerCase().includes(normalizedSearch)) ||
-                (tx.hash && tx.hash.toLowerCase().includes(normalizedSearch)) ||
-                (tx.remittance_number && tx.remittance_number.toLowerCase().includes(normalizedSearch)) ||
-                (tx.notes && normalizeArabic(tx.notes.toLowerCase()).includes(normalizedSearch)) ||
-                (tx.client_wallet_address && tx.client_wallet_address.toLowerCase().includes(normalizedSearch))
+                (tx.status && tx.status.toLowerCase().includes(normalizedSearch))
             );
-            
-            return otherFieldsMatch;
         });
     }
 
@@ -98,9 +93,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
     }
     if (statusFilter !== 'all') {
         filtered = filtered.filter(tx => tx.status === statusFilter);
-    }
-    if (currencyFilter !== 'all') {
-        filtered = filtered.filter(tx => tx.currency === currencyFilter);
     }
 
     if (dateRange?.from) {
@@ -141,13 +133,12 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
     }
 
     return filtered;
-  }, [transactions, search, dateRange, sortConfig, typeFilter, statusFilter, currencyFilter]);
+  }, [transactions, search, dateRange, sortConfig, typeFilter, statusFilter]);
 
   React.useEffect(() => {
-    onFilteredDataChange(filteredAndSortedTransactions);
     setCurrentPage(1);
     setRowSelection({});
-  }, [filteredAndSortedTransactions, onFilteredDataChange]);
+  }, [filteredAndSortedTransactions]);
 
   const totalPages = Math.ceil(filteredAndSortedTransactions.length / ITEMS_PER_PAGE);
 
@@ -181,8 +172,8 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
     return <ArrowDown className="ml-2 h-4 w-4" />;
   };
 
-  const SortableHeader = ({ sortKey, children }: { sortKey: SortableKeys; children: React.ReactNode }) => (
-    <TableHead>
+  const SortableHeader = ({ sortKey, children, className }: { sortKey: SortableKeys; children: React.ReactNode; className?: string }) => (
+    <TableHead className={className}>
         <Button variant="ghost" onClick={() => handleSort(sortKey)} className="px-2">
             {children} {renderSortIcon(sortKey)}
         </Button>
@@ -195,7 +186,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
     const newSelection: Record<string, boolean> = {};
     if (checked) {
       paginatedTransactions.forEach(tx => {
-        newSelection[tx.id] = true;
+        if(tx.id) newSelection[tx.id] = true;
       });
     }
     setRowSelection(newSelection);
@@ -206,8 +197,19 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
     setDateRange(undefined);
     setTypeFilter('all');
     setStatusFilter('all');
-    setCurrencyFilter('all');
   };
+
+  const exportableData = filteredAndSortedTransactions.map(tx => ({
+        ID: tx.id,
+        Date: tx.date ? format(parseISO(tx.date), 'yyyy-MM-dd HH:mm') : 'N/A',
+        Client: tx.clientName,
+        Type: tx.type,
+        Inflow_USD: tx.amount_usd.toFixed(2),
+        Outflow_USD: tx.amount_usdt.toFixed(2), // Represents total outflow
+        Fee_USD: tx.fee_usd.toFixed(2),
+        Difference_USD: (tx.exchange_rate_commission || 0 - (tx.expense_usd || 0)).toFixed(2),
+        Status: tx.status,
+    }));
 
   return (
     <div className="space-y-4">
@@ -233,13 +235,6 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
                     {statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
             </Select>
-             <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by currency..." /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Currencies</SelectItem>
-                    {currencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-            </Select>
             <Popover>
             <PopoverTrigger asChild>
                 <Button
@@ -256,6 +251,7 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
             </PopoverContent>
             </Popover>
             <Button variant="ghost" onClick={clearFilters}><X className="mr-2 h-4 w-4" />Clear Filters</Button>
+            <ExportButton data={exportableData} filename="transactions" />
         </div>
       </div>
 
@@ -277,20 +273,21 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
                         aria-label="Select all"
                     />
                 </TableHead>
+                <SortableHeader sortKey="id">ID</SortableHeader>
                 <SortableHeader sortKey="date">Date</SortableHeader>
                 <SortableHeader sortKey="clientName">Client</SortableHeader>
                 <SortableHeader sortKey="type">Type</SortableHeader>
-                <SortableHeader sortKey="amount">Amount</SortableHeader>
-                <SortableHeader sortKey="amount_usd">Amount (USD)</SortableHeader>
+                <SortableHeader sortKey="amount_usd" className="text-right">Inflow (USD)</SortableHeader>
+                <SortableHeader sortKey="amount_usdt" className="text-right">Outflow (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map(tx => (
-                    <TableRow key={tx.id} data-state={selectedTxId === tx.id && "selected"} onClick={() => onRowClick(tx.id)} className="cursor-pointer">
+                    <TableRow key={tx.id} data-state={rowSelection[tx.id] && "selected"} className="cursor-pointer">
                         <TableCell className="px-2">
                             <Checkbox
                                 checked={rowSelection[tx.id] || false}
@@ -299,22 +296,21 @@ export function TransactionsTable({ transactions, loading, onFilteredDataChange,
                                 aria-label="Select row"
                             />
                         </TableCell>
+                        <TableCell className="font-mono text-xs">{tx.id}</TableCell>
                         <TableCell>
-                        {tx.date && !isNaN(parseISO(tx.date).getTime()) ? format(parseISO(tx.date), 'PPP') : 'N/A'}
+                            {tx.date && !isNaN(parseISO(tx.date).getTime()) ? format(parseISO(tx.date), 'PPp') : 'N/A'}
                         </TableCell>
                         <TableCell className="font-medium">{tx.clientName || tx.clientId}</TableCell>
                         <TableCell>
-                        <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
+                            <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
                         </TableCell>
-                        <TableCell className="font-mono">
-                        {tx.amount ? new Intl.NumberFormat().format(tx.amount) : ''} {tx.currency}
-                        </TableCell>
-                        <TableCell className="font-mono">{formatCurrency(tx.amount_usd || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usd || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usdt || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                     </TableRow>
                 ))
               ) : (
-                <TableRow><TableCell colSpan={7} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

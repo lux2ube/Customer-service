@@ -133,7 +133,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     }
     
     const { clientId, type, linkedRecordIds, notes, attachment, incomeAccountId, expenseAccountId } = validatedFields.data;
-    const newId = await getNextSequentialId('globalRecordId');
+    const newId = await getNextSequentialId('transactionId');
     
     try {
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
@@ -181,7 +181,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         }
 
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
-        const minFee = transactionType === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
+        const minFee = type === 'Deposit' ? cryptoFees.minimum_buy_fee : cryptoFees.minimum_sell_fee;
         const fee = Math.max(baseAmountForFee * feePercent, baseAmountForFee > 0 ? minFee : 0);
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;

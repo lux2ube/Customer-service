@@ -90,15 +90,6 @@ export interface Transaction {
     createdAt: string;
     linkedRecordIds?: string;
     exchange_rate_commission?: number; // Captures positive difference (profit)
-    // --- LEGACY FIELDS ---
-    bankAccountId?: string;
-    cryptoWalletId?: string;
-    currency?: string;
-    amount?: number;
-    remittance_number?: string;
-    hash?: string;
-    client_wallet_address?: string;
-    linkedSmsId?: string;
 }
 
 export interface CashRecord {
