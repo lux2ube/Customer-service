@@ -14,7 +14,7 @@ import type { Transaction } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
-import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Pencil } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Pencil, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -120,7 +120,11 @@ export function TransactionsTable() {
         if (bVal === null || bVal === undefined) return -1;
         
         let comparison = 0;
-        if (sortConfig.key === 'date' || sortConfig.key === 'createdAt') {
+        if (sortConfig.key === 'id') {
+            const numA = parseInt(String(aVal).substring(1));
+            const numB = parseInt(String(bVal).substring(1));
+            comparison = numA - numB;
+        } else if (sortConfig.key === 'date' || sortConfig.key === 'createdAt') {
             comparison = parseISO(aVal).getTime() - parseISO(bVal).getTime();
         } else if (typeof aVal === 'number' && typeof bVal === 'number') {
             comparison = aVal - bVal;
@@ -280,11 +284,12 @@ export function TransactionsTable() {
                 <SortableHeader sortKey="amount_usd" className="text-right">Inflow (USD)</SortableHeader>
                 <SortableHeader sortKey="amount_usdt" className="text-right">Outflow (USD)</SortableHeader>
                 <SortableHeader sortKey="status">Status</SortableHeader>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading transactions...</TableCell></TableRow>
               ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map(tx => (
                     <TableRow key={tx.id} data-state={rowSelection[tx.id] && "selected"} className="cursor-pointer">
@@ -307,10 +312,17 @@ export function TransactionsTable() {
                         <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usd || 0)}</TableCell>
                         <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usdt || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
+                        <TableCell className="text-right">
+                           <Button variant="ghost" size="icon" asChild>
+                               <Link href={`/transactions/${tx.id}/invoice`} target="_blank">
+                                   <FileText className="h-4 w-4" />
+                               </Link>
+                           </Button>
+                        </TableCell>
                     </TableRow>
                 ))
               ) : (
-                <TableRow><TableCell colSpan={8} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="h-24 text-center">No transactions found for the selected criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

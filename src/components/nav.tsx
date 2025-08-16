@@ -37,6 +37,7 @@ import {
   Plug,
   FileWarning,
   Globe,
+  ListOrdered,
 } from 'lucide-react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 
@@ -47,6 +48,7 @@ const menuItems = [
   
   { type: 'divider', label: 'Financial' },
   { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
+  { href: '/transactions', label: 'Transactions', icon: ListOrdered },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
   { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
 
