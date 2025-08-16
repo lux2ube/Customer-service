@@ -275,6 +275,7 @@ export interface SendRequest {
     txHash?: string;
     error?: string;
     creditAccountId: string;
+    clientId: string;
 }
 
 export interface TransactionFlag {
@@ -333,4 +334,3 @@ export interface ModernUsdtRecord {
     createdAt: string;
     blockNumber?: number; // For sync logic
 }
-
