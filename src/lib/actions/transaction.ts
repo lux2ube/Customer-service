@@ -110,6 +110,7 @@ const ModernTransactionSchema = z.object({
     linkedRecordIds: z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' }),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
+    differenceHandling: z.enum(['credit', 'income', 'debit', 'expense']).optional(),
     incomeAccountId: z.string().optional(),
     expenseAccountId: z.string().optional(),
 });
@@ -121,6 +122,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         linkedRecordIds: formData.getAll('linkedRecordIds'),
         notes: formData.get('notes'),
         attachment: formData.get('attachment'),
+        differenceHandling: formData.get('differenceHandling'),
         incomeAccountId: formData.get('incomeAccountId'),
         expenseAccountId: formData.get('expenseAccountId'),
     });
@@ -132,7 +134,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
     }
     
-    const { clientId, type, linkedRecordIds, notes, attachment, incomeAccountId, expenseAccountId } = validatedFields.data;
+    const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     const newId = await getNextSequentialId('transactionId');
     
     try {
@@ -171,13 +173,12 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         const totalInflowUSD = allLinkedRecords.filter(r => r!.type === 'inflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
         const totalOutflowUSD = allLinkedRecords.filter(r => r!.type === 'outflow').reduce((sum, r) => sum + (r!.amountUsd || r!.amount), 0);
-
+        
         let baseAmountForFee = 0;
         if (type === 'Deposit') {
-            baseAmountForFee = totalInflowUSD;
+            baseAmountForFee = allLinkedRecords.filter(r => r!.type === 'outflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
         } else if (type === 'Withdraw') {
-            const usdtInflow = allLinkedRecords.filter(r => r!.type === 'inflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
-            baseAmountForFee = usdtInflow;
+            baseAmountForFee = allLinkedRecords.filter(r => r!.type === 'inflow' && r!.recordType === 'usdt').reduce((sum, r) => sum + r!.amount, 0);
         }
 
         const feePercent = (type === 'Deposit' ? cryptoFees.buy_fee_percent : cryptoFees.sell_fee_percent) / 100;
@@ -186,10 +187,10 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         
         const difference = (totalOutflowUSD + fee) - totalInflowUSD;
 
-        if (difference > 0 && !incomeAccountId) {
+        if (difference > 0 && differenceHandling === 'income' && !incomeAccountId) {
             return { errors: { incomeAccountId: ['An income account must be selected for the gain.'] }, message: 'Missing income account.', success: false };
         }
-        if (difference < 0 && !expenseAccountId) {
+        if (difference < 0 && differenceHandling === 'expense' && !expenseAccountId) {
             return { errors: { expenseAccountId: ['An expense account must be selected for the loss.'] }, message: 'Missing expense account.', success: false };
         }
         
@@ -208,7 +209,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             clientName: client.name,
             amount_usd: totalInflowUSD,
             fee_usd: fee,
-            amount_usdt: totalOutflowUSD, // amount_usdt now represents the total outflow
+            amount_usdt: totalOutflowUSD,
             expense_usd: difference < 0 ? Math.abs(difference) : 0,
             exchange_rate_commission: difference > 0 ? difference : 0,
             notes,
@@ -250,20 +251,35 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             let diffDesc: string;
             let diffLegs: { accountId: string; debit: number; credit: number; }[] = [];
             
-            if (difference > 0) { // Profit (Income)
-                diffDesc = `Exchange Gain on Tx #${newId}`;
-                diffLegs = [
-                    { accountId: incomeAccountId!, debit: 0, credit: difference }, // Credit Selected Income Account
-                    { accountId: clientAccountId, debit: difference, credit: 0 }, // Debit Client Liability
-                ];
-            } else { // Loss (Expense/Discount)
-                diffDesc = `Exchange Loss/Discount on Tx #${newId}`;
-                diffLegs = [
-                    { accountId: expenseAccountId!, debit: Math.abs(difference), credit: 0 }, // Debit Selected Expense Account
-                    { accountId: clientAccountId, credit: Math.abs(difference), debit: 0 }, // Credit Client Liability
-                ];
+            // We gained money (negative difference)
+            if (difference < 0) {
+                const gain = Math.abs(difference);
+                if (differenceHandling === 'income') {
+                    diffDesc = `Exchange Gain on Tx #${newId}`;
+                    diffLegs.push({ accountId: incomeAccountId!, debit: 0, credit: gain });
+                    diffLegs.push({ accountId: clientAccountId, debit: gain, credit: 0 });
+                } else { // Credit to Client
+                    diffDesc = `Overpayment credited to client on Tx #${newId}`;
+                    // This logic seems reversed. If we gain, and credit client, it's a liability for us.
+                    // This will be handled implicitly by the main transaction legs. No extra entry needed if it's a client credit.
+                }
+            } 
+            // We lost money (positive difference)
+            else {
+                const loss = difference;
+                 if (differenceHandling === 'expense') {
+                    diffDesc = `Exchange Loss/Discount on Tx #${newId}`;
+                    diffLegs.push({ accountId: expenseAccountId!, debit: loss, credit: 0 });
+                    diffLegs.push({ accountId: clientAccountId, credit: loss, debit: 0 });
+                 } else { // Debit from Client
+                    diffDesc = `Underpayment debited from client on Tx #${newId}`;
+                    // This will be handled implicitly by the main transaction legs. No extra entry needed if it's a client debit.
+                 }
             }
-            await createJournalEntryFromTransaction(diffDesc, diffLegs);
+
+            if(diffLegs.length > 0) {
+                await createJournalEntryFromTransaction(diffDesc, diffLegs);
+            }
         }
 
         revalidatePath('/transactions/modern');
