@@ -11,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client, CashRecord, UsdtRecord, Account } from '@/lib/types';
+import type { Client, Transaction, Account } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -21,12 +21,12 @@ import { Input } from '@/components/ui/input';
 import { normalizeArabic, cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
-import { onValue, ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { onValue, ref, get } from 'firebase/database';
 
 
 interface ClientsTableProps {
     initialClients: Client[];
-    initialTransactions: never[]; // This is no longer needed
+    initialTransactions: never[];
     initialBankAccounts: Account[];
     initialCryptoWallets: Account[];
     onFilteredDataChange: (data: Client[]) => void;
@@ -50,9 +50,9 @@ export function ClientsTable({
   const [bankAccountFilter, setBankAccountFilter] = React.useState('all');
   const [cryptoWalletFilter, setCryptoWalletFilter] = React.useState('all');
   
-  const [clientRecordMap, setClientRecordMap] = React.useState(new Map<string, { bankAccountIds: Set<string>, cryptoWalletIds: Set<string> }>());
+  const [clientAccountUsage, setClientAccountUsage] = React.useState(new Map<string, { bankAccountIds: Set<string>, cryptoWalletIds: Set<string> }>());
 
-  // Listen for real-time updates
+  // Listen for real-time updates on clients
   React.useEffect(() => {
     setLoading(initialClients.length === 0);
      const clientsRef = ref(db, 'clients');
@@ -66,36 +66,37 @@ export function ClientsTable({
     return () => unsubscribe();
   }, [initialClients]);
 
+  // Fetch all transactions once to build the account usage map
   React.useEffect(() => {
-    const fetchRecords = async () => {
+    const transactionsRef = ref(db, 'transactions');
+    const unsubscribe = onValue(transactionsRef, (snapshot) => {
+        if (!snapshot.exists()) {
+            setClientAccountUsage(new Map());
+            return;
+        }
+        const transactions: Record<string, Transaction> = snapshot.val();
         const newMap = new Map<string, { bankAccountIds: Set<string>, cryptoWalletIds: Set<string> }>();
-        const [cashSnapshot, usdtSnapshot] = await Promise.all([
-            get(ref(db, 'records/cash')),
-            get(ref(db, 'records/usdt'))
-        ]);
-        
-        if (cashSnapshot.exists()) {
-            const records: Record<string, CashRecord> = cashSnapshot.val();
-            Object.values(records).forEach(rec => {
-                if (rec.clientId) {
-                    if (!newMap.has(rec.clientId)) newMap.set(rec.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
-                    newMap.get(rec.clientId)!.bankAccountIds.add(rec.accountId);
+
+        Object.values(transactions).forEach(tx => {
+            if (!tx.clientId) return;
+
+            if (!newMap.has(tx.clientId)) {
+                newMap.set(tx.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
+            }
+            const usage = newMap.get(tx.clientId)!;
+
+            const allLegs = [...(tx.inflows || []), ...(tx.outflows || [])];
+            allLegs.forEach(leg => {
+                if (leg.type === 'cash') {
+                    usage.bankAccountIds.add(leg.accountId);
+                } else if (leg.type === 'usdt') {
+                    usage.cryptoWalletIds.add(leg.accountId);
                 }
             });
-        }
-        
-        if (usdtSnapshot.exists()) {
-            const records: Record<string, UsdtRecord> = usdtSnapshot.val();
-            Object.values(records).forEach(rec => {
-                if (rec.clientId) {
-                    if (!newMap.has(rec.clientId)) newMap.set(rec.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
-                    newMap.get(rec.clientId)!.cryptoWalletIds.add(rec.accountId);
-                }
-            });
-        }
-        setClientRecordMap(newMap);
-    };
-    fetchRecords();
+        });
+        setClientAccountUsage(newMap);
+    });
+    return () => unsubscribe();
   }, []);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
@@ -134,20 +135,20 @@ export function ClientsTable({
 
     if (bankAccountFilter !== 'all') {
         filtered = filtered.filter(client => {
-            const clientData = clientRecordMap.get(client.id);
+            const clientData = clientAccountUsage.get(client.id);
             return clientData?.bankAccountIds.has(bankAccountFilter);
         });
     }
     
     if (cryptoWalletFilter !== 'all') {
          filtered = filtered.filter(client => {
-            const clientData = clientRecordMap.get(client.id);
+            const clientData = clientAccountUsage.get(client.id);
             return clientData?.cryptoWalletIds.has(cryptoWalletFilter);
         });
     }
 
     return filtered;
-  }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientRecordMap]);
+  }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientAccountUsage]);
 
   React.useEffect(() => {
     onFilteredDataChange(filteredClients);
