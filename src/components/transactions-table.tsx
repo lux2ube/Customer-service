@@ -30,7 +30,6 @@ import { ref, onValue } from 'firebase/database';
 import { ExportButton } from './export-button';
 import Link from 'next/link';
 import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
 import { confirmTransaction, type ConfirmState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -97,7 +96,7 @@ export function TransactionsTable() {
             return (
                 (tx.id && tx.id.toLowerCase().includes(normalizedSearch)) ||
                 (tx.type && tx.type.toLowerCase().includes(normalizedSearch)) ||
-                (tx.summary.total_inflow_usd && tx.summary.total_inflow_usd.toString().includes(normalizedSearch)) ||
+                (tx.summary?.total_inflow_usd && tx.summary.total_inflow_usd.toString().includes(normalizedSearch)) ||
                 (tx.status && tx.status.toLowerCase().includes(normalizedSearch))
             );
         });
@@ -227,17 +226,24 @@ export function TransactionsTable() {
     setStatusFilter('all');
   };
 
-  const exportableData = filteredAndSortedTransactions.map(tx => ({
+  const exportableData = filteredAndSortedTransactions.map(tx => {
+    const inflow = tx.summary ? tx.summary.total_inflow_usd : (tx.amount_usd || 0);
+    const outflow = tx.summary ? tx.summary.total_outflow_usd : (tx.outflow_usd || 0);
+    const fee = tx.summary ? tx.summary.fee_usd : (tx.fee_usd || 0);
+    const difference = tx.summary ? tx.summary.net_difference_usd : (inflow - (outflow + fee));
+    
+    return {
         ID: tx.id,
         Date: tx.date ? format(parseISO(tx.date), 'yyyy-MM-dd HH:mm') : 'N/A',
         Client: tx.clientName,
         Type: tx.type,
-        Inflow_USD: tx.summary.total_inflow_usd.toFixed(2),
-        Outflow_USD: tx.summary.total_outflow_usd.toFixed(2),
-        Fee_USD: tx.summary.fee_usd.toFixed(2),
-        Difference_USD: tx.summary.net_difference_usd.toFixed(2),
+        Inflow_USD: inflow.toFixed(2),
+        Outflow_USD: outflow.toFixed(2),
+        Fee_USD: fee.toFixed(2),
+        Difference_USD: difference.toFixed(2),
         Status: tx.status,
-    }));
+    }
+  });
 
   return (
     <div className="space-y-4">
@@ -333,8 +339,8 @@ export function TransactionsTable() {
                         <TableCell>
                             <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary.total_inflow_usd || 0)}</TableCell>
-                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary.total_outflow_usd || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary ? tx.summary.total_inflow_usd : (tx.amount_usd || 0))}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary ? tx.summary.total_outflow_usd : (tx.outflow_usd || 0))}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                         <TableCell className="text-right">
                            <Button variant="ghost" size="icon" asChild>
