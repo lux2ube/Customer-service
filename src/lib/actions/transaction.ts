@@ -95,6 +95,9 @@ export type TransactionFormState =
         clientId?: string[];
         type?: string[];
         linkedRecordIds?: string[];
+        differenceHandling?: string[];
+        incomeAccountId?: string[];
+        expenseAccountId?: string[];
       };
       message?: string;
       success?: boolean;
@@ -108,9 +111,24 @@ const ModernTransactionSchema = z.object({
     linkedRecordIds: z.preprocess((val) => (Array.isArray(val) ? val.filter(Boolean) : [val].filter(Boolean)), z.array(z.string()).min(1, { message: 'At least one financial record must be linked.' })),
     notes: z.string().optional(),
     attachment: z.instanceof(File).optional(),
-    differenceHandling: z.enum(['income', 'expense', 'client_liability']).optional(),
+    differenceHandling: z.enum(['income', 'expense']).optional(),
     incomeAccountId: z.string().optional(),
     expenseAccountId: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.differenceHandling === 'income' && !data.incomeAccountId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['incomeAccountId'],
+            message: 'An income account must be selected to record a gain.',
+        });
+    }
+    if (data.differenceHandling === 'expense' && !data.expenseAccountId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['expenseAccountId'],
+            message: 'An expense account must be selected to record a loss.',
+        });
+    }
 });
 
 
@@ -145,7 +163,6 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             return null;
         }).filter((r): r is CashRecord | UsdtRecord => r !== null);
-
 
         const inflows: TransactionLeg[] = allLinkedRecords
             .filter(r => r.type === 'inflow')
@@ -203,7 +220,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             type,
             clientId,
             clientName: client.name,
-            status: 'Pending',
+            status: 'Confirmed', // Create as Confirmed immediately
             notes,
             attachment_url: attachmentUrl || undefined,
             createdAt: new Date().toISOString(),
@@ -214,16 +231,38 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                 total_outflow_usd: totalOutflowUSD,
                 fee_usd: fee,
                 net_difference_usd: netDifference
-            }
+            },
+            // Include difference handling for journaling
+            differenceHandling: differenceHandling,
+            incomeAccountId: incomeAccountId,
+            expenseAccountId: expenseAccountId
         };
         
+        // --- All database changes happen here ---
         const updates: { [key: string]: any } = {};
         updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
         
+        // Mark source records as 'Used'
+        for (const record of allLinkedRecords) {
+            const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
+            updates[`${recordPath}/status`] = 'Used';
+        }
+        
+        // Create all journal entries
+        const journalEntries = createJournalEntriesForTransaction(newTransactionData, client);
+        for (const entry of journalEntries) {
+            const entryRef = push(ref(db, 'journal_entries'));
+            updates[`/journal_entries/${entryRef.key}`] = entry;
+        }
+
         await update(ref(db), updates);
 
         revalidatePath('/transactions');
-        return { success: true, message: 'Transaction created and is now pending confirmation.' };
+        revalidatePath('/accounting/journal');
+        revalidatePath('/modern-cash-records');
+        revalidatePath('/modern-usdt-records');
+
+        return { success: true, message: `Transaction ${newId} created and confirmed successfully.` };
 
     } catch (e: any) {
         console.error("Error creating modern transaction:", e);
@@ -234,81 +273,63 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 export type ConfirmState = { message?: string; error?: boolean; } | undefined;
 
 export async function confirmTransaction(transactionId: string): Promise<ConfirmState> {
-    if (!transactionId) {
-        return { error: true, message: "Transaction ID is required." };
-    }
-
-    try {
-        const txRef = ref(db, `modern_transactions/${transactionId}`);
-        const txSnapshot = await get(txRef);
-        if (!txSnapshot.exists()) {
-            return { error: true, message: "Transaction not found." };
-        }
-
-        const transaction = txSnapshot.val() as Transaction;
-        if (transaction.status !== 'Pending') {
-            return { error: true, message: `Transaction is already ${transaction.status}.` };
-        }
-        
-        const clientSnapshot = await get(ref(db, `clients/${transaction.clientId}`));
-        if (!clientSnapshot.exists()) {
-             return { error: true, message: "Client associated with transaction not found." };
-        }
-        const client = clientSnapshot.val() as Client;
-
-        await createJournalEntriesForTransaction(transaction, client);
-
-        const updates: { [key: string]: any } = {};
-        updates[`/modern_transactions/${transactionId}/status`] = 'Confirmed';
-        
-        const allLinkedRecords = [...transaction.inflows, ...transaction.outflows];
-        for (const record of allLinkedRecords) {
-            const recordPath = record.type === 'cash' ? `/cash_records/${record.recordId}` : `/modern_usdt_records/${record.recordId}`;
-            updates[`${recordPath}/status`] = 'Used';
-        }
-
-        await update(ref(db), updates);
-
-        revalidatePath('/transactions');
-        revalidatePath('/accounting/journal');
-        revalidatePath('/modern-cash-records');
-        revalidatePath('/modern-usdt-records');
-
-        return { message: `Transaction ${transactionId} has been confirmed and accounted for.` };
-
-    } catch (error: any) {
-        console.error("Error confirming transaction:", error);
-        return { error: true, message: error.message || "An unknown error occurred." };
-    }
+    // This function is now OBSOLETE as transactions are confirmed on creation.
+    // It's kept here to avoid breaking any potential lingering references, but should be removed later.
+    return { error: true, message: "This action is deprecated. Transactions are confirmed upon creation." };
 }
 
-
-async function createJournalEntriesForTransaction(transaction: Transaction, client: Client) {
+function createJournalEntriesForTransaction(transaction: Transaction, client: Client): Omit<JournalEntry, 'id'>[] {
     const description = `Tx #${transaction.id} for ${client.name}`;
     const clientAccountId = `6000${client.id}`;
+    const allEntries: Omit<JournalEntry, 'id'>[] = [];
+    const date = new Date().toISOString();
     
     // Process all inflows
     for (const leg of transaction.inflows) {
-         await createJournalEntryFromTransaction(`${description} | Inflow`, [
-            { accountId: leg.accountId, debit: leg.amount_usd, credit: 0 },
-            { accountId: clientAccountId, debit: 0, credit: leg.amount_usd },
-        ]);
+         allEntries.push({
+            date,
+            description: `${description} | Inflow`,
+            debit_account: leg.accountId,
+            credit_account: clientAccountId,
+            debit_amount: leg.amount,
+            credit_amount: leg.amount,
+            amount_usd: leg.amount_usd,
+            createdAt: date,
+            debit_account_name: leg.accountName,
+            credit_account_name: client.name,
+         });
     }
     
     // Process all outflows
     for (const leg of transaction.outflows) {
-         await createJournalEntryFromTransaction(`${description} | Outflow`, [
-            { accountId: clientAccountId, debit: leg.amount_usd, credit: 0 },
-            { accountId: leg.accountId, debit: 0, credit: leg.amount_usd },
-        ]);
+         allEntries.push({
+            date,
+            description: `${description} | Outflow`,
+            debit_account: clientAccountId,
+            credit_account: leg.accountId,
+            debit_amount: leg.amount,
+            credit_amount: leg.amount,
+            amount_usd: leg.amount_usd,
+            createdAt: date,
+            debit_account_name: client.name,
+            credit_account_name: leg.accountName,
+         });
     }
 
     // Process the fee
     if (transaction.summary.fee_usd > 0.001) {
-        await createJournalEntryFromTransaction(`${description} | Fee`, [
-            { accountId: clientAccountId, debit: transaction.summary.fee_usd, credit: 0 },
-            { accountId: '4002', debit: 0, credit: transaction.summary.fee_usd }, // 4002 = Fee Income
-        ]);
+        allEntries.push({
+            date,
+            description: `${description} | Fee`,
+            debit_account: clientAccountId,
+            credit_account: '4002', // 4002 = Fee Income
+            debit_amount: transaction.summary.fee_usd,
+            credit_amount: transaction.summary.fee_usd,
+            amount_usd: transaction.summary.fee_usd,
+            createdAt: date,
+            debit_account_name: client.name,
+            credit_account_name: 'Fee Income',
+        });
     }
     
     // The net_difference_usd is calculated as inflow - (outflow + fee).
@@ -316,18 +337,36 @@ async function createJournalEntriesForTransaction(transaction: Transaction, clie
     // A negative difference is a loss for the business.
     const difference = transaction.summary.net_difference_usd;
 
-    if (difference > 0.001) { // Gain for the business
-         await createJournalEntryFromTransaction(`${description} | Gain`, [
-            { accountId: clientAccountId, debit: difference, credit: 0 },
-            { accountId: '4003', debit: 0, credit: difference }, // 4003 = Exchange Rate Profit
-        ]);
-    } else if (difference < -0.001) { // Loss for the business
+    if (transaction.differenceHandling === 'income' && difference > 0.001) { // Gain for the business
+         allEntries.push({
+            date,
+            description: `${description} | Gain`,
+            debit_account: clientAccountId, 
+            credit_account: transaction.incomeAccountId!,
+            debit_amount: difference,
+            credit_amount: difference,
+            amount_usd: difference,
+            createdAt: date,
+            debit_account_name: client.name,
+            credit_account_name: `Income: Gain`,
+        });
+    } else if (transaction.differenceHandling === 'expense' && difference < -0.001) { // Loss for the business
         const loss = Math.abs(difference);
-        await createJournalEntryFromTransaction(`${description} | Loss`, [
-            { accountId: '5002', debit: loss, credit: 0 }, // 5002 = Discounts/Loss Expense
-            { accountId: clientAccountId, debit: 0, credit: loss },
-        ]);
+        allEntries.push({
+            date,
+            description: `${description} | Loss`,
+            debit_account: transaction.expenseAccountId!,
+            credit_account: clientAccountId,
+            debit_amount: loss,
+            credit_amount: loss,
+            amount_usd: loss,
+            createdAt: date,
+            debit_account_name: `Expense: Loss`,
+            credit_account_name: client.name,
+        });
     }
+
+    return allEntries;
 }
 
 

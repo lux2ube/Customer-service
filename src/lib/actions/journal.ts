@@ -106,63 +106,73 @@ export async function createJournalEntry(prevState: JournalEntryFormState, formD
 
 export async function createJournalEntryFromTransaction(
     description: string,
-    legs: { accountId: string; debit: number; credit: number; }[],
+    legs: { accountId: string; debit: number; credit: number; amount: number; currency: string }[],
+    accountNames: Map<string, string>
 ) {
     if (legs.length < 2) {
         console.error("Journal entry must have at least two legs.");
-        return;
+        return [];
     }
-    
+
     const totalDebits = legs.reduce((sum, leg) => sum + leg.debit, 0);
     const totalCredits = legs.reduce((sum, leg) => sum + leg.credit, 0);
-    
+
     if (Math.abs(totalDebits - totalCredits) > 0.01) {
         console.error(`Journal entry is not balanced. Debits: ${totalDebits}, Credits: ${totalCredits}`);
-        return; // Do not create unbalanced entries
+        return []; // Do not create unbalanced entries
+    }
+
+    if (Math.abs(totalDebits) < 0.01) {
+        return []; // Don't create zero-value entries
     }
     
-    if (Math.abs(totalDebits) < 0.01) {
-        return; // Don't create zero-value entries
-    }
-
-    try {
-        const allAccountSnapshots = await Promise.all(
-            legs.map(leg => get(ref(db, `accounts/${leg.accountId}`)))
-        );
-
-        const accountNames = new Map(
-            allAccountSnapshots.map((snap, i) => [legs[i].accountId, snap.exists() ? (snap.val() as Account).name : legs[i].accountId])
-        );
-
-        // For simplicity, we'll represent this as a single entry in the log,
-        // but in a real accounting system, this might be multiple entries.
-        // We pick the first debit and first credit leg for the main fields.
-        const firstDebitLeg = legs.find(l => l.debit > 0);
-        const firstCreditLeg = legs.find(l => l.credit > 0);
-
-        if (!firstDebitLeg || !firstCreditLeg) {
-            console.error("Cannot create journal entry: No debit or credit leg found.");
-            return;
-        }
-
-        const entryRef = push(ref(db, 'journal_entries'));
-        const entryData: Omit<JournalEntry, 'id'> = {
-            date: new Date().toISOString(),
-            description: description,
+    const entries: Omit<JournalEntry, 'id'>[] = [];
+    const date = new Date().toISOString();
+    
+    // We create a separate journal entry for each leg of the transaction for clarity
+    const debitLegs = legs.filter(l => l.debit > 0);
+    const creditLegs = legs.filter(l => l.credit > 0);
+    
+    // This is a simplified approach. A real system might pair them off or use a clearing account.
+    // For now, we pair the first debit with the first credit, and so on.
+    // This assumes a simple transaction structure.
+    if(debitLegs.length === 1 && creditLegs.length === 1){
+        const debitLeg = debitLegs[0];
+        const creditLeg = creditLegs[0];
+        
+        entries.push({
+            date,
+            description,
+            debit_account: debitLeg.accountId,
+            credit_account: creditLeg.accountId,
+            debit_amount: debitLeg.amount,
+            credit_amount: creditLeg.amount,
+            amount_usd: totalDebits, // The total value of the entry
+            createdAt: date,
+            debit_account_name: accountNames.get(debitLeg.accountId),
+            credit_account_name: accountNames.get(creditLeg.accountId),
+            details: legs,
+        });
+    } else {
+        // Fallback for more complex entries: just log the legs.
+        // This part needs a more robust accounting design for multi-leg entries (e.g., using a suspense account).
+        // For now, we'll create a simplified entry.
+         const firstDebitLeg = legs.find(l => l.debit > 0)!;
+         const firstCreditLeg = legs.find(l => l.credit > 0)!;
+         entries.push({
+            date,
+            description,
             debit_account: firstDebitLeg.accountId,
             credit_account: firstCreditLeg.accountId,
-            debit_amount: totalDebits, // Store total debit
-            credit_amount: totalCredits, // Store total credit
-            amount_usd: totalDebits, // Total value of the entry
-            createdAt: new Date().toISOString(),
+            debit_amount: totalDebits,
+            credit_amount: totalCredits,
+            amount_usd: totalDebits,
+            createdAt: date,
             debit_account_name: accountNames.get(firstDebitLeg.accountId),
             credit_account_name: accountNames.get(firstCreditLeg.accountId),
-            details: legs, // Store all legs for detailed auditing
-        };
-        await set(entryRef, stripUndefined(entryData));
-        revalidatePath('/accounting/journal');
-
-    } catch (error) {
-        console.error("Failed to create journal entry from transaction:", error);
+            details: legs,
+        });
     }
+
+    return entries;
 }
