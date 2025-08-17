@@ -234,26 +234,6 @@ export interface BlacklistItem {
     createdAt: string;
 }
 
-export interface IncomingSms {
-    [pushId: string]: string;
-}
-
-export interface SmsTransaction {
-    id: string;
-    client_name: string; // Name parsed from the SMS
-    account_id: string;
-    account_name?: string; // for display
-    amount: number | null;
-    currency: string | null;
-    type: 'credit' | 'debit' | null;
-    status: 'pending' | 'parsed' | 'matched' | 'used' | 'rejected';
-    parsed_at: string;
-    raw_sms: string;
-    transaction_id?: string; // To store the linked transaction ID
-    matched_client_id?: string;
-    matched_client_name?: string;
-}
-
 export interface ParsedSms {
   parsed: boolean;
   type?: 'credit' | 'debit';
@@ -321,8 +301,3 @@ export interface BscApiSetting {
     createdAt: string;
     lastSyncedBlock?: number;
 }
-
-
-// This is the old type, it can be removed once all components are updated
-export type ModernCashRecord = CashRecord;
-export type ModernUsdtRecord = UsdtRecord;

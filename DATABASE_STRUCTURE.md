@@ -9,7 +9,7 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 1. `/journal_entries/{entryId}` (New)
+### 1. `/journal_entries/{entryId}`
 
 **The core of the double-entry accounting system.** This is the definitive ledger of all financial movements between accounts. Every transaction from `modern_transactions` generates one or more entries here.
 
@@ -30,13 +30,13 @@ The database is organized into several top-level keys, each representing a colle
 
 ### 2. `/cash_records/{recordId}`
 
-**Primary store for all cash-based transactions (inflows and outflows).** This is the unified ledger for cash movements, replacing all previous cash-related paths. `{recordId}` is a sequential number from a shared counter.
+**Primary store for all cash-based transactions (inflows and outflows).** This is the unified ledger for cash movements. `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record (e.g., "1001", "1002").
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
 -   **`type`**: `'inflow' | 'outflow'` - Whether the transaction is money coming in or going out.
 -   **`source`**: `'Manual' | 'SMS'` - The origin of the record.
--   **`status`**: `'Pending' | 'Matched' | 'Used' | 'Cancelled'` - The lifecycle status of the record.
+-   **`status`**: `'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed'` - The lifecycle status of the record.
 -   **`clientId`**: `string | null` - The ID of the client associated with the record (can be null if unmatched).
 -   **`clientName`**: `string | null` - Denormalized client name for display.
 -   **`accountId`**: `string` - The ID of the internal bank/cash account affected.
@@ -54,7 +54,7 @@ The database is organized into several top-level keys, each representing a colle
 
 ### 3. `/usdt_records/{recordId}`
 
-**Primary store for all USDT-based transactions (inflows and outflows).** This is the unified ledger for USDT movements, replacing all previous USDT-related paths. `{recordId}` is a sequential number from a shared counter.
+**Primary store for all USDT-based transactions (inflows and outflows).** This is the unified ledger for USDT movements. `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record.
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
@@ -148,11 +148,9 @@ Stores atomic counters for generating sequential IDs.
 
 ### Deprecated Paths
 
-The following paths are no longer in active use by the new system but may be retained for historical data.
+The following paths are no longer in active use by the new system but may be retained for historical data. All new development should focus on the modern paths listed above.
 
 -   `/transactions`
--   `/modern_cash_records`
--   `/modern_usdt_records`
 -   `/sms_transactions`
 -   `/cash_receipts`
 -   `/usdt_receipts`

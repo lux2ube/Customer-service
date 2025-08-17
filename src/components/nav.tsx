@@ -45,25 +45,22 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collap
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/modern', label: 'Modern Hub', icon: Sparkles },
-  
-  { type: 'divider', label: 'Financial' },
   { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
-  { href: '/transactions', label: 'Transaction List', icon: ListOrdered },
-  { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
-  { href: '/accounting/journal', label: 'Internal Transfers', icon: Repeat },
+  
+  { type: 'divider', label: 'Core' },
+  { href: '/transactions', label: 'Transactions', icon: ListOrdered },
+  { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
 
   { type: 'divider', label: 'Records' },
   { href: '/modern-cash-records', label: 'Cash Records', icon: BookCopy },
   { href: '/modern-usdt-records', label: 'USDT Records', icon: DollarSign },
   { href: '/wallet', label: 'USDT Sender Wallet', icon: Send },
 
-  { type: 'divider', label: 'Management' },
-  { href: '/clients', label: 'Clients', icon: Users },
+  { type: 'divider', label: 'Accounting' },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
-  { href: '/logs', label: 'Audit Log', icon: History },
+  { href: '/accounting/journal', label: 'Journal', icon: Book },
+  { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
 
   { type: 'divider', label: 'System' },
   { href: '/sms/settings', label: 'SMS Gateway', icon: Settings2 },
@@ -72,7 +69,8 @@ const menuItems = [
   { href: '/settings/bsc-apis', label: 'BSC API Settings', icon: Plug },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },
-  { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
+  { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },
+  { href: '/logs', label: 'Audit Log', icon: History },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/about', label: 'About', icon: Info },
 ];
