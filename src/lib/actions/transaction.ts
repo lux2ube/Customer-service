@@ -7,7 +7,7 @@ import { db, storage } from '../firebase';
 import { push, ref, set, update, get, query, orderByChild, limitToLast, equalTo } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider, CashRecord, UsdtRecord, UnifiedFinancialRecord, TransactionLeg } from '../types';
+import type { Client, Account, Transaction, CryptoFee, ServiceProvider, ClientServiceProvider, CashRecord, UsdtRecord, UnifiedFinancialRecord, TransactionLeg, JournalEntry } from '../types';
 import { stripUndefined, sendTelegramNotification, sendTelegramPhoto, logAction, getNextSequentialId } from './helpers';
 import { createJournalEntryFromTransaction } from './journal';
 import { redirect } from 'next/navigation';
@@ -268,14 +268,6 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         console.error("Error creating modern transaction:", e);
         return { message: 'Database Error: Could not create transaction.', success: false };
     }
-}
-
-export type ConfirmState = { message?: string; error?: boolean; } | undefined;
-
-export async function confirmTransaction(transactionId: string): Promise<ConfirmState> {
-    // This function is now OBSOLETE as transactions are confirmed on creation.
-    // It's kept here to avoid breaking any potential lingering references, but should be removed later.
-    return { error: true, message: "This action is deprecated. Transactions are confirmed upon creation." };
 }
 
 function createJournalEntriesForTransaction(transaction: Transaction, client: Client): Omit<JournalEntry, 'id'>[] {

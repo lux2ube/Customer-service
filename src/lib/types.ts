@@ -111,6 +111,9 @@ export interface Transaction {
     exchange_rate_commission?: number;
     expense_usd?: number;
     remittance_number?: string;
+    differenceHandling?: 'income' | 'expense';
+    incomeAccountId?: string;
+    expenseAccountId?: string;
 }
 
 

@@ -51,7 +51,7 @@ const menuItems = [
   { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
   { href: '/transactions', label: 'Transaction List', icon: ListOrdered },
   { href: '/exchange', label: 'Exchange', icon: ArrowLeftRight },
-  { href: '/accounting/journal', label: 'Internal Transfer', icon: Repeat },
+  { href: '/accounting/journal', label: 'Internal Transfers', icon: Repeat },
 
   { type: 'divider', label: 'Records' },
   { href: '/modern-cash-records', label: 'Cash Records', icon: BookCopy },

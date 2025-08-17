@@ -9,9 +9,28 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 1. `/cash_records/{recordId}` (New)
+### 1. `/journal_entries/{entryId}` (New)
 
-**Primary store for all cash-based transactions (inflows and outflows).** This is the new, unified ledger for cash movements, replacing all previous cash-related paths. `{recordId}` is a sequential number from a shared counter.
+**The core of the double-entry accounting system.** This is the definitive ledger of all financial movements between accounts. Every transaction from `modern_transactions` generates one or more entries here.
+
+-   **`id`**: `string` - Unique push ID.
+-   **`date`**: `string` (ISO 8601) - The date of the journal entry.
+-   **`description`**: `string` - A human-readable description of the transaction.
+-   **`debit_account`**: `string` - The ID of the account being debited.
+-   **`credit_account`**: `string` - The ID of the account being credited.
+-   **`debit_account_name`**: `string` (denormalized) - The name of the debited account.
+-   **`credit_account_name`**: `string` (denormalized) - The name of the credited account.
+-   **`debit_amount`**: `number` - The amount in the debit account's native currency.
+-   **`credit_amount`**: `number` - The amount in the credit account's native currency.
+-   **`amount_usd`**: `number` - The value of the transaction in USD, for consistent reporting.
+-   **`createdAt`**: `string` (ISO 8601) - Timestamp of creation.
+-   **`details`**: `object[]` (optional) - For multi-leg transactions, this stores the original transaction legs.
+
+---
+
+### 2. `/cash_records/{recordId}`
+
+**Primary store for all cash-based transactions (inflows and outflows).** This is the unified ledger for cash movements, replacing all previous cash-related paths. `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record (e.g., "1001", "1002").
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
@@ -33,9 +52,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 2. `/usdt_records/{recordId}` (New)
+### 3. `/usdt_records/{recordId}`
 
-**Primary store for all USDT-based transactions (inflows and outflows).** This is the new, unified ledger for USDT movements, replacing all previous USDT-related paths. `{recordId}` is a sequential number from a shared counter.
+**Primary store for all USDT-based transactions (inflows and outflows).** This is the unified ledger for USDT movements, replacing all previous USDT-related paths. `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record.
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
@@ -54,9 +73,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 3. `/modern_transactions/{transactionId}` (New & Restructured)
+### 4. `/modern_transactions/{transactionId}`
 
-**Primary store for consolidated, finalized transactions.** This is the new, modern transaction ledger. A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential (e.g., T-1, T-2).
+**Primary store for consolidated, finalized transactions.** A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential.
 
 -   **`id`**: `string` - The unique, sequential ID for the transaction.
 -   **`date`**: `string` (ISO 8601) - The date the transaction was created.
@@ -84,11 +103,11 @@ The database is organized into several top-level keys, each representing a colle
     -   `total_inflow_usd`: `number`
     -   `total_outflow_usd`: `number`
     -   `fee_usd`: `number`
-    -   `net_difference_usd`: `number` - The final balance of the transaction (inflow - (outflow + fee)). Can be positive (gain) or negative (loss).
+    -   `net_difference_usd`: `number` - The final balance of the transaction (inflow - (outflow + fee)).
 
 ---
 
-### 4. `/accounts/{accountId}`
+### 5. `/accounts/{accountId}`
 
 Stores the Chart of Accounts records. Each record can be a group (like "Assets") or a postable account (like "Cash - YER").
 
@@ -102,7 +121,7 @@ Stores the Chart of Accounts records. Each record can be a group (like "Assets")
 
 ---
 
-### 5. `/clients/{clientId}`
+### 6. `/clients/{clientId}`
 
 Stores all customer information. After the initial migration, `{clientId}` is a sequential number starting from `1000001`.
 
@@ -116,7 +135,7 @@ Stores all customer information. After the initial migration, `{clientId}` is a 
 
 ---
 
-### 6. `/counters`
+### 7. `/counters`
 
 Stores atomic counters for generating sequential IDs.
 
