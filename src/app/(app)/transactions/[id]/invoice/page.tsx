@@ -6,7 +6,7 @@ import type { Transaction, Client } from '@/lib/types';
 import { notFound } from 'next/navigation';
 
 async function getTransaction(id: string): Promise<Transaction | null> {
-    const transactionRef = ref(db, `transactions/${id}`);
+    const transactionRef = ref(db, `modern_transactions/${id}`);
     const snapshot = await get(transactionRef);
     if (snapshot.exists()) {
         return { id, ...snapshot.val() };
