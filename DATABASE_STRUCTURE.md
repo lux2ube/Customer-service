@@ -54,7 +54,7 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 3. `/modern_transactions/{transactionId}` (New)
+### 3. `/modern_transactions/{transactionId}` (New & Restructured)
 
 **Primary store for consolidated, finalized transactions.** This is the new, modern transaction ledger. A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential (e.g., T-1, T-2).
 
@@ -63,17 +63,28 @@ The database is organized into several top-level keys, each representing a colle
 -   **`type`**: `'Deposit' | 'Withdraw' | 'Transfer'` - The type of transaction.
 -   **`clientId`**: `string` - The ID of the client.
 -   **`clientName`**: `string` - Denormalized client name.
--   **`amount_usd`**: `number` - Total USD value of all inflows.
--   **`outflow_usd`**: `number` - Total USD value of all outflows.
--   **`fee_usd`**: `number` - Calculated fee in USD.
 -   **`status`**: `'Pending' | 'Confirmed' | 'Cancelled'` - The status of the transaction.
--   **`linkedRecordIds`**: `string` - A comma-separated list of IDs from `cash_records` and `usdt_records`.
 -   **`notes`**: `string` (optional) - Any additional notes for the transaction.
 -   **`attachment_url`**: `string` (optional) - URL for any uploaded attachment.
 -   **`createdAt`**: `string` (ISO 8601) - The timestamp when the transaction was created.
--   **`exchange_rate_commission`**: `number` (optional) - Profit from exchange rate differences.
--   **`expense_usd`**: `number` (optional) - Loss from exchange rate differences or discounts.
 
+-   **`inflows`**: `TransactionLeg[]` - An array detailing all funds received.
+    -   `recordId`: `string` - ID from `cash_records` or `usdt_records`.
+    -   `type`: `'cash' | 'usdt'`
+    -   `accountId`: `string` - The internal account that received the funds.
+    -   `accountName`: `string`
+    -   `amount`: `number`
+    -   `currency`: `string`
+    -   `amount_usd`: `number`
+
+-   **`outflows`**: `TransactionLeg[]` - An array detailing all funds paid out.
+    -   (Same structure as `inflows`)
+
+-   **`summary`**: `object` - An object containing the calculated totals for the transaction.
+    -   `total_inflow_usd`: `number`
+    -   `total_outflow_usd`: `number`
+    -   `fee_usd`: `number`
+    -   `net_difference_usd`: `number` - The final balance of the transaction (inflow - (outflow + fee)). Can be positive (gain) or negative (loss).
 
 ---
 
@@ -127,4 +138,3 @@ The following paths are no longer in active use by the new system but may be ret
 -   `/cash_receipts`
 -   `/usdt_receipts`
 -   `/cash_payments`
-

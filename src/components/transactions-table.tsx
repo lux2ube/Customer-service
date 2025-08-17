@@ -135,7 +135,7 @@ export function TransactionsTable() {
             return (
                 (tx.id && tx.id.toLowerCase().includes(normalizedSearch)) ||
                 (tx.type && tx.type.toLowerCase().includes(normalizedSearch)) ||
-                (tx.amount_usd && tx.amount_usd.toString().includes(normalizedSearch)) ||
+                (tx.summary.total_inflow_usd && tx.summary.total_inflow_usd.toString().includes(normalizedSearch)) ||
                 (tx.status && tx.status.toLowerCase().includes(normalizedSearch))
             );
         });
@@ -166,8 +166,17 @@ export function TransactionsTable() {
 
     if (sortConfig.key) {
       filtered.sort((a, b) => {
-        const aVal = a[sortConfig.key as keyof Transaction] as any;
-        const bVal = b[sortConfig.key as keyof Transaction] as any;
+        let aVal: any = a[sortConfig.key as keyof Transaction];
+        let bVal: any = b[sortConfig.key as keyof Transaction];
+
+        // Handle nested summary object
+        if (sortConfig.key === 'amount_usd') {
+            aVal = a.summary?.total_inflow_usd;
+            bVal = b.summary?.total_inflow_usd;
+        } else if (sortConfig.key === 'outflow_usd') {
+            aVal = a.summary?.total_outflow_usd;
+            bVal = b.summary?.total_outflow_usd;
+        }
 
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
@@ -261,10 +270,10 @@ export function TransactionsTable() {
         Date: tx.date ? format(parseISO(tx.date), 'yyyy-MM-dd HH:mm') : 'N/A',
         Client: tx.clientName,
         Type: tx.type,
-        Inflow_USD: tx.amount_usd.toFixed(2),
-        Outflow_USD: (tx.outflow_usd || 0).toFixed(2), // Represents total outflow
-        Fee_USD: tx.fee_usd.toFixed(2),
-        Difference_USD: (tx.exchange_rate_commission || 0 - (tx.expense_usd || 0)).toFixed(2),
+        Inflow_USD: tx.summary.total_inflow_usd.toFixed(2),
+        Outflow_USD: tx.summary.total_outflow_usd.toFixed(2),
+        Fee_USD: tx.summary.fee_usd.toFixed(2),
+        Difference_USD: tx.summary.net_difference_usd.toFixed(2),
         Status: tx.status,
     }));
 
@@ -362,8 +371,8 @@ export function TransactionsTable() {
                         <TableCell>
                             <Badge variant={tx.type === 'Deposit' ? 'outline' : 'secondary'}>{tx.type}</Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-right">{formatCurrency(tx.amount_usd || 0)}</TableCell>
-                        <TableCell className="font-mono text-right">{formatCurrency(tx.outflow_usd || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary.total_inflow_usd || 0)}</TableCell>
+                        <TableCell className="font-mono text-right">{formatCurrency(tx.summary.total_outflow_usd || 0)}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(tx.status)}>{tx.status}</Badge></TableCell>
                         <TableCell className="text-right">
                            {tx.status === 'Pending' && (

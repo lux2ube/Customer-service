@@ -72,25 +72,47 @@ export interface ServiceProvider {
     };
 }
 
+export interface TransactionLeg {
+    recordId: string;
+    type: 'cash' | 'usdt';
+    accountId: string;
+    accountName: string;
+    amount: number;
+    currency: string;
+    amount_usd: number;
+}
+
 export interface Transaction {
     id: string;
     date: string;
     type: 'Deposit' | 'Withdraw' | 'Transfer';
     clientId: string;
     clientName?: string; // For display
-    amount_usd: number; // Total USD value of all inflows
-    outflow_usd: number; // Total USD value of all outflows
-    fee_usd: number;
-    expense_usd?: number; // Captures negative difference (loss/discount)
-    attachment_url?: string;
-    invoice_image_url?: string;
-    notes?: string;
     status: 'Pending' | 'Confirmed' | 'Cancelled';
+    notes?: string;
+    attachment_url?: string;
     createdAt: string;
+    
+    inflows: TransactionLeg[];
+    outflows: TransactionLeg[];
+    
+    summary: {
+        total_inflow_usd: number;
+        total_outflow_usd: number;
+        fee_usd: number;
+        net_difference_usd: number;
+    };
+    
+    // Kept for backward compatibility if needed, but new logic uses arrays
     linkedRecordIds?: string;
-    exchange_rate_commission?: number; // Captures positive difference (profit)
+    amount_usd?: number;
+    outflow_usd?: number;
+    fee_usd?: number;
+    exchange_rate_commission?: number;
+    expense_usd?: number;
     remittance_number?: string;
 }
+
 
 export interface CashRecord {
     id: string;
