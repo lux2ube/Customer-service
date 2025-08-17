@@ -4,7 +4,7 @@
 
 import type { Transaction, Client } from "@/lib/types";
 import { format, parseISO } from "date-fns";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
 import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp, UserCircle } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
@@ -21,10 +21,26 @@ interface Step {
 
 export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
     
-    const steps: Step[] = [];
-    const transactionTime = transaction.date ? format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a") : 'N/A';
-    const confirmedTime = transaction.createdAt ? format(parseISO(transaction.createdAt), "dd/MM/yyyy, h:mm a") : transactionTime;
+    const [formattedTransactionTime, setFormattedTransactionTime] = useState('...');
+    const [formattedConfirmedTime, setFormattedConfirmedTime] = useState('...');
 
+    useEffect(() => {
+        // This code runs only on the client, after hydration
+        if (transaction.date) {
+            setFormattedTransactionTime(format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a"));
+        } else {
+            setFormattedTransactionTime('N/A');
+        }
+
+        if (transaction.createdAt) {
+            setFormattedConfirmedTime(format(parseISO(transaction.createdAt), "dd/MM/yyyy, h:mm a"));
+        } else {
+            setFormattedConfirmedTime(formattedTransactionTime);
+        }
+    }, [transaction.date, transaction.createdAt, formattedTransactionTime]);
+    
+
+    const steps: Step[] = [];
     const isConfirmed = transaction.status === 'Confirmed';
     const isCancelled = transaction.status === 'Cancelled';
     
@@ -34,7 +50,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             icon: Wallet,
             isCompleted: true,
             isCurrent: !isConfirmed && !isCancelled,
-            timestamp: transactionTime,
+            timestamp: formattedTransactionTime,
             details: (
                  <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -66,7 +82,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             icon: Landmark,
             isCompleted: isConfirmed,
             isCurrent: isConfirmed,
-            timestamp: confirmedTime,
+            timestamp: formattedConfirmedTime,
             details: (
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -82,7 +98,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                            <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
                            <div>
                                 <p className="text-muted-foreground">رقم الحوالة:</p>
-                                <p className="font-mono break-all">N/A</p>
+                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
                            </div>
                         </div>
                     </div>
@@ -95,7 +111,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             icon: Landmark,
             isCompleted: true,
             isCurrent: !isConfirmed && !isCancelled,
-            timestamp: transactionTime,
+            timestamp: formattedTransactionTime,
             details: (
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -127,7 +143,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             icon: Wallet,
             isCompleted: isConfirmed,
             isCurrent: isConfirmed,
-            timestamp: confirmedTime,
+            timestamp: formattedConfirmedTime,
             details: (
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -165,7 +181,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
             icon: XCircle,
             isCompleted: true,
             isCurrent: true,
-            timestamp: confirmedTime,
+            timestamp: formattedConfirmedTime,
             details: <p>تم إلغاء هذه العملية.</p>
         });
     }
