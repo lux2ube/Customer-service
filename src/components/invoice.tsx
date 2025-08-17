@@ -2,7 +2,7 @@
 
 'use client';
 
-import type { Transaction, Client } from "@/lib/types";
+import type { Transaction, Client, CashRecord, UsdtRecord } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
@@ -10,189 +10,54 @@ import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash,
 import { Alert, AlertDescription } from "./ui/alert";
 import { Separator } from "./ui/separator";
 
-interface Step {
-    title: string;
-    details: React.ReactNode;
-    icon: React.ElementType;
-    isCompleted: boolean;
-    isCurrent: boolean;
-    timestamp?: string;
+interface InvoiceProps {
+    transaction: Transaction;
+    client: Client | null;
+    linkedRecords: (CashRecord | UsdtRecord)[];
 }
 
-export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transaction; client: Client | null }>(({ transaction, client }, ref) => {
+const getRecordDetails = (record: CashRecord | UsdtRecord, type: 'inflow' | 'outflow') => {
+    if ('currency' in record) { // It's a CashRecord
+        return {
+            title: `Fiat ${type === 'inflow' ? 'Received' : 'Paid'}`,
+            amount: `${record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${record.currency}`,
+            icon: Landmark,
+            details: [
+                { label: type === 'inflow' ? "From" : "To", value: record.senderName || record.recipientName, icon: User },
+                { label: "Via Account", value: record.accountName, icon: Landmark },
+                { label: "Remittance #", value: record.notes, icon: Repeat }
+            ]
+        }
+    } else { // It's a UsdtRecord
+        return {
+            title: `USDT ${type === 'inflow' ? 'Received' : 'Paid'}`,
+            amount: `${record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDT`,
+            icon: Wallet,
+            details: [
+                { label: type === 'inflow' ? "From Wallet" : "To Wallet", value: record.clientWalletAddress, icon: Wallet },
+                { label: "System Wallet", value: record.accountName, icon: Landmark },
+                { label: "Tx Hash", value: record.txHash, icon: Hash }
+            ]
+        }
+    }
+}
+
+
+export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transaction, client, linkedRecords }, ref) => {
     
     const [formattedTransactionTime, setFormattedTransactionTime] = useState('...');
-    const [formattedConfirmedTime, setFormattedConfirmedTime] = useState('...');
     
-    // --- Data Compatibility Layer ---
-    // This makes the component work with both old and new transaction structures.
-    const summary = {
-        inflow: transaction.summary ? transaction.summary.total_inflow_usd : (transaction.amount_usd || 0),
-        outflow: transaction.summary ? transaction.summary.total_outflow_usd : (transaction.outflow_usd || 0),
-        fee: transaction.summary ? transaction.summary.fee_usd : (transaction.fee_usd || 0),
-    }
-
     useEffect(() => {
         if (transaction.date) {
             setFormattedTransactionTime(format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a"));
         } else {
             setFormattedTransactionTime('N/A');
         }
-
-        if (transaction.createdAt) {
-            setFormattedConfirmedTime(format(parseISO(transaction.createdAt), "dd/MM/yyyy, h:mm a"));
-        } else {
-            setFormattedConfirmedTime(formattedTransactionTime);
-        }
-    }, [transaction.date, transaction.createdAt, formattedTransactionTime]);
+    }, [transaction.date]);
     
-
-    const steps: Step[] = [];
-    const isConfirmed = transaction.status === 'Confirmed';
     const isCancelled = transaction.status === 'Cancelled';
     
-    if (transaction.type === 'Withdraw') {
-        steps.push({
-            title: 'الطلب المستلم (سحب)',
-            icon: Wallet,
-            isCompleted: true,
-            isCurrent: !isConfirmed && !isCancelled,
-            timestamp: formattedTransactionTime,
-            details: (
-                 <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
-                        <p className="text-lg font-bold text-primary">{summary.inflow.toFixed(2)} USDT</p>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                        <div className="flex items-start gap-2">
-                           <User className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">من:</span> <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
-                        </div>
-                        <div className="flex items-start gap-2">
-                           <Wallet className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">إلى محفظة النظام:</span> {transaction.inflows?.[0]?.accountName || 'N/A'}</p>
-                        </div>
-                         <div className="flex items-start gap-2">
-                            <Hash className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                            <div>
-                                <p className="text-muted-foreground">معرّف العملية (Hash):</p>
-                                <p className="font-mono break-all">N/A</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )
-        });
-         steps.push({
-            title: 'تم التسليم بنجاح',
-            icon: Landmark,
-            isCompleted: isConfirmed,
-            isCurrent: isConfirmed,
-            timestamp: formattedConfirmedTime,
-            details: (
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-lg font-bold text-green-600">{summary.outflow.toFixed(2)} Fiat</p>
-                    </div>
-                     <div className="space-y-2 text-xs">
-                        <div className="flex items-start gap-2">
-                           <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">إلى حساب:</span> {transaction.outflows?.[0]?.accountName || 'N/A'}</p>
-                        </div>
-                        <div className="flex items-start gap-2">
-                           <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <div>
-                                <p className="text-muted-foreground">رقم الحوالة:</p>
-                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
-                           </div>
-                        </div>
-                    </div>
-                </div>
-            )
-        });
-    } else { // Deposit
-        steps.push({
-            title: 'الطلب المستلم (إيداع)',
-            icon: Landmark,
-            isCompleted: true,
-            isCurrent: !isConfirmed && !isCancelled,
-            timestamp: formattedTransactionTime,
-            details: (
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <ArrowDown className="h-5 w-5 text-green-500 flex-shrink-0" />
-                        <p className="text-lg font-bold text-primary">{summary.inflow.toFixed(2)} Fiat</p>
-                    </div>
-                     <div className="space-y-2 text-xs">
-                        <div className="flex items-start gap-2">
-                           <User className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">من:</span> <span className="font-semibold">{client?.name || transaction.clientName}</span></p>
-                        </div>
-                         <div className="flex items-start gap-2">
-                           <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.inflows?.[0]?.accountName || 'N/A'}</p>
-                        </div>
-                        <div className="flex items-start gap-2">
-                           <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <div>
-                                <p className="text-muted-foreground">رقم الحوالة:</p>
-                                <p className="font-mono break-all">{transaction.remittance_number || 'N/A'}</p>
-                           </div>
-                        </div>
-                    </div>
-                </div>
-            )
-        });
-        steps.push({
-            title: 'تم التسليم بنجاح',
-            icon: Wallet,
-            isCompleted: isConfirmed,
-            isCurrent: isConfirmed,
-            timestamp: formattedConfirmedTime,
-            details: (
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-lg font-bold text-green-600">{summary.outflow.toFixed(2)} USDT</p>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                        <div className="flex items-start gap-2">
-                            <Wallet className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                            <div>
-                                <p><span className="text-muted-foreground">إلى المحفظة:</span></p>
-                                <p className="font-mono break-all">N/A</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                            <Hash className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                            <div>
-                                <p className="text-muted-foreground">معرّف العملية (Hash):</p>
-                                <p className="font-mono break-all">N/A</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )
-        });
-    }
-     
-    if (isCancelled) {
-        steps.forEach(step => {
-            step.isCompleted = false;
-            step.isCurrent = false;
-        });
-        steps.push({
-            title: 'تم إلغاء الطلب',
-            icon: XCircle,
-            isCompleted: true,
-            isCurrent: true,
-            timestamp: formattedConfirmedTime,
-            details: <p>تم إلغاء هذه العملية.</p>
-        });
-    }
-
+    const { inflows, outflows } = transaction;
 
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
@@ -232,35 +97,71 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 </Alert>
 
                 <div className="p-4">
-                    <div className="relative pl-8 pr-4 py-4">
-                        <div className="absolute top-4 bottom-4 right-6 w-0.5 bg-border"></div>
-                        
-                        {steps.map((step, index) => (
-                            <div key={index} className="relative mb-8 last:mb-0">
-                                <div className="absolute top-0 right-[25px] transform translate-x-1/2 -translate-y-1/2">
-                                     <div className={cn(
-                                        "h-6 w-6 rounded-full flex items-center justify-center bg-background border-2",
-                                        step.isCurrent ? "border-primary" : "border-border"
-                                    )}>
-                                        <div className={cn(
-                                            "h-3 w-3 rounded-full",
-                                            step.isCompleted ? 'bg-primary' : 'bg-muted'
-                                        )}>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mr-10">
-                                    <p className="font-semibold">{step.title}</p>
-                                    <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
-                                        {step.details}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground pt-2">
-                                        {step.timestamp}
+                    <div className="relative pl-8 pr-4 py-4 space-y-6">
+                        {inflows.map((leg, index) => {
+                            const record = linkedRecords.find(r => r.id === leg.recordId);
+                            if (!record) return null;
+                            const { title, amount, details } = getRecordDetails(record, 'inflow');
+                            
+                            return (
+                                <div key={`in-${index}`}>
+                                    <p className="font-semibold text-base mb-2 flex items-center gap-2">
+                                        <ArrowDown className="h-5 w-5 text-green-600 flex-shrink-0" />
+                                        <span>{title}</span>
                                     </p>
+                                     <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
+                                         <p className="text-lg font-bold text-primary mb-3">{amount}</p>
+                                         <div className="space-y-2 text-xs">
+                                             {details.map((d, i) => d.value && (
+                                                <div key={i} className="flex items-start gap-2">
+                                                    <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                                                    <div>
+                                                        <p className="text-muted-foreground">{d.label}:</p>
+                                                        <p className="font-mono break-all">{d.value}</p>
+                                                    </div>
+                                                </div>
+                                             ))}
+                                         </div>
+                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
+
+                        {outflows.map((leg, index) => {
+                             const record = linkedRecords.find(r => r.id === leg.recordId);
+                             if (!record) return null;
+                             const { title, amount, details } = getRecordDetails(record, 'outflow');
+                             
+                             return (
+                                <div key={`out-${index}`}>
+                                    <p className="font-semibold text-base mb-2 flex items-center gap-2">
+                                        <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                        <span>{title}</span>
+                                    </p>
+                                     <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
+                                         <p className="text-lg font-bold text-green-600 mb-3">{amount}</p>
+                                         <div className="space-y-2 text-xs">
+                                             {details.map((d, i) => d.value && (
+                                                <div key={i} className="flex items-start gap-2">
+                                                    <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                                                    <div>
+                                                        <p className="text-muted-foreground">{d.label}:</p>
+                                                        <p className="font-mono break-all">{d.value}</p>
+                                                    </div>
+                                                </div>
+                                             ))}
+                                         </div>
+                                     </div>
+                                </div>
+                             )
+                        })}
                     </div>
+                </div>
+
+                <div className="p-4 border-t bg-muted/50">
+                     <p className="text-xs text-muted-foreground text-center">
+                        {formattedTransactionTime}
+                    </p>
                 </div>
             </div>
         </div>
