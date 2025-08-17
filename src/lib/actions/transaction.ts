@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -145,47 +144,50 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     
     try {
-        const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot] = await Promise.all([
+        const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'cash_records')),
             get(ref(db, 'modern_usdt_records')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
+            get(ref(db, 'accounts')),
         ]);
 
         if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
         const client = clientSnapshot.val() as Client;
         const allCashRecords = cashRecordsSnapshot.val() || {};
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
+        const allAccounts = accountsSnapshot.val() || {};
         const lastFeeEntry = cryptoFeesSnapshot.exists() ? Object.values(cryptoFeesSnapshot.val())[0] as CryptoFee : null;
 
         const allLinkedRecords = linkedRecordIds.map(id => {
             if (allCashRecords[id]) return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
             if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             return null;
-        }).filter((r): r is CashRecord | UsdtRecord => r !== null);
+        }).filter((r): r is (CashRecord | UsdtRecord) & { recordType: 'cash' | 'usdt' } => r !== null);
+
 
         const inflows: TransactionLeg[] = allLinkedRecords
             .filter(r => r.type === 'inflow')
             .map(r => ({
                 recordId: r.id,
-                type: r.source === 'Manual' || r.source === 'SMS' ? 'cash' : 'usdt',
+                type: r.recordType,
                 accountId: r.accountId,
                 accountName: r.accountName,
                 amount: r.amount,
                 currency: (r as CashRecord).currency || 'USDT',
-                amount_usd: r.source === 'Manual' || r.source === 'SMS' ? (r as CashRecord).amountusd : r.amount,
+                amount_usd: r.amount_usd,
             }));
             
         const outflows: TransactionLeg[] = allLinkedRecords
             .filter(r => r.type === 'outflow')
             .map(r => ({
                 recordId: r.id,
-                type: r.source === 'Manual' || r.source === 'SMS' ? 'cash' : 'usdt',
+                type: r.recordType,
                 accountId: r.accountId,
                 accountName: r.accountName,
                 amount: r.amount,
                 currency: (r as CashRecord).currency || 'USDT',
-                amount_usd: r.source === 'Manual' || r.source === 'SMS' ? (r as CashRecord).amountusd : r.amount,
+                amount_usd: r.amount_usd,
             }));
 
         const totalInflowUSD = inflows.reduce((sum, r) => sum + r.amount_usd, 0);
@@ -220,7 +222,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             type,
             clientId,
             clientName: client.name,
-            status: 'Confirmed', // Create as Confirmed immediately
+            status: 'Confirmed',
             notes,
             attachment_url: attachmentUrl || undefined,
             createdAt: new Date().toISOString(),
@@ -232,24 +234,20 @@ export async function createModernTransaction(prevState: TransactionFormState, f
                 fee_usd: fee,
                 net_difference_usd: netDifference
             },
-            // Include difference handling for journaling
             differenceHandling: differenceHandling,
             incomeAccountId: incomeAccountId,
             expenseAccountId: expenseAccountId
         };
         
-        // --- All database changes happen here ---
         const updates: { [key: string]: any } = {};
         updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
         
-        // Mark source records as 'Used'
         for (const record of allLinkedRecords) {
             const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
         }
         
-        // Create all journal entries
-        const journalEntries = createJournalEntriesForTransaction(newTransactionData, client);
+        const journalEntries = createJournalEntriesForTransaction(newTransactionData, client, allAccounts);
         for (const entry of journalEntries) {
             const entryRef = push(ref(db, 'journal_entries'));
             updates[`/journal_entries/${entryRef.key}`] = entry;
@@ -270,7 +268,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     }
 }
 
-function createJournalEntriesForTransaction(transaction: Transaction, client: Client): Omit<JournalEntry, 'id'>[] {
+function createJournalEntriesForTransaction(transaction: Transaction, client: Client, allAccounts: Record<string, Account>): Omit<JournalEntry, 'id'>[] {
     const description = `Tx #${transaction.id} for ${client.name}`;
     const clientAccountId = `6000${client.id}`;
     const allEntries: Omit<JournalEntry, 'id'>[] = [];
@@ -308,7 +306,6 @@ function createJournalEntriesForTransaction(transaction: Transaction, client: Cl
          });
     }
 
-    // Process the fee
     if (transaction.summary.fee_usd > 0.001) {
         allEntries.push({
             date,
@@ -324,15 +321,13 @@ function createJournalEntriesForTransaction(transaction: Transaction, client: Cl
         });
     }
     
-    // The net_difference_usd is calculated as inflow - (outflow + fee).
-    // A positive difference is a gain for the business.
-    // A negative difference is a loss for the business.
     const difference = transaction.summary.net_difference_usd;
 
-    if (transaction.differenceHandling === 'income' && difference > 0.001) { // Gain for the business
+    if (transaction.differenceHandling === 'income' && difference > 0.001) {
+        const incomeAccountName = allAccounts[transaction.incomeAccountId!]?.name || 'Income';
          allEntries.push({
             date,
-            description: `${description} | Gain`,
+            description: `${description} | Gain on Tx`,
             debit_account: clientAccountId, 
             credit_account: transaction.incomeAccountId!,
             debit_amount: difference,
@@ -340,20 +335,21 @@ function createJournalEntriesForTransaction(transaction: Transaction, client: Cl
             amount_usd: difference,
             createdAt: date,
             debit_account_name: client.name,
-            credit_account_name: `Income: Gain`,
+            credit_account_name: incomeAccountName,
         });
-    } else if (transaction.differenceHandling === 'expense' && difference < -0.001) { // Loss for the business
+    } else if (transaction.differenceHandling === 'expense' && difference < -0.001) {
         const loss = Math.abs(difference);
+        const expenseAccountName = allAccounts[transaction.expenseAccountId!]?.name || 'Expense';
         allEntries.push({
             date,
-            description: `${description} | Loss`,
+            description: `${description} | Loss on Tx`,
             debit_account: transaction.expenseAccountId!,
             credit_account: clientAccountId,
             debit_amount: loss,
             credit_amount: loss,
             amount_usd: loss,
             createdAt: date,
-            debit_account_name: `Expense: Loss`,
+            debit_account_name: expenseAccountName,
             credit_account_name: client.name,
         });
     }

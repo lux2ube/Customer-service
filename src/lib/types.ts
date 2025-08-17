@@ -46,7 +46,6 @@ export interface ClientActivity {
     status: string;
     source: 'Transaction' | 'Cash Record' | 'USDT Record';
     link?: string;
-    bankAccountId?: string;
 }
 
 export type BankFormulaField = 'Client Name' | 'Phone Number' | 'ID';
