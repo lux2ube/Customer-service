@@ -1,11 +1,12 @@
 
+
 'use server';
 
 import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, BscApiSetting, ModernUsdtRecord } from '../types';
+import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord } from '../types';
 import { stripUndefined, getNextSequentialId } from './helpers';
 import { findClientByAddress } from './client';
 
@@ -88,7 +89,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
             const newRecordId = await getNextSequentialId('usdtRecordId');
             
-            const newTxData: Omit<ModernUsdtRecord, 'id'> = {
+            const newTxData: Omit<UsdtRecord, 'id'> = {
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
                 type: isIncoming ? 'inflow' : 'outflow',
                 source: 'BSCScan',
@@ -104,7 +105,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 createdAt: new Date().toISOString(),
                 blockNumber: txBlockNumber
             };
-            updates[`/modern_usdt_records/${newRecordId}`] = stripUndefined(newTxData);
+            updates[`/records/usdt/${newRecordId}`] = stripUndefined(newTxData);
             newRecordsCount++;
         }
 

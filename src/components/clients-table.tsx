@@ -68,7 +68,7 @@ export function ClientsTable({
 
   // Fetch all transactions once to build the account usage map
   React.useEffect(() => {
-    const transactionsRef = ref(db, 'transactions');
+    const transactionsRef = ref(db, 'modern_transactions');
     const unsubscribe = onValue(transactionsRef, (snapshot) => {
         if (!snapshot.exists()) {
             setClientAccountUsage(new Map());
