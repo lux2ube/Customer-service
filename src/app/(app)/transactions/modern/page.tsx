@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
-import { ModernTransactionForm } from "@/components/modern-transaction-form";
+import { TransactionForm } from "@/components/transaction-form";
 import { Suspense } from "react";
 import { db } from "@/lib/firebase";
 import { get, ref, onValue } from "firebase/database";
@@ -74,7 +74,7 @@ function FormLoader() {
     }
 
     return (
-        <ModernTransactionForm 
+        <TransactionForm 
             initialClients={data.clients} 
             allAccounts={data.allAccounts}
             serviceProviders={data.serviceProviders}
