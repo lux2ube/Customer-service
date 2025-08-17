@@ -164,7 +164,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             if (allCashRecords[id]) return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
             if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             return null;
-        }).filter((r): r is (CashRecord | UsdtRecord) & { recordType: 'cash' | 'usdt' } => r !== null);
+        }).filter((r): r is (CashRecord | UsdtRecord) & { recordType: 'cash' | 'usdt', amount_usd: number } => r !== null && typeof r.amount_usd === 'number');
 
 
         const inflows: TransactionLeg[] = allLinkedRecords
@@ -383,3 +383,5 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
+
+    
