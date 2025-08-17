@@ -46,7 +46,7 @@ const ActionCard = ({ title, icon: Icon, href }: { title: string, icon: React.El
 
 
 const TransactionItem = ({ tx }: { tx: Transaction }) => {
-    const isCredit = tx.type === 'Withdraw'; // In this context, Withdraw = credit to us
+    const isCredit = tx.type === 'Withdraw'; // In this context, Withdraw = client sells USDT, an inflow to us
     const totalAmount = tx.summary?.total_inflow_usd || 0;
     return (
         <div className="flex items-center gap-4 py-3">
@@ -59,9 +59,9 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
             </div>
             <div className={cn(
                 "font-bold text-right",
-                isCredit ? "text-green-600" : "text-red-600"
+                isCredit ? "text-green-600" : "" // Only color inflows, not outflows from us
             )}>
-                <p>{isCredit ? '' : '-'}{new Intl.NumberFormat('en-US').format(totalAmount)}</p>
+                <p>${new Intl.NumberFormat('en-US').format(totalAmount)}</p>
                 <p className="text-xs font-normal text-muted-foreground">USD</p>
             </div>
         </div>
@@ -153,17 +153,17 @@ export default function DashboardPage() {
                 const thirtyDaysAgo = subDays(new Date(), 30).getTime();
                 const allTxs: Transaction[] = Object.values(data);
                 
-                const recentTxs = allTxs.filter(tx => tx.createdAt && parseISO(tx.createdAt).getTime() >= thirtyDaysAgo);
-                const confirmedTxs = recentTxs.filter(tx => tx.status === 'Confirmed' && tx.date && tx.summary);
+                const confirmedTxs = allTxs.filter(tx => tx.status === 'Confirmed' && tx.date && tx.summary);
+                const recentConfirmedTxs = confirmedTxs.filter(tx => tx.createdAt && parseISO(tx.createdAt).getTime() >= thirtyDaysAgo);
 
                 // --- Deposit/Withdrawal Stats (Last 30 Days) ---
-                const deposits = confirmedTxs
+                const deposits = recentConfirmedTxs
                     .filter(tx => tx.type === 'Deposit')
                     .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
 
-                const withdrawals = confirmedTxs
+                const withdrawals = recentConfirmedTxs
                     .filter(tx => tx.type === 'Withdraw')
-                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0); // For withdraw, client sells usdt, so it's an inflow to us
+                    .reduce((sum, tx) => sum + tx.summary.total_outflow_usd, 0); // Correctly sum outflow for withdrawals
 
                 setTotalDeposits(deposits);
                 setTotalWithdrawals(withdrawals);
@@ -237,6 +237,16 @@ export default function DashboardPage() {
                 // --- Global Stats ---
                 const pending = allTxs.filter(tx => tx.status === 'Pending').length;
                 setPendingTxs(pending);
+            } else {
+                // If no transactions exist at all
+                setPendingTxs(0);
+                setTotalDeposits(0);
+                setTotalWithdrawals(0);
+                setTotalVolumeToday(0);
+                setTotalVolumeThisWeek(0);
+                setDayOverDayChange(null);
+                setWeekOverWeekChange(null);
+                setDailyVolumeData([]);
             }
         }));
 
@@ -247,7 +257,6 @@ export default function DashboardPage() {
         // Mark loading as false after initial data load
         Promise.all([
             get(query(transactionsRef, limitToLast(5))), 
-            get(transactionsRef), 
             get(clientsRef)
         ]).then(() => setLoading(false));
 
@@ -256,7 +265,7 @@ export default function DashboardPage() {
 
     const quickAccessActions = [
         { title: 'Add Client', icon: UserPlus, href: '/clients/add' },
-        { title: 'New Transaction', icon: PlusCircle, href: '/transactions' },
+        { title: 'New Transaction', icon: PlusCircle, href: '/transactions/modern' },
         { title: 'Chart of Accounts', icon: Network, href: '/accounting/chart-of-accounts' },
         { title: 'Blacklist', icon: ShieldAlert, href: '/blacklist' },
     ];
