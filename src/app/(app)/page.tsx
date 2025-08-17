@@ -129,7 +129,7 @@ export default function DashboardPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
-        const transactionsRef = ref(db, 'transactions');
+        const transactionsRef = ref(db, 'modern_transactions');
         
         const unsubs: (() => void)[] = [];
 
