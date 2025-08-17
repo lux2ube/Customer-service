@@ -6,7 +6,7 @@ import type { Transaction, Client, CashRecord, UsdtRecord } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
-import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp, UserCircle } from "lucide-react";
+import { Landmark, Wallet, XCircle, User, FileText, AlertTriangle, Repeat, Hash, CheckCircle, ArrowDown, ArrowUp, UserCircle, DollarSign } from "lucide-react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Separator } from "./ui/separator";
 
@@ -56,8 +56,10 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
     }, [transaction.date]);
     
     const isCancelled = transaction.status === 'Cancelled';
-    
     const { inflows = [], outflows = [] } = transaction;
+
+    // --- Fallback for old data structure ---
+    const isModern = transaction.summary && (transaction.inflows || transaction.outflows);
 
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
@@ -97,65 +99,88 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
                 </Alert>
 
                 <div className="p-4">
-                    <div className="relative pl-8 pr-4 py-4 space-y-6">
-                        {inflows.map((leg, index) => {
-                            const record = linkedRecords.find(r => r.id === leg.recordId);
-                            if (!record) return null;
-                            const { title, amount, details } = getRecordDetails(record, 'inflow');
-                            
-                            return (
-                                <div key={`in-${index}`}>
-                                    <p className="font-semibold text-base mb-2 flex items-center gap-2">
-                                        <ArrowDown className="h-5 w-5 text-green-600 flex-shrink-0" />
-                                        <span>{title}</span>
-                                    </p>
-                                     <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
-                                         <p className="text-lg font-bold text-primary mb-3">{amount}</p>
-                                         <div className="space-y-2 text-xs">
-                                             {details.map((d, i) => d.value && (
-                                                <div key={i} className="flex items-start gap-2">
-                                                    <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                                                    <div>
-                                                        <p className="text-muted-foreground">{d.label}:</p>
-                                                        <p className="font-mono break-all">{d.value}</p>
+                     {isModern ? (
+                        <div className="relative pl-8 pr-4 py-4 space-y-6">
+                            {inflows.map((leg, index) => {
+                                const record = linkedRecords.find(r => r.id === leg.recordId);
+                                if (!record) return null;
+                                const { title, amount, details } = getRecordDetails(record, 'inflow');
+                                
+                                return (
+                                    <div key={`in-${index}`}>
+                                        <p className="font-semibold text-base mb-2 flex items-center gap-2">
+                                            <ArrowDown className="h-5 w-5 text-green-600 flex-shrink-0" />
+                                            <span>{title}</span>
+                                        </p>
+                                        <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
+                                            <p className="text-lg font-bold text-primary mb-3">{amount}</p>
+                                            <div className="space-y-2 text-xs">
+                                                {details.map((d, i) => d.value && (
+                                                    <div key={i} className="flex items-start gap-2">
+                                                        <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                                                        <div>
+                                                            <p className="text-muted-foreground">{d.label}:</p>
+                                                            <p className="font-mono break-all">{d.value}</p>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                             ))}
-                                         </div>
-                                     </div>
-                                </div>
-                            )
-                        })}
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
 
-                        {outflows.map((leg, index) => {
-                             const record = linkedRecords.find(r => r.id === leg.recordId);
-                             if (!record) return null;
-                             const { title, amount, details } = getRecordDetails(record, 'outflow');
-                             
-                             return (
-                                <div key={`out-${index}`}>
-                                    <p className="font-semibold text-base mb-2 flex items-center gap-2">
-                                        <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
-                                        <span>{title}</span>
-                                    </p>
-                                     <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
-                                         <p className="text-lg font-bold text-green-600 mb-3">{amount}</p>
-                                         <div className="space-y-2 text-xs">
-                                             {details.map((d, i) => d.value && (
-                                                <div key={i} className="flex items-start gap-2">
-                                                    <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                                                    <div>
-                                                        <p className="text-muted-foreground">{d.label}:</p>
-                                                        <p className="font-mono break-all">{d.value}</p>
+                            {outflows.map((leg, index) => {
+                                const record = linkedRecords.find(r => r.id === leg.recordId);
+                                if (!record) return null;
+                                const { title, amount, details } = getRecordDetails(record, 'outflow');
+                                
+                                return (
+                                    <div key={`out-${index}`}>
+                                        <p className="font-semibold text-base mb-2 flex items-center gap-2">
+                                            <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                            <span>{title}</span>
+                                        </p>
+                                        <div className="text-sm text-foreground bg-muted/40 p-3 rounded-md mt-2">
+                                            <p className="text-lg font-bold text-green-600 mb-3">{amount}</p>
+                                            <div className="space-y-2 text-xs">
+                                                {details.map((d, i) => d.value && (
+                                                    <div key={i} className="flex items-start gap-2">
+                                                        <d.icon className="h-3 w-3 mt-0.5 text-muted-foreground" />
+                                                        <div>
+                                                            <p className="text-muted-foreground">{d.label}:</p>
+                                                            <p className="font-mono break-all">{d.value}</p>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                             ))}
-                                         </div>
-                                     </div>
-                                </div>
-                             )
-                        })}
-                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        // Fallback for old transactions
+                        <div className="py-4 space-y-4">
+                            <p className="text-center text-sm text-muted-foreground">(Legacy Transaction View)</p>
+                            <div className="flex justify-between items-center text-lg">
+                                <span className="font-semibold">Type:</span>
+                                <span className="font-bold">{transaction.type}</span>
+                            </div>
+                             <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Inflow Amount (USD):</span>
+                                <span className="font-mono text-green-600">{transaction.amount_usd?.toLocaleString() || 'N/A'}</span>
+                            </div>
+                             <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Outflow Amount (USD):</span>
+                                <span className="font-mono text-red-500">{transaction.outflow_usd?.toLocaleString() || 'N/A'}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Fee (USD):</span>
+                                <span className="font-mono">{transaction.fee_usd?.toLocaleString() || 'N/A'}</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-4 border-t bg-muted/50">
