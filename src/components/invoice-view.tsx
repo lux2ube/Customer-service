@@ -62,7 +62,6 @@ export function InvoiceView({ transaction, client, linkedRecords }: InvoiceViewP
         }
     }, [transaction.date]);
     
-    const isModern = !!transaction.summary;
     const { inflows = [], outflows = [] } = transaction;
 
     return (
@@ -103,7 +102,6 @@ export function InvoiceView({ transaction, client, linkedRecords }: InvoiceViewP
                 </Alert>
 
                 <div className="p-4">
-                     {isModern ? (
                         <div className="relative pl-8 pr-4 py-4 space-y-6">
                             {inflows.map((leg, index) => {
                                 const record = linkedRecords.find(r => r.id === leg.recordId);
@@ -163,28 +161,6 @@ export function InvoiceView({ transaction, client, linkedRecords }: InvoiceViewP
                                 )
                             })}
                         </div>
-                    ) : (
-                        // Fallback for old transactions
-                        <div className="py-4 space-y-4">
-                            <p className="text-center text-sm text-muted-foreground">(Legacy Transaction View)</p>
-                            <div className="flex justify-between items-center text-lg">
-                                <span className="font-semibold">Type:</span>
-                                <span className="font-bold">{transaction.type}</span>
-                            </div>
-                             <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Inflow Amount (USD):</span>
-                                <span className="font-mono text-green-600">{transaction.amount_usd?.toLocaleString() || 'N/A'}</span>
-                            </div>
-                             <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Outflow Amount (USD):</span>
-                                <span className="font-mono text-red-500">{transaction.outflow_usd?.toLocaleString() || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Fee (USD):</span>
-                                <span className="font-mono">{transaction.fee_usd?.toLocaleString() || 'N/A'}</span>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 <div className="p-4 border-t bg-muted/50">
