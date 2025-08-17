@@ -57,7 +57,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
     
     const isCancelled = transaction.status === 'Cancelled';
     
-    const { inflows, outflows } = transaction;
+    const { inflows = [], outflows = [] } = transaction;
 
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
