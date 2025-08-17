@@ -19,7 +19,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
     try {
         const cashRecordsQuery = query(ref(db, 'records/cash'), orderByChild('clientId'), equalTo(clientId));
-        const usdtRecordsQuery = query(ref(db, 'records/usdt'), orderByChild('clientId'), equalTo(clientId));
+        const usdtRecordsQuery = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
 
         const [
             cashRecordsSnapshot,
@@ -148,7 +148,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'records/cash')),
-            get(ref(db, 'records/usdt')),
+            get(ref(db, 'modern_usdt_records')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
             get(ref(db, 'accounts')),
         ]);
@@ -244,7 +244,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
         
         for (const record of allLinkedRecords) {
-            const recordPath = record.recordType === 'cash' ? `/records/cash/${record.id}` : `/records/usdt/${record.id}`;
+            const recordPath = record.recordType === 'cash' ? `/records/cash/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
         }
         

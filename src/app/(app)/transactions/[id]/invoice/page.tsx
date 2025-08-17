@@ -35,7 +35,7 @@ async function getLinkedRecords(transaction: Transaction): Promise<(CashRecord |
     const uniqueRecordIds = Array.from(new Map(recordIds.map(item => [item.id, item])).values());
 
     const recordPromises = uniqueRecordIds.map(async ({ id, type }) => {
-        const path = type === 'cash' ? `records/cash/${id}` : `records/usdt/${id}`;
+        const path = type === 'cash' ? `records/cash/${id}` : `modern_usdt_records/${id}`;
         const snapshot = await get(ref(db, path));
         if (snapshot.exists()) {
             // Add a flag to distinguish record types easily
