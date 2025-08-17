@@ -6,14 +6,9 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
-import { ExportButton } from '@/components/export-button';
-import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
-import type { Transaction } from '@/lib/types';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
 
 export default function TransactionsPage() {
     return (
