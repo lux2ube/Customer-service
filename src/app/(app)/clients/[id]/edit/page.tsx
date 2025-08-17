@@ -21,8 +21,8 @@ async function getClient(id: string): Promise<Client | null> {
 
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
     const [cashRecordsSnap, usdtRecordsSnap] = await Promise.all([
-        get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId)))
+        get(query(ref(db, 'records/cash'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'records/usdt'), orderByChild('clientId'), equalTo(clientId)))
     ]);
 
     const history: ClientActivity[] = [];
@@ -39,7 +39,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
                 currency: record.currency,
                 status: record.status,
                 source: 'Cash Record',
-                link: `/modern-cash-records/${key}/edit`
+                link: `/records/cash/${key}/edit`
             });
         });
     }
@@ -56,7 +56,7 @@ async function getClientActivityHistory(clientId: string): Promise<ClientActivit
                 currency: 'USDT',
                 status: record.status,
                 source: 'USDT Record',
-                link: `/modern-usdt-records/${key}/edit`
+                link: `/records/usdt/${key}/edit`
             });
         });
     }

@@ -1,4 +1,3 @@
-
 # Firebase Realtime Database Structure
 
 This document outlines the data structure used in the Firebase Realtime Database for this application.
@@ -9,28 +8,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 1. `/journal_entries/{entryId}`
+### 1. `/records/cash/{recordId}`
 
-**The core of the double-entry accounting system.** This is the definitive ledger of all financial movements between accounts. Every transaction from `modern_transactions` generates one or more entries here.
-
--   **`id`**: `string` - Unique push ID.
--   **`date`**: `string` (ISO 8601) - The date of the journal entry.
--   **`description`**: `string` - A human-readable description of the transaction.
--   **`debit_account`**: `string` - The ID of the account being debited.
--   **`credit_account`**: `string` - The ID of the account being credited.
--   **`debit_account_name`**: `string` (denormalized) - The name of the debited account.
--   **`credit_account_name`**: `string` (denormalized) - The name of the credited account.
--   **`debit_amount`**: `number` - The amount in the debit account's native currency.
--   **`credit_amount`**: `number` - The amount in the credit account's native currency.
--   **`amount_usd`**: `number` - The value of the transaction in USD, for consistent reporting.
--   **`createdAt`**: `string` (ISO 8601) - Timestamp of creation.
--   **`details`**: `object[]` (optional) - For multi-leg transactions, this stores the original transaction legs.
-
----
-
-### 2. `/cash_records/{recordId}`
-
-**Primary store for all cash-based transactions (inflows and outflows).** This is the unified ledger for cash movements. `{recordId}` is a sequential number from a shared counter.
+**Unified ledger for all cash-based transactions (inflows and outflows).** This is a primary source of truth for all manual or SMS-based fiat currency movements. `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record (e.g., "1001", "1002").
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
@@ -52,9 +32,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 3. `/usdt_records/{recordId}`
+### 2. `/records/usdt/{recordId}`
 
-**Primary store for all USDT-based transactions (inflows and outflows).** This is the unified ledger for USDT movements. `{recordId}` is a sequential number from a shared counter.
+**Unified ledger for all USDT-based transactions (inflows and outflows).** `{recordId}` is a sequential number from a shared counter.
 
 -   **`id`**: `string` - The unique, sequential ID for the record.
 -   **`date`**: `string` (ISO 8601) - The date of the transaction.
@@ -73,9 +53,9 @@ The database is organized into several top-level keys, each representing a colle
 
 ---
 
-### 4. `/modern_transactions/{transactionId}`
+### 3. `/transactions/{transactionId}`
 
-**Primary store for consolidated, finalized transactions.** A transaction is created by linking one or more records from `cash_records` or `usdt_records`. `{transactionId}` starts with "T-" and is sequential.
+**Primary store for consolidated, finalized transactions.** A transaction is created by linking one or more records from `/records/cash` or `/records/usdt`. `{transactionId}` starts with "T-" and is sequential.
 
 -   **`id`**: `string` - The unique, sequential ID for the transaction.
 -   **`date`**: `string` (ISO 8601) - The date the transaction was created.
@@ -88,7 +68,7 @@ The database is organized into several top-level keys, each representing a colle
 -   **`createdAt`**: `string` (ISO 8601) - The timestamp when the transaction was created.
 
 -   **`inflows`**: `TransactionLeg[]` - An array detailing all funds received.
-    -   `recordId`: `string` - ID from `cash_records` or `usdt_records`.
+    -   `recordId`: `string` - ID from `/records/cash` or `/records/usdt`.
     -   `type`: `'cash' | 'usdt'`
     -   `accountId`: `string` - The internal account that received the funds.
     -   `accountName`: `string`
@@ -104,6 +84,25 @@ The database is organized into several top-level keys, each representing a colle
     -   `total_outflow_usd`: `number`
     -   `fee_usd`: `number`
     -   `net_difference_usd`: `number` - The final balance of the transaction (inflow - (outflow + fee)).
+
+---
+
+### 4. `/journal_entries/{entryId}`
+
+**The core of the double-entry accounting system.** This is the definitive ledger of all financial movements between accounts. Every transaction from `transactions` generates one or more entries here.
+
+-   **`id`**: `string` - Unique push ID.
+-   **`date`**: `string` (ISO 8601) - The date of the journal entry.
+-   **`description`**: `string` - A human-readable description of the transaction.
+-   **`debit_account`**: `string` - The ID of the account being debited.
+-   **`credit_account`**: `string` - The ID of the account being credited.
+-   **`debit_account_name`**: `string` (denormalized) - The name of the debited account.
+-   **`credit_account_name`**: `string` (denormalized) - The name of the credited account.
+-   **`debit_amount`**: `number` - The amount in the debit account's native currency.
+-   **`credit_amount`**: `number` - The amount in the credit account's native currency.
+-   **`amount_usd`**: `number` - The value of the transaction in USD, for consistent reporting.
+-   **`createdAt`**: `string` (ISO 8601) - Timestamp of creation.
+-   **`details`**: `object[]` (optional) - For multi-leg transactions, this stores the original transaction legs.
 
 ---
 
@@ -142,16 +141,4 @@ Stores atomic counters for generating sequential IDs.
 -   **/`cashRecordId`**: `number` - The last used ID for the new unified cash records.
 -   **/`usdtRecordId`**: `number` - The last used ID for the new unified USDT records.
 -   **/`bscApiId`**: `number` - The last used ID for BSC API configurations.
--   **/`transactionId`**: `number` - The last used ID for the new `modern_transactions` table.
-
----
-
-### Deprecated Paths
-
-The following paths are no longer in active use by the new system but may be retained for historical data. All new development should focus on the modern paths listed above.
-
--   `/transactions`
--   `/sms_transactions`
--   `/cash_receipts`
--   `/usdt_receipts`
--   `/cash_payments`
+-   **/`transactionId`**: `number` - The last used ID for the new `transactions` table.

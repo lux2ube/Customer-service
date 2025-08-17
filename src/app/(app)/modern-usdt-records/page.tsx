@@ -123,7 +123,7 @@ export default function ModernUsdtRecordsPage() {
     return (
         <>
             <PageHeader
-                title="Modern USDT Records"
+                title="USDT Records"
                 description="A unified ledger for all USDT inflows and outflows from any source."
             >
                 <div className="flex flex-wrap items-center gap-2">

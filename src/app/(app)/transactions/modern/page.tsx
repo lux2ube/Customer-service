@@ -87,7 +87,7 @@ export default function ModernTransactionPage() {
     return (
         <>
             <PageHeader
-                title="Modern Transaction"
+                title="Create Transaction"
                 description="Create a new transaction by linking multiple financial records for a client."
             />
             <Suspense fallback={<div>Loading form...</div>}>

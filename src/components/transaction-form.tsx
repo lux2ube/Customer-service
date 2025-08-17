@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 
 export function TransactionForm() {
     useEffect(() => {
-        redirect('/transactions/modern');
+        redirect('/transactions');
     }, []);
     return null;
 }

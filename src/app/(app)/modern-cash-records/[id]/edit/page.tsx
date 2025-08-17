@@ -11,7 +11,7 @@ import { CashReceiptForm } from "@/components/cash-receipt-form";
 import { CashPaymentForm } from "@/components/cash-payment-form";
 
 async function getPageData(recordId: string) {
-    const recordRef = ref(db, `cash_records/${recordId}`);
+    const recordRef = ref(db, `records/cash/${recordId}`);
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
 
@@ -64,7 +64,7 @@ export default async function EditModernCashRecordPage({ params }: { params: { i
             />
             <Suspense fallback={<div>Loading form...</div>}>
                 {record.type === 'inflow' ? (
-                    <CashReceiptForm record={record} clients={clients} bankAccounts={bankAccounts} />
+                    <CashReceiptForm record={record} onFormSubmit={() => {}} />
                 ) : (
                     <CashPaymentForm record={record} clients={clients} bankAccounts={bankAccounts} />
                 )}

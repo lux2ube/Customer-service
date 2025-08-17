@@ -102,14 +102,6 @@ export interface Transaction {
         net_difference_usd: number;
     };
     
-    // Kept for backward compatibility if needed, but new logic uses arrays
-    linkedRecordIds?: string;
-    amount_usd?: number;
-    outflow_usd?: number;
-    fee_usd?: number;
-    exchange_rate_commission?: number;
-    expense_usd?: number;
-    remittance_number?: string;
     differenceHandling?: 'income' | 'expense';
     incomeAccountId?: string;
     expenseAccountId?: string;

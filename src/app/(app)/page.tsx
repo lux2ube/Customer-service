@@ -47,6 +47,7 @@ const ActionCard = ({ title, icon: Icon, href }: { title: string, icon: React.El
 
 const TransactionItem = ({ tx }: { tx: Transaction }) => {
     const isCredit = tx.type === 'Withdraw'; // In this context, Withdraw = credit to us
+    const totalAmount = tx.summary?.total_inflow_usd || 0;
     return (
         <div className="flex items-center gap-4 py-3">
              <div className="p-3 bg-secondary rounded-full">
@@ -60,7 +61,7 @@ const TransactionItem = ({ tx }: { tx: Transaction }) => {
                 "font-bold text-right",
                 isCredit ? "text-green-600" : "text-red-600"
             )}>
-                <p>{isCredit ? '' : '-'}{new Intl.NumberFormat('en-US').format(tx.amount_usd)}</p>
+                <p>{isCredit ? '' : '-'}{new Intl.NumberFormat('en-US').format(totalAmount)}</p>
                 <p className="text-xs font-normal text-muted-foreground">USD</p>
             </div>
         </div>
@@ -128,7 +129,7 @@ export default function DashboardPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
-        const transactionsRef = ref(db, 'modern_transactions');
+        const transactionsRef = ref(db, 'transactions');
         
         const unsubs: (() => void)[] = [];
 
@@ -153,16 +154,16 @@ export default function DashboardPage() {
                 const allTxs: Transaction[] = Object.values(data);
                 
                 const recentTxs = allTxs.filter(tx => tx.createdAt && parseISO(tx.createdAt).getTime() >= thirtyDaysAgo);
-                const confirmedTxs = recentTxs.filter(tx => tx.status === 'Confirmed' && tx.date);
+                const confirmedTxs = recentTxs.filter(tx => tx.status === 'Confirmed' && tx.date && tx.summary);
 
                 // --- Deposit/Withdrawal Stats (Last 30 Days) ---
                 const deposits = confirmedTxs
                     .filter(tx => tx.type === 'Deposit')
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
 
                 const withdrawals = confirmedTxs
                     .filter(tx => tx.type === 'Withdraw')
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0); // For withdraw, client sells usdt, so it's an inflow to us
 
                 setTotalDeposits(deposits);
                 setTotalWithdrawals(withdrawals);
@@ -173,14 +174,14 @@ export default function DashboardPage() {
 
                 const todayVolume = confirmedTxs
                     .filter(tx => parseISO(tx.date) >= todayStart)
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
 
                 const yesterdayVolume = confirmedTxs
                     .filter(tx => {
                         const txDate = parseISO(tx.date);
                         return txDate >= yesterdayStart && txDate < todayStart;
                     })
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
 
                 setTotalVolumeToday(todayVolume);
                 if (yesterdayVolume > 0) {
@@ -197,11 +198,11 @@ export default function DashboardPage() {
                 
                 const thisWeekVolume = confirmedTxs
                     .filter(tx => parseISO(tx.date) >= thisWeekStart)
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
 
                 const lastWeekVolume = confirmedTxs
                     .filter(tx => parseISO(tx.date) >= lastWeekStart && parseISO(tx.date) <= lastWeekEnd)
-                    .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                    .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
                 
                 setTotalVolumeThisWeek(thisWeekVolume);
                 if (lastWeekVolume > 0) {
@@ -225,7 +226,7 @@ export default function DashboardPage() {
                             const txDate = parseISO(tx.date);
                             return txDate >= dayStart && txDate <= dayEnd;
                         })
-                        .reduce((sum, tx) => sum + tx.amount_usd, 0);
+                        .reduce((sum, tx) => sum + tx.summary.total_inflow_usd, 0);
                     return {
                         name: format(day, 'E'), // e.g., 'Mon'
                         value: volume,
@@ -255,7 +256,7 @@ export default function DashboardPage() {
 
     const quickAccessActions = [
         { title: 'Add Client', icon: UserPlus, href: '/clients/add' },
-        { title: 'New Transaction', icon: PlusCircle, href: '/transactions/modern' },
+        { title: 'New Transaction', icon: PlusCircle, href: '/transactions' },
         { title: 'Chart of Accounts', icon: Network, href: '/accounting/chart-of-accounts' },
         { title: 'Blacklist', icon: ShieldAlert, href: '/blacklist' },
     ];

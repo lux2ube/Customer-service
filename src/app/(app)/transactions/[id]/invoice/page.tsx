@@ -6,7 +6,7 @@ import type { Transaction, Client, CashRecord, UsdtRecord } from '@/lib/types';
 import { notFound } from 'next/navigation';
 
 async function getTransaction(id: string): Promise<Transaction | null> {
-    const transactionRef = ref(db, `modern_transactions/${id}`);
+    const transactionRef = ref(db, `transactions/${id}`);
     const snapshot = await get(transactionRef);
     if (snapshot.exists()) {
         return { id, ...snapshot.val() };
@@ -34,7 +34,7 @@ async function getLinkedRecords(transaction: Transaction): Promise<(CashRecord |
     const uniqueRecordIds = Array.from(new Map(recordIds.map(item => [item.id, item])).values());
 
     const recordPromises = uniqueRecordIds.map(async ({ id, type }) => {
-        const path = type === 'cash' ? `cash_records/${id}` : `modern_usdt_records/${id}`;
+        const path = type === 'cash' ? `records/cash/${id}` : `records/usdt/${id}`;
         const snapshot = await get(ref(db, path));
         if (snapshot.exists()) {
             // Add a flag to distinguish record types easily

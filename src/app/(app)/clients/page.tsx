@@ -27,7 +27,7 @@ export default function ClientsPage() {
 
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients/');
-        const transactionsRef = ref(db, 'modern_transactions/');
+        const transactionsRef = ref(db, 'transactions/');
         const accountsRef = ref(db, 'accounts/');
 
         const unsubs: (() => void)[] = [];

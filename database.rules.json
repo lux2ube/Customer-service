@@ -3,14 +3,13 @@
   "rules": {
     ".read": true,
     ".write": true,
-    "cash_records": {
-      ".indexOn": ["clientId", "source", "createdAt"]
-    },
-    "modern_usdt_records": {
-      ".indexOn": ["clientId", "createdAt"]
-    },
-    "modern_transactions": {
-      ".indexOn": ["clientId"]
+    "records": {
+      "cash": {
+        ".indexOn": ["clientId", "source", "createdAt"]
+      },
+      "usdt": {
+        ".indexOn": ["clientId", "createdAt"]
+      }
     },
     "transactions": {
       ".indexOn": ["clientId"]
