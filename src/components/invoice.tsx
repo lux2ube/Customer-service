@@ -23,9 +23,16 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
     
     const [formattedTransactionTime, setFormattedTransactionTime] = useState('...');
     const [formattedConfirmedTime, setFormattedConfirmedTime] = useState('...');
+    
+    // --- Data Compatibility Layer ---
+    // This makes the component work with both old and new transaction structures.
+    const summary = {
+        inflow: transaction.summary ? transaction.summary.total_inflow_usd : (transaction.amount_usd || 0),
+        outflow: transaction.summary ? transaction.summary.total_outflow_usd : (transaction.outflow_usd || 0),
+        fee: transaction.summary ? transaction.summary.fee_usd : (transaction.fee_usd || 0),
+    }
 
     useEffect(() => {
-        // This code runs only on the client, after hydration
         if (transaction.date) {
             setFormattedTransactionTime(format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a"));
         } else {
@@ -55,7 +62,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                  <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <ArrowUp className="h-5 w-5 text-red-500 flex-shrink-0" />
-                        <p className="text-lg font-bold text-primary">{transaction.amount_usd.toFixed(2)} USDT</p>
+                        <p className="text-lg font-bold text-primary">{summary.inflow.toFixed(2)} USDT</p>
                     </div>
                     <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
@@ -64,7 +71,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         </div>
                         <div className="flex items-start gap-2">
                            <Wallet className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">إلى محفظة النظام:</span> N/A</p>
+                           <p><span className="text-muted-foreground">إلى محفظة النظام:</span> {transaction.inflows?.[0]?.accountName || 'N/A'}</p>
                         </div>
                          <div className="flex items-start gap-2">
                             <Hash className="h-3 w-3 mt-0.5 text-muted-foreground" />
@@ -87,12 +94,12 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-lg font-bold text-green-600">{transaction.outflow_usd} Fiat</p>
+                        <p className="text-lg font-bold text-green-600">{summary.outflow.toFixed(2)} Fiat</p>
                     </div>
                      <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
                            <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">إلى حساب:</span> N/A</p>
+                           <p><span className="text-muted-foreground">إلى حساب:</span> {transaction.outflows?.[0]?.accountName || 'N/A'}</p>
                         </div>
                         <div className="flex items-start gap-2">
                            <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
@@ -116,7 +123,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <ArrowDown className="h-5 w-5 text-green-500 flex-shrink-0" />
-                        <p className="text-lg font-bold text-primary">{transaction.amount_usd} Fiat</p>
+                        <p className="text-lg font-bold text-primary">{summary.inflow.toFixed(2)} Fiat</p>
                     </div>
                      <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
@@ -125,7 +132,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                         </div>
                          <div className="flex items-start gap-2">
                            <Landmark className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                           <p><span className="text-muted-foreground">عبر حساب:</span> N/A</p>
+                           <p><span className="text-muted-foreground">عبر حساب:</span> {transaction.inflows?.[0]?.accountName || 'N/A'}</p>
                         </div>
                         <div className="flex items-start gap-2">
                            <Repeat className="h-3 w-3 mt-0.5 text-muted-foreground" />
@@ -148,7 +155,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, { transaction: Transacti
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-lg font-bold text-green-600">{transaction.outflow_usd.toFixed(2)} USDT</p>
+                        <p className="text-lg font-bold text-green-600">{summary.outflow.toFixed(2)} USDT</p>
                     </div>
                     <div className="space-y-2 text-xs">
                         <div className="flex items-start gap-2">
