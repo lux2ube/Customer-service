@@ -1,5 +1,5 @@
 
-import { Invoice } from '@/components/invoice';
+import { InvoiceView } from '@/components/invoice-view';
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
 import type { Transaction, Client, CashRecord, UsdtRecord } from '@/lib/types';
@@ -37,7 +37,9 @@ async function getLinkedRecords(transaction: Transaction): Promise<(CashRecord |
         const path = type === 'cash' ? `cash_records/${id}` : `modern_usdt_records/${id}`;
         const snapshot = await get(ref(db, path));
         if (snapshot.exists()) {
-            return { id, ...snapshot.val() };
+            // Add a flag to distinguish record types easily
+            const recordData = snapshot.val();
+            return { id, ...recordData, recordType: type };
         }
         return null;
     });
@@ -56,7 +58,9 @@ export default async function InvoicePage({ params }: { params: { id: string } }
     const client = transaction.clientId ? await getClient(transaction.clientId) : null;
     const linkedRecords = await getLinkedRecords(transaction);
 
+    // The InvoiceView component will handle all the rendering logic.
+    // We pass the fetched data as props.
     return (
-        <Invoice transaction={transaction} client={client} linkedRecords={linkedRecords} />
+        <InvoiceView transaction={transaction} client={client} linkedRecords={linkedRecords} />
     );
 }
