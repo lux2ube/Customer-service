@@ -63,7 +63,7 @@ export function TransactionsTable() {
   const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
-    const transactionsRef = ref(db, 'modern_transactions/');
+    const transactionsRef = ref(db, 'transactions/');
     const unsubscribe = onValue(transactionsRef, (snapshot) => {
         const data = snapshot.val();
         setTransactions(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
