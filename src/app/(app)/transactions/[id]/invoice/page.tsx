@@ -1,4 +1,5 @@
 
+
 import { InvoiceView } from '@/components/invoice-view';
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
@@ -6,7 +7,6 @@ import type { Transaction, Client, CashRecord, UsdtRecord } from '@/lib/types';
 import { notFound } from 'next/navigation';
 
 async function getTransaction(id: string): Promise<Transaction | null> {
-    // CORRECTED PATH: Changed 'transactions' to 'modern_transactions' to match the database
     const transactionRef = ref(db, `transactions/${id}`);
     const snapshot = await get(transactionRef);
     if (snapshot.exists()) {

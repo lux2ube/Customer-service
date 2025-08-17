@@ -55,7 +55,7 @@ export function TransactionsTable() {
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
-  const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = React.useState<{ key: SortableKeys; direction: 'asc' | 'desc' }>({ key: 'id', direction: 'desc' });
   const [currentPage, setCurrentPage] = React.useState(1);
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [statusFilter, setStatusFilter] = React.useState('all');
