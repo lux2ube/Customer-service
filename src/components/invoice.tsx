@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import type { Transaction, Client, CashRecord, UsdtRecord } from "@/lib/types";
@@ -48,6 +47,7 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
     const [formattedTransactionTime, setFormattedTransactionTime] = useState('...');
     
     useEffect(() => {
+        // This ensures date formatting only happens on the client, avoiding hydration mismatches.
         if (transaction.date) {
             setFormattedTransactionTime(format(parseISO(transaction.date), "dd/MM/yyyy, h:mm a"));
         } else {
@@ -56,10 +56,8 @@ export const Invoice = React.forwardRef<HTMLDivElement, InvoiceProps>(({ transac
     }, [transaction.date]);
     
     const isCancelled = transaction.status === 'Cancelled';
+    const isModern = !!transaction.summary;
     const { inflows = [], outflows = [] } = transaction;
-
-    // --- Fallback for old data structure ---
-    const isModern = transaction.summary && (transaction.inflows || transaction.outflows);
 
     return (
         <div ref={ref} dir="rtl" className="w-full max-w-md mx-auto bg-background text-foreground font-cairo">
