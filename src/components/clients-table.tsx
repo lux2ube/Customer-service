@@ -11,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { Client, Transaction, Account } from '@/lib/types';
+import type { Client, CashRecord, UsdtRecord, Account } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -21,12 +21,12 @@ import { Input } from '@/components/ui/input';
 import { normalizeArabic, cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
-import { onValue, ref } from 'firebase/database';
+import { onValue, ref, get, query, orderByChild, equalTo } from 'firebase/database';
 
 
 interface ClientsTableProps {
     initialClients: Client[];
-    initialTransactions: Transaction[];
+    initialTransactions: never[]; // This is no longer needed
     initialBankAccounts: Account[];
     initialCryptoWallets: Account[];
     onFilteredDataChange: (data: Client[]) => void;
@@ -36,30 +36,67 @@ const ITEMS_PER_PAGE = 50;
 
 export function ClientsTable({ 
     initialClients,
-    initialTransactions,
     initialBankAccounts,
     initialCryptoWallets,
     onFilteredDataChange,
 }: ClientsTableProps) {
   const [clients, setClients] = React.useState<Client[]>(initialClients);
-  const [transactions, setTransactions] = React.useState<Transaction[]>(initialTransactions);
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>(initialBankAccounts);
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>(initialCryptoWallets);
-  const [loading, setLoading] = React.useState(true); // Initial load is done on server
+  const [loading, setLoading] = React.useState(true);
   
   const [search, setSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
   const [bankAccountFilter, setBankAccountFilter] = React.useState('all');
   const [cryptoWalletFilter, setCryptoWalletFilter] = React.useState('all');
+  
+  const [clientRecordMap, setClientRecordMap] = React.useState(new Map<string, { bankAccountIds: Set<string>, cryptoWalletIds: Set<string> }>());
 
   // Listen for real-time updates
   React.useEffect(() => {
-    setClients(initialClients);
-    setTransactions(initialTransactions);
-    setBankAccounts(initialBankAccounts);
-    setCryptoWallets(initialCryptoWallets);
     setLoading(initialClients.length === 0);
-  }, [initialClients, initialTransactions, initialBankAccounts, initialCryptoWallets]);
+     const clientsRef = ref(db, 'clients');
+     const unsubscribe = onValue(clientsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            setClients(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+        }
+        setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [initialClients]);
+
+  React.useEffect(() => {
+    const fetchRecords = async () => {
+        const newMap = new Map<string, { bankAccountIds: Set<string>, cryptoWalletIds: Set<string> }>();
+        const [cashSnapshot, usdtSnapshot] = await Promise.all([
+            get(ref(db, 'records/cash')),
+            get(ref(db, 'records/usdt'))
+        ]);
+        
+        if (cashSnapshot.exists()) {
+            const records: Record<string, CashRecord> = cashSnapshot.val();
+            Object.values(records).forEach(rec => {
+                if (rec.clientId) {
+                    if (!newMap.has(rec.clientId)) newMap.set(rec.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
+                    newMap.get(rec.clientId)!.bankAccountIds.add(rec.accountId);
+                }
+            });
+        }
+        
+        if (usdtSnapshot.exists()) {
+            const records: Record<string, UsdtRecord> = usdtSnapshot.val();
+            Object.values(records).forEach(rec => {
+                if (rec.clientId) {
+                    if (!newMap.has(rec.clientId)) newMap.set(rec.clientId, { bankAccountIds: new Set(), cryptoWalletIds: new Set() });
+                    newMap.get(rec.clientId)!.cryptoWalletIds.add(rec.accountId);
+                }
+            });
+        }
+        setClientRecordMap(newMap);
+    };
+    fetchRecords();
+  }, []);
 
   const getClientPhoneString = (phone: string | string[] | undefined): string => {
     if (!phone) return '';
@@ -67,14 +104,6 @@ export function ClientsTable({
     return phone;
   };
   
-  const clientTransactionMap = React.useMemo(() => {
-    const map = new Map<string, { bankAccountIds: Set<string>; cryptoWalletIds: Set<string> }>();
-    // This logic needs to be updated to inspect the linked records of modern_transactions
-    // For now, this will be empty until that's implemented.
-    return map;
-  }, [transactions]);
-
-
   const filteredClients = React.useMemo(() => {
     let filtered = [...clients].sort((a,b) => {
         const idA = parseInt(a.id);
@@ -92,12 +121,10 @@ export function ClientsTable({
             const phone = (getClientPhoneString(client.phone).toLowerCase());
             const id = (client.id?.toLowerCase() || '');
 
-            // ID and Phone can be a direct substring match. Use original search for phone.
             if (id.includes(normalizedSearch) || phone.includes(search.trim())) {
                 return true;
             }
             
-            // For name, check if all search terms match the start of some word in the name
             const nameWords = name.split(' ');
             return searchTerms.every(term => 
                 nameWords.some(nameWord => nameWord.startsWith(term))
@@ -106,15 +133,21 @@ export function ClientsTable({
     }
 
     if (bankAccountFilter !== 'all') {
-        // This filtering is currently disabled as the data source (clientTransactionMap) is not populated correctly yet.
+        filtered = filtered.filter(client => {
+            const clientData = clientRecordMap.get(client.id);
+            return clientData?.bankAccountIds.has(bankAccountFilter);
+        });
     }
     
     if (cryptoWalletFilter !== 'all') {
-        // This filtering is currently disabled.
+         filtered = filtered.filter(client => {
+            const clientData = clientRecordMap.get(client.id);
+            return clientData?.cryptoWalletIds.has(cryptoWalletFilter);
+        });
     }
 
     return filtered;
-  }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientTransactionMap]);
+  }, [clients, search, bankAccountFilter, cryptoWalletFilter, clientRecordMap]);
 
   React.useEffect(() => {
     onFilteredDataChange(filteredClients);
@@ -155,14 +188,14 @@ export function ClientsTable({
           onChange={(event) => setSearch(event.target.value)}
           className="max-w-xs"
         />
-        <Select value={bankAccountFilter} onValueChange={setBankAccountFilter} disabled>
+        <Select value={bankAccountFilter} onValueChange={setBankAccountFilter}>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by bank account..." /></SelectTrigger>
             <SelectContent>
                 <SelectItem value="all">All Bank Accounts</SelectItem>
                 {bankAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
             </SelectContent>
         </Select>
-        <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter} disabled>
+        <Select value={cryptoWalletFilter} onValueChange={setCryptoWalletFilter}>
             <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by crypto wallet..." /></SelectTrigger>
             <SelectContent>
                 <SelectItem value="all">All Crypto Wallets</SelectItem>
