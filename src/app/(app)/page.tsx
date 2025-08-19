@@ -7,10 +7,10 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database, Download } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database, Download, Globe } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
-import type { Client, Transaction, Account, SmsParsingRule, SmsEndpoint } from '@/lib/types';
+import type { Client, Transaction, Account, SmsParsingRule, SmsEndpoint, ServiceProvider } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks, endOfDay } from 'date-fns';
@@ -132,6 +132,7 @@ export default function DashboardPage() {
     const [exportableAccounts, setExportableAccounts] = React.useState<any>(null);
     const [exportableParsingRules, setExportableParsingRules] = React.useState<any>(null);
     const [exportableGateways, setExportableGateways] = React.useState<any>(null);
+    const [exportableServiceProviders, setExportableServiceProviders] = React.useState<any>(null);
 
 
     React.useEffect(() => {
@@ -145,6 +146,7 @@ export default function DashboardPage() {
         get(ref(db, 'accounts')).then(snap => snap.exists() && setExportableAccounts(snap.val()));
         get(ref(db, 'sms_parsing_rules')).then(snap => snap.exists() && setExportableParsingRules(snap.val()));
         get(ref(db, 'sms_endpoints')).then(snap => snap.exists() && setExportableGateways(snap.val()));
+        get(ref(db, 'service_providers')).then(snap => snap.exists() && setExportableServiceProviders(snap.val()));
 
 
         // Fetch last 5 transactions for display without relying on server-side sort
@@ -331,6 +333,7 @@ export default function DashboardPage() {
                            <ExportJsonButton data={exportableAccounts} filename="chart_of_accounts.json"><Network className="mr-2 h-4 w-4" /> Export Accounts</ExportJsonButton>
                            <ExportJsonButton data={exportableParsingRules} filename="sms_parsing_rules.json"><Bot className="mr-2 h-4 w-4" /> Export Parsing Rules</ExportJsonButton>
                            <ExportJsonButton data={exportableGateways} filename="sms_gateways.json"><Download className="mr-2 h-4 w-4" /> Export Gateways</ExportJsonButton>
+                           <ExportJsonButton data={exportableServiceProviders} filename="service_providers.json"><Globe className="mr-2 h-4 w-4" /> Export Service Providers</ExportJsonButton>
                         </CardContent>
                     </Card>
                 </div>

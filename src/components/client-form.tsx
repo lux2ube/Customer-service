@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
@@ -290,7 +291,7 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
                                                                 <li key={index} className="p-3 text-sm space-y-1">
                                                                     {Object.entries(method.details).map(([key, value]) => (
                                                                         <div key={key} className="flex justify-between items-center">
-                                                                            <span className="text-muted-foreground text-xs">{key}:</span>
+                                                                            <span className="text-muted-foreground text-xs capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span>
                                                                             <span className="font-mono text-xs">{value}</span>
                                                                         </div>
                                                                     ))}
