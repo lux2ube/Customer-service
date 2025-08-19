@@ -6,11 +6,11 @@ import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database, Download } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
-import type { Client, Transaction } from '@/lib/types';
+import type { Client, Transaction, Account, SmsParsingRule, SmsEndpoint } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks, endOfDay } from 'date-fns';
@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount, backfillCashRecordUsd } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
+import { ExportJsonButton } from '@/components/export-json-button';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
     <Card>
@@ -125,6 +126,12 @@ export default function DashboardPage() {
     const [totalWithdrawals, setTotalWithdrawals] = React.useState(0);
 
     const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string; value: number }[]>([]);
+    
+    // State for exportable data
+    const [exportableClients, setExportableClients] = React.useState<any>(null);
+    const [exportableAccounts, setExportableAccounts] = React.useState<any>(null);
+    const [exportableParsingRules, setExportableParsingRules] = React.useState<any>(null);
+    const [exportableGateways, setExportableGateways] = React.useState<any>(null);
 
 
     React.useEffect(() => {
@@ -132,6 +139,13 @@ export default function DashboardPage() {
         const transactionsRef = ref(db, 'modern_transactions');
         
         const unsubs: (() => void)[] = [];
+
+        // --- Data Fetching for Exports ---
+        get(clientsRef).then(snap => snap.exists() && setExportableClients(snap.val()));
+        get(ref(db, 'accounts')).then(snap => snap.exists() && setExportableAccounts(snap.val()));
+        get(ref(db, 'sms_parsing_rules')).then(snap => snap.exists() && setExportableParsingRules(snap.val()));
+        get(ref(db, 'sms_endpoints')).then(snap => snap.exists() && setExportableGateways(snap.val()));
+
 
         // Fetch last 5 transactions for display without relying on server-side sort
         unsubs.push(onValue(query(transactionsRef, limitToLast(20)), (snapshot) => {
@@ -291,21 +305,35 @@ export default function DashboardPage() {
                         {loading ? <Skeleton className="h-[300px] w-full" /> : <DashboardChart data={dailyVolumeData} />}
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>System Actions</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        <div className="flex flex-wrap gap-2">
-                           <ProcessSmsForm />
-                           <BackfillCashUsdForm />
-                        </div>
-                         <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
-                           <SetupClientParentAccountForm />
-                           <MigrateBep20Form />
-                        </div>
-                    </CardContent>
-                </Card>
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>System Actions</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-2">
+                            <div className="flex flex-wrap gap-2">
+                            <ProcessSmsForm />
+                            <BackfillCashUsdForm />
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
+                            <SetupClientParentAccountForm />
+                            <MigrateBep20Form />
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Data Export</CardTitle>
+                            <CardDescription>Download core system data as JSON files.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 gap-2">
+                           <ExportJsonButton data={exportableClients} filename="clients.json"><Users className="mr-2 h-4 w-4" /> Export Clients</ExportJsonButton>
+                           <ExportJsonButton data={exportableAccounts} filename="chart_of_accounts.json"><Network className="mr-2 h-4 w-4" /> Export Accounts</ExportJsonButton>
+                           <ExportJsonButton data={exportableParsingRules} filename="sms_parsing_rules.json"><Bot className="mr-2 h-4 w-4" /> Export Parsing Rules</ExportJsonButton>
+                           <ExportJsonButton data={exportableGateways} filename="sms_gateways.json"><Download className="mr-2 h-4 w-4" /> Export Gateways</ExportJsonButton>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
