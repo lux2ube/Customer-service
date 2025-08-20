@@ -357,6 +357,7 @@ const filterCandidatesByHistory = (
     const candidatesWithSimilarTx = candidates.filter(c =>
         allTransactions.some(tx =>
             tx.clientId === c.id &&
+            tx.summary && // Ensure summary exists
             Math.abs(tx.summary.total_inflow_usd - recordUsdAmount) < (recordUsdAmount * 0.1) // 10% tolerance
         )
     );
@@ -391,7 +392,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
     try {
         const [clientsSnapshot, smsRecordsSnapshot, endpointsSnapshot, transactionsSnapshot] = await Promise.all([
             get(ref(db, 'clients')),
-            get(query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'))),
+            get(query(ref(db, 'records/cash'), orderByChild('status'), equalTo('Pending'))),
             get(ref(db, 'sms_endpoints')),
             get(ref(db, 'transactions'))
         ]);
