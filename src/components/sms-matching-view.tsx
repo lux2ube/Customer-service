@@ -48,28 +48,31 @@ function findBestMatch(record: CashRecord, allClients: Client[]): { client: Clie
     return bestMatch ? { client: bestMatch, score: highestScore } : null;
 }
 
-function AutoMatchButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button disabled={pending} type="submit">
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
-            Auto-Match All
-        </Button>
-    )
-}
-
-export function SmsMatchingView({ initialRecords, allClients }: { initialRecords: CashRecord[], allClients: Client[] }) {
-    const [records, setRecords] = React.useState<MatchSuggestion[]>([]);
-    const { toast } = useToast();
+function AutoMatchForm() {
     const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
-
-
+    const { pending } = useFormStatus();
+    const { toast } = useToast();
+    
     React.useEffect(() => {
         if (state?.message) {
             toast({ title: state.error ? 'Error' : 'Success', description: state.message, variant: state.error ? 'destructive' : 'default' });
         }
     }, [state, toast]);
 
+    return (
+        <form action={formAction}>
+            <Button disabled={pending} type="submit">
+                {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+                Auto-Match All
+            </Button>
+        </form>
+    );
+}
+
+export function SmsMatchingView({ initialRecords, allClients }: { initialRecords: CashRecord[], allClients: Client[] }) {
+    const [records, setRecords] = React.useState<MatchSuggestion[]>([]);
+    const { toast } = useToast();
+    
     React.useEffect(() => {
         const suggestions = initialRecords.map(record => {
             const match = findBestMatch(record, allClients);
@@ -104,9 +107,7 @@ export function SmsMatchingView({ initialRecords, allClients }: { initialRecords
                     </p>
                 </CardContent>
                 <CardFooter>
-                    <form action={formAction}>
-                        <AutoMatchButton />
-                    </form>
+                    <AutoMatchForm />
                 </CardFooter>
             </Card>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
