@@ -71,6 +71,12 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
   const handleDynamicFieldChange = (key: string, value: string) => {
     setDynamicFields(prev => ({ ...prev, [key]: value }));
   };
+  
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccountId(accountId);
+    // Reset dynamic fields when account changes
+    setDynamicFields({});
+  }
 
   return (
     <form action={formAction} ref={formRef} className="pt-4 space-y-4">
@@ -83,7 +89,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
       <div className="space-y-4 py-4">
         <div className="space-y-2">
             <Label htmlFor="accountId">Paid From (System Wallet)</Label>
-            <Select name="accountId" required value={selectedAccountId} onValueChange={setSelectedAccountId}>
+            <Select name="accountId" required value={selectedAccountId} onValueChange={handleAccountChange}>
                 <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
                 <SelectContent>
                     {usdtAccounts.map(account => (
