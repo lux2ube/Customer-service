@@ -65,7 +65,7 @@ export default async function EditModernCashRecordPage({ params }: { params: { i
             />
             <Suspense fallback={<div>Loading form...</div>}>
                 {record.type === 'inflow' ? (
-                    <CashReceiptForm record={record} onFormSubmit={() => {}} />
+                    <CashReceiptForm record={record} />
                 ) : (
                     <CashPaymentForm record={record} clients={clients} bankAccounts={bankAccounts} />
                 )}

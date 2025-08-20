@@ -26,10 +26,10 @@ import { useRouter } from 'next/navigation';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Skeleton } from './ui/skeleton';
 
-function SubmitButton({ isEditing, onFormSubmit }: { isEditing: boolean, onFormSubmit?: () => void }) {
+function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending} onClick={onFormSubmit}>
+        <Button type="submit" disabled={pending}>
             {pending ? (
                 <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -223,7 +223,9 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                 title: 'Success',
                 description: state.message,
             });
-            if (record?.id) {
+            if (onFormSubmit) {
+                onFormSubmit();
+            } else if (record?.id) {
                 router.push('/modern-cash-records');
             } else {
                 formRef.current?.reset();
@@ -241,7 +243,7 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                 variant: 'destructive',
             });
         }
-    }, [state, toast, record, router]);
+    }, [state, toast, record, router, onFormSubmit]);
     
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
@@ -355,7 +357,7 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <SubmitButton isEditing={isEditing} onFormSubmit={onFormSubmit} />
+                    <SubmitButton isEditing={isEditing} />
                 </CardFooter>
             </Card>
         </form>
