@@ -83,7 +83,7 @@ export function AssetBalances() {
                     <div className="space-y-2">
                         {loading ? (
                             [...Array(5)].map((_, i) => (
-                                <div key={i} className="flex justify-between items-center p-2 rounded-md">
+                                <div key={`skel-${i}`} className="flex justify-between items-center p-2 rounded-md">
                                     <Skeleton className="h-4 w-2/4" />
                                     <Skeleton className="h-4 w-1/4" />
                                 </div>
