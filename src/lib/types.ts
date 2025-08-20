@@ -292,3 +292,88 @@ export interface BscApiSetting {
     createdAt: string;
     lastSyncedBlock?: number;
 }
+
+// Kept for legacy compatibility but new records use the unified types
+export interface CashReceipt {
+  id: string;
+  date: string;
+  clientId: string;
+  clientName: string;
+  bankAccountId: string;
+  bankAccountName: string;
+  amount: number;
+  currency: string;
+  amount_usd: number;
+  remittanceNumber?: string;
+  notes?: string;
+  createdAt: string;
+  status: 'Pending' | 'Used' | 'Cancelled';
+}
+
+export interface CashPayment {
+  id: string;
+  date: string;
+  clientId: string;
+  clientName: string;
+  bankAccountId: string;
+  bankAccountName: string;
+  amount: number;
+  currency: string;
+  amount_usd: number;
+  recipientName: string;
+  notes?: string;
+  createdAt: string;
+  status: 'Pending' | 'Used' | 'Cancelled';
+}
+
+export interface ModernUsdtRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'BSCScan';
+    status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string;
+    accountName: string;
+    amount: number;
+    notes?: string;
+    txHash?: string;
+    clientWalletAddress?: string;
+    createdAt: string;
+}
+
+
+export interface ModernCashRecord {
+    id: string;
+    date: string;
+    type: 'inflow' | 'outflow';
+    source: 'Manual' | 'SMS';
+    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled';
+    clientId: string | null;
+    clientName: string | null;
+    accountId: string;
+    accountName: string;
+    senderName?: string;
+    recipientName?: string;
+    amount: number;
+    currency: string;
+    amountusd: number;
+    notes?: string;
+    rawSms?: string;
+    createdAt: string;
+}
+
+export interface SmsTransaction {
+    id: string;
+    date: string;
+    type: 'credit' | 'debit';
+    amount: number;
+    person: string;
+    status: 'parsed' | 'matched' | 'used' | 'cancelled';
+    rawSms: string;
+    matched_client_id?: string;
+    matched_client_name?: string;
+    createdAt: string;
+    transaction_id: string; // The sequential S-number
+}

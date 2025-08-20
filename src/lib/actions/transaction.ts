@@ -18,8 +18,8 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
     if (!clientId) return [];
 
     try {
-        const cashRecordsQuery = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
-        const usdtRecordsQuery = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
+        const cashRecordsQuery = query(ref(db, 'records/cash'), orderByChild('clientId'), equalTo(clientId));
+        const usdtRecordsQuery = query(ref(db, 'records/usdt'), orderByChild('clientId'), equalTo(clientId));
 
         const [
             cashRecordsSnapshot,
@@ -147,8 +147,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     try {
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'cash_records')),
-            get(ref(db, 'modern_usdt_records')),
+            get(ref(db, 'records/cash')),
+            get(ref(db, 'records/usdt')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
             get(ref(db, 'accounts')),
         ]);
@@ -241,10 +241,10 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
         
         const updates: { [key: string]: any } = {};
-        updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
+        updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
         
         for (const record of allLinkedRecords) {
-            const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
+            const recordPath = record.recordType === 'cash' ? `/records/cash/${record.id}` : `/records/usdt/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
         }
         
@@ -372,7 +372,7 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     try {
         const updates: { [key: string]: any } = {};
         for (const id of transactionIds) {
-            updates[`/modern_transactions/${id}/status`] = status;
+            updates[`/transactions/${id}/status`] = status;
         }
 
         await update(ref(db), updates);
@@ -383,5 +383,3 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
         return { error: true, message: e.message || 'An unknown database error occurred.' };
     }
 }
-
-    
