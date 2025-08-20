@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, query, orderByChild, limitToLast, equalTo } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule } from '../types';
+import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule, Transaction, ClientServiceProvider } from '../types';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
@@ -18,7 +18,7 @@ import { parseSmsWithCustomRules } from '../custom-sms-parser';
 // --- SMS Processing Actions ---
 export type ProcessSmsState = { message?: string; error?: boolean; } | undefined;
 export type MatchSmsState = { message?: string; error?: boolean; } | undefined;
-export type BulkUpdateState = { message?: string; error?: boolean; } | undefined;
+export type BulkUpdateState = { message?: string; error?:boolean; } | undefined;
 
 export type SmsEndpointState = { message?: string; error?: boolean; } | undefined;
 
@@ -130,7 +130,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             currentFiatRates = lastEntry.rates || {};
         }
         
-        const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
+        const cashRecordsSnapshot = await get(ref(db, 'records/cash'));
         const allCashRecords: CashRecord[] = cashRecordsSnapshot.exists() ? Object.values(cashRecordsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
@@ -302,56 +302,158 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
     }
 }
 
-export async function matchSmsToClients(
-  prevState: MatchSmsState,
-  formData: FormData
-): Promise<MatchSmsState> {
-    try {
-        const clientsRef = ref(db, 'clients');
-        const smsRecordsRef = query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'));
+// --- Matching Algorithm Helpers ---
 
-        const [clientsSnapshot, smsSnapshot] = await Promise.all([
-            get(clientsRef),
-            get(smsRecordsRef),
+const findClientByPhoneNumber = (personName: string, allClients: Client[]): Client[] => {
+    // Basic check if the name is a number-like string
+    if (!/^\d+$/.test(personName)) return [];
+    return allClients.filter(c => c.phone.includes(personName));
+};
+
+const findClientByFirstNameAndSecondName = (personName: string, allClients: Client[]): Client[] => {
+    const normalizedSmsName = normalizeArabic(personName);
+    return allClients.filter(c => {
+        const normalizedClientName = normalizeArabic(c.name);
+        return normalizedClientName.startsWith(normalizedSmsName);
+    });
+};
+
+const findClientByFullName = (personName: string, allClients: Client[]): Client[] => {
+    const normalizedSmsName = normalizeArabic(personName);
+    return allClients.filter(c => normalizeArabic(c.name) === normalizedSmsName);
+};
+
+const findClientByFirstNameAndLastName = (personName: string, allClients: Client[]): Client[] => {
+    const smsNameParts = normalizeArabic(personName).split(' ');
+    if (smsNameParts.length < 2) return [];
+    const smsFirst = smsNameParts[0];
+    const smsLast = smsNameParts[smsNameParts.length - 1];
+
+    return allClients.filter(c => {
+        const clientNameParts = normalizeArabic(c.name).split(' ');
+        if (clientNameParts.length < 2) return false;
+        const clientFirst = clientNameParts[0];
+        const clientLast = clientNameParts[clientNameParts.length - 1];
+        return smsFirst === clientFirst && smsLast === clientLast;
+    });
+};
+
+const filterCandidatesByHistory = (
+    candidates: Client[],
+    record: CashRecord,
+    allTransactions: Transaction[]
+): Client[] => {
+    if (candidates.length <= 1) return candidates;
+
+    // 1. Filter by used same bank account
+    const candidatesWhoUsedAccount = candidates.filter(c =>
+        c.serviceProviders?.some(sp => sp.providerType === 'Bank' && sp.details['Account ID'] === record.accountId)
+    );
+    if (candidatesWhoUsedAccount.length === 1) return candidatesWhoUsedAccount;
+    if (candidatesWhoUsedAccount.length > 1) candidates = candidatesWhoUsedAccount;
+
+    // 2. Filter by similar transaction amount
+    const recordUsdAmount = record.amountusd;
+    const candidatesWithSimilarTx = candidates.filter(c =>
+        allTransactions.some(tx =>
+            tx.clientId === c.id &&
+            Math.abs(tx.summary.total_inflow_usd - recordUsdAmount) < (recordUsdAmount * 0.1) // 10% tolerance
+        )
+    );
+    if (candidatesWithSimilarTx.length === 1) return candidatesWithSimilarTx;
+    if (candidatesWithSimilarTx.length > 1) candidates = candidatesWithSimilarTx;
+
+    // 3. Filter by most recent transaction
+    let mostRecentClient: Client | null = null;
+    let mostRecentDate = new Date(0);
+
+    for (const client of candidates) {
+        const clientTxs = allTransactions.filter(tx => tx.clientId === client.id);
+        if (clientTxs.length > 0) {
+            const lastTxDate = clientTxs.reduce((latest, tx) => {
+                const txDate = new Date(tx.date);
+                return txDate > latest ? txDate : latest;
+            }, new Date(0));
+
+            if (lastTxDate > mostRecentDate) {
+                mostRecentDate = lastTxDate;
+                mostRecentClient = client;
+            }
+        }
+    }
+    if (mostRecentClient) return [mostRecentClient];
+
+    return candidates; // Return the filtered (or original) list if no single best match is found
+};
+
+
+export async function matchSmsToClients(prevState: MatchSmsState, formData: FormData): Promise<MatchSmsState> {
+    try {
+        const [clientsSnapshot, smsRecordsSnapshot, endpointsSnapshot, transactionsSnapshot] = await Promise.all([
+            get(ref(db, 'clients')),
+            get(query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'))),
+            get(ref(db, 'sms_endpoints')),
+            get(ref(db, 'transactions'))
         ]);
 
-        if (!smsSnapshot.exists()) return { message: 'No pending SMS records to match.', error: false };
-        
-        const clients: Client[] = clientsSnapshot.exists() ? Object.values(clientsSnapshot.val()) : [];
-        const smsRecords: Record<string, CashRecord> = smsSnapshot.val();
+        if (!smsRecordsSnapshot.exists()) return { message: 'No pending SMS records to match.', error: false };
 
-        const updates: { [key: string]: any } = {};
+        const allClients: Client[] = clientsSnapshot.exists() ? Object.keys(clientsSnapshot.val()).map(key => ({ id: key, ...clientsSnapshot.val()[key] })) : [];
+        const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.exists() ? endpointsSnapshot.val() : {};
+        const allTransactions: Transaction[] = transactionsSnapshot.exists() ? Object.values(transactionsSnapshot.val()) : [];
+
+        const smsRecords = Object.entries<CashRecord>(smsRecordsSnapshot.val())
+            .map(([id, record]) => ({ id, ...record }))
+            .filter(record => record.source === 'SMS' && !record.clientId);
+
         let matchedCount = 0;
+        const updates: { [key: string]: any } = {};
 
-        for (const recordId in smsRecords) {
-            const record = smsRecords[recordId];
-            if (record.source !== 'SMS' || record.clientId) continue;
+        const ruleFunctions: Record<NameMatchingRule, (name: string, clients: Client[]) => Client[]> = {
+            'phone_number': findClientByPhoneNumber,
+            'first_and_second': findClientByFirstNameAndSecondName,
+            'full_name': findClientByFullName,
+            'first_and_last': findClientByFirstNameAndLastName,
+            'part_of_full_name': findClientByFirstNameAndSecondName // Using this as a proxy for part of name
+        };
 
+        const ruleOrder: NameMatchingRule[] = ['phone_number', 'first_and_second', 'full_name', 'first_and_last', 'part_of_full_name'];
+
+        for (const record of smsRecords) {
             const personName = record.senderName || record.recipientName;
             if (!personName) continue;
 
-            const normalizedSmsName = normalizeArabic(personName);
+            const endpoint = Object.values(allEndpoints).find(ep => ep.accountId === record.accountId);
+            const rulesToApply = endpoint?.nameMatchingRules || ruleOrder;
 
-            let bestMatch: { client: Client; score: number } | null = null;
-            
-            for (const client of clients) {
-                const normalizedClientName = normalizeArabic(client.name);
-                if (normalizedSmsName === normalizedClientName) {
-                    bestMatch = { client, score: 100 };
+            let bestMatch: Client | null = null;
+
+            for (const rule of rulesToApply) {
+                const matchingFunction = ruleFunctions[rule];
+                if (!matchingFunction) continue;
+
+                let candidates = matchingFunction(personName, allClients);
+                if (candidates.length === 1) {
+                    bestMatch = candidates[0];
                     break;
+                } else if (candidates.length > 1) {
+                    const filteredCandidates = filterCandidatesByHistory(candidates, record, allTransactions);
+                    if (filteredCandidates.length === 1) {
+                        bestMatch = filteredCandidates[0];
+                        break;
+                    }
                 }
-                // Could add more sophisticated fuzzy matching here if needed
             }
-            
+
             if (bestMatch) {
-                updates[`/cash_records/${recordId}/clientId`] = bestMatch.client.id;
-                updates[`/cash_records/${recordId}/clientName`] = bestMatch.client.name;
-                updates[`/cash_records/${recordId}/status`] = 'Matched';
+                updates[`/cash_records/${record.id}/clientId`] = bestMatch.id;
+                updates[`/cash_records/${record.id}/clientName`] = bestMatch.name;
+                updates[`/cash_records/${record.id}/status`] = 'Matched';
                 matchedCount++;
             }
         }
-        
-        if(matchedCount > 0) {
+
+        if (matchedCount > 0) {
             await update(ref(db), updates);
         }
 
@@ -364,6 +466,7 @@ export async function matchSmsToClients(
         return { message: e.message || 'An unknown error occurred.', error: true };
     }
 }
+
 
 
 export async function updateSmsTransactionStatus(recordId: string, status: 'Used' | 'Cancelled') {

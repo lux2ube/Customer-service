@@ -145,12 +145,13 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     
     try {
-        const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot] = await Promise.all([
+        const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot, serviceProvidersSnapshot] = await Promise.all([
             get(ref(db, `clients/${clientId}`)),
             get(ref(db, 'records/cash')),
             get(ref(db, 'records/usdt')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
             get(ref(db, 'accounts')),
+            get(ref(db, 'service_providers'))
         ]);
 
         if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
@@ -158,6 +159,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const allCashRecords = cashRecordsSnapshot.val() || {};
         const allUsdtRecords = usdtRecordsSnapshot.val() || {};
         const allAccounts = accountsSnapshot.val() || {};
+        const allServiceProviders: Record<string, ServiceProvider> = serviceProvidersSnapshot.val() || {};
         const lastFeeEntry = cryptoFeesSnapshot.exists() ? Object.values(cryptoFeesSnapshot.val())[0] as CryptoFee : null;
 
         const allLinkedRecords = linkedRecordIds.map(id => {
@@ -165,7 +167,6 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             return null;
         }).filter((r): r is (CashRecord | UsdtRecord) & { recordType: 'cash' | 'usdt', amount_usd: number } => r !== null && typeof r.amount_usd === 'number');
-
 
         const inflows: TransactionLeg[] = allLinkedRecords
             .filter(r => r.type === 'inflow')
@@ -253,6 +254,46 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             const entryRef = push(ref(db, 'journal_entries'));
             updates[`/journal_entries/${entryRef.key}`] = entry;
         }
+
+        // --- Save Payment Methods to Client Profile ---
+        const existingClientProviders = client.serviceProviders || [];
+        const newClientProviders: ClientServiceProvider[] = [];
+
+        for (const leg of [...inflows, ...outflows]) {
+            const provider = Object.values(allServiceProviders).find(p => p.accountIds.includes(leg.accountId));
+            if (!provider) continue;
+
+            const record = allLinkedRecords.find(r => r.id === leg.recordId);
+            if (!record) continue;
+
+            let details: Record<string, string> = {};
+            if(provider.type === 'Bank' && provider.bankFormula) {
+                if(provider.bankFormula.includes('Client Name')) details['Client Name'] = client.name;
+                if(provider.bankFormula.includes('Phone Number') && client.phone.length > 0) details['Phone Number'] = client.phone[0];
+                if(provider.bankFormula.includes('ID')) details['Account ID'] = leg.accountId;
+            } else if (provider.type === 'Crypto' && provider.cryptoFormula) {
+                if(provider.cryptoFormula.includes('Address') && (record as UsdtRecord).clientWalletAddress) details.Address = (record as UsdtRecord).clientWalletAddress!;
+                 if(provider.cryptoFormula.includes('ID')) details['Account ID'] = leg.accountId;
+            }
+
+            if (Object.keys(details).length > 0) {
+                 const newProviderEntry: ClientServiceProvider = {
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    providerType: provider.type,
+                    details
+                 };
+                // Avoid adding duplicates
+                const isAlreadySaved = existingClientProviders.some(p => JSON.stringify(p) === JSON.stringify(newProviderEntry));
+                if (!isAlreadySaved) {
+                    newClientProviders.push(newProviderEntry);
+                }
+            }
+        }
+        if (newClientProviders.length > 0) {
+            updates[`/clients/${clientId}/serviceProviders`] = [...existingClientProviders, ...newClientProviders];
+        }
+
 
         await update(ref(db), updates);
 
