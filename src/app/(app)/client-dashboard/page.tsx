@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -262,8 +263,8 @@ export default function ClientDashboardPage() {
         const unsubAccounts = onValue(accountsRef, (snapshot) => {
             if (snapshot.exists()) {
                 const allAccountsData: Record<string, Account> = snapshot.val();
-                const allAccountsList = Object.values(allAccountsData);
-                setUsdtAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+                const allAccountsList: Account[] = Object.values(allAccountsData);
+                setUsdtAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.currency === 'USDT' && acc.parentId === '1000'));
             }
         });
 
