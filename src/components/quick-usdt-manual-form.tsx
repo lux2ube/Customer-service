@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -138,3 +139,5 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
     </form>
   );
 }
+
+    
