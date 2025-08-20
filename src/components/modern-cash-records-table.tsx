@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table';
 import type { ModernCashRecord, Client, CryptoFee } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, get } from 'firebase/database';
+import { ref, onValue, query, orderByChild, get, limitToLast } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
