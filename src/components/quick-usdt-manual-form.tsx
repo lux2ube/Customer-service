@@ -54,9 +54,15 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
   const formulaFields = selectedProvider?.cryptoFormula || [];
 
   React.useEffect(() => {
-    // Select the first wallet by default when the component mounts or accounts change.
+    // Set a default account when the component mounts or accounts change.
     if (usdtAccounts.length > 0 && !selectedAccountId) {
-      setSelectedAccountId(usdtAccounts[0].id);
+      const defaultAccount = usdtAccounts.find(acc => acc.id === '1001');
+      if (defaultAccount) {
+        setSelectedAccountId(defaultAccount.id);
+      } else {
+        // Fallback to the first account if 1001 isn't present
+        setSelectedAccountId(usdtAccounts[0].id);
+      }
     }
   }, [usdtAccounts, selectedAccountId]);
 
