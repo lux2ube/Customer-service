@@ -48,13 +48,14 @@ function escapeTelegramMarkdown(text: string | number | null | undefined): strin
     if (text === null || text === undefined) return '';
     const textStr = String(text);
     // Escape characters for MarkdownV2
-    const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+    const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
     return textStr.replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
-export async function sendTelegramNotification(message: string) {
+export async function sendTelegramNotification(message: string, customChatId?: string) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const defaultChatId = process.env.TELEGRAM_CHAT_ID;
+    const chatId = customChatId || defaultChatId;
 
     if (!botToken || !chatId) {
         console.error("Telegram bot token or Chat ID is not configured in environment variables.");
@@ -69,7 +70,7 @@ export async function sendTelegramNotification(message: string) {
     const payload = {
         chat_id: chatId,
         text: safeMessage,
-        parse_mode: 'Markdown', // Use regular Markdown for better compatibility
+        parse_mode: 'MarkdownV2',
     };
 
     try {

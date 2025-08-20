@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { push, ref, set, update, get, query, orderByChild, limitToLast, equalTo } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule, Transaction, ClientServiceProvider } from '../types';
+import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule, Transaction, ClientServiceProvider, JournalEntry } from '../types';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
@@ -283,14 +283,52 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         if (!recordSnapshot.exists()) return { success: false, message: "Record not found." };
         if (!clientSnapshot.exists()) return { success: false, message: "Client not found." };
         
-        const clientName = (clientSnapshot.val() as Client).name;
-        
+        const client = clientSnapshot.val() as Client;
+        const record = recordSnapshot.val() as CashRecord;
+
         const updates: { [key: string]: any } = {};
         updates[`/cash_records/${recordId}/clientId`] = clientId;
-        updates[`/cash_records/${recordId}/clientName`] = clientName;
+        updates[`/cash_records/${recordId}/clientName`] = client.name;
         updates[`/cash_records/${recordId}/status`] = 'Matched';
 
+        // --- Create Journal Entry on Match ---
+        const journalRef = push(ref(db, 'journal_entries'));
+        const clientAccountId = `6000${clientId}`;
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: new Date().toISOString(),
+            description: `Matched SMS Record #${recordId} to ${client.name}`,
+            debit_account: '7000', // Unmatched Funds
+            credit_account: clientAccountId,
+            debit_amount: record.amount,
+            credit_amount: record.amount,
+            amount_usd: record.amountusd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: 'Unmatched Funds',
+            credit_account_name: client.name,
+        };
+        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+
         await update(ref(db), updates);
+        
+        // --- Send Telegram Notification ---
+        const amountFormatted = `${record.amount.toLocaleString()} ${record.currency}`;
+        const usdFormatted = `($${record.amountusd.toFixed(2)} USD)`;
+        const flowDirection = record.type === 'inflow' ? 'from' : 'to';
+        const person = record.senderName || record.recipientName;
+        
+        const message = `
+✅ *SMS Matched to Client*
+
+*Client:* ${client.name} (\`${clientId}\`)
+*Transaction:* ${record.type === 'inflow' ? 'INFLOW' : 'OUTFLOW'} of *${amountFormatted}* ${usdFormatted}
+*${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${person}
+*Original SMS:*
+\`\`\`
+${record.rawSms}
+\`\`\`
+        `;
+
+        await sendTelegramNotification(message, "-1002700770095");
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/cash-receipts');
