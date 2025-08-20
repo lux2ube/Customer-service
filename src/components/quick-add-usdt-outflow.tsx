@@ -55,18 +55,14 @@ export function QuickAddUsdtOutflow({
         <DialogHeader>
           <DialogTitle>Add USDT Outflow for {client.name}</DialogTitle>
           <DialogDescription>
-            Choose to record manually, send live, or match an unassigned BSCScan transaction.
+            Choose to send live or match an unassigned BSCScan transaction.
           </DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue={autoProcessData ? "auto" : "manual"} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="manual">Manual Record</TabsTrigger>
+        <Tabs defaultValue={autoProcessData ? "auto" : "auto"} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="auto">Auto Send</TabsTrigger>
             <TabsTrigger value="match">Match BSCScan</TabsTrigger>
           </TabsList>
-          <TabsContent value="manual">
-            <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} />
-          </TabsContent>
            <TabsContent value="auto">
             <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} autoProcessData={autoProcessData} />
           </TabsContent>
