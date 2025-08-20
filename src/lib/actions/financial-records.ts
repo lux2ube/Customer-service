@@ -191,8 +191,8 @@ export type UsdtPaymentState = {
 
 
 const UsdtManualPaymentSchema = z.object({
-  clientId: z.string(),
-  clientName: z.string(),
+  clientId: z.string().nullable(),
+  clientName: z.string().nullable(),
   date: z.string(),
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
   recipientAddress: z.string().min(1, 'Recipient address is required.'),
@@ -205,7 +205,7 @@ const UsdtManualPaymentSchema = z.object({
 
 export async function createUsdtManualPayment(recordId: string | null, prevState: UsdtPaymentState, formData: FormData): Promise<UsdtPaymentState> {
     const isEditing = !!recordId;
-    let dataToValidate = Object.fromEntries(formData.entries());
+    let dataToValidate: Record<string, any> = Object.fromEntries(formData.entries());
 
     // If editing, fetch the original record to merge with form data
     if (isEditing) {
@@ -237,7 +237,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         const newId = recordId || await getNextSequentialId('usdtRecordId');
         const paymentData: Omit<UsdtRecord, 'id'> = {
             date: date!, type: 'outflow', source: 'Manual', status: status!,
-            clientId: clientId!, clientName: clientName!, accountId: accountId,
+            clientId: clientId, clientName: clientName, accountId: accountId,
             accountName: accountName, amount: amount!, clientWalletAddress: recipientAddress,
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };

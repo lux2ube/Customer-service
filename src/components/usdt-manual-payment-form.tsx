@@ -121,20 +121,20 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
     const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : undefined);
+    const [date, setDate] = React.useState<Date | undefined>(undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientSearch, setClientSearch] = React.useState("");
 
     React.useEffect(() => {
-        if (!record) {
-            // Only set the date on the client-side to avoid hydration mismatch
-            setDate(new Date());
-        } else {
+        if (record) {
+            setDate(parseISO(record.date));
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
                 setClientSearch(initialClient.name);
             }
+        } else {
+             setDate(new Date());
         }
     }, [record, clients]);
 
@@ -199,6 +199,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                                 onValueChange={setClientSearch}
                                 selectedClient={selectedClient}
                                 onSelect={setSelectedClient}
+                                disabled={isEditing && !!record.clientId}
                             />
                            <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                            <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
