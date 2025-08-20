@@ -39,12 +39,14 @@ import {
   FileWarning,
   Globe,
   ListOrdered,
+  UserSquare,
 } from 'lucide-react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 
 
 const menuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/client-dashboard', label: 'Client Dashboard', icon: UserSquare },
   { href: '/transactions/modern', label: 'New Transaction', icon: HandCoins },
   
   { type: 'divider', label: 'Core' },
