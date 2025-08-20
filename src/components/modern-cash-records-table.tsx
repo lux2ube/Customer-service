@@ -11,14 +11,14 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { ModernCashRecord, Client } from '@/lib/types';
+import type { ModernCashRecord, Client, CryptoFee } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild } from 'firebase/database';
+import { ref, onValue, query, orderByChild, get } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare, Trash2, ArrowRight } from 'lucide-react';
+import { MoreHorizontal, Calendar as CalendarIcon, ArrowDown, ArrowUp, Pencil, MessageSquare, Trash2, ArrowRight, Bot } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { cancelCashPayment } from '@/lib/actions';
+import { QuickAddUsdtOutflow } from './quick-add-usdt-outflow';
 
 
 const statuses = ['Pending', 'Matched', 'Used', 'Cancelled'];
@@ -51,6 +52,7 @@ const types = ['inflow', 'outflow'];
 
 export function ModernCashRecordsTable() {
   const [records, setRecords] = React.useState<ModernCashRecord[]>([]);
+  const [clients, setClients] = React.useState<Record<string, Client>>({});
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
@@ -59,13 +61,16 @@ export function ModernCashRecordsTable() {
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [rawSmsToShow, setRawSmsToShow] = React.useState<string | null>(null);
   const [recordToCancel, setRecordToCancel] = React.useState<ModernCashRecord | null>(null);
-
+  const [recordToProcess, setRecordToProcess] = React.useState<ModernCashRecord | null>(null);
+  const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
 
   const { toast } = useToast();
 
   React.useEffect(() => {
     const recordsRef = query(ref(db, 'cash_records'), orderByChild('createdAt'));
-    const unsubscribe = onValue(recordsRef, (snapshot) => {
+    const clientsRef = ref(db, 'clients');
+
+    const unsubRecords = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         const list: ModernCashRecord[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
@@ -76,7 +81,26 @@ export function ModernCashRecordsTable() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubClients = onValue(clientsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setClients(snapshot.val());
+      }
+    });
+    
+    const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
+    const unsubFees = onValue(feesRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            const lastEntryKey = Object.keys(data)[0];
+            setCryptoFees(data[lastEntryKey]);
+        }
+    });
+
+    return () => { 
+        unsubRecords();
+        unsubClients();
+        unsubFees();
+    };
   }, []);
   
   const filteredRecords = React.useMemo(() => {
@@ -132,9 +156,46 @@ export function ModernCashRecordsTable() {
     }
     setRecordToCancel(null);
   };
+  
+  const autoProcessData = React.useMemo(() => {
+    if (!recordToProcess || !cryptoFees) return null;
+    
+    const totalFiatInflowUsd = recordToProcess.amountusd;
+    const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
+    const minFee = cryptoFees.minimum_buy_fee || 0;
+
+    let fee = 0;
+    let usdtAmount = 0;
+
+    if ((1 + feePercent) > 0) {
+        fee = (totalFiatInflowUsd * feePercent) / (1 + feePercent);
+        if (totalFiatInflowUsd > 0 && fee < minFee) {
+            fee = minFee;
+        }
+        usdtAmount = totalFiatInflowUsd - fee;
+    } else {
+        usdtAmount = totalFiatInflowUsd;
+    }
+    
+    return { amount: usdtAmount };
+
+  }, [recordToProcess, cryptoFees]);
 
   return (
     <>
+    {recordToProcess && recordToProcess.clientId && (
+        <QuickAddUsdtOutflow
+            client={clients[recordToProcess.clientId] ? {id: recordToProcess.clientId, ...clients[recordToProcess.clientId]} : null}
+            isOpen={!!recordToProcess}
+            setIsOpen={(open) => !open && setRecordToProcess(null)}
+            onRecordCreated={() => {}}
+            usdtAccounts={[]} // Will be fetched inside dialog
+            serviceProviders={[]} // Will be fetched inside dialog
+            defaultRecordingAccountId={''} // Fetched inside dialog
+            autoProcessData={autoProcessData}
+            onDialogClose={() => setRecordToProcess(null)}
+        />
+    )}
     <div className="space-y-4">
         <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
             <Input 
@@ -215,6 +276,11 @@ export function ModernCashRecordsTable() {
                            <DropdownMenu>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                    {(record.type === 'inflow' && (record.status === 'Matched' || record.status === 'Confirmed')) && (
+                                        <DropdownMenuItem onClick={() => setRecordToProcess(record)}>
+                                            <Bot className="mr-2 h-4 w-4" /> Auto Process
+                                        </DropdownMenuItem>
+                                    )}
                                     {(record.status === 'Matched' || record.status === 'Confirmed') && record.clientId && (
                                         <DropdownMenuItem asChild>
                                             <Link href={`/transactions/modern?type=${record.type === 'inflow' ? 'Deposit' : 'Withdraw'}&clientId=${record.clientId}&linkedRecordIds=${record.id}`}>
