@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import type { CashRecord, Client } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { linkSmsToClient, matchSmsToClients, type MatchSmsState } from '@/lib/actions';
 import { format } from 'date-fns';
@@ -48,6 +48,47 @@ function findBestMatch(record: CashRecord, allClients: Client[]): { client: Clie
     return bestMatch ? { client: bestMatch, score: highestScore } : null;
 }
 
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button disabled={pending} type="submit">
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+            Auto-Match All
+        </Button>
+    )
+}
+
+function AutoMatchForm() {
+    const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
+    const { toast } = useToast();
+    
+    React.useEffect(() => {
+        if (state?.message) {
+            toast({
+                title: state.error ? 'Error' : 'Success',
+                description: state.message,
+                variant: state.error ? 'destructive' : 'default',
+            });
+        }
+    }, [state, toast]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Automatic Matching</CardTitle>
+                <CardDescription>
+                    Automatically match all pending SMS records where the sender/recipient name exactly matches a client name.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form action={formAction}>
+                    <SubmitButton />
+                </form>
+            </CardContent>
+        </Card>
+    );
+}
+
 export function SmsMatchingView({ initialRecords, allClients }: { initialRecords: CashRecord[], allClients: Client[] }) {
     const [records, setRecords] = React.useState<MatchSuggestion[]>([]);
     const { toast } = useToast();
@@ -76,6 +117,7 @@ export function SmsMatchingView({ initialRecords, allClients }: { initialRecords
     
     return (
          <div className="space-y-6">
+            <AutoMatchForm />
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {records.map(record => (
                 <Card key={record.id}>
@@ -167,3 +209,4 @@ function ManualClientSelector({ allClients, onSelect }: { allClients: Client[], 
         </Popover>
     )
 }
+
