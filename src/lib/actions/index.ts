@@ -49,7 +49,8 @@ export {
     updateSmsTransactionStatus,
     updateBulkSmsStatus,
     createSmsParsingRule,
-    deleteSmsParsingRule
+    deleteSmsParsingRule,
+    matchSmsToClients
 } from './sms';
 
 // Core Transaction Logic
