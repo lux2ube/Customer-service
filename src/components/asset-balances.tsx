@@ -4,11 +4,12 @@
 import * as React from 'react';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import type { Account, JournalEntry } from '@/lib/types';
+import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 
 interface AssetBalance {
     id: string;
@@ -17,90 +18,130 @@ interface AssetBalance {
     balance: number;
 }
 
+interface GroupedBalances {
+    [providerName: string]: AssetBalance[];
+}
+
 export function AssetBalances() {
-    const [balances, setBalances] = React.useState<AssetBalance[]>([]);
+    const [balances, setBalances] = React.useState<GroupedBalances>({});
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const journalRef = ref(db, 'journal_entries');
+        const providersRef = ref(db, 'service_providers');
 
-        const unsubAccounts = onValue(accountsRef, (accSnapshot) => {
-            if (!accSnapshot.exists()) {
-                setLoading(false);
-                return;
-            }
-            const allAccounts: Record<string, Account> = accSnapshot.val();
-            const assetAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Assets' && !acc.isGroup);
+        const unsubProviders = onValue(providersRef, (provSnapshot) => {
+            const allProviders: Record<string, ServiceProvider> = provSnapshot.val() || {};
+            
+            const unsubAccounts = onValue(accountsRef, (accSnapshot) => {
+                if (!accSnapshot.exists()) {
+                    setLoading(false);
+                    return;
+                }
+                const allAccounts: Record<string, Account> = accSnapshot.val();
+                const assetAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Assets' && !acc.isGroup);
 
-            const unsubJournal = onValue(journalRef, (journalSnapshot) => {
-                const newBalances: AssetBalance[] = assetAccounts.map(account => ({
-                    id: account.id,
-                    name: account.name,
-                    currency: account.currency || 'N/A',
-                    balance: 0,
-                }));
-                const balanceMap = new Map<string, number>(newBalances.map(b => [b.id, 0]));
+                const unsubJournal = onValue(journalRef, (journalSnapshot) => {
+                    const accountBalances: Record<string, number> = {};
+                    assetAccounts.forEach(acc => accountBalances[acc.id] = 0);
 
-                if (journalSnapshot.exists()) {
-                    const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
-                    for (const key in allEntries) {
-                        const entry = allEntries[key];
-                        if (balanceMap.has(entry.debit_account)) {
-                            balanceMap.set(entry.debit_account, (balanceMap.get(entry.debit_account) || 0) + entry.debit_amount);
-                        }
-                        if (balanceMap.has(entry.credit_account)) {
-                            balanceMap.set(entry.credit_account, (balanceMap.get(entry.credit_account) || 0) - entry.credit_amount);
+                    if (journalSnapshot.exists()) {
+                        const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
+                        for (const key in allEntries) {
+                            const entry = allEntries[key];
+                            if (accountBalances[entry.debit_account] !== undefined) {
+                                accountBalances[entry.debit_account] += entry.debit_amount;
+                            }
+                            if (accountBalances[entry.credit_account] !== undefined) {
+                                accountBalances[entry.credit_account] -= entry.credit_amount;
+                            }
                         }
                     }
-                }
-                
-                const finalBalances = newBalances.map(b => ({
-                    ...b,
-                    balance: balanceMap.get(b.id) || 0,
-                })).sort((a,b) => b.balance - a.balance);
 
-                setBalances(finalBalances);
-                setLoading(false);
+                    const newGroupedBalances: GroupedBalances = {};
+                    
+                    // Group accounts by provider
+                    Object.values(allProviders).forEach(provider => {
+                        newGroupedBalances[provider.name] = [];
+                        provider.accountIds.forEach(accountId => {
+                            const account = allAccounts[accountId];
+                            if (account && account.type === 'Assets' && !account.isGroup) {
+                                newGroupedBalances[provider.name].push({
+                                    id: account.id,
+                                    name: account.name,
+                                    currency: account.currency || 'N/A',
+                                    balance: accountBalances[account.id] || 0
+                                });
+                            }
+                        });
+                         newGroupedBalances[provider.name].sort((a,b) => a.name.localeCompare(b.name));
+                    });
+
+                    // Handle ungrouped accounts
+                    newGroupedBalances['Other Assets'] = [];
+                    const groupedAccountIds = new Set(Object.values(allProviders).flatMap(p => p.accountIds));
+                    assetAccounts.forEach(account => {
+                        if (!groupedAccountIds.has(account.id)) {
+                             newGroupedBalances['Other Assets'].push({
+                                id: account.id,
+                                name: account.name,
+                                currency: account.currency || 'N/A',
+                                balance: accountBalances[account.id] || 0
+                            });
+                        }
+                    });
+                     newGroupedBalances['Other Assets'].sort((a,b) => a.name.localeCompare(b.name));
+                     if (newGroupedBalances['Other Assets'].length === 0) {
+                        delete newGroupedBalances['Other Assets'];
+                     }
+
+
+                    setBalances(newGroupedBalances);
+                    setLoading(false);
+                });
+
+                return () => unsubJournal();
             });
-
-            // Cleanup journal listener when accounts listener re-runs or component unmounts
-            return () => unsubJournal();
+             return () => unsubAccounts();
         });
 
-        // Cleanup accounts listener on component unmount
-        return () => unsubAccounts();
+
+        return () => unsubProviders();
     }, []);
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Asset Balances</CardTitle>
-                <CardDescription>Real-time overview of all asset accounts.</CardDescription>
+                <CardDescription>Real-time overview of all asset accounts by provider.</CardDescription>
             </CardHeader>
             <CardContent>
                 <ScrollArea className="h-72 pr-3">
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                         {loading ? (
-                            [...Array(5)].map((_, i) => (
-                                <div key={`skel-${i}`} className="flex justify-between items-center p-2 rounded-md">
-                                    <Skeleton className="h-4 w-2/4" />
-                                    <Skeleton className="h-4 w-1/4" />
-                                </div>
-                            ))
-                        ) : balances.length > 0 ? (
-                            balances.map(asset => (
-                                <div key={asset.id} className={cn(
-                                    "flex justify-between items-center p-2 rounded-md",
-                                    asset.balance > 0 ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
-                                )}>
-                                    <p className="text-xs font-medium truncate pr-2">{asset.name}</p>
-                                    <p className="font-mono text-[11px] font-semibold whitespace-nowrap">
-                                        {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        <span className="text-muted-foreground ml-1">{asset.currency}</span>
-                                    </p>
-                                </div>
-                            ))
+                           [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
+                        ) : Object.keys(balances).length > 0 ? (
+                           Object.entries(balances).map(([providerName, providerBalances]) => (
+                               <div key={providerName}>
+                                   <h4 className="font-semibold text-sm mb-1">{providerName}</h4>
+                                   <div className="rounded-md border">
+                                       <Table>
+                                           <TableBody>
+                                               {providerBalances.map(asset => (
+                                                   <TableRow key={asset.id} className="text-xs">
+                                                       <TableCell className="font-medium truncate p-2">{asset.name}</TableCell>
+                                                       <TableCell className="text-right font-mono p-2">
+                                                            {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <span className="text-muted-foreground ml-1">{asset.currency}</span>
+                                                       </TableCell>
+                                                   </TableRow>
+                                               ))}
+                                           </TableBody>
+                                       </Table>
+                                   </div>
+                               </div>
+                           ))
                         ) : (
                             <p className="text-sm text-muted-foreground text-center py-10">No asset accounts found.</p>
                         )}
