@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -66,7 +65,7 @@ export function QuickAddUsdtOutflow({
             <TabsTrigger value="match">Match BSCScan</TabsTrigger>
           </TabsList>
           <TabsContent value="manual">
-            <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
+            <QuickUsdtManualForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} />
           </TabsContent>
            <TabsContent value="auto">
             <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} autoProcessData={autoProcessData} />

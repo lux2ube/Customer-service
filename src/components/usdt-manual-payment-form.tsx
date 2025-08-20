@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import type { Client, ModernUsdtRecord } from '@/lib/types';
+import type { Client, Account, UsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createUsdtManualPayment, type UsdtPaymentState, searchClients } from '@/lib/actions';
 import { format, parseISO } from 'date-fns';
@@ -113,7 +113,7 @@ function ClientSelector({
     );
 }
 
-export function UsdtManualPaymentForm({ record, clients }: { record?: ModernUsdtRecord, clients: Client[] }) {
+export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord, clients: Client[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);

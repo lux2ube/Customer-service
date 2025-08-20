@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -165,7 +164,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(receiptData));
+        await set(ref(db, `records/usdt/${newId}`), stripUndefined(receiptData));
 
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT Receipt recorded successfully.' };
@@ -182,6 +181,7 @@ export type UsdtPaymentState = {
     recipientAddress?: string[];
     amount?: string[];
     txid?: string[];
+    accountId?: string[];
   };
   message?: string;
   success?: boolean;
@@ -196,6 +196,7 @@ const UsdtManualPaymentSchema = z.object({
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
   recipientAddress: z.string().min(1, 'Recipient address is required.'),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
+  accountId: z.string().min(1, "A sending wallet must be selected"),
   txid: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -206,18 +207,24 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
-    const { clientId, clientName, date, status, recipientAddress, amount, txid, notes } = validatedFields.data;
+    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes } = validatedFields.data;
     
     try {
+        const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
+        if (!accountSnapshot.exists()) {
+            return { message: 'Selected sending wallet not found.', success: false };
+        }
+        const accountName = (accountSnapshot.val() as Account).name;
+
         const newId = recordId || await getNextSequentialId('usdtRecordId');
         const paymentData: Omit<UsdtRecord, 'id'> = {
             date: date!, type: 'outflow', source: 'Manual', status: status!,
-            clientId: clientId!, clientName: clientName!, accountId: '1003', // Default USDT wallet
-            accountName: 'USDT Wallet', amount: amount!, clientWalletAddress: recipientAddress,
+            clientId: clientId!, clientName: clientName!, accountId: accountId,
+            accountName: accountName, amount: amount!, clientWalletAddress: recipientAddress,
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
         
-        await set(ref(db, `modern_usdt_records/${newId}`), stripUndefined(paymentData));
+        await set(ref(db, `records/usdt/${newId}`), stripUndefined(paymentData));
         revalidatePath('/modern-usdt-records');
         return { success: true, message: 'USDT manual payment recorded successfully.', newRecordId: newId };
     } catch (e: any) {

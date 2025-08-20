@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -9,16 +8,18 @@ import { Button } from './ui/button';
 import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import type { Client } from '@/lib/types';
+import type { Client, Account } from '@/lib/types';
 import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, ClipboardPaste } from 'lucide-react';
 import { ethers } from 'ethers';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface QuickUsdtManualFormProps {
   client: Client;
   onPaymentCreated: (newRecordId: string) => void;
   setIsOpen: (open: boolean) => void;
+  usdtAccounts: Account[];
 }
 
 function SubmitButton() {
@@ -31,7 +32,7 @@ function SubmitButton() {
     );
 }
 
-export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: QuickUsdtManualFormProps) {
+export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtAccounts }: QuickUsdtManualFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -75,6 +76,20 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen }: Qui
       <input type="hidden" name="date" value={new Date().toISOString()} />
       <input type="hidden" name="status" value="Confirmed" />
       <div className="space-y-4 py-4">
+        <div className="space-y-2">
+            <Label htmlFor="accountId">Paid From (System Wallet)</Label>
+            <Select name="accountId" required>
+                <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
+                <SelectContent>
+                    {usdtAccounts.map(account => (
+                        <SelectItem key={account.id} value={account.id}>
+                            {account.name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {state?.errors?.accountId && <p className="text-destructive text-sm">{state.errors.accountId[0]}</p>}
+        </div>
         <div className="space-y-2">
             <Label htmlFor="manual_recipientAddress">Recipient Address</Label>
             <div className="flex items-center gap-2">
