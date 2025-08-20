@@ -39,6 +39,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
   const [state, formAction] = useActionState(createUsdtManualPayment.bind(null, null), undefined);
   
   const [addressInput, setAddressInput] = React.useState(client?.bep20_addresses?.[0] || '');
+  const [selectedAccountId, setSelectedAccountId] = React.useState('');
   
   const stateRef = React.useRef<any>();
 
@@ -49,6 +50,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
         onPaymentCreated(state.newRecordId || '');
         setIsOpen(false);
         formRef.current?.reset();
+        setSelectedAccountId('');
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
@@ -78,7 +80,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
       <div className="space-y-4 py-4">
         <div className="space-y-2">
             <Label htmlFor="accountId">Paid From (System Wallet)</Label>
-            <Select name="accountId" required>
+            <Select name="accountId" required value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
                 <SelectContent>
                     {usdtAccounts.map(account => (
