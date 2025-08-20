@@ -85,7 +85,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
     // Form state managed here
-    const [date, setDate] = React.useState<Date | undefined>(record?.date ? parseISO(record.date) : new Date());
+    const [date, setDate] = React.useState<Date | undefined>(record?.date ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(() => clients.find(c => c.id === record?.clientId) || null);
     const [accountId, setAccountId] = React.useState(record?.accountId || '');
     const [walletAddress, setWalletAddress] = React.useState(record?.clientWalletAddress || '');
@@ -94,6 +94,11 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const [status, setStatus] = React.useState(record?.status || 'Confirmed');
     const [notes, setNotes] = React.useState(record?.notes || '');
 
+    React.useEffect(() => {
+        if (!record) {
+            setDate(new Date());
+        }
+    }, [record]);
 
     React.useEffect(() => {
         if (state?.success) {
@@ -212,5 +217,3 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
         </form>
     );
 }
-
-    
