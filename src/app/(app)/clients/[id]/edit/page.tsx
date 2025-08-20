@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -21,7 +22,7 @@ async function getClient(id: string): Promise<Client | null> {
 
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
     const [cashRecordsSnap, usdtRecordsSnap] = await Promise.all([
-        get(query(ref(db, 'records/cash'), orderByChild('clientId'), equalTo(clientId))),
+        get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
         get(query(ref(db, 'records/usdt'), orderByChild('clientId'), equalTo(clientId)))
     ]);
 

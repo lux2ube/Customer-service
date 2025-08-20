@@ -130,7 +130,7 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             currentFiatRates = lastEntry.rates || {};
         }
         
-        const cashRecordsSnapshot = await get(ref(db, 'records/cash'));
+        const cashRecordsSnapshot = await get(ref(db, 'cash_records'));
         const allCashRecords: CashRecord[] = cashRecordsSnapshot.exists() ? Object.values(cashRecordsSnapshot.val()) : [];
         const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
         const recentSmsBodies = new Set(
@@ -392,7 +392,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
     try {
         const [clientsSnapshot, smsRecordsSnapshot, endpointsSnapshot, transactionsSnapshot] = await Promise.all([
             get(ref(db, 'clients')),
-            get(query(ref(db, 'records/cash'), orderByChild('status'), equalTo('Pending'))),
+            get(query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'))),
             get(ref(db, 'sms_endpoints')),
             get(ref(db, 'transactions'))
         ]);

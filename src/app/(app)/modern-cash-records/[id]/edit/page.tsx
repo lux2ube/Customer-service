@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { PageHeader } from "@/components/page-header";
@@ -11,7 +12,7 @@ import { CashReceiptForm } from "@/components/cash-receipt-form";
 import { CashPaymentForm } from "@/components/cash-payment-form";
 
 async function getPageData(recordId: string) {
-    const recordRef = ref(db, `records/cash/${recordId}`);
+    const recordRef = ref(db, `cash_records/${recordId}`);
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
 
