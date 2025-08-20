@@ -48,9 +48,18 @@ function findBestMatch(record: CashRecord, allClients: Client[]): { client: Clie
     return bestMatch ? { client: bestMatch, score: highestScore } : null;
 }
 
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button disabled={pending} type="submit">
+            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+            Auto-Match All
+        </Button>
+    );
+}
+
 function AutoMatchForm() {
     const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
-    const { pending } = useFormStatus();
     const { toast } = useToast();
     
     React.useEffect(() => {
@@ -61,10 +70,7 @@ function AutoMatchForm() {
 
     return (
         <form action={formAction}>
-            <Button disabled={pending} type="submit">
-                {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
-                Auto-Match All
-            </Button>
+            <SubmitButton />
         </form>
     );
 }
