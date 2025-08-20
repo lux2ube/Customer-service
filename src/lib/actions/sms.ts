@@ -303,14 +303,31 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
 }
 
 // --- Matching Algorithm Helpers ---
+function normalizePhoneNumber(phone: string): string | null {
+    if (!phone) return null;
+    // Remove all non-digit characters to get the core numbers
+    const digitsOnly = phone.replace(/\D/g, '');
+    
+    // Check if the number is a valid length for a Yemeni number, with or without country code/leading zero
+    if (digitsOnly.length >= 9) {
+        // Return the last 9 digits to standardize the format
+        return digitsOnly.slice(-9);
+    }
+    
+    return null; // Return null if it's not a recognizable phone number format
+}
 
 const findClientByPhoneNumber = (personName: string, allClients: Client[]): Client[] => {
-    if (!/^\d+$/.test(personName.trim())) return [];
-    
+    // 1. Normalize the phone number from the SMS text.
+    const smsPhoneNumber = normalizePhoneNumber(personName);
+    if (!smsPhoneNumber) return [];
+
+    // 2. Find clients whose normalized phone number matches.
     return allClients.filter(c => {
-        if (!c.phone || !Array.isArray(c.phone)) return false;
-        // Check if any of the client's phone numbers are contained within the parsed name string.
-        return c.phone.some(p => personName.includes(p));
+        if (!c.phone) return false;
+        // Ensure c.phone is always an array before trying to use .some()
+        const clientPhones = Array.isArray(c.phone) ? c.phone : [c.phone];
+        return clientPhones.some(p => normalizePhoneNumber(p) === smsPhoneNumber);
     });
 };
 
