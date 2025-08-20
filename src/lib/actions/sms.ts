@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { push, ref, set, update, get, query, orderByChild, limitToLast } from 'firebase/database';
+import { push, ref, set, update, get, query, orderByChild, limitToLast, equalTo } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule } from '../types';
 import { normalizeArabic } from '../utils';
@@ -12,6 +12,7 @@ import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
 import { format } from 'date-fns';
 import { getNextSequentialId, stripUndefined } from './helpers';
+import { parseSmsWithCustomRules } from '../custom-sms-parser';
 
 
 // --- SMS Processing Actions ---
