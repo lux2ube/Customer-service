@@ -5,8 +5,8 @@
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2, Link } from "lucide-react";
+import NextLink from "next/link";
 import { Suspense } from "react";
 import { ModernCashRecordsTable } from "@/components/modern-cash-records-table";
 import { useActionState } from 'react';
@@ -120,17 +120,23 @@ export default function ModernCashRecordsPage() {
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <ProcessSmsForm />
+                     <Button asChild variant="outline">
+                        <NextLink href="/sms/match">
+                            <Link className="mr-2 h-4 w-4" />
+                            Match SMS to Clients
+                        </NextLink>
+                    </Button>
                     <Button asChild>
-                        <Link href="/modern-cash-records/inflow">
+                        <NextLink href="/modern-cash-records/inflow">
                             <ArrowDownToLine className="mr-2 h-4 w-4" />
                             New Inflow
-                        </Link>
+                        </NextLink>
                     </Button>
                      <Button asChild variant="outline">
-                        <Link href="/modern-cash-records/outflow">
+                        <NextLink href="/modern-cash-records/outflow">
                             <ArrowUpFromLine className="mr-2 h-4 w-4" />
                             New Outflow
-                        </Link>
+                        </NextLink>
                     </Button>
                      <DeleteAllForm />
                 </div>

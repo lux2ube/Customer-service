@@ -12,7 +12,6 @@ import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
 import { sendTelegramNotification } from './helpers';
 import { format } from 'date-fns';
 import { getNextSequentialId, stripUndefined } from './helpers';
-import { parseSmsWithCustomRules } from '../custom-sms-parser';
 
 
 // --- SMS Processing Actions ---
@@ -95,22 +94,21 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const chartOfAccountsRef = ref(db, 'accounts');
     const rulesRef = ref(db, 'sms_parsing_rules');
     const failuresRef = ref(db, 'sms_parsing_failures');
-    const fiatRatesRef = query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1));
-
+    
     try {
+        const fiatRatesSnapshot = await get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)));
+        
         const [
             incomingSnapshot,
             endpointsSnapshot,
             accountsSnapshot,
             rulesSnapshot,
-            fiatRatesSnapshot,
             settingsSnapshot
         ] = await Promise.all([
             get(incomingSmsRef),
             get(smsEndpointsRef),
             get(chartOfAccountsRef),
             get(rulesRef),
-            get(fiatRatesRef),
             get(ref(db, 'settings/api')),
         ]);
 
@@ -295,12 +293,77 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/cash-receipts');
+        revalidatePath('/sms/match');
         return { success: true, message: "SMS record linked to client." };
     } catch (e: any) {
         console.error("Error linking SMS to client:", e);
         return { success: false, message: e.message || "An unexpected database error occurred." };
     }
 }
+
+export async function matchSmsToClients(
+  prevState: MatchSmsState,
+  formData: FormData
+): Promise<MatchSmsState> {
+    try {
+        const clientsRef = ref(db, 'clients');
+        const smsRecordsRef = query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'));
+
+        const [clientsSnapshot, smsSnapshot] = await Promise.all([
+            get(clientsRef),
+            get(smsRecordsRef),
+        ]);
+
+        if (!smsSnapshot.exists()) return { message: 'No pending SMS records to match.', error: false };
+        
+        const clients: Client[] = clientsSnapshot.exists() ? Object.values(clientsSnapshot.val()) : [];
+        const smsRecords: Record<string, CashRecord> = smsSnapshot.val();
+
+        const updates: { [key: string]: any } = {};
+        let matchedCount = 0;
+
+        for (const recordId in smsRecords) {
+            const record = smsRecords[recordId];
+            if (record.source !== 'SMS' || record.clientId) continue;
+
+            const personName = record.senderName || record.recipientName;
+            if (!personName) continue;
+
+            const normalizedSmsName = normalizeArabic(personName);
+
+            let bestMatch: { client: Client; score: number } | null = null;
+            
+            for (const client of clients) {
+                const normalizedClientName = normalizeArabic(client.name);
+                if (normalizedSmsName === normalizedClientName) {
+                    bestMatch = { client, score: 100 };
+                    break;
+                }
+                // Could add more sophisticated fuzzy matching here if needed
+            }
+            
+            if (bestMatch) {
+                updates[`/cash_records/${recordId}/clientId`] = bestMatch.client.id;
+                updates[`/cash_records/${recordId}/clientName`] = bestMatch.client.name;
+                updates[`/cash_records/${recordId}/status`] = 'Matched';
+                matchedCount++;
+            }
+        }
+        
+        if(matchedCount > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/modern-cash-records');
+        revalidatePath('/sms/match');
+        return { message: `Auto-matching complete. Matched ${matchedCount} records.`, error: false };
+
+    } catch (e: any) {
+        console.error("SMS Auto-matching Error:", e);
+        return { message: e.message || 'An unknown error occurred.', error: true };
+    }
+}
+
 
 export async function updateSmsTransactionStatus(recordId: string, status: 'Used' | 'Cancelled') {
      if (!recordId || !status) {
