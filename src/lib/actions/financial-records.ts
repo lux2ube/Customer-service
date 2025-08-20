@@ -200,6 +200,7 @@ const UsdtManualPaymentSchema = z.object({
   accountId: z.string().min(1, "A sending wallet must be selected"),
   txid: z.string().optional(),
   notes: z.string().optional(),
+  source: z.string().optional(),
 });
 
 
@@ -208,7 +209,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
-    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes } = validatedFields.data;
+    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes, source } = validatedFields.data;
     
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -216,13 +217,32 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             return { message: 'Selected sending wallet not found.', success: false };
         }
         const accountName = (accountSnapshot.val() as Account).name;
-
+        
         const newId = recordId || await getNextSequentialId('usdtRecordId');
+        
+        let existingRecord: Partial<UsdtRecord> = {};
+        if (recordId) {
+            const existingSnapshot = await get(ref(db, `records/usdt/${recordId}`));
+            if (existingSnapshot.exists()) {
+                existingRecord = existingSnapshot.val();
+            }
+        }
+        
         const paymentData: Omit<UsdtRecord, 'id'> = {
-            date: date!, type: 'outflow', source: 'Manual', status: status!,
-            clientId: clientId, clientName: clientName, accountId: accountId,
-            accountName: accountName, amount: amount!, clientWalletAddress: recipientAddress,
-            txHash: txid, notes, createdAt: new Date().toISOString(),
+            ...existingRecord,
+            date: date!, 
+            type: 'outflow', 
+            source: source || 'Manual', 
+            status: status!,
+            clientId: clientId, 
+            clientName: clientName, 
+            accountId: accountId,
+            accountName: accountName, 
+            amount: amount!, 
+            clientWalletAddress: recipientAddress,
+            txHash: txid, 
+            notes, 
+            createdAt: existingRecord.createdAt || new Date().toISOString(),
         };
         
         await set(ref(db, `records/usdt/${newId}`), stripUndefined(paymentData));

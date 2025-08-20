@@ -21,6 +21,9 @@ import { createUsdtManualPayment, type UsdtPaymentState, searchClients } from '@
 import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
+import { db } from '@/lib/firebase';
+import { get, ref } from 'firebase/database';
+
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -114,7 +117,7 @@ function ClientSelector({
     );
 }
 
-export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord, clients: Client[] }) {
+export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { record?: UsdtRecord, clients: Client[], cryptoWallets: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -171,6 +174,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
 
     return (
         <form action={formAction} ref={formRef}>
+             <input type="hidden" name="source" value={record?.source || 'Manual'} />
              <Card>
                 <CardHeader>
                     <CardTitle>{isEditing ? 'Edit' : 'New'} USDT Manual Payment</CardTitle>
@@ -203,6 +207,21 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                            <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
                             {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="accountId">Paid From (System Wallet)</Label>
+                        <Select name="accountId" required defaultValue={record?.accountId}>
+                            <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
+                            <SelectContent>
+                                {cryptoWallets.map(wallet => (
+                                    <SelectItem key={wallet.id} value={wallet.id}>
+                                        {wallet.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {state?.errors?.accountId && <p className="text-sm text-destructive">{state.errors.accountId[0]}</p>}
                     </div>
                      
                     <div className="space-y-2">

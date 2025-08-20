@@ -1,4 +1,5 @@
 
+
 import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
 import { db } from '@/lib/firebase';
@@ -37,8 +38,9 @@ async function getPageData(recordId: string) {
     if (accountsSnapshot.exists()) {
         const data = accountsSnapshot.val();
         Object.keys(data).forEach(key => {
-            if (!data[key].isGroup && data[key].currency === 'USDT') {
-                 cryptoWallets.push({ id: key, ...data[key] });
+            const accountData = data[key];
+            if (accountData && !accountData.isGroup && accountData.currency === 'USDT') {
+                 cryptoWallets.push({ id: key, ...accountData });
             }
         });
     }
@@ -63,7 +65,7 @@ export default async function EditModernUsdtRecordPage({ params }: { params: { i
                 {record.type === 'inflow' ? (
                     <UsdtManualReceiptForm record={record} clients={clients} cryptoWallets={cryptoWallets} />
                 ) : (
-                     <UsdtManualPaymentForm record={record} clients={clients} />
+                     <UsdtManualPaymentForm record={record} clients={clients} cryptoWallets={cryptoWallets} />
                 )}
             </Suspense>
         </>
