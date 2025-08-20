@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -17,13 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import type { Client, Account, UsdtRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { createUsdtManualPayment, type UsdtPaymentState, searchClients } from '@/lib/actions';
+import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
+import { searchClients } from '@/lib/actions/client';
 import { format, parseISO } from 'date-fns';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { get, ref } from 'firebase/database';
-
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
     const { pending } = useFormStatus();
@@ -36,77 +33,40 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
 }
 
 function ClientSelector({
-  value,
-  onValueChange,
   selectedClient,
   onSelect,
-  disabled = false
+  clients
 }: {
-  value: string;
-  onValueChange: (value: string) => void;
   selectedClient: Client | null;
   onSelect: (client: Client | null) => void;
-  disabled?: boolean;
+  clients: Client[];
 }) {
     const [open, setOpen] = React.useState(false);
-    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
-    const [isLoading, setIsLoading] = React.useState(false);
+    const [search, setSearch] = React.useState('');
     
-    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-    React.useEffect(() => {
-        if (!open) return;
-        if (value.length < 2) {
-            setSearchResults([]);
-            return;
-        }
-
-        setIsLoading(true);
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-        
-        debounceTimeoutRef.current = setTimeout(async () => {
-            const results = await searchClients(value);
-            setSearchResults(results);
-            setIsLoading(false);
-        }, 300);
-
-        return () => {
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current);
-            }
-        };
-    }, [value, open]);
-    
-    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
-
-    const handleSelect = (client: Client) => {
-        onSelect(client);
-        setOpen(false);
-    };
+    const filteredClients = React.useMemo(() => {
+        if (!search) return clients.slice(0, 100);
+        return clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+    }, [search, clients]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal" disabled={disabled}>
-                    {value || "Select a client..."}
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    {selectedClient ? selectedClient.name : "Select a client..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                <Command shouldFilter={false}>
-                    <CommandInput placeholder="Search clients..." value={value} onValueChange={onValueChange} />
+                <Command>
+                    <CommandInput placeholder="Search clients..." value={search} onValueChange={setSearch} />
                     <CommandList>
                         <CommandEmpty>No client found.</CommandEmpty>
                         <CommandGroup>
-                             {searchResults.map(client => (
-                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
+                             {filteredClients.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => { onSelect(client); setOpen(false); }}>
                                     <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                    <div className="flex flex-col">
-                                        <span>{client.name}</span>
-                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
-                                    </div>
+                                    <span>{client.name}</span>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -124,51 +84,36 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
     const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
     const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
     
-    const [date, setDate] = React.useState<Date | undefined>(undefined);
-    const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
-    const [clientSearch, setClientSearch] = React.useState("");
-
-    React.useEffect(() => {
-        if (record) {
-            setDate(record.date ? parseISO(record.date) : new Date());
-            const initialClient = clients.find(c => c.id === record.clientId);
-            if(initialClient) {
-                setSelectedClient(initialClient);
-                setClientSearch(initialClient.name);
-            }
-        } else {
-             setDate(new Date());
-        }
-    }, [record, clients]);
-
+    // Form state managed here
+    const [date, setDate] = React.useState<Date | undefined>(record?.date ? parseISO(record.date) : new Date());
+    const [selectedClient, setSelectedClient] = React.useState<Client | null>(() => clients.find(c => c.id === record?.clientId) || null);
+    const [accountId, setAccountId] = React.useState(record?.accountId || '');
+    const [recipientAddress, setRecipientAddress] = React.useState(record?.clientWalletAddress || '');
+    const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
+    const [txHash, setTxHash] = React.useState(record?.txHash || '');
+    const [status, setStatus] = React.useState(record?.status || 'Confirmed');
+    const [notes, setNotes] = React.useState(record?.notes || '');
+    
     React.useEffect(() => {
         if (state?.success) {
-            toast({
-                title: 'Success',
-                description: state.message,
-            });
-             if (record?.id) {
+            toast({ title: 'Success', description: state.message });
+            if (record?.id) {
                 router.push('/modern-usdt-records');
             } else {
                 formRef.current?.reset();
-                setSelectedClient(null);
-                setClientSearch("");
                 setDate(new Date());
+                setSelectedClient(null);
+                setAccountId('');
+                setRecipientAddress('');
+                setAmount('');
+                setTxHash('');
+                setStatus('Confirmed');
+                setNotes('');
             }
         } else if (state?.message) {
-            toast({
-                title: 'Error',
-                description: state.message,
-                variant: 'destructive',
-            });
+            toast({ title: 'Error', description: state.message, variant: 'destructive' });
         }
     }, [state, toast, record, router]);
-
-    React.useEffect(() => {
-        if (selectedClient) {
-            setClientSearch(selectedClient.name);
-        }
-    }, [selectedClient]);
     
     const isEditing = !!record;
 
@@ -198,8 +143,7 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                         <div className="space-y-2">
                            <Label htmlFor="clientId">Paid To (Client)</Label>
                             <ClientSelector 
-                                value={clientSearch}
-                                onValueChange={setClientSearch}
+                                clients={clients}
                                 selectedClient={selectedClient}
                                 onSelect={setSelectedClient}
                             />
@@ -211,7 +155,7 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
 
                     <div className="space-y-2">
                         <Label htmlFor="accountId">Paid From (System Wallet)</Label>
-                        <Select name="accountId" required defaultValue={record?.accountId}>
+                        <Select name="accountId" required value={accountId} onValueChange={setAccountId}>
                             <SelectTrigger><SelectValue placeholder="Select system wallet..." /></SelectTrigger>
                             <SelectContent>
                                 {cryptoWallets.map(wallet => (
@@ -226,26 +170,26 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                      
                     <div className="space-y-2">
                         <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
-                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required defaultValue={record?.clientWalletAddress} />
+                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required value={recipientAddress} onChange={(e) => setRecipientAddress(e.target.value)} />
                         {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount (USDT)</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount} />
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="txid">Transaction Hash (TxID)</Label>
-                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash} />
+                            <Input id="txid" name="txid" placeholder="Optional" value={txHash} onChange={(e) => setTxHash(e.target.value)} />
                         </div>
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Status</Label>
-                            <Select name="status" defaultValue={record?.status || 'Confirmed'}>
+                            <Select name="status" value={status} onValueChange={(v) => setStatus(v as any)}>
                                 <SelectTrigger><SelectValue/></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Pending">Pending</SelectItem>
@@ -257,7 +201,7 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="notes">Notes</Label>
-                            <Textarea id="notes" name="notes" placeholder="Optional notes about the transaction" defaultValue={record?.notes}/>
+                            <Textarea id="notes" name="notes" placeholder="Optional notes about the transaction" value={notes} onChange={(e) => setNotes(e.target.value)} />
                         </div>
                     </div>
                 </CardContent>
@@ -268,3 +212,5 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
         </form>
     );
 }
+
+    

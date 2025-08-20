@@ -179,10 +179,11 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
 // --- USDT Manual Payment ---
 export type UsdtPaymentState = {
   errors?: {
-    recipientDetails?: string[];
+    recipientAddress?: string[];
     amount?: string[];
     txid?: string[];
     accountId?: string[];
+    clientId?: string[];
   };
   message?: string;
   success?: boolean;
@@ -195,7 +196,7 @@ const UsdtManualPaymentSchema = z.object({
   clientName: z.string().nullable(),
   date: z.string(),
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
-  recipientDetails: z.string().transform((str) => str ? JSON.parse(str) : {}).pipe(z.record(z.string())),
+  recipientAddress: z.string().optional(),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
   accountId: z.string().min(1, "A sending wallet must be selected"),
   txid: z.string().optional(),
@@ -209,7 +210,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
-    const { clientId, clientName, date, status, recipientDetails, amount, accountId, txid, notes, source } = validatedFields.data;
+    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes, source } = validatedFields.data;
     
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -239,7 +240,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             accountId: accountId,
             accountName: accountName, 
             amount: amount!, 
-            clientWalletAddress: recipientDetails['Address'] || 'N/A', // Extract address
+            clientWalletAddress: recipientAddress,
             txHash: txid, 
             notes, 
             createdAt: existingRecord.createdAt || new Date().toISOString(),
@@ -273,3 +274,5 @@ export async function cancelCashPayment(recordId: string) {
         return { success: false, message: "Failed to cancel payment." };
     }
 }
+
+    
