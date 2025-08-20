@@ -48,33 +48,6 @@ function findBestMatch(record: CashRecord, allClients: Client[]): { client: Clie
     return bestMatch ? { client: bestMatch, score: highestScore } : null;
 }
 
-function AutoMatchForm() {
-    const [state, formAction] = useActionState<MatchSmsState, FormData>(matchSmsToClients, undefined);
-    const { toast } = useToast();
-    
-    React.useEffect(() => {
-        if (state?.message) {
-            toast({ title: state.error ? 'Error' : 'Success', description: state.message, variant: state.error ? 'destructive' : 'default' });
-        }
-    }, [state, toast]);
-
-    function SubmitButton() {
-        const { pending } = useFormStatus();
-        return (
-            <Button disabled={pending} type="submit">
-                {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
-                Auto-Match All
-            </Button>
-        );
-    }
-    
-    return (
-        <form action={formAction}>
-            <SubmitButton />
-        </form>
-    );
-}
-
 export function SmsMatchingView({ initialRecords, allClients }: { initialRecords: CashRecord[], allClients: Client[] }) {
     const [records, setRecords] = React.useState<MatchSuggestion[]>([]);
     const { toast } = useToast();
@@ -103,19 +76,6 @@ export function SmsMatchingView({ initialRecords, allClients }: { initialRecords
     
     return (
          <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Auto-Matching</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                        Automatically match all pending SMS records where the sender/receiver name exactly matches a client's name.
-                    </p>
-                </CardContent>
-                <CardFooter>
-                    <AutoMatchForm />
-                </CardFooter>
-            </Card>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {records.map(record => (
                 <Card key={record.id}>
