@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -126,6 +127,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
 
     React.useEffect(() => {
         if (!record) {
+            // Only set the date on the client-side to avoid hydration mismatch
             setDate(new Date());
         } else {
             const initialClient = clients.find(c => c.id === record.clientId);
