@@ -305,11 +305,12 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
 // --- Matching Algorithm Helpers ---
 
 const findClientByPhoneNumber = (personName: string, allClients: Client[]): Client[] => {
-    // Basic check if the name is a number-like string
-    if (!/^\d+$/.test(personName)) return [];
+    if (!/^\d+$/.test(personName.trim())) return [];
+    
     return allClients.filter(c => {
-        // Ensure client.phone exists and is an array before calling includes
-        return Array.isArray(c.phone) && c.phone.includes(personName);
+        if (!c.phone || !Array.isArray(c.phone)) return false;
+        // Check if any of the client's phone numbers are contained within the parsed name string.
+        return c.phone.some(p => personName.includes(p));
     });
 };
 
@@ -328,16 +329,19 @@ const findClientByFullName = (personName: string, allClients: Client[]): Client[
 };
 
 const findClientByFirstNameAndLastName = (personName: string, allClients: Client[]): Client[] => {
-    const smsNameParts = normalizeArabic(personName).split(' ');
+    const smsNameParts = normalizeArabic(personName.trim()).split(' ').filter(p => p);
     if (smsNameParts.length < 2) return [];
     const smsFirst = smsNameParts[0];
     const smsLast = smsNameParts[smsNameParts.length - 1];
 
     return allClients.filter(c => {
-        const clientNameParts = normalizeArabic(c.name).split(' ');
+        if (!c.name) return false;
+        const clientNameParts = normalizeArabic(c.name.trim()).split(' ').filter(p => p);
         if (clientNameParts.length < 2) return false;
+        
         const clientFirst = clientNameParts[0];
         const clientLast = clientNameParts[clientNameParts.length - 1];
+        
         return smsFirst === clientFirst && smsLast === clientLast;
     });
 };
@@ -362,6 +366,7 @@ const filterCandidatesByHistory = (
         allTransactions.some(tx =>
             tx.clientId === c.id &&
             tx.summary && // Ensure summary exists
+            typeof tx.summary.total_inflow_usd === 'number' &&
             Math.abs((tx.summary.total_inflow_usd || 0) - recordUsdAmount) < (recordUsdAmount * 0.1) // 10% tolerance
         )
     );
