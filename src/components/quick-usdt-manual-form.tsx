@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -14,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, ClipboardPaste } from 'lucide-react';
 import { ethers } from 'ethers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 
 interface QuickUsdtManualFormProps {
   client: Client;
@@ -35,6 +37,7 @@ function SubmitButton() {
 export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtAccounts }: QuickUsdtManualFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
+  useFormHotkeys(formRef);
 
   const [state, formAction] = useActionState(createUsdtManualPayment.bind(null, null), undefined);
   
@@ -95,7 +98,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
         <div className="space-y-2">
             <Label htmlFor="manual_recipientAddress">Recipient Address</Label>
             <div className="flex items-center gap-2">
-                <Input id="manual_recipientAddress" name="recipientAddress" placeholder="Client's BEP20 address" required value={addressInput} onChange={(e) => setAddressInput(e.target.value)} />
+                <Input id="manual_recipientAddress" name="recipientAddress" placeholder="Client's BEP20 address" required value={addressInput} onChange={(e) => setAddressInput(e.target.value)} autoFocus />
                 <Button type="button" variant="outline" size="icon" onClick={handlePaste}><ClipboardPaste className="h-4 w-4" /></Button>
             </div>
             {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}

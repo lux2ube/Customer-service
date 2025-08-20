@@ -25,6 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 
 interface QuickCashReceiptFormProps {
   client: Client | null;
@@ -54,6 +55,7 @@ function SubmitButton() {
 export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: QuickCashReceiptFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
+  useFormHotkeys(formRef);
   
   const [bankAccounts, setBankAccounts] = React.useState<Account[]>([]);
   const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
@@ -165,7 +167,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         </div>
             <div className="space-y-2">
             <Label htmlFor="amount">Amount Received</Label>
-            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
         </div>
         <div className="space-y-2">
@@ -178,9 +180,7 @@ export function QuickCashReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         </div>
         </div>
         <DialogFooter>
-        <DialogClose asChild>
-            <Button type="button" variant="secondary">Cancel</Button>
-        </DialogClose>
+        <DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose>
         <SubmitButton />
         </DialogFooter>
     </form>

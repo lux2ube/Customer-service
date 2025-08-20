@@ -1,20 +1,31 @@
 
+
 'use client';
 
 import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import { DialogFooter, DialogClose } from './ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import type { Client, Account } from '@/lib/types';
+import { Textarea } from './ui/textarea';
+import type { Client, Account, FiatRate } from '@/lib/types';
 import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 
 interface QuickUsdtReceiptFormProps {
   client: Client | null;
@@ -44,11 +55,12 @@ function SubmitButton() {
 export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: QuickUsdtReceiptFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
+  useFormHotkeys(formRef);
   
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createUsdtManualReceipt, undefined);
+  const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(createUsdtManualReceipt.bind(null, null), undefined);
   
   React.useEffect(() => {
     setLoading(true);
@@ -106,7 +118,7 @@ export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         </div>
             <div className="space-y-2">
             <Label htmlFor="amount">Amount (USDT)</Label>
-            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" />
+            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" autoFocus/>
             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
         </div>
             <div className="space-y-2">
@@ -115,9 +127,7 @@ export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
         </div>
         </div>
         <DialogFooter>
-        <DialogClose asChild>
-            <Button type="button" variant="secondary">Cancel</Button>
-        </DialogClose>
+        <DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose>
         <SubmitButton />
         </DialogFooter>
     </form>

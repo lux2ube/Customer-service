@@ -19,6 +19,7 @@ import { get } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { ref } from 'firebase/database';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 
 
 interface QuickUsdtAutoFormProps {
@@ -44,6 +45,7 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
 export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders, defaultRecordingAccountId, autoProcessData }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
+  useFormHotkeys(formRef);
 
   const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
   
@@ -120,6 +122,7 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
                         onChange={(e) => isAddingNew && setAddressInput(e.target.value)} 
                         readOnly={!isAddingNew}
                         className="font-mono text-xs" 
+                        autoFocus
                     />
                     <Button type="button" variant="ghost" size="icon" onClick={handlePaste}><ClipboardPaste className="h-4 w-4" /></Button>
                 </div>
