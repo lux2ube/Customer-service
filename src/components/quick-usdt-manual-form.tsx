@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -9,69 +8,68 @@ import { Button } from './ui/button';
 import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import type { Client, Account } from '@/lib/types';
+import type { Client, Account, ServiceProvider } from '@/lib/types';
 import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Loader2, ClipboardPaste } from 'lucide-react';
-import { ethers } from 'ethers';
+import { Save, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 
 interface QuickUsdtManualFormProps {
   client: Client;
-  onPaymentCreated: (newRecordId: string) => void;
+  onPaymentCreated: (newRecordId?: string) => void;
   setIsOpen: (open: boolean) => void;
   usdtAccounts: Account[];
+  serviceProviders: ServiceProvider[];
 }
 
-function SubmitButton() {
+function SubmitButton({ disabled }: { disabled?: boolean }) {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || disabled}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {pending ? 'Recording...' : 'Record Manual Payment'}
         </Button>
     );
 }
 
-export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtAccounts }: QuickUsdtManualFormProps) {
+export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtAccounts, serviceProviders }: QuickUsdtManualFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   useFormHotkeys(formRef);
 
   const [state, formAction] = useActionState(createUsdtManualPayment.bind(null, null), undefined);
   
-  const [addressInput, setAddressInput] = React.useState(client?.bep20_addresses?.[0] || '');
   const [selectedAccountId, setSelectedAccountId] = React.useState('');
+  const [dynamicFields, setDynamicFields] = React.useState<Record<string, string>>({});
   
-  const stateRef = React.useRef<any>();
+  const stateRef = React.useRef<UsdtPaymentState>();
+  
+  const selectedProvider = React.useMemo(() => {
+    if (!selectedAccountId) return null;
+    return serviceProviders.find(p => p.accountIds.includes(selectedAccountId));
+  }, [selectedAccountId, serviceProviders]);
+  
+  const formulaFields = selectedProvider?.cryptoFormula || [];
 
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
       if (state.success) {
         toast({ title: 'Success', description: state.message });
-        onPaymentCreated(state.newRecordId || '');
+        onPaymentCreated(state.newRecordId);
         setIsOpen(false);
         formRef.current?.reset();
         setSelectedAccountId('');
+        setDynamicFields({});
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
       stateRef.current = state;
     }
   }, [state, toast, onPaymentCreated, setIsOpen]);
-  
-  const handlePaste = async () => {
-    try {
-        const text = await navigator.clipboard.readText();
-        if (ethers.isAddress(text)) {
-          setAddressInput(text);
-        } else {
-            toast({ variant: 'destructive', title: 'Invalid Address', description: 'The pasted text is not a valid BSC address.'});
-        }
-    } catch (err) {
-        toast({ variant: 'destructive', title: 'Paste Failed', description: 'Could not read from clipboard.'});
-    }
+
+  const handleDynamicFieldChange = (key: string, value: string) => {
+    setDynamicFields(prev => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -80,6 +78,8 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
       <input type="hidden" name="clientName" value={client.name} />
       <input type="hidden" name="date" value={new Date().toISOString()} />
       <input type="hidden" name="status" value="Confirmed" />
+      <input type="hidden" name="recipientDetails" value={JSON.stringify(dynamicFields)} />
+      
       <div className="space-y-4 py-4">
         <div className="space-y-2">
             <Label htmlFor="accountId">Paid From (System Wallet)</Label>
@@ -95,17 +95,27 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
             </Select>
             {state?.errors?.accountId && <p className="text-destructive text-sm">{state.errors.accountId[0]}</p>}
         </div>
-        <div className="space-y-2">
-            <Label htmlFor="manual_recipientAddress">Recipient Address</Label>
-            <div className="flex items-center gap-2">
-                <Input id="manual_recipientAddress" name="recipientAddress" placeholder="Client's BEP20 address" required value={addressInput} onChange={(e) => setAddressInput(e.target.value)} autoFocus />
-                <Button type="button" variant="outline" size="icon" onClick={handlePaste}><ClipboardPaste className="h-4 w-4" /></Button>
+        
+        {formulaFields.map(field => (
+            <div key={field} className="space-y-2">
+                <Label htmlFor={`detail_${field}`}>{field}</Label>
+                <Input 
+                    id={`detail_${field}`} 
+                    name={`detail_${field}`} 
+                    placeholder={`Enter recipient's ${field}`} 
+                    value={dynamicFields[field] || ''}
+                    onChange={(e) => handleDynamicFieldChange(field, e.target.value)}
+                    required 
+                />
             </div>
-            {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
-        </div>
+        ))}
+        {selectedAccountId && formulaFields.length === 0 && (
+             <p className="text-xs text-muted-foreground">No payment formula is set for this provider. Add one in Service Provider settings.</p>
+        )}
+
         <div className="space-y-2">
             <Label htmlFor="manual_amount">Amount (USDT)</Label>
-            <Input id="manual_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
+            <Input id="manual_amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required autoFocus/>
             {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
         </div>
         <div className="space-y-2">
@@ -117,7 +127,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
         <DialogClose asChild>
             <Button type="button" variant="secondary">Cancel</Button>
         </DialogClose>
-        <SubmitButton />
+        <SubmitButton disabled={!selectedProvider || formulaFields.length === 0} />
       </DialogFooter>
     </form>
   );

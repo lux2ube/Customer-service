@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate } from '../types';
+import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider } from '../types';
 import { stripUndefined, logAction, getNextSequentialId } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -179,7 +179,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
 // --- USDT Manual Payment ---
 export type UsdtPaymentState = {
   errors?: {
-    recipientAddress?: string[];
+    recipientDetails?: string[];
     amount?: string[];
     txid?: string[];
     accountId?: string[];
@@ -195,7 +195,7 @@ const UsdtManualPaymentSchema = z.object({
   clientName: z.string().nullable(),
   date: z.string(),
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
-  recipientAddress: z.string().min(1, 'Recipient address is required.'),
+  recipientDetails: z.string().transform((str) => str ? JSON.parse(str) : {}).pipe(z.record(z.string())),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
   accountId: z.string().min(1, "A sending wallet must be selected"),
   txid: z.string().optional(),
@@ -209,7 +209,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
-    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes, source } = validatedFields.data;
+    const { clientId, clientName, date, status, recipientDetails, amount, accountId, txid, notes, source } = validatedFields.data;
     
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -239,7 +239,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             accountId: accountId,
             accountName: accountName, 
             amount: amount!, 
-            clientWalletAddress: recipientAddress,
+            clientWalletAddress: recipientDetails['Address'] || 'N/A', // Extract address
             txHash: txid, 
             notes, 
             createdAt: existingRecord.createdAt || new Date().toISOString(),
