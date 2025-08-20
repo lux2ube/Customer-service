@@ -127,7 +127,7 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
 
     React.useEffect(() => {
         if (record) {
-            setDate(parseISO(record.date));
+            setDate(record.date ? parseISO(record.date) : new Date());
             const initialClient = clients.find(c => c.id === record.clientId);
             if(initialClient) {
                 setSelectedClient(initialClient);
@@ -168,7 +168,6 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
     }, [selectedClient]);
     
     const isEditing = !!record;
-    const isSyncedRecord = isEditing && record.source === 'BSCScan';
 
     return (
         <form action={formAction} ref={formRef}>
@@ -183,12 +182,12 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                             <Label>Date</Label>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")} disabled={isSyncedRecord}>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {date ? format(date, "PPP") : <span>Pick a date</span>}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={isSyncedRecord} /></PopoverContent>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus/></PopoverContent>
                             </Popover>
                             <input type="hidden" name="date" value={date?.toISOString() || ''} />
                         </div>
@@ -199,7 +198,6 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                                 onValueChange={setClientSearch}
                                 selectedClient={selectedClient}
                                 onSelect={setSelectedClient}
-                                disabled={isEditing && !!record.clientId}
                             />
                            <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                            <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
@@ -209,19 +207,19 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                      
                     <div className="space-y-2">
                         <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
-                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required defaultValue={record?.clientWalletAddress} disabled={isSyncedRecord}/>
+                        <Input id="recipientAddress" name="recipientAddress" placeholder="0x..." required defaultValue={record?.clientWalletAddress} />
                         {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount (USDT)</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount} disabled={isSyncedRecord}/>
+                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" defaultValue={record?.amount} />
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="txid">Transaction Hash (TxID)</Label>
-                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash} disabled={isSyncedRecord}/>
+                            <Input id="txid" name="txid" placeholder="Optional" defaultValue={record?.txHash} />
                         </div>
                     </div>
                     
