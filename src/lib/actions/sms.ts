@@ -307,8 +307,12 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
 const findClientByPhoneNumber = (personName: string, allClients: Client[]): Client[] => {
     // Basic check if the name is a number-like string
     if (!/^\d+$/.test(personName)) return [];
-    return allClients.filter(c => c.phone.includes(personName));
+    return allClients.filter(c => {
+        // Ensure client.phone exists and is an array before calling includes
+        return Array.isArray(c.phone) && c.phone.includes(personName);
+    });
 };
+
 
 const findClientByFirstNameAndSecondName = (personName: string, allClients: Client[]): Client[] => {
     const normalizedSmsName = normalizeArabic(personName);
@@ -358,7 +362,7 @@ const filterCandidatesByHistory = (
         allTransactions.some(tx =>
             tx.clientId === c.id &&
             tx.summary && // Ensure summary exists
-            Math.abs(tx.summary.total_inflow_usd - recordUsdAmount) < (recordUsdAmount * 0.1) // 10% tolerance
+            Math.abs((tx.summary.total_inflow_usd || 0) - recordUsdAmount) < (recordUsdAmount * 0.1) // 10% tolerance
         )
     );
     if (candidatesWithSimilarTx.length === 1) return candidatesWithSimilarTx;

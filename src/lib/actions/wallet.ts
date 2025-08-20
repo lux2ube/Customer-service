@@ -187,7 +187,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
             notes: 'Sent from Wallet Page',
             createdAt: new Date().toISOString(),
         };
-        updates[`/modern_usdt_records/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
+        updates[`/records/usdt/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
 
         // --- Save new address to client profile if needed ---
         if (isNewAddress && client && serviceProviderId) {
