@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -203,7 +204,24 @@ const UsdtManualPaymentSchema = z.object({
 
 
 export async function createUsdtManualPayment(recordId: string | null, prevState: UsdtPaymentState, formData: FormData): Promise<UsdtPaymentState> {
-    const validatedFields = UsdtManualPaymentSchema.safeParse(Object.fromEntries(formData.entries()));
+    const isEditing = !!recordId;
+    let dataToValidate = Object.fromEntries(formData.entries());
+
+    // If editing, fetch the original record to merge with form data
+    if (isEditing) {
+        try {
+            const recordSnapshot = await get(ref(db, `records/usdt/${recordId}`));
+            if (recordSnapshot.exists()) {
+                const existingData = recordSnapshot.val();
+                // Merge existing data with form data. Form data takes precedence.
+                dataToValidate = { ...existingData, ...dataToValidate };
+            }
+        } catch (e) {
+            return { message: 'Database Error: Could not retrieve existing record.', success: false };
+        }
+    }
+
+    const validatedFields = UsdtManualPaymentSchema.safeParse(dataToValidate);
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
