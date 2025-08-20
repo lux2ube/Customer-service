@@ -209,4 +209,3 @@ function ManualClientSelector({ allClients, onSelect }: { allClients: Client[], 
         </Popover>
     )
 }
-
