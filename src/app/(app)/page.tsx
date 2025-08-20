@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount, backfillCashRecordUsd } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 import { ExportJsonButton } from '@/components/export-json-button';
+import { AssetBalances } from '@/components/asset-balances';
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
     <Card>
@@ -304,16 +305,45 @@ export default function DashboardPage() {
                 <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Daily Volume (Last 7 Days)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-[300px] w-full" /> : <DashboardChart data={dailyVolumeData} />}
-                    </CardContent>
-                </Card>
-                <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                <div className="lg:col-span-2 grid gap-6">
+                    <DashboardChart data={dailyVolumeData} />
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-lg">Recent Transactions</CardTitle>
+                                <Button variant="ghost" size="sm" asChild>
+                                <Link href="/transactions">
+                                    View All <ArrowRight className="ml-2 h-4 w-4" />
+                                </Link>
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="divide-y">
+                        {loading && recentTransactions.length === 0 ? (
+                            [...Array(3)].map((_, i) => (
+                                <div key={i} className="flex items-center gap-4 py-3">
+                                    <Skeleton className="h-12 w-12 rounded-full" />
+                                    <div className="flex-1 space-y-2">
+                                        <Skeleton className="h-4 w-3/4" />
+                                        <Skeleton className="h-3 w-1/2" />
+                                    </div>
+                                    <div className="text-right space-y-2">
+                                        <Skeleton className="h-4 w-16" />
+                                        <Skeleton className="h-3 w-10" />
+                                    </div>
+                                </div>
+                            ))
+                        ) : recentTransactions.length > 0 ? (
+                            recentTransactions.map(tx => <TransactionItem key={tx.id} tx={tx} />)
+                        ) : (
+                            <p className="text-muted-foreground text-center py-8">No recent transactions.</p>
+                        )}
+                        </CardContent>
+                    </Card>
+                </div>
+                 <div className="lg:col-span-1 space-y-6">
+                    <AssetBalances />
                     <Card>
                         <CardHeader>
                             <CardTitle>System Actions</CardTitle>
@@ -352,39 +382,6 @@ export default function DashboardPage() {
                 {quickAccessActions.map(action => <ActionCard key={action.title} {...action} />)}
             </div>
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Recent Transactions</CardTitle>
-                        <Button variant="ghost" size="sm" asChild>
-                           <Link href="/transactions">
-                             View All <ArrowRight className="ml-2 h-4 w-4" />
-                           </Link>
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent className="divide-y">
-                   {loading && recentTransactions.length === 0 ? (
-                       [...Array(3)].map((_, i) => (
-                           <div key={i} className="flex items-center gap-4 py-3">
-                               <Skeleton className="h-12 w-12 rounded-full" />
-                               <div className="flex-1 space-y-2">
-                                   <Skeleton className="h-4 w-3/4" />
-                                   <Skeleton className="h-3 w-1/2" />
-                               </div>
-                               <div className="text-right space-y-2">
-                                   <Skeleton className="h-4 w-16" />
-                                   <Skeleton className="h-3 w-10" />
-                               </div>
-                           </div>
-                       ))
-                   ) : recentTransactions.length > 0 ? (
-                       recentTransactions.map(tx => <TransactionItem key={tx.id} tx={tx} />)
-                   ) : (
-                       <p className="text-muted-foreground text-center py-8">No recent transactions.</p>
-                   )}
-                </CardContent>
-            </Card>
         </div>
     );
 }

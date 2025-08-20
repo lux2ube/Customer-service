@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider } from '../types';
-import { stripUndefined, logAction, getNextSequentialId } from './helpers';
+import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification } from './helpers';
 import { redirect } from 'next/navigation';
 
 
@@ -66,6 +66,9 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
 
         const account = accountSnapshot.val() as Account;
         const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
+        const clientAccountId = clientId ? `6000${clientId}` : '7000'; // Default to Unmatched Funds
+        const creditAccountName = clientName || 'Unmatched Funds';
+
 
         // Server-side calculation of amountusd as a fallback
         if (amountusd === 0 && account.currency && account.currency !== 'USD' && fiatRatesSnapshot.exists()) {
@@ -86,7 +89,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             date: date,
             type: type,
             source: 'Manual',
-            status: 'Matched', // Manual entries are considered matched
+            status: clientId ? 'Matched' : 'Pending', // If client is provided, it's matched
             clientId: clientId,
             clientName: clientName,
             accountId: bankAccountId,
@@ -100,9 +103,33 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `cash_records/${newId}`), stripUndefined(recordData));
+        const updates: { [key: string]: any } = {};
+        updates[`/cash_records/${newId}`] = stripUndefined(recordData);
+        
+        // --- Create Journal Entry ---
+        const journalDescription = `Cash ${type} | ${senderName || recipientName || clientName || 'N/A'}`;
+        const journalRef = push(ref(db, 'journal_entries'));
+        
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: date,
+            description: journalDescription,
+            debit_account: type === 'inflow' ? bankAccountId : clientAccountId,
+            credit_account: type === 'inflow' ? clientAccountId : bankAccountId,
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amountusd,
+            createdAt: new Date().toISOString(),
+            debit_account_name: type === 'inflow' ? account.name : creditAccountName,
+            credit_account_name: type === 'inflow' ? creditAccountName : account.name,
+        };
+        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+
+
+        await update(ref(db), updates);
 
         revalidatePath('/modern-cash-records');
+        revalidatePath('/accounting/journal');
+        revalidatePath('/'); // For asset balance card
         return { success: true, message: 'Cash record saved successfully.' };
 
     } catch (error) {
@@ -165,9 +192,32 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        await set(ref(db, `records/usdt/${newId}`), stripUndefined(receiptData));
+        const updates: { [key: string]: any } = {};
+        updates[`/records/usdt/${newId}`] = stripUndefined(receiptData);
+
+        // --- Create Journal Entry ---
+        const clientAccountId = `6000${clientId}`;
+        const journalDescription = `USDT Inflow from ${clientName}`;
+        const journalRef = push(ref(db, 'journal_entries'));
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: date,
+            description: journalDescription,
+            debit_account: cryptoWalletId, // Asset increases
+            credit_account: clientAccountId, // Client liability increases
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amount, // USDT is 1:1 with USD
+            createdAt: new Date().toISOString(),
+            debit_account_name: wallet.name,
+            credit_account_name: clientName,
+        };
+        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+        
+        await update(ref(db), updates);
 
         revalidatePath('/modern-usdt-records');
+        revalidatePath('/accounting/journal');
+        revalidatePath('/'); // For asset balance card
         return { success: true, message: 'USDT Receipt recorded successfully.' };
     } catch (error) {
         console.error("Create USDT Manual Receipt Error:", error);
@@ -245,9 +295,35 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             notes, 
             createdAt: existingRecord.createdAt || new Date().toISOString(),
         };
+
+        const updates: { [key: string]: any } = {};
+        updates[`/records/usdt/${newId}`] = stripUndefined(paymentData);
         
-        await set(ref(db, `records/usdt/${newId}`), stripUndefined(paymentData));
+        // --- Create Journal Entry ---
+        if (clientId && clientName) {
+            const clientAccountId = `6000${clientId}`;
+            const journalDescription = `USDT Outflow to ${clientName}`;
+            const journalRef = push(ref(db, 'journal_entries'));
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: date,
+                description: journalDescription,
+                debit_account: clientAccountId, // Client liability decreases
+                credit_account: accountId, // Asset decreases
+                debit_amount: amount,
+                credit_amount: amount,
+                amount_usd: amount,
+                createdAt: new Date().toISOString(),
+                debit_account_name: clientName,
+                credit_account_name: accountName,
+            };
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+        }
+
+        await update(ref(db), updates);
+        
         revalidatePath('/modern-usdt-records');
+        revalidatePath('/accounting/journal');
+        revalidatePath('/'); // For asset balance card
         return { success: true, message: 'USDT manual payment recorded successfully.', newRecordId: newId };
     } catch (e: any) {
         console.error("Error creating manual USDT payment:", e);
