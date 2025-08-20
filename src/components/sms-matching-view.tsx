@@ -13,7 +13,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Check, ChevronsUpDown, Loader2, Link as LinkIcon, User, Users } from 'lucide-react';
 import { cn, normalizeArabic } from '@/lib/utils';
 import { useActionState, useFormStatus } from 'react';
-import { searchClients } from '@/lib/actions/client';
 
 interface MatchSuggestion extends CashRecord {
     suggestedClient?: Client | null;
