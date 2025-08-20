@@ -54,20 +54,27 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
   const formulaFields = selectedProvider?.cryptoFormula || [];
 
   React.useEffect(() => {
+    // Select the first wallet by default when the component mounts or accounts change.
+    if (usdtAccounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(usdtAccounts[0].id);
+    }
+  }, [usdtAccounts, selectedAccountId]);
+
+  React.useEffect(() => {
     if (state && state !== stateRef.current) {
       if (state.success) {
         toast({ title: 'Success', description: state.message });
         onPaymentCreated(state.newRecordId);
         setIsOpen(false);
         formRef.current?.reset();
-        setSelectedAccountId('');
+        setSelectedAccountId(usdtAccounts.length > 0 ? usdtAccounts[0].id : '');
         setDynamicFields({});
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
       stateRef.current = state;
     }
-  }, [state, toast, onPaymentCreated, setIsOpen]);
+  }, [state, toast, onPaymentCreated, setIsOpen, usdtAccounts]);
 
   const handleDynamicFieldChange = (key: string, value: string) => {
     setDynamicFields(prev => ({ ...prev, [key]: value }));
@@ -139,5 +146,3 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
     </form>
   );
 }
-
-    
