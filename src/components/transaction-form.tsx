@@ -266,7 +266,7 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                     <CardContent>
                         <RadioGroup
                             value={transactionType || ''}
-                            onValueChange={(value) => setTransactionType(value as any)}
+                            onValueChange={(value) => setTimeout(() => setTransactionType(value as any), 0)}
                             className="grid grid-cols-1 md:grid-cols-3 gap-4"
                         >
                              <div>
