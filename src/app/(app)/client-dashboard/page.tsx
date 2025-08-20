@@ -144,7 +144,13 @@ function ClientDetailsCard({ client, balance }: { client: Client | null, balance
     )
 }
 
-function ActionsCard({ client, onActionSuccess }: { client: Client | null, onActionSuccess: () => void }) {
+function ActionsCard({ client, onActionSuccess, usdtAccounts, serviceProviders, defaultRecordingAccountId }: { 
+    client: Client | null, 
+    onActionSuccess: () => void,
+    usdtAccounts: Account[],
+    serviceProviders: ServiceProvider[],
+    defaultRecordingAccountId: string
+}) {
     const [isCashInOpen, setIsCashInOpen] = React.useState(false);
     const [isCashOutOpen, setIsCashOutOpen] = React.useState(false);
     const [isUsdtInOpen, setIsUsdtInOpen] = React.useState(false);
@@ -157,8 +163,7 @@ function ActionsCard({ client, onActionSuccess }: { client: Client | null, onAct
             <QuickAddCashInflow client={client} isOpen={isCashInOpen} setIsOpen={setIsCashInOpen} onRecordCreated={onActionSuccess} />
             <QuickAddCashOutflow client={client} isOpen={isCashOutOpen} setIsOpen={setIsCashOutOpen} onRecordCreated={onActionSuccess} />
             <QuickAddUsdtInflow client={client} isOpen={isUsdtInOpen} setIsOpen={setIsUsdtInOpen} onRecordCreated={onActionSuccess} />
-            {/* The real component has more props, but we only need these for the trigger */}
-            <QuickAddUsdtOutflow client={client} isOpen={isUsdtOutOpen} setIsOpen={setIsUsdtOutOpen} onRecordCreated={onActionSuccess} usdtAccounts={[]} serviceProviders={[]} defaultRecordingAccountId="" />
+            <QuickAddUsdtOutflow client={client} isOpen={isUsdtOutOpen} setIsOpen={setIsUsdtOutOpen} onRecordCreated={onActionSuccess} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} />
 
             <Card>
                 <CardHeader>
@@ -193,6 +198,12 @@ export default function ClientDashboardPage() {
     const [loadingRecords, setLoadingRecords] = React.useState(false);
     const [clientBalance, setClientBalance] = React.useState(0);
     
+    // State for data needed by QuickAddUsdtOutflow
+    const [usdtAccounts, setUsdtAccounts] = React.useState<Account[]>([]);
+    const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
+    const [defaultRecordingAccountId, setDefaultRecordingAccountId] = React.useState('');
+
+
     const fetchClientData = React.useCallback(async (clientId: string) => {
         setLoadingRecords(true);
         const [fetchedRecords] = await Promise.all([
@@ -241,6 +252,38 @@ export default function ClientDashboardPage() {
         return () => unsubscribe();
 
     }, [selectedClient]);
+    
+    // Effect to fetch global data needed for dialogs
+    React.useEffect(() => {
+        const accountsRef = ref(db, 'accounts');
+        const providersRef = ref(db, 'service_providers');
+        const settingRef = ref(db, 'settings/wallet/defaultRecordingAccountId');
+
+        const unsubAccounts = onValue(accountsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const allAccountsData: Record<string, Account> = snapshot.val();
+                const allAccountsList = Object.values(allAccountsData);
+                setUsdtAccounts(allAccountsList.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
+            }
+        });
+
+        const unsubProviders = onValue(providersRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                setServiceProviders(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+            }
+        });
+
+        const unsubSettings = onValue(settingRef, (snapshot) => {
+            setDefaultRecordingAccountId(snapshot.exists() ? snapshot.val() : '');
+        });
+
+        return () => {
+            unsubAccounts();
+            unsubProviders();
+            unsubSettings();
+        };
+    }, []);
 
     return (
         <div className="space-y-6">
@@ -298,10 +341,15 @@ export default function ClientDashboardPage() {
                     </Card>
                 </div>
                 <div className="lg:col-span-1">
-                    <ActionsCard client={selectedClient} onActionSuccess={() => selectedClient && fetchClientData(selectedClient.id)} />
+                    <ActionsCard 
+                        client={selectedClient} 
+                        onActionSuccess={() => selectedClient && fetchClientData(selectedClient.id)} 
+                        usdtAccounts={usdtAccounts}
+                        serviceProviders={serviceProviders}
+                        defaultRecordingAccountId={defaultRecordingAccountId}
+                    />
                 </div>
             </div>
         </div>
     );
 }
-

@@ -21,7 +21,7 @@ interface QuickAddUsdtOutflowProps {
   client: Client | null;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onRecordCreated: (newRecordId: string) => void;
+  onRecordCreated: (newRecordId?: string) => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
   defaultRecordingAccountId: string;
@@ -71,7 +71,7 @@ export function QuickAddUsdtOutflow({
             <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} autoProcessData={autoProcessData} />
           </TabsContent>
           <TabsContent value="match">
-             <MatchUnassignedBscTxForm client={client} onTxMatched={() => onRecordCreated('')} setIsOpen={setIsOpen} />
+             <MatchUnassignedBscTxForm client={client} onTxMatched={() => onRecordCreated()} setIsOpen={setIsOpen} />
           </TabsContent>
         </Tabs>
       </DialogContent>
