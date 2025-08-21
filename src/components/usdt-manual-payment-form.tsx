@@ -147,8 +147,8 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
         const unsubscribe = onValue(accountsRef, (snapshot) => {
             if (snapshot.exists()) {
                 const allAccounts: Account[] = Object.entries(snapshot.val()).map(([id, data]) => ({
-                    id, // preserve the key
-                    ...(data as Account),
+                  id, // preserve the key
+                  ...(data as Account),
                 }));
                 setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
             }
