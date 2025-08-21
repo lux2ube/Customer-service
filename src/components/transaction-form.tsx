@@ -30,6 +30,8 @@ import { QuickAddCashOutflow } from './quick-add-cash-outflow';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { useSearchParams } from 'next/navigation';
+import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
+
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -87,6 +89,13 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
     const [isQuickAddCashOutOpen, setIsQuickAddCashOutOpen] = React.useState(false);
     
     const [autoProcessData, setAutoProcessData] = React.useState<{amount: number, address?: string} | null>(null);
+
+    const { calculation } = useTransactionProcessor({
+        selectedRecordIds,
+        records,
+        cryptoFees,
+        transactionType,
+    });
 
 
     const { toast } = useToast();
@@ -166,36 +175,6 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
         }, 0);
     };
 
-    const calculation = React.useMemo(() => {
-        const selected = records.filter(r => selectedRecordIds.includes(r.id));
-        if (!transactionType || !cryptoFees) {
-            return { totalInflowUSD: 0, totalOutflowUSD: 0, fee: 0, difference: 0 };
-        }
-
-        const totalInflowUSD = selected.filter(r => r.type === 'inflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
-        const totalOutflowUSD = selected.filter(r => r.type === 'outflow').reduce((sum, r) => sum + (r.amount_usd || 0), 0);
-        
-        let fee = 0;
-
-        if (transactionType === 'Deposit') {
-            const usdtOutflow = selected.filter(r => r.type === 'outflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
-            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100;
-            fee = Math.max(usdtOutflow * feePercent, usdtOutflow > 0 ? (cryptoFees.minimum_buy_fee || 0) : 0);
-        } else if (transactionType === 'Withdraw') {
-            const usdtInflow = selected.filter(r => r.type === 'inflow' && r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
-            const feePercent = (cryptoFees.sell_fee_percent || 0) / 100;
-            fee = Math.max(usdtInflow * feePercent, usdtInflow > 0 ? (cryptoFees.minimum_sell_fee || 0) : 0);
-        } else if (transactionType === 'Transfer') {
-            const usdtMovement = selected.filter(r => r.category === 'crypto').reduce((sum, r) => sum + r.amount, 0);
-            const feePercent = (cryptoFees.buy_fee_percent || 0) / 100; // Use a default fee for transfers, e.g., buy fee
-            fee = usdtMovement * feePercent;
-        }
-
-        const difference = (totalOutflowUSD + fee) - totalInflowUSD;
-        
-        return { totalInflowUSD, totalOutflowUSD, fee, difference };
-    }, [selectedRecordIds, records, cryptoFees, transactionType]);
-    
     const recordCategories = React.useMemo(() => {
         return {
             fiatInflows: records.filter(r => r.type === 'inflow' && r.category === 'fiat'),
@@ -253,10 +232,10 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
             <input type="hidden" name="type" value={transactionType || ''} />
             {selectedRecordIds.map(id => <input key={id} type="hidden" name="linkedRecordIds" value={id} />)}
 
-            <QuickAddCashInflow client={selectedClient} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddUsdtOutflow client={selectedClient} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
-            <QuickAddUsdtInflow client={selectedClient} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
-            <QuickAddCashOutflow client={selectedClient} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddCashInflow client={selectedClient!} isOpen={isQuickAddCashInOpen} setIsOpen={setIsQuickAddCashInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddUsdtOutflow client={selectedClient!} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders || []} defaultRecordingAccountId={defaultRecordingAccountId} isOpen={isQuickAddUsdtOutOpen} setIsOpen={setIsQuickAddUsdtOutOpen} onRecordCreated={onAutoProcessSuccess} autoProcessData={autoProcessData} onDialogClose={() => setAutoProcessData(null)} />
+            <QuickAddUsdtInflow client={selectedClient!} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
+            <QuickAddCashOutflow client={selectedClient!} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
             <div className="space-y-4">
                 <Card>
@@ -402,12 +381,12 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                                 </div>
                             </div>
                              <p className="text-xs text-muted-foreground pt-2">
-                                Formula: (Outflow + Fee) - Inflow = Difference.
+                                Formula: Inflow - (Outflow + Fee) = Difference.
                             </p>
                             {Math.abs(calculation.difference) > 0.01 && (
                                 <div className="pt-4 border-t mt-4">
                                      <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
-                                    {calculation.difference < -0.01 ? (
+                                    {calculation.difference > 0.01 ? (
                                         <RadioGroup name="differenceHandling" defaultValue="income" className="mt-2 space-y-2">
                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="income" id="diff-income" />
