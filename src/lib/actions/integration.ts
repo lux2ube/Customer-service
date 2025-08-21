@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { db } from '../firebase';
-import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
+import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast, push } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord, JournalEntry } from '../types';
 import { stripUndefined, getNextSequentialId, notifyClientTransaction } from './helpers';
@@ -75,7 +75,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
         for (const tx of fetchedTransactions) {
             const txBlockNumber = parseInt(tx.blockNumber);
-            if (txBlockNumber <= lastSyncedBlock) continue;
+            if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) continue;
 
             highestBlock = Math.max(highestBlock, txBlockNumber);
             
