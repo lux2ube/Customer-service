@@ -7,8 +7,6 @@ import { ref, onValue } from 'firebase/database';
 import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { ScrollArea } from './ui/scroll-area';
-import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 
 interface AssetBalance {
@@ -117,36 +115,34 @@ export function AssetBalances() {
                 <CardDescription>Real-time overview of all asset accounts by provider.</CardDescription>
             </CardHeader>
             <CardContent>
-                <ScrollArea className="h-72 pr-3">
-                    <div className="space-y-4">
-                        {loading ? (
-                           [...Array(3)].map((_, i) => <Skeleton key={`skel-${i}`} className="h-24 w-full" />)
-                        ) : Object.keys(balances).length > 0 ? (
-                           Object.entries(balances).map(([providerName, providerBalances]) => (
-                               <div key={providerName}>
-                                   <h4 className="font-semibold text-sm mb-1">{providerName}</h4>
-                                   <div className="rounded-md border">
-                                       <Table>
-                                           <TableBody>
-                                               {providerBalances.map(asset => (
-                                                   <TableRow key={asset.id} className="text-xs">
-                                                       <TableCell className="font-medium truncate p-2">{asset.name}</TableCell>
-                                                       <TableCell className="text-right font-mono p-2">
-                                                            {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                            <span className="text-muted-foreground ml-1">{asset.currency}</span>
-                                                       </TableCell>
-                                                   </TableRow>
-                                               ))}
-                                           </TableBody>
-                                       </Table>
-                                   </div>
+                <div className="space-y-4">
+                    {loading ? (
+                       [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
+                    ) : Object.keys(balances).length > 0 ? (
+                       Object.entries(balances).map(([providerName, providerBalances]) => (
+                           <div key={providerName}>
+                               <h4 className="font-semibold text-sm mb-1">{providerName}</h4>
+                               <div className="rounded-md border">
+                                   <Table>
+                                       <TableBody>
+                                           {providerBalances.map(asset => (
+                                               <TableRow key={asset.id} className="text-xs">
+                                                   <TableCell className="font-medium truncate p-2">{asset.name}</TableCell>
+                                                   <TableCell className="text-right font-mono p-2">
+                                                        {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        <span className="text-muted-foreground ml-1">{asset.currency}</span>
+                                                   </TableCell>
+                                               </TableRow>
+                                           ))}
+                                       </TableBody>
+                                   </Table>
                                </div>
-                           ))
-                        ) : (
-                            <p className="text-sm text-muted-foreground text-center py-10">No asset accounts found.</p>
-                        )}
-                    </div>
-                </ScrollArea>
+                           </div>
+                       ))
+                    ) : (
+                        <p className="text-sm text-muted-foreground text-center py-10">No asset accounts found.</p>
+                    )}
+                </div>
             </CardContent>
         </Card>
     );
