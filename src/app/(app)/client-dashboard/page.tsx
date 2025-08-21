@@ -19,7 +19,9 @@ import { QuickAddCashOutflow } from '@/components/quick-add-cash-outflow';
 import { QuickAddUsdtInflow } from '@/components/quick-add-usdt-inflow';
 import { QuickAddUsdtOutflow } from '@/components/quick-add-usdt-outflow';
 import { Badge } from '@/components/ui/badge';
-import { FinancialRecordsTable } from '@/components/financial-records-table';
+import { ClientCashRecordsTable } from '@/components/client-cash-records-table';
+import { ClientUsdtRecordsTable } from '@/components/client-usdt-records-table';
+
 
 type ActiveAction = 'cash-in' | 'cash-out' | 'usdt-in' | 'usdt-out' | null;
 
@@ -293,11 +295,10 @@ export default function ClientDashboardPage() {
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
                      {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
                      {selectedClient && (
-                        <FinancialRecordsTable 
-                            key={selectedClient.id} // This is crucial for re-rendering
-                            client={selectedClient} 
-                            onTransactionCreated={handleActionSuccess} 
-                        />
+                        <div className="space-y-6">
+                            <ClientCashRecordsTable clientId={selectedClient.id} />
+                            <ClientUsdtRecordsTable clientId={selectedClient.id} />
+                        </div>
                      )}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
@@ -314,3 +315,5 @@ export default function ClientDashboardPage() {
         </div>
     );
 }
+
+    
