@@ -23,7 +23,7 @@ async function getClient(id: string): Promise<Client | null> {
 async function getClientActivityHistory(clientId: string): Promise<ClientActivity[]> {
     const [cashRecordsSnap, usdtRecordsSnap] = await Promise.all([
         get(query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId))),
-        get(query(ref(db, 'records/usdt'), orderByChild('clientId'), equalTo(clientId)))
+        get(query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId)))
     ]);
 
     const history: ClientActivity[] = [];
@@ -121,7 +121,6 @@ async function getServiceProviders(): Promise<ServiceProvider[]> {
 
 
 export default function EditClientPage({ params }: { params: { id: string } }) {
-    const { id } = params;
     const [client, setClient] = React.useState<Client | null>(null);
     const [activityHistory, setActivityHistory] = React.useState<ClientActivity[]>([]);
     const [otherClients, setOtherClients] = React.useState<Client[]>([]);
@@ -132,13 +131,13 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
     React.useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
-            const clientData = await getClient(id);
+            const clientData = await getClient(params.id);
             if (clientData) {
                 setClient(clientData);
                 const [history, others, logs, providers] = await Promise.all([
-                    getClientActivityHistory(id),
+                    getClientActivityHistory(params.id),
                     getOtherClientsWithSameName(clientData),
-                    getClientAuditLogs(id),
+                    getClientAuditLogs(params.id),
                     getServiceProviders()
                 ]);
                 setActivityHistory(history);
@@ -149,7 +148,7 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
             setLoading(false);
         };
         fetchData();
-    }, [id]);
+    }, [params.id]);
 
     if (loading) {
         return (
