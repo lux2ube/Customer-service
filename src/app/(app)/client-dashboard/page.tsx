@@ -231,6 +231,8 @@ export default function ClientDashboardPage() {
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientBalance, setClientBalance] = React.useState(0);
     const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
+    
+    // This state is now only used to re-fetch the *balance*, not the records table.
     const [refreshKey, setRefreshKey] = React.useState(0);
 
     const handleClientSelect = (client: Client | null) => {
@@ -266,11 +268,10 @@ export default function ClientDashboardPage() {
 
         return () => unsubscribe();
 
-    }, [selectedClient]);
+    }, [selectedClient, refreshKey]);
 
     const handleActionSuccess = () => {
-        // Increment key to force FinancialRecordsTable to re-fetch data
-        setRefreshKey(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Triggers balance re-fetch
         setActiveAction(null);
     }
     
@@ -291,7 +292,7 @@ export default function ClientDashboardPage() {
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
                     {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
-                    {selectedClient && <FinancialRecordsTable key={refreshKey} client={selectedClient} onTransactionCreated={handleActionSuccess} />}
+                    {selectedClient && <FinancialRecordsTable client={selectedClient} onTransactionCreated={handleActionSuccess} />}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
                     {activeAction && (

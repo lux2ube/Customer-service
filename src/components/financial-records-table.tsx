@@ -227,7 +227,7 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
             setLoadingRecords(true);
             const fetchedRecords = await getUnifiedClientRecords(clientId);
             setRecords(fetchedRecords);
-            setSelectedRecordIds([]);
+            setSelectedRecordIds([]); // Reset selection when client changes
             setLoadingRecords(false);
         };
 
@@ -255,10 +255,6 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
         };
     }, [client]);
 
-    const handleSelectAll = (checked: boolean) => {
-        setSelectedRecordIds(checked ? records.map(r => r.id) : []);
-    };
-    
     const handleSelectionChange = (id: string, selected: boolean) => {
         setSelectedRecordIds(prev =>
             selected ? [...prev, id] : prev.filter(recId => recId !== id)
@@ -301,7 +297,10 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
                     selectedRecords={records.filter(r => selectedRecordIds.includes(r.id))}
                     allAccounts={allAccounts}
                     calculation={calculation}
-                    onTransactionCreated={onTransactionCreated}
+                    onTransactionCreated={() => {
+                        setSelectedRecordIds([]); // Reset selections on success
+                        onTransactionCreated();
+                    }}
                 />
             )}
         </div>
