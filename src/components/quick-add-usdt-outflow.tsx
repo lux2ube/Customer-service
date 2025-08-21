@@ -35,22 +35,11 @@ export function QuickAddUsdtOutflow({
 
   return (
     <Tabs defaultValue={autoProcessData ? "auto" : "auto"} className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="manual">Manual Record</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="auto">Auto Send</TabsTrigger>
         <TabsTrigger value="match">Match BSCScan</TabsTrigger>
         <TabsTrigger value="manual-out">Manual Out</TabsTrigger>
       </TabsList>
-      <TabsContent value="manual">
-        <QuickUsdtManualForm 
-            client={client} 
-            onPaymentCreated={onRecordCreated} 
-            setIsOpen={setIsOpen} 
-            usdtAccounts={usdtAccounts} 
-            serviceProviders={serviceProviders}
-            onClose={onDialogClose}
-        />
-      </TabsContent>
        <TabsContent value="auto">
         <QuickUsdtAutoForm 
             client={client} 
