@@ -8,6 +8,8 @@ import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
+import { ScrollArea } from './ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface AssetBalance {
     id: string;
@@ -147,3 +149,5 @@ export function AssetBalances() {
         </Card>
     );
 }
+
+    

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React from 'react';
@@ -7,10 +6,10 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database, Download, Globe, MessageSquare, Tag, Settings as SettingsIcon } from "lucide-react";
+import { DollarSign, Activity, Users, ArrowRight, UserPlus, ShieldAlert, Network, PlusCircle, Repeat, RefreshCw, Bot, Users2, History, Link2, ArrowDownToLine, ArrowUpFromLine, DatabaseZap, ListTree, Database, Download, Globe, MessageSquare, Tag, Settings as SettingsIcon, Landmark, Wallet } from "lucide-react";
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, get, startAt, orderByChild } from 'firebase/database';
-import type { Client, Transaction, Account, SmsParsingRule, SmsEndpoint, ServiceProvider, BlacklistItem, TransactionFlag, Settings } from '@/lib/types';
+import type { Client, Transaction, Account, SmsParsingRule, SmsEndpoint, ServiceProvider, BlacklistItem, TransactionFlag, Settings, JournalEntry } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { format, startOfDay, subDays, parseISO, eachDayOfInterval, sub, startOfWeek, endOfWeek, subWeeks, endOfDay } from 'date-fns';
@@ -20,7 +19,15 @@ import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount, backfillCashRecordUsd } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 import { ExportJsonButton } from '@/components/export-json-button';
-import { AssetBalances } from '@/components/asset-balances';
+
+interface AssetBalance {
+    id: string;
+    name: string;
+    currency: string;
+    balance: number;
+    type: 'fiat' | 'crypto';
+}
+
 
 const StatCard = ({ title, value, icon: Icon, loading, subText }: { title: string, value: string, icon: React.ElementType, loading: boolean, subText?: string }) => (
     <Card>
@@ -127,6 +134,7 @@ export default function DashboardPage() {
     const [totalWithdrawals, setTotalWithdrawals] = React.useState(0);
 
     const [dailyVolumeData, setDailyVolumeData] = React.useState<{ name: string; value: number }[]>([]);
+    const [assetBalances, setAssetBalances] = React.useState<AssetBalance[]>([]);
     
     // State for exportable data
     const [exportableClients, setExportableClients] = React.useState<any>(null);
@@ -142,6 +150,8 @@ export default function DashboardPage() {
     React.useEffect(() => {
         const clientsRef = ref(db, 'clients');
         const transactionsRef = ref(db, 'modern_transactions');
+        const accountsRef = ref(db, 'accounts');
+        const journalRef = ref(db, 'journal_entries');
         
         const unsubs: (() => void)[] = [];
 
@@ -154,6 +164,44 @@ export default function DashboardPage() {
         get(ref(db, 'blacklist')).then(snap => snap.exists() && setExportableBlacklist(snap.val()));
         get(ref(db, 'labels')).then(snap => snap.exists() && setExportableLabels(snap.val()));
         get(ref(db, 'settings')).then(snap => snap.exists() && setExportableSettings(snap.val()));
+
+
+        // --- Asset Balances ---
+        unsubs.push(onValue(accountsRef, (accSnapshot) => {
+            if (!accSnapshot.exists()) {
+                setAssetBalances([]);
+                return;
+            }
+            const allAccounts: Record<string, Account> = accSnapshot.val();
+            const assetAccounts = Object.entries(allAccounts)
+                .filter(([, acc]) => acc.type === 'Assets' && !acc.isGroup)
+                .map(([id, acc]) => ({ id, ...acc }));
+
+            unsubs.push(onValue(journalRef, (journalSnapshot) => {
+                const balances: Record<string, number> = {};
+                assetAccounts.forEach(acc => balances[acc.id] = 0);
+
+                if (journalSnapshot.exists()) {
+                    const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
+                    for (const key in allEntries) {
+                        const entry = allEntries[key];
+                        if (balances[entry.debit_account] !== undefined) {
+                            balances[entry.debit_account] += entry.debit_amount;
+                        }
+                        if (balances[entry.credit_account] !== undefined) {
+                            balances[entry.credit_account] -= entry.credit_amount;
+                        }
+                    }
+                }
+                setAssetBalances(assetAccounts.map(acc => ({
+                    id: acc.id,
+                    name: acc.name,
+                    currency: acc.currency || 'N/A',
+                    balance: balances[acc.id] || 0,
+                    type: acc.currency === 'USDT' ? 'crypto' : 'fiat'
+                })));
+            }));
+        }));
 
 
         // Fetch last 5 transactions for display without relying on server-side sort
@@ -296,13 +344,32 @@ export default function DashboardPage() {
     return (
         <div className="space-y-6">
 
-             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 <StatCard title="Total Clients" value={clientCount.toLocaleString()} icon={Users} loading={loading} />
                 <StatCard title="Deposits (30d)" value={`$${totalDeposits.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowDownToLine} loading={loading} />
                 <StatCard title="Withdrawals (30d)" value={`$${totalWithdrawals.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={ArrowUpFromLine} loading={loading} />
                 <StatCard title="Pending Transactions" value={pendingTxs.toLocaleString()} icon={Activity} loading={loading} />
                 <StatCard title="Volume Today" value={`$${totalVolumeToday.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={dayOverDayChange || ''} />
                 <StatCard title="Volume This Week" value={`$${totalVolumeThisWeek.toLocaleString('en-US', {maximumFractionDigits: 0})}`} icon={DollarSign} loading={loading} subText={weekOverWeekChange || ''} />
+            </div>
+
+            <div className="space-y-4">
+                 <h2 className="text-xl font-semibold tracking-tight">Asset Balances</h2>
+                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                     {loading && assetBalances.length === 0 ? (
+                        [...Array(8)].map((_, i) => <Skeleton key={i} className="h-[108px] w-full" />)
+                     ) : (
+                        assetBalances.map(asset => (
+                            <StatCard 
+                                key={asset.id}
+                                title={asset.name}
+                                value={`${asset.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${asset.currency}`}
+                                icon={asset.type === 'crypto' ? Wallet : Landmark}
+                                loading={loading}
+                            />
+                        ))
+                     )}
+                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -343,7 +410,6 @@ export default function DashboardPage() {
                     </Card>
                 </div>
                  <div className="lg:col-span-1 space-y-6">
-                    <AssetBalances />
                     <Card>
                         <CardHeader>
                             <CardTitle>System Actions</CardTitle>
@@ -385,3 +451,5 @@ export default function DashboardPage() {
         </div>
     );
 }
+
+    
