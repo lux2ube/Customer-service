@@ -120,7 +120,7 @@ function ClientSelector({
     );
 }
 
-export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord, clients: Client[] }) {
+export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { record?: UsdtRecord, clients: Client[], cryptoWallets: Account[] }) {
     const { toast } = useToast();
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -136,26 +136,6 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
     const [txHash, setTxHash] = React.useState(record?.txHash || '');
     const [status, setStatus] = React.useState(record?.status || 'Confirmed');
     const [notes, setNotes] = React.useState(record?.notes || '');
-    
-    // State for the wallet dropdown
-    const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
-    const [loadingWallets, setLoadingWallets] = React.useState(true);
-    
-    React.useEffect(() => {
-        setLoadingWallets(true);
-        const accountsRef = ref(db, 'accounts');
-        const unsubscribe = onValue(accountsRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const allAccounts: Account[] = Object.entries(snapshot.val()).map(([id, data]) => ({
-                  id, // preserve the key
-                  ...(data as Account),
-                }));
-                setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
-            }
-            setLoadingWallets(false);
-        });
-        return () => unsubscribe();
-    }, []);
     
     React.useEffect(() => {
         if (!record) {
@@ -219,27 +199,6 @@ export function UsdtManualPaymentForm({ record, clients }: { record?: UsdtRecord
                            <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
                             {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
                         </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="accountId">Paid From (System Wallet)</Label>
-                        <Select name="accountId" required value={accountId} onValueChange={setAccountId} disabled={loadingWallets}>
-                            <SelectTrigger>
-                                <SelectValue placeholder={loadingWallets ? "Loading wallets..." : "Select system wallet..."} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {loadingWallets ? (
-                                    <SelectItem value="loading" disabled>Loading...</SelectItem>
-                                ) : (
-                                    cryptoWallets.map(wallet => (
-                                        <SelectItem key={wallet.id} value={wallet.id}>
-                                            {wallet.name}
-                                        </SelectItem>
-                                    ))
-                                )}
-                            </SelectContent>
-                        </Select>
-                        {state?.errors?.accountId && <p className="text-sm text-destructive">{state.errors.accountId[0]}</p>}
                     </div>
                      
                     <div className="space-y-2">
