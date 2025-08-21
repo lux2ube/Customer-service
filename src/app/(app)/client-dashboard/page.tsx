@@ -7,14 +7,14 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { searchClients, createModernTransaction, type TransactionFormState } from '@/lib/actions';
-import type { Client, JournalEntry, UnifiedFinancialRecord, CryptoFee, Account } from '@/lib/types';
+import { searchClients, createModernTransaction } from '@/lib/actions';
+import type { Client, JournalEntry, UnifiedFinancialRecord, CryptoFee, Account, TransactionFormState } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Check, X, ArrowDown, ArrowUp, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query, limitToLast } from 'firebase/database';
+import { ref, onValue, query, limitToLast, orderByChild } from 'firebase/database';
 import { QuickAddCashInflow } from '@/components/quick-add-cash-inflow';
 import { QuickAddCashOutflow } from '@/components/quick-add-cash-outflow';
 import { QuickAddUsdtInflow } from '@/components/quick-add-usdt-inflow';
@@ -487,7 +487,7 @@ export default function ClientDashboardPage() {
                             allAccounts={allAccounts}
                             calculation={calculation}
                             onTransactionCreated={() => {
-                                handleClientSelect(selectedClient);
+                                if (selectedClient) handleClientSelect(selectedClient);
                                 setSelectedIds([]);
                             }}
                         />
