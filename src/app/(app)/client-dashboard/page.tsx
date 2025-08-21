@@ -231,6 +231,7 @@ export default function ClientDashboardPage() {
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientBalance, setClientBalance] = React.useState(0);
     const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
+    const [refreshKey, setRefreshKey] = React.useState(0);
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
@@ -268,12 +269,8 @@ export default function ClientDashboardPage() {
     }, [selectedClient]);
 
     const handleActionSuccess = () => {
-        if (selectedClient) {
-             // Re-selecting the same client will trigger a re-fetch in the child component if keyed correctly
-             const currentClient = selectedClient;
-             setSelectedClient(null); 
-             setTimeout(() => setSelectedClient(currentClient), 0);
-        }
+        // Increment key to force FinancialRecordsTable to re-fetch data
+        setRefreshKey(prev => prev + 1);
         setActiveAction(null);
     }
     
@@ -294,7 +291,7 @@ export default function ClientDashboardPage() {
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
                     {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
-                    {selectedClient && <FinancialRecordsTable key={selectedClient.id} client={selectedClient} onTransactionCreated={handleActionSuccess} />}
+                    {selectedClient && <FinancialRecordsTable key={refreshKey} client={selectedClient} onTransactionCreated={handleActionSuccess} />}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
                     {activeAction && (
