@@ -11,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { ModernUsdtRecord } from '@/lib/types';
+import type { UsdtRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild } from 'firebase/database';
 import { format } from 'date-fns';
@@ -45,28 +45,35 @@ import { useToast } from '@/hooks/use-toast';
 import { cancelCashPayment } from '@/lib/actions'; // This should be a generic cancel action
 
 
-const statuses: ModernUsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
-const sources: ModernUsdtRecord['source'][] = ['Manual', 'BSCScan'];
-const types: ModernUsdtRecord['type'][] = ['inflow', 'outflow'];
+const statuses: UsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
+const sources: UsdtRecord['source'][] = ['Manual', 'BSCScan'];
+const types: UsdtRecord['type'][] = ['inflow', 'outflow'];
 
-export function ModernUsdtRecordsTable() {
-  const [records, setRecords] = React.useState<ModernUsdtRecord[]>([]);
-  const [loading, setLoading] = React.useState(true);
+export function ModernUsdtRecordsTable({ records: recordsFromProps, clientId }: { records?: UsdtRecord[], clientId?: string }) {
+  const [records, setRecords] = React.useState<UsdtRecord[]>(recordsFromProps || []);
+  const [loading, setLoading] = React.useState(!recordsFromProps);
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [sourceFilter, setSourceFilter] = React.useState('all');
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
-  const [recordToCancel, setRecordToCancel] = React.useState<ModernUsdtRecord | null>(null);
+  const [recordToCancel, setRecordToCancel] = React.useState<UsdtRecord | null>(null);
   const { toast } = useToast();
 
 
   React.useEffect(() => {
-    const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('createdAt'));
+    // If records are passed as props, don't fetch from DB. This is for the client dashboard.
+    if (recordsFromProps) {
+      setRecords(recordsFromProps);
+      setLoading(false);
+      return;
+    }
+
+    const recordsRef = query(ref(db, 'records/usdt'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const list: ModernUsdtRecord[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        const list: UsdtRecord[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
         setRecords(list.reverse()); // Show newest first
       } else {
         setRecords([]);
@@ -75,7 +82,7 @@ export function ModernUsdtRecordsTable() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [recordsFromProps]);
   
   const filteredRecords = React.useMemo(() => {
     return records.filter(r => {
@@ -111,7 +118,7 @@ export function ModernUsdtRecordsTable() {
     });
   }, [records, search, statusFilter, sourceFilter, typeFilter, dateRange]);
   
-  const getStatusVariant = (status: ModernUsdtRecord['status']) => {
+  const getStatusVariant = (status: UsdtRecord['status']) => {
         switch(status) {
             case 'Pending': return 'secondary';
             case 'Used': return 'outline';

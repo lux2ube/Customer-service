@@ -10,7 +10,7 @@ import { UsdtManualReceiptForm } from "@/components/usdt-manual-receipt-form";
 import { UsdtManualPaymentForm } from "@/components/usdt-manual-payment-form";
 
 async function getPageData(recordId: string) {
-    const recordRef = ref(db, `modern_usdt_records/${recordId}`);
+    const recordRef = ref(db, `records/usdt/${recordId}`);
     const clientsRef = ref(db, 'clients');
     const accountsRef = ref(db, 'accounts');
 
