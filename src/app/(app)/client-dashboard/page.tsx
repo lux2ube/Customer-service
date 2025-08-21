@@ -125,7 +125,7 @@ function ClientDetailsCard({ client, balance }: { client: Client | null, balance
             case 'Active': return 'default';
             case 'Inactive': return 'destructive';
             case 'Pending': return 'secondary';
-            default: 'secondary';
+            default: return 'secondary';
         }
     }
 
@@ -236,7 +236,7 @@ export default function ClientDashboardPage() {
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
         setActiveAction(null);
-        setRefreshCounter(c => c + 1);
+        setRefreshCounter(c => c + 1); // Increment to force re-render of child component
     };
     
      React.useEffect(() => {
@@ -307,4 +307,3 @@ export default function ClientDashboardPage() {
         </div>
     );
 }
-
