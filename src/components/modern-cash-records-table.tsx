@@ -44,16 +44,21 @@ import {
 import Link from 'next/link';
 import { cancelCashPayment } from '@/lib/actions';
 import { QuickAddUsdtOutflow } from './quick-add-usdt-outflow';
+import { Checkbox } from './ui/checkbox';
 
 
 const statuses = ['Pending', 'Matched', 'Used', 'Cancelled'];
 const sources = ['Manual', 'SMS'];
 const types = ['inflow', 'outflow'];
 
-export function ModernCashRecordsTable() {
-  const [records, setRecords] = React.useState<ModernCashRecord[]>([]);
+export function ModernCashRecordsTable({ records: recordsFromProps, selectedIds, onSelectionChange }: { 
+    records?: ModernCashRecord[], 
+    selectedIds?: string[], 
+    onSelectionChange?: (id: string, checked: boolean) => void 
+}) {
+  const [records, setRecords] = React.useState<ModernCashRecord[]>(recordsFromProps || []);
   const [clients, setClients] = React.useState<Record<string, Client>>({});
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(!recordsFromProps);
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [sourceFilter, setSourceFilter] = React.useState('all');
@@ -67,6 +72,12 @@ export function ModernCashRecordsTable() {
   const { toast } = useToast();
 
   React.useEffect(() => {
+    if (recordsFromProps) {
+      setRecords(recordsFromProps);
+      setLoading(false);
+      return;
+    }
+    
     const recordsRef = query(ref(db, 'cash_records'), orderByChild('createdAt'));
     const clientsRef = ref(db, 'clients');
 
@@ -101,7 +112,7 @@ export function ModernCashRecordsTable() {
         unsubClients();
         unsubFees();
     };
-  }, []);
+  }, [recordsFromProps]);
   
   const filteredRecords = React.useMemo(() => {
     return records.filter(r => {
@@ -197,51 +208,61 @@ export function ModernCashRecordsTable() {
         />
     )}
     <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
-            <Input 
-                placeholder="Search records..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-sm"
-            />
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full md:w-[150px]"><SelectValue placeholder="Filter by type..." /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    {types.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by source..." /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Sources</SelectItem>
-                    {sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    {statuses.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Popover>
-            <PopoverTrigger asChild>
-                <Button id="date" variant={"outline"} className={cn("w-full md:w-[260px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange?.from ? (dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
-            </PopoverContent>
-            </Popover>
-        </div>
+        {!recordsFromProps && (
+            <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
+                <Input 
+                    placeholder="Search records..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="max-w-sm"
+                />
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-full md:w-[150px]"><SelectValue placeholder="Filter by type..." /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        {types.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by source..." /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Sources</SelectItem>
+                        {sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        {statuses.map(s => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Popover>
+                <PopoverTrigger asChild>
+                    <Button id="date" variant={"outline"} className={cn("w-full md:w-[260px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange?.from ? (dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+                </PopoverContent>
+                </Popover>
+            </div>
+        )}
         
         <div className="rounded-md border bg-card">
             <Table>
             <TableHeader>
                 <TableRow>
+                    {onSelectionChange && selectedIds && (
+                        <TableHead className="w-10">
+                            <Checkbox
+                                checked={filteredRecords.length > 0 && filteredRecords.every(r => selectedIds.includes(r.id))}
+                                onCheckedChange={(checked) => filteredRecords.forEach(r => onSelectionChange(r.id, !!checked))}
+                            />
+                        </TableHead>
+                    )}
                     <TableHead>ID</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
@@ -258,7 +279,15 @@ export function ModernCashRecordsTable() {
                     <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading records...</TableCell></TableRow>
                 ) : filteredRecords.length > 0 ? (
                 filteredRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow key={record.id} data-state={selectedIds?.includes(record.id) && "selected"}>
+                        {onSelectionChange && selectedIds && (
+                             <TableCell>
+                                <Checkbox
+                                    checked={selectedIds.includes(record.id)}
+                                    onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                                />
+                            </TableCell>
+                        )}
                         <TableCell className="font-mono text-xs">{record.id}</TableCell>
                         <TableCell>{record.date && !isNaN(new Date(record.date).getTime()) ? format(new Date(record.date), 'Pp') : 'N/A'}</TableCell>
                         <TableCell>

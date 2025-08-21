@@ -42,14 +42,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import { cancelCashPayment } from '@/lib/actions'; // This should be a generic cancel action
+import { Checkbox } from './ui/checkbox';
 
 
 const statuses: UsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
 const sources: UsdtRecord['source'][] = ['Manual', 'BSCScan'];
 const types: UsdtRecord['type'][] = ['inflow', 'outflow'];
 
-export function ModernUsdtRecordsTable({ records: recordsFromProps, clientId }: { records?: UsdtRecord[], clientId?: string }) {
+export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds, onSelectionChange }: { 
+    records?: UsdtRecord[],
+    selectedIds?: string[], 
+    onSelectionChange?: (id: string, checked: boolean) => void 
+}) {
   const [records, setRecords] = React.useState<UsdtRecord[]>(recordsFromProps || []);
   const [loading, setLoading] = React.useState(!recordsFromProps);
   const [search, setSearch] = React.useState('');
@@ -143,7 +147,8 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, clientId }: 
   return (
     <>
     <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
+       {!recordsFromProps && (
+         <div className="flex flex-col md:flex-row items-center gap-2 py-4 flex-wrap">
             <Input 
                 placeholder="Search records..."
                 value={search}
@@ -183,11 +188,20 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, clientId }: 
             </PopoverContent>
             </Popover>
         </div>
+       )}
         
         <div className="rounded-md border bg-card">
             <Table>
             <TableHeader>
                 <TableRow>
+                     {onSelectionChange && selectedIds && (
+                        <TableHead className="w-10">
+                             <Checkbox
+                                checked={filteredRecords.length > 0 && filteredRecords.every(r => selectedIds.includes(r.id))}
+                                onCheckedChange={(checked) => filteredRecords.forEach(r => onSelectionChange(r.id, !!checked))}
+                             />
+                        </TableHead>
+                    )}
                     <TableHead>ID</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
@@ -203,7 +217,15 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, clientId }: 
                     <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading records...</TableCell></TableRow>
                 ) : filteredRecords.length > 0 ? (
                 filteredRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow key={record.id} data-state={selectedIds?.includes(record.id) && "selected"}>
+                         {onSelectionChange && selectedIds && (
+                             <TableCell>
+                                <Checkbox
+                                    checked={selectedIds.includes(record.id)}
+                                    onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                                />
+                            </TableCell>
+                        )}
                         <TableCell className="font-mono text-xs">{record.id}</TableCell>
                         <TableCell>{record.date && !isNaN(new Date(record.date).getTime()) ? format(new Date(record.date), 'Pp') : 'N/A'}</TableCell>
                         <TableCell>

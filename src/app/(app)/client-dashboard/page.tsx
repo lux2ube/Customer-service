@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -23,8 +24,7 @@ import { ClientCashRecordsTable } from '@/components/client-cash-records-table';
 import { ClientUsdtRecordsTable } from '@/components/client-usdt-records-table';
 import { getUnifiedClientRecords } from '@/lib/actions/transaction';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, useFormStatus } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -363,13 +363,6 @@ export default function ClientDashboardPage() {
     const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
     const [allAccounts, setAllAccounts] = React.useState<Account[]>([]);
     
-    const { calculation } = useTransactionProcessor({
-        selectedRecordIds: selectedIds,
-        records: allRecords,
-        cryptoFees: cryptoFees,
-        transactionType: null,
-    });
-    
     const handleClientSelect = async (client: Client | null) => {
         setSelectedClient(client);
         setAllRecords([]);
@@ -381,6 +374,13 @@ export default function ClientDashboardPage() {
             setLoadingRecords(false);
         }
     };
+    
+    const { calculation } = useTransactionProcessor({
+        selectedRecordIds: selectedIds,
+        records: allRecords,
+        cryptoFees: cryptoFees,
+        transactionType: null,
+    });
     
     React.useEffect(() => {
         if (!selectedClient) {
