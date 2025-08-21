@@ -4,7 +4,6 @@
 
 import * as React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { QuickUsdtManualForm } from './quick-usdt-manual-form';
 import { QuickUsdtAutoForm } from './quick-usdt-auto-form';
 import { MatchUnassignedBscTxForm } from './match-unassigned-bsc-tx-form';
 import type { Client, Account, ServiceProvider } from '@/lib/types';
@@ -56,7 +55,7 @@ export function QuickAddUsdtOutflow({
          <MatchUnassignedBscTxForm client={client} onTxMatched={() => onRecordCreated()} setIsOpen={setIsOpen} />
       </TabsContent>
        <TabsContent value="manual-out">
-         <UsdtManualPaymentForm clients={[client]} />
+         <UsdtManualPaymentForm clientFromProps={client} onFormSubmit={onRecordCreated} />
       </TabsContent>
     </Tabs>
   );

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -11,7 +12,8 @@ import {
    Calendar as CalendarIcon,
    Save,
    Loader2,
-   Check
+   Check,
+   ChevronsUpDown
 } from 'lucide-react';
 
 import { db } from '@/lib/firebase';
@@ -149,10 +151,14 @@ function ClientSelector({
   // ----------------- Main Form -----------------
 export function UsdtManualPaymentForm({
    record,
-   clients
+   clients,
+   clientFromProps, // Client passed in from another component
+   onFormSubmit, // Callback for when form is submitted
  }: {
    record?: UsdtRecord;
-   clients: Client[];
+   clients?: Client[]; // Make clients optional for embedded use case
+   clientFromProps?: Client;
+   onFormSubmit?: () => void;
  }) {
   const { toast } = useToast();
   const router = useRouter();
@@ -164,7 +170,7 @@ export function UsdtManualPaymentForm({
     record?.date ? parseISO(record.date) : undefined
   );
   const [selectedClient, setSelectedClient] = React.useState<Client | null>(
-    () => clients.find(c => c.id === record?.clientId) || null
+    () => clientFromProps || (clients?.find(c => c.id === record?.clientId)) || null
   );
   const [accountId, setAccountId] = React.useState(record?.accountId || '');
   const [recipientAddress, setRecipientAddress] = React.useState(record?.clientWalletAddress || '');
@@ -182,10 +188,10 @@ export function UsdtManualPaymentForm({
     const accountsRef = ref(db, 'accounts');
      const unsubscribe = onValue(accountsRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allAccountsData = snapshot.val();
-        const allAccounts: Account[] = Object.keys(allAccountsData).map(key => ({
-            id: key,
-            ...allAccountsData[key]
+        const allAccountsData: Record<string, Account> = snapshot.val();
+        const allAccounts: Account[] = Object.entries(allAccountsData).map(([id, data]) => ({
+            id,
+            ...(data as Account),
         }));
         setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
       }
@@ -201,12 +207,15 @@ export function UsdtManualPaymentForm({
   React.useEffect(() => {
     if (state?.success) {
       toast({ title: 'Success', description: state.message });
+      if (onFormSubmit) {
+        onFormSubmit();
+      }
        if (record?.id) {
         router.push('/modern-usdt-records');
       } else {
         formRef.current?.reset();
         setDate(new Date());
-        setSelectedClient(null);
+        if (!clientFromProps) setSelectedClient(null);
         setAccountId('');
         setRecipientAddress('');
         setAmount('');
@@ -217,69 +226,71 @@ export function UsdtManualPaymentForm({
     } else if (state?.message) {
       toast({ title: 'Error', description: state.message, variant: 'destructive' });
     }
-  }, [state, toast, record, router]);
+  }, [state, toast, record, router, clientFromProps, onFormSubmit]);
    const isEditing = !!record;
+   const isEmbedded = !!clientFromProps;
    // ----------------- Render -----------------
   return (
     <form action={formAction} ref={formRef}>
       <input type="hidden" name="source" value={record?.source || 'Manual'} />
-       <Card>
-        <CardHeader>
-          <CardTitle>
-            {isEditing ? 'Edit' : 'New'} USDT Manual Payment
-          </CardTitle>
-          <CardDescription>
-            {isEditing
-               ? `Editing record ID: ${record.id}`
-               : 'Record sending USDT to a client manually. This creates an outflow record.'}
-          </CardDescription>
-        </CardHeader>
-         <CardContent className="space-y-4">
+       <Card className={isEmbedded ? "border-none shadow-none" : ""}>
+        {!isEmbedded && (
+            <CardHeader>
+            <CardTitle>
+                {isEditing ? 'Edit' : 'New'} USDT Manual Payment
+            </CardTitle>
+            <CardDescription>
+                {isEditing
+                ? `Editing record ID: ${record.id}`
+                : 'Record sending USDT to a client manually. This creates an outflow record.'}
+            </CardDescription>
+            </CardHeader>
+        )}
+         <CardContent className="space-y-4 pt-6">
           {/* Date + Client */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Date */}
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                     variant="outline"
-                     className={cn(
-                      "w-full justify-start text-left font-normal",
-                       !date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                     mode="single"
-                     selected={date}
-                     onSelect={setDate}
-                     initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <input type="hidden" name="date" value={date?.toISOString() || ''} />
+          {!isEmbedded && (
+            <div className="grid md:grid-cols-2 gap-4">
+                {/* Date */}
+                <div className="space-y-2">
+                <Label>Date</Label>
+                <Popover>
+                    <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !date && "text-muted-foreground"
+                        )}
+                    >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date ? format(date, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                    <Calendar
+                        mode="single"
+                        selected={date}
+                        onSelect={setDate}
+                        initialFocus
+                    />
+                    </PopoverContent>
+                </Popover>
+                </div>
+                {/* Client */}
+                <div className="space-y-2">
+                <Label htmlFor="clientId">Paid To (Client)</Label>
+                <ClientSelector
+                    selectedClient={selectedClient}
+                    onSelect={setSelectedClient}
+                />
+                </div>
             </div>
-             {/* Client */}
-            <div className="space-y-2">
-              <Label htmlFor="clientId">Paid To (Client)</Label>
-              <ClientSelector
-                 selectedClient={selectedClient}
-                onSelect={setSelectedClient}
-              />
-              <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
-              <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
-               {state?.errors?.recipientAddress && (
-                <p className="text-sm text-destructive">
-                  {state.errors.recipientAddress[0]}
-                </p>
-              )}
-            </div>
-          </div>
+          )}
+          
+          <input type="hidden" name="date" value={date?.toISOString() || ''} />
+          <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
+          <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
+
            {/* Wallet */}
           <div className="space-y-2">
             <Label htmlFor="accountId">Paid From (System Wallet)</Label>
