@@ -52,20 +52,18 @@ function escapeTelegramMarkdown(text: any): string {
     return textStr.replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
-export async function sendTelegramNotification(message: string, customChatId?: string) {
+export async function sendTelegramNotification(message: string) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const defaultChatId = process.env.TELEGRAM_CHAT_ID;
-    
-    // Use the custom chat ID if provided, otherwise fall back to the environment variable.
-    const chatId = customChatId || defaultChatId;
+    const chatId = "-1002700770095"; // Always use this group chat ID.
 
-    if (!botToken || !chatId) {
-        console.error("Telegram bot token or Chat ID is not configured.");
+    if (!botToken) {
+        console.error("TELEGRAM_BOT_TOKEN environment variable is not set.");
         return;
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
+    // The message is pre-escaped before being passed to this function now.
     const payload = {
         chat_id: chatId,
         text: message,
@@ -218,7 +216,7 @@ ${escapeTelegramMarkdown(record.rawSms)}
             `;
         }
 
-        await sendTelegramNotification(message, "-1002700770095");
+        await sendTelegramNotification(message);
 
     } catch (e) {
         console.error("Failed to send transaction notification:", e);
