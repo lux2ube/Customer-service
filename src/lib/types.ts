@@ -170,7 +170,7 @@ export interface Account {
     type: 'Assets' | 'Liabilities' | 'Equity' | 'Income' | 'Expenses';
     isGroup: boolean;
     parentId?: string | null;
-    currency?: string;
+    currency?: string | null;
     priority?: number;
     // Balance fields will be calculated properties, not stored directly
 }

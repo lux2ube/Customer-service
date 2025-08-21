@@ -160,14 +160,11 @@ export function ChartOfAccountsTable() {
   };
 
   const renderAccounts = () => {
-    // Filter out individual client sub-accounts to improve performance
-    const displayableAccounts = accounts.filter(acc => acc.parentId !== '6000');
-
-    const accountMap = new Map(displayableAccounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
+    const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as any[] }]));
     const rootAccounts: any[] = [];
 
     // Build the tree structure
-    displayableAccounts.forEach(account => {
+    accounts.forEach(account => {
         const node = accountMap.get(account.id)!;
         if (account.parentId && accountMap.has(account.parentId)) {
             accountMap.get(account.parentId)!.children.push(node);
