@@ -275,9 +275,10 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
     }
 
     try {
-        const [recordSnapshot, clientSnapshot] = await Promise.all([
+        const [recordSnapshot, clientSnapshot, allJournalSnapshot] = await Promise.all([
             get(ref(db, `cash_records/${recordId}`)),
-            get(ref(db, `clients/${clientId}`))
+            get(ref(db, `clients/${clientId}`)),
+            get(ref(db, 'journal_entries')) // Get all journal entries
         ]);
 
         if (!recordSnapshot.exists()) return { success: false, message: "Record not found." };
@@ -285,6 +286,7 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         
         const client = clientSnapshot.val() as Client;
         const record = recordSnapshot.val() as CashRecord;
+        const allJournalEntries: Record<string, JournalEntry> = allJournalSnapshot.val() || {};
 
         const updates: { [key: string]: any } = {};
         updates[`/cash_records/${recordId}/clientId`] = clientId;
@@ -307,6 +309,21 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
             credit_account_name: client.name,
         };
         updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+        
+        // --- Calculate New Balance ---
+        let currentBalance = 0;
+        for (const key in allJournalEntries) {
+            const entry = allJournalEntries[key];
+            if (entry.credit_account === clientAccountId) {
+                currentBalance += entry.amount_usd;
+            }
+            if (entry.debit_account === clientAccountId) {
+                currentBalance -= entry.amount_usd;
+            }
+        }
+        // Add the amount from the new journal entry we are about to create
+        const newBalance = currentBalance + journalEntry.amount_usd;
+
 
         await update(ref(db), updates);
         
@@ -322,6 +339,8 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
 *Client:* ${client.name} (\`${clientId}\`)
 *Transaction:* ${record.type === 'inflow' ? 'INFLOW' : 'OUTFLOW'} of *${amountFormatted}* ${usdFormatted}
 *${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${person}
+*New Balance:* $${newBalance.toFixed(2)} USD
+
 *Original SMS:*
 \`\`\`
 ${record.rawSms}
