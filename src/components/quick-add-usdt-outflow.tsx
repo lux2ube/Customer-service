@@ -8,6 +8,7 @@ import { QuickUsdtManualForm } from './quick-usdt-manual-form';
 import { QuickUsdtAutoForm } from './quick-usdt-auto-form';
 import { MatchUnassignedBscTxForm } from './match-unassigned-bsc-tx-form';
 import type { Client, Account, ServiceProvider } from '@/lib/types';
+import { UsdtManualPaymentForm } from './usdt-manual-payment-form';
 
 interface QuickAddUsdtOutflowProps {
   client: Client;
@@ -34,10 +35,11 @@ export function QuickAddUsdtOutflow({
 
   return (
     <Tabs defaultValue={autoProcessData ? "auto" : "auto"} className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="manual">Manual Record</TabsTrigger>
         <TabsTrigger value="auto">Auto Send</TabsTrigger>
         <TabsTrigger value="match">Match BSCScan</TabsTrigger>
+        <TabsTrigger value="manual-out">Manual Out</TabsTrigger>
       </TabsList>
       <TabsContent value="manual">
         <QuickUsdtManualForm 
@@ -63,6 +65,9 @@ export function QuickAddUsdtOutflow({
       </TabsContent>
       <TabsContent value="match">
          <MatchUnassignedBscTxForm client={client} onTxMatched={() => onRecordCreated()} setIsOpen={setIsOpen} />
+      </TabsContent>
+       <TabsContent value="manual-out">
+         <UsdtManualPaymentForm clients={[client]} />
       </TabsContent>
     </Tabs>
   );
