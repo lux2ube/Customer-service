@@ -11,9 +11,8 @@ import type { Client, Account, ServiceProvider } from '@/lib/types';
 
 interface QuickAddUsdtOutflowProps {
   client: Client;
-  isOpen?: boolean; // Now optional
-  setIsOpen: (open: boolean) => void;
   onRecordCreated: (newRecordId?: string) => void;
+  setIsOpen: (open: boolean) => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
   defaultRecordingAccountId: string;
@@ -28,7 +27,8 @@ export function QuickAddUsdtOutflow({
     usdtAccounts, 
     serviceProviders, 
     defaultRecordingAccountId,
-    autoProcessData
+    autoProcessData,
+    onDialogClose
 }: QuickAddUsdtOutflowProps) {
   if (!client) return null;
 
@@ -46,10 +46,20 @@ export function QuickAddUsdtOutflow({
             setIsOpen={setIsOpen} 
             usdtAccounts={usdtAccounts} 
             serviceProviders={serviceProviders}
+            onClose={onDialogClose}
         />
       </TabsContent>
        <TabsContent value="auto">
-        <QuickUsdtAutoForm client={client} onPaymentSent={onRecordCreated} setIsOpen={setIsOpen} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} autoProcessData={autoProcessData} />
+        <QuickUsdtAutoForm 
+            client={client} 
+            onPaymentSent={onRecordCreated} 
+            setIsOpen={setIsOpen} 
+            usdtAccounts={usdtAccounts} 
+            serviceProviders={serviceProviders} 
+            defaultRecordingAccountId={defaultRecordingAccountId} 
+            autoProcessData={autoProcessData} 
+            onDialogClose={onDialogClose}
+        />
       </TabsContent>
       <TabsContent value="match">
          <MatchUnassignedBscTxForm client={client} onTxMatched={() => onRecordCreated()} setIsOpen={setIsOpen} />

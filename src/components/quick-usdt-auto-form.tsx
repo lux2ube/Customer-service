@@ -6,14 +6,13 @@ import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import type { Client, Account, ServiceProvider } from '@/lib/types';
 import { createSendRequest, type SendRequestState } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, ClipboardPaste, PlusCircle } from 'lucide-react';
+import { Send, Loader2, ClipboardPaste, PlusCircle, X } from 'lucide-react';
 import { ethers } from 'ethers';
 import { get } from 'firebase/database';
 import { db } from '@/lib/firebase';
@@ -30,6 +29,7 @@ interface QuickUsdtAutoFormProps {
   serviceProviders: ServiceProvider[];
   defaultRecordingAccountId: string;
   autoProcessData?: { amount: number, address?: string } | null;
+  onDialogClose?: () => void; // Used to reset auto-process data
 }
 
 function SubmitButton({ disabled }: { disabled?: boolean }) {
@@ -42,7 +42,16 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
     );
 }
 
-export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccounts, serviceProviders, defaultRecordingAccountId, autoProcessData }: QuickUsdtAutoFormProps) {
+export function QuickUsdtAutoForm({ 
+    client, 
+    onPaymentSent, 
+    setIsOpen, 
+    usdtAccounts, 
+    serviceProviders, 
+    defaultRecordingAccountId, 
+    autoProcessData,
+    onDialogClose,
+ }: QuickUsdtAutoFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   useFormHotkeys(formRef);
@@ -71,13 +80,14 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
         toast({ title: 'Success', description: state.message });
         onPaymentSent(state.newRecordId || '');
         setIsOpen(false);
+        if (onDialogClose) onDialogClose();
         formRef.current?.reset();
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
       stateRef.current = state;
     }
-  }, [state, toast, onPaymentSent, setIsOpen]);
+  }, [state, toast, onPaymentSent, setIsOpen, onDialogClose]);
 
   const handlePaste = async () => {
     try {
@@ -101,6 +111,11 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
   const handleSelectSaved = (address: string) => {
     setIsAddingNew(false);
     setAddressInput(address);
+  };
+  
+  const handleClose = () => {
+      setIsOpen(false);
+      if (onDialogClose) onDialogClose();
   };
 
   return (
@@ -160,12 +175,10 @@ export function QuickUsdtAutoForm({ client, onPaymentSent, setIsOpen, usdtAccoun
                 </Alert>
             )}
         </div>
-        <DialogFooter>
-             <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
+        <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={handleClose}>Cancel</Button>
             <SubmitButton disabled={!defaultRecordingAccountId || !activeProvider} />
-        </DialogFooter>
+        </div>
     </form>
   );
 }

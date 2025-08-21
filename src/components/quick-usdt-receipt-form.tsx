@@ -6,20 +6,10 @@ import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Textarea } from './ui/textarea';
-import type { Client, Account, FiatRate } from '@/lib/types';
+import type { Client, Account } from '@/lib/types';
 import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2 } from 'lucide-react';
@@ -126,10 +116,10 @@ export function QuickUsdtReceiptForm({ client, onReceiptCreated, setIsOpen }: Qu
             <Input id="txid" name="txid" placeholder="Optional" />
         </div>
         </div>
-        <DialogFooter>
-        <DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose>
-        <SubmitButton />
-        </DialogFooter>
+        <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setIsOpen(false)}>Cancel</Button>
+            <SubmitButton />
+        </div>
     </form>
   );
 }

@@ -4,15 +4,6 @@
 
 import * as React from 'react';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { QuickCashPaymentForm } from './quick-cash-payment-form';
 import { MatchUnusedSmsForm } from './match-unused-sms-form';
@@ -62,10 +53,10 @@ function CashOperationForm({ client, setIsOpen }: { client: Client, setIsOpen: (
                 <Label htmlFor="op_notes">Notes</Label>
                 <Textarea id="op_notes" name="notes" placeholder="Any specific instructions for the payment." />
             </div>
-            <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary">Cancel</Button></DialogClose>
+            <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setIsOpen(false)}>Cancel</Button>
                 <Button type="submit"><Send className="mr-2 h-4 w-4"/>Send Request</Button>
-            </DialogFooter>
+            </div>
         </form>
     );
 }
@@ -87,15 +78,7 @@ export function QuickAddCashOutflow({ client, onRecordCreated, setIsOpen }: Quic
         <MatchUnusedSmsForm client={client} onSmsMatched={onRecordCreated} setIsOpen={setIsOpen} />
       </TabsContent>
        <TabsContent value="operation">
-        <Dialog>
-             <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>New Cash Operation</DialogTitle>
-                    <DialogDescription>Send a request to the operations team for a cash payment.</DialogDescription>
-                </DialogHeader>
-                <CashOperationForm client={client} setIsOpen={setIsOpen} />
-            </DialogContent>
-        </Dialog>
+          <CashOperationForm client={client} setIsOpen={setIsOpen} />
        </TabsContent>
     </Tabs>
   );

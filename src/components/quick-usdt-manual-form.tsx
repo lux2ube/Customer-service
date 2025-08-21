@@ -1,11 +1,11 @@
 
+
 'use client';
 
 import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 import { useActionState } from 'react';
 import { Button } from './ui/button';
-import { DialogFooter, DialogClose } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import type { Client, Account, ServiceProvider } from '@/lib/types';
@@ -19,6 +19,7 @@ interface QuickUsdtManualFormProps {
   client: Client;
   onPaymentCreated: (newRecordId?: string) => void;
   setIsOpen: (open: boolean) => void;
+  onClose?: () => void;
   usdtAccounts: Account[];
   serviceProviders: ServiceProvider[];
 }
@@ -33,7 +34,7 @@ function SubmitButton({ disabled }: { disabled?: boolean }) {
     );
 }
 
-export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtAccounts, serviceProviders }: QuickUsdtManualFormProps) {
+export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, onClose, usdtAccounts, serviceProviders }: QuickUsdtManualFormProps) {
   const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement>(null);
   useFormHotkeys(formRef);
@@ -70,7 +71,11 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
       if (state.success) {
         toast({ title: 'Success', description: state.message });
         onPaymentCreated(state.newRecordId);
-        setIsOpen(false);
+        if (onClose) {
+            onClose();
+        } else {
+            setIsOpen(false);
+        }
         formRef.current?.reset();
         setSelectedAccountId(usdtAccounts.length > 0 ? usdtAccounts[0].id : '');
         setDynamicFields({});
@@ -79,7 +84,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
       }
       stateRef.current = state;
     }
-  }, [state, toast, onPaymentCreated, setIsOpen, usdtAccounts]);
+  }, [state, toast, onPaymentCreated, setIsOpen, usdtAccounts, onClose]);
 
   const handleDynamicFieldChange = (key: string, value: string) => {
     setDynamicFields(prev => ({ ...prev, [key]: value }));
@@ -142,12 +147,10 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, usdtA
             <Input id="txid" name="txid" placeholder="Optional" />
         </div>
       </div>
-      <DialogFooter>
-        <DialogClose asChild>
-            <Button type="button" variant="secondary">Cancel</Button>
-        </DialogClose>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose || (() => setIsOpen(false))}>Cancel</Button>
         <SubmitButton disabled={!selectedProvider || formulaFields.length === 0} />
-      </DialogFooter>
+      </div>
     </form>
   );
 }
