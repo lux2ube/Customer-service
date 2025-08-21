@@ -112,6 +112,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 const journalDescription = `Synced USDT ${newTxData.type} from ${configName} for ${existingClient.name}`;
                 const journalRef = push(ref(db, 'journal_entries'));
                 
+                const clientNameForJournal = existingClient.name || `Client ${existingClient.id}`;
+
                 const journalEntry: Omit<JournalEntry, 'id'> = {
                     date: newTxData.date,
                     description: journalDescription,
@@ -121,8 +123,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                     credit_amount: newTxData.amount,
                     amount_usd: newTxData.amount,
                     createdAt: new Date().toISOString(),
-                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : existingClient.name,
-                    credit_account_name: newTxData.type === 'inflow' ? existingClient.name : cryptoWalletName,
+                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : clientNameForJournal,
+                    credit_account_name: newTxData.type === 'inflow' ? clientNameForJournal : cryptoWalletName,
                 };
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
 
