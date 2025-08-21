@@ -8,10 +8,10 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { searchClients } from '@/lib/actions';
-import type { Client, JournalEntry, Account, ServiceProvider, UnifiedFinancialRecord } from '@/lib/types';
+import type { Client, JournalEntry } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, Loader2, PlusCircle, ArrowDown, ArrowUp, X } from 'lucide-react';
+import { Check, X, ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query } from 'firebase/database';
@@ -231,12 +231,10 @@ export default function ClientDashboardPage() {
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientBalance, setClientBalance] = React.useState(0);
     const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
-    const [refreshCounter, setRefreshCounter] = React.useState(0);
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
         setActiveAction(null);
-        setRefreshCounter(c => c + 1); // Increment to force re-render of child component
     };
     
      React.useEffect(() => {
@@ -270,7 +268,12 @@ export default function ClientDashboardPage() {
     }, [selectedClient]);
 
     const handleActionSuccess = () => {
-        setRefreshCounter(c => c + 1);
+        if (selectedClient) {
+             // Re-selecting the same client will trigger a re-fetch in the child component if keyed correctly
+             const currentClient = selectedClient;
+             setSelectedClient(null); 
+             setTimeout(() => setSelectedClient(currentClient), 0);
+        }
         setActiveAction(null);
     }
     
@@ -291,7 +294,7 @@ export default function ClientDashboardPage() {
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
                     {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
-                    {selectedClient && <FinancialRecordsTable key={refreshCounter} client={selectedClient} onTransactionCreated={handleActionSuccess} />}
+                    {selectedClient && <FinancialRecordsTable key={selectedClient.id} client={selectedClient} onTransactionCreated={handleActionSuccess} />}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
                     {activeAction && (

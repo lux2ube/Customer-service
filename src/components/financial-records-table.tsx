@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -149,7 +150,7 @@ function TransactionCreator({
                                         <SelectContent>
                                             {expenseAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
                                         </SelectContent>
-                                    </Select>
+                                     </Select>
                                 </RadioGroup>
                             )}
                         </div>
@@ -182,6 +183,12 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
     });
 
     React.useEffect(() => {
+        if (!client || !client.id) {
+            setLoadingRecords(false);
+            setRecords([]);
+            return;
+        };
+
         const fetchClientData = async (clientId: string) => {
             setLoadingRecords(true);
             const fetchedRecords = await getUnifiedClientRecords(clientId);
@@ -190,9 +197,7 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
             setLoadingRecords(false);
         };
 
-        if (client.id) {
-            fetchClientData(client.id);
-        }
+        fetchClientData(client.id);
 
         const accountsRef = ref(db, 'accounts');
         const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
@@ -296,4 +301,3 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
         </div>
     );
 }
-
