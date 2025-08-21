@@ -6,8 +6,10 @@
     "cash_records": {
       ".indexOn": ["clientId", "source", "createdAt"]
     },
-    "modern_usdt_records": {
-      ".indexOn": ["clientId", "createdAt"]
+    "records": {
+      "usdt": {
+        ".indexOn": ["clientId", "createdAt"]
+      }
     },
     "transactions": {
       ".indexOn": ["clientId"]
