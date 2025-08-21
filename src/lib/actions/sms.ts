@@ -286,29 +286,11 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         const client = clientSnapshot.val() as Client;
         const record = recordSnapshot.val() as CashRecord;
         
-        const updates: { [key: string]: any } = {};
-        updates[`/cash_records/${recordId}/clientId`] = clientId;
-        updates[`/cash_records/${recordId}/clientName`] = client.name;
-        updates[`/cash_records/${recordId}/status`] = 'Matched';
-
-        // --- Create Journal Entry on Match ---
-        const journalRef = push(ref(db, 'journal_entries'));
-        const clientAccountId = `6000${clientId}`;
-        const journalEntry: Omit<JournalEntry, 'id'> = {
-            date: new Date().toISOString(),
-            description: `Matched SMS Record #${recordId} to ${client.name}`,
-            debit_account: '7000', // Unmatched Funds
-            credit_account: clientAccountId,
-            debit_amount: record.amount,
-            credit_amount: record.amount,
-            amount_usd: record.amountusd,
-            createdAt: new Date().toISOString(),
-            debit_account_name: 'Unmatched Funds',
-            credit_account_name: client.name,
-        };
-        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
-        
-        await update(ref(db), updates);
+        await update(ref(db, `/cash_records/${recordId}`), {
+            clientId: clientId,
+            clientName: client.name,
+            status: 'Matched'
+        });
         
         await notifyClientTransaction(clientId, client.name, record);
 
@@ -613,5 +595,3 @@ export async function deleteSmsParsingRule(id: string): Promise<{ message?: stri
         return { message: 'Database error: Failed to delete rule.' };
     }
 }
-
-    

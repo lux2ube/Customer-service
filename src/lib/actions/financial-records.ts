@@ -66,9 +66,6 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
 
         const account = accountSnapshot.val() as Account;
         const clientName = clientSnapshot?.exists() ? (clientSnapshot.val() as Client).name : null;
-        const clientAccountId = clientId ? `6000${clientId}` : '7000'; // Default to Unmatched Funds
-        const creditAccountName = clientName || 'Unmatched Funds';
-
 
         // Server-side calculation of amountusd as a fallback
         if (amountusd === 0 && account.currency && account.currency !== 'USD' && fiatRatesSnapshot.exists()) {
@@ -103,29 +100,8 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             createdAt: new Date().toISOString(),
         };
 
-        const updates: { [key: string]: any } = {};
-        updates[`/cash_records/${newId}`] = stripUndefined(recordData);
-        
-        // --- Create Journal Entry ---
-        const journalDescription = `Cash ${type} | ${senderName || recipientName || clientName || 'N/A'}`;
-        const journalRef = push(ref(db, 'journal_entries'));
-        
-        const journalEntry: Omit<JournalEntry, 'id'> = {
-            date: date,
-            description: journalDescription,
-            debit_account: type === 'inflow' ? bankAccountId : clientAccountId,
-            credit_account: type === 'inflow' ? clientAccountId : bankAccountId,
-            debit_amount: amount,
-            credit_amount: amount,
-            amount_usd: amountusd,
-            createdAt: new Date().toISOString(),
-            debit_account_name: type === 'inflow' ? account.name : creditAccountName,
-            credit_account_name: type === 'inflow' ? creditAccountName : account.name,
-        };
-        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
-
-
-        await update(ref(db), updates);
+        const recordRef = ref(db, `/cash_records/${newId}`);
+        await set(recordRef, stripUndefined(recordData));
 
         if (clientId && clientName) {
             await notifyClientTransaction(clientId, clientName, { ...recordData, currency: account.currency! });
@@ -196,28 +172,8 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        const updates: { [key: string]: any } = {};
-        updates[`/records/usdt/${newId}`] = stripUndefined(receiptData);
-
-        // --- Create Journal Entry ---
-        const clientAccountId = `6000${clientId}`;
-        const journalDescription = `USDT Inflow from ${clientName}`;
-        const journalRef = push(ref(db, 'journal_entries'));
-        const journalEntry: Omit<JournalEntry, 'id'> = {
-            date: date,
-            description: journalDescription,
-            debit_account: cryptoWalletId, // Asset increases
-            credit_account: clientAccountId, // Client liability increases
-            debit_amount: amount,
-            credit_amount: amount,
-            amount_usd: amount, // USDT is 1:1 with USD
-            createdAt: new Date().toISOString(),
-            debit_account_name: wallet.name,
-            credit_account_name: clientName,
-        };
-        updates[`/journal_entries/${journalRef.key}`] = journalEntry;
-        
-        await update(ref(db), updates);
+        const recordRef = ref(db, `/records/usdt/${newId}`);
+        await set(recordRef, stripUndefined(receiptData));
 
         await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
 
@@ -302,30 +258,8 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             createdAt: existingRecord.createdAt || new Date().toISOString(),
         };
 
-        const updates: { [key: string]: any } = {};
-        updates[`/records/usdt/${newId}`] = stripUndefined(paymentData);
-        
-        // --- Create Journal Entry ---
-        if (clientId && clientName) {
-            const clientAccountId = `6000${clientId}`;
-            const journalDescription = `USDT Outflow to ${clientName}`;
-            const journalRef = push(ref(db, 'journal_entries'));
-            const journalEntry: Omit<JournalEntry, 'id'> = {
-                date: date,
-                description: journalDescription,
-                debit_account: clientAccountId, // Client liability decreases
-                credit_account: accountId, // Asset decreases
-                debit_amount: amount,
-                credit_amount: amount,
-                amount_usd: amount,
-                createdAt: new Date().toISOString(),
-                debit_account_name: clientName,
-                credit_account_name: accountName,
-            };
-            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
-        }
-
-        await update(ref(db), updates);
+        const recordRef = ref(db, `/records/usdt/${newId}`);
+        await set(recordRef, stripUndefined(paymentData));
 
         if (clientId && clientName) {
             await notifyClientTransaction(clientId, clientName, { ...paymentData, currency: 'USDT', amountusd: amount });
@@ -360,5 +294,3 @@ export async function cancelCashPayment(recordId: string) {
         return { success: false, message: "Failed to cancel payment." };
     }
 }
-
-    
