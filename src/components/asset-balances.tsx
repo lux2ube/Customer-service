@@ -7,7 +7,6 @@ import { ref, onValue } from 'firebase/database';
 import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { cn } from '@/lib/utils';
 
 interface AssetBalance {
@@ -126,15 +125,15 @@ export function AssetBalances() {
                                <div className="rounded-md border p-1">
                                     <div className="space-y-1">
                                         {providerBalances.map(asset => (
-                                            <div key={asset.id} className={cn(
-                                                "flex justify-between items-center p-2 rounded-md text-xs",
-                                                asset.balance > 0 ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
-                                            )}>
+                                            <div key={asset.id} className="flex justify-between items-center p-2 rounded-md text-xs">
                                                 <span className="font-medium truncate">{asset.name}</span>
-                                                <span className="font-mono whitespace-nowrap">
+                                                <div className={cn(
+                                                    "font-mono whitespace-nowrap",
+                                                    asset.balance > 0 ? 'text-green-600' : 'text-red-600'
+                                                )}>
                                                     {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     <span className="text-muted-foreground ml-1">{asset.currency}</span>
-                                                </span>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
