@@ -11,6 +11,7 @@ import {
   CardTitle,
   CardContent,
   CardFooter,
+  CardDescription,
 } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { createModernTransaction, getUnifiedClientRecords } from '@/lib/actions/transaction';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
 import type { Client, UnifiedFinancialRecord, CryptoFee, Account } from '@/lib/types';
-import { ArrowDown, ArrowUp, Loader2, Save } from 'lucide-react';
+import { ArrowDown, ArrowUp, Loader2, Save, Landmark, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
@@ -45,6 +46,40 @@ function SubmitButton() {
             {pending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Create Transaction</>}
         </Button>
     );
+}
+
+function RecordCard({ record, isSelected, onSelectionChange }: { record: UnifiedFinancialRecord; isSelected: boolean; onSelectionChange: (id: string, selected: boolean) => void; }) {
+    return (
+        <div className={cn(
+            "flex items-start gap-3 p-3 border rounded-lg transition-colors cursor-pointer",
+            isSelected ? 'bg-muted border-primary' : 'hover:bg-muted/50'
+        )}>
+            <Checkbox
+                id={record.id}
+                checked={isSelected}
+                onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                className="mt-1"
+            />
+            <Label htmlFor={record.id} className="flex-1 cursor-pointer">
+                <div className="flex justify-between items-start">
+                    <div>
+                         <span className={cn('flex items-center gap-2 text-sm font-semibold', record.type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
+                            {record.type === 'inflow' ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+                            <span>{record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {record.currency}</span>
+                        </span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {format(new Date(record.date), 'PP')}
+                        </p>
+                    </div>
+                     <Badge variant="outline" className="capitalize text-xs font-normal">{record.status}</Badge>
+                </div>
+                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                    {record.category === 'fiat' ? <Landmark className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
+                    <span>{record.bankAccountName || record.cryptoWalletName || record.source}</span>
+                </div>
+            </Label>
+        </div>
+    )
 }
 
 
@@ -236,56 +271,28 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
             <Card>
                 <CardHeader>
                     <CardTitle>Financial Records</CardTitle>
+                    <CardDescription>Select records to consolidate into a single transaction.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {loadingRecords ? (
                          <Skeleton className="h-48 w-full" />
                     ) : (
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                         <TableHead className="w-12">
-                                            <Checkbox
-                                                checked={selectedRecordIds.length === records.length && records.length > 0}
-                                                onCheckedChange={handleSelectAll}
-                                            />
-                                        </TableHead>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Category</TableHead>
-                                        <TableHead className="text-right">Amount</TableHead>
-                                        <TableHead>Status</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {records.length > 0 ? (
-                                        records.map(record => (
-                                            <TableRow key={record.id}>
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedRecordIds.includes(record.id)}
-                                                        onCheckedChange={(checked) => handleSelectionChange(record.id, !!checked)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="text-xs">{format(new Date(record.date), 'PP')}</TableCell>
-                                                <TableCell>
-                                                     <span className={cn('flex items-center gap-1 text-xs', record.type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
-                                                        {record.type === 'inflow' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
-                                                        {record.type}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="capitalize text-xs">{record.category}</TableCell>
-                                                <TableCell className="text-right font-mono text-xs">{record.amount.toLocaleString()} {record.currency}</TableCell>
-                                                <TableCell><Badge variant="outline" className="capitalize text-xs font-normal">{record.status}</Badge></TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No records found for this client.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                        records.length > 0 ? (
+                            <div className="space-y-2">
+                                {records.map(record => (
+                                    <RecordCard
+                                        key={record.id}
+                                        record={record}
+                                        isSelected={selectedRecordIds.includes(record.id)}
+                                        onSelectionChange={handleSelectionChange}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                                No available financial records for this client.
+                            </div>
+                        )
                     )}
                 </CardContent>
             </Card>
