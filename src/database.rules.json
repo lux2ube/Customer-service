@@ -1,0 +1,30 @@
+
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "cash_records": {
+      ".indexOn": ["clientId", "source", "createdAt"]
+    },
+    "modern_usdt_records": {
+        ".indexOn": ["clientId", "createdAt"]
+    },
+    "transactions": {
+      ".indexOn": ["clientId"]
+    },
+    "send_requests": {
+        ".indexOn": "timestamp"
+    },
+    "rate_history": {
+      "fiat_rates": {
+        ".indexOn": "timestamp"
+      },
+      "crypto_rates": {
+        ".indexOn": "timestamp"
+      },
+      "crypto_fees": {
+        ".indexOn": "timestamp"
+      }
+    }
+  }
+}
