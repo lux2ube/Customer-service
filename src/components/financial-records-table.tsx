@@ -217,11 +217,11 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
     });
 
     React.useEffect(() => {
-        if (!client || !client.id) {
-            setLoadingRecords(false);
+        if (!client?.id) {
             setRecords([]);
+            setLoadingRecords(false);
             return;
-        };
+        }
 
         const fetchClientData = async (clientId: string) => {
             setLoadingRecords(true);
@@ -245,7 +245,8 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
 
         const unsubFees = onValue(feesRef, (snapshot) => {
             if (snapshot.exists()) {
-                setCryptoFees(Object.values(snapshot.val())[0]);
+                const data = snapshot.val();
+                setCryptoFees(data[Object.keys(data)[0]]);
             }
         });
 

@@ -291,8 +291,8 @@ export default function ClientDashboardPage() {
             <div className="grid lg:grid-cols-3 gap-6 items-start">
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
-                    {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
-                    {selectedClient && <FinancialRecordsTable client={selectedClient} onTransactionCreated={handleActionSuccess} />}
+                     {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
+                     {selectedClient && <FinancialRecordsTable client={selectedClient} onTransactionCreated={handleActionSuccess} />}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
                     {activeAction && (
