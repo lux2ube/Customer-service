@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -232,12 +231,13 @@ export default function ClientDashboardPage() {
     const [clientBalance, setClientBalance] = React.useState(0);
     const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
     
-    // This state is now only used to re-fetch the *balance*, not the records table.
     const [refreshKey, setRefreshKey] = React.useState(0);
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
         setActiveAction(null);
+        // Increment refresh key to trigger balance re-fetch and signal to child components
+        setRefreshKey(prev => prev + 1);
     };
     
      React.useEffect(() => {
@@ -271,7 +271,7 @@ export default function ClientDashboardPage() {
     }, [selectedClient, refreshKey]);
 
     const handleActionSuccess = () => {
-        setRefreshKey(prev => prev + 1); // Triggers balance re-fetch
+        setRefreshKey(prev => prev + 1);
         setActiveAction(null);
     }
     
@@ -292,7 +292,13 @@ export default function ClientDashboardPage() {
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
                      {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
-                     {selectedClient && <FinancialRecordsTable client={selectedClient} onTransactionCreated={handleActionSuccess} />}
+                     {selectedClient && (
+                        <FinancialRecordsTable 
+                            key={selectedClient.id} // This is crucial for re-rendering
+                            client={selectedClient} 
+                            onTransactionCreated={handleActionSuccess} 
+                        />
+                     )}
                 </div>
                 <div className="lg:col-span-1 space-y-6">
                     {activeAction && (

@@ -216,12 +216,6 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
     });
 
     React.useEffect(() => {
-        if (!client?.id) {
-            setRecords([]);
-            setLoadingRecords(false);
-            return;
-        }
-
         const fetchClientData = async (clientId: string) => {
             setLoadingRecords(true);
             const fetchedRecords = await getUnifiedClientRecords(clientId);
@@ -230,8 +224,15 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
             setLoadingRecords(false);
         };
 
-        fetchClientData(client.id);
+        if (client?.id) {
+            fetchClientData(client.id);
+        } else {
+            setRecords([]);
+            setLoadingRecords(false);
+        }
+    }, [client]);
 
+    React.useEffect(() => {
         const accountsRef = ref(db, 'accounts');
         const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
 
@@ -253,7 +254,7 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
             unsubAccounts();
             unsubFees();
         };
-    }, [client]);
+    }, []);
 
     const handleSelectionChange = (id: string, selected: boolean) => {
         setSelectedRecordIds(prev =>
@@ -298,7 +299,6 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
                     allAccounts={allAccounts}
                     calculation={calculation}
                     onTransactionCreated={() => {
-                        setSelectedRecordIds([]); // Reset selections on success
                         onTransactionCreated();
                     }}
                 />
