@@ -130,7 +130,6 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
     // Form state managed here
     const [date, setDate] = React.useState<Date | undefined>(record?.date ? parseISO(record.date) : undefined);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(() => clients.find(c => c.id === record?.clientId) || null);
-    const [accountId, setAccountId] = React.useState(record?.accountId || '');
     const [recipientAddress, setRecipientAddress] = React.useState(record?.clientWalletAddress || '');
     const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
     const [txHash, setTxHash] = React.useState(record?.txHash || '');
@@ -152,7 +151,6 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                 formRef.current?.reset();
                 setDate(new Date());
                 setSelectedClient(null);
-                setAccountId('');
                 setRecipientAddress('');
                 setAmount('');
                 setTxHash('');
@@ -169,6 +167,8 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
     return (
         <form action={formAction} ref={formRef}>
              <input type="hidden" name="source" value={record?.source || 'Manual'} />
+             {/* The accountId is now hardcoded or needs to be determined differently */}
+             <input type="hidden" name="accountId" value={record?.accountId || '1003'} />
              <Card>
                 <CardHeader>
                     <CardTitle>{isEditing ? 'Edit' : 'New'} USDT Manual Payment</CardTitle>
@@ -197,7 +197,7 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                             />
                            <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
                            <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
-                            {state?.errors?.recipientAddress && <p className="text-sm text-destructive">{state.errors.recipientAddress[0]}</p>}
+                            {state?.errors?.clientId && <p className="text-sm text-destructive">{state.errors.clientId[0]}</p>}
                         </div>
                     </div>
                      
