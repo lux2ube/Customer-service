@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import * as React from 'react';
@@ -7,8 +6,8 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { searchClients, createModernTransaction } from '@/lib/actions';
-import type { Client, JournalEntry, UnifiedFinancialRecord, CryptoFee, Account, TransactionFormState } from '@/lib/types';
+import { createModernTransaction, searchClients } from '@/lib/actions';
+import type { Client, JournalEntry, UnifiedFinancialRecord, CryptoFee, Account } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Check, X, ArrowDown, ArrowUp, Loader2, Save } from 'lucide-react';
@@ -24,7 +23,8 @@ import { ClientCashRecordsTable } from '@/components/client-cash-records-table';
 import { ClientUsdtRecordsTable } from '@/components/client-usdt-records-table';
 import { getUnifiedClientRecords } from '@/lib/actions/transaction';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
-import { useActionState, useFormStatus } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -507,5 +507,3 @@ export default function ClientDashboardPage() {
         </div>
     );
 }
-
-    
