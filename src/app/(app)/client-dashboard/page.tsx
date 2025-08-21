@@ -12,7 +12,7 @@ import { searchClients } from '@/lib/actions';
 import type { Client, UnifiedFinancialRecord, JournalEntry, Account, ServiceProvider } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, ChevronsUpDown, Loader2, PlusCircle, ArrowDown, ArrowUp } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, PlusCircle, ArrowDown, ArrowUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getUnifiedClientRecords } from '@/lib/actions/transaction';
 import { db } from '@/lib/firebase';
@@ -24,6 +24,8 @@ import { QuickAddCashInflow } from '@/components/quick-add-cash-inflow';
 import { QuickAddCashOutflow } from '@/components/quick-add-cash-outflow';
 import { QuickAddUsdtInflow } from '@/components/quick-add-usdt-inflow';
 import { QuickAddUsdtOutflow } from '@/components/quick-add-usdt-outflow';
+
+type ActiveAction = 'cash-in' | 'cash-out' | 'usdt-in' | 'usdt-out' | null;
 
 function ClientSelector({ selectedClient, onSelect }: { selectedClient: Client | null; onSelect: (client: Client | null) => void; }) {
     const [open, setIsOpen] = React.useState(false);
@@ -145,59 +147,92 @@ function ClientDetailsCard({ client, balance }: { client: Client | null, balance
     )
 }
 
-function ActionsCard({ client, onActionSuccess, usdtAccounts, serviceProviders, defaultRecordingAccountId }: { 
+function ActionsCard({ client, onActionSelect }: { 
     client: Client | null, 
+    onActionSelect: (action: ActiveAction) => void
+}) {
+    if (!client) return null;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <Button variant="outline" onClick={() => onActionSelect('cash-in')}>
+                    <ArrowDown className="mr-2 h-4 w-4 text-green-500" />
+                    Cash Inflow
+                </Button>
+                <Button variant="outline" onClick={() => onActionSelect('cash-out')}>
+                     <ArrowUp className="mr-2 h-4 w-4 text-red-500" />
+                    Cash Outflow
+                </Button>
+                 <Button variant="outline" onClick={() => onActionSelect('usdt-in')}>
+                     <ArrowDown className="mr-2 h-4 w-4 text-green-500" />
+                    USDT Inflow
+                </Button>
+                 <Button variant="outline" onClick={() => onActionSelect('usdt-out')}>
+                     <ArrowUp className="mr-2 h-4 w-4 text-red-500" />
+                    USDT Outflow
+                </Button>
+            </CardContent>
+        </Card>
+    );
+}
+
+function ActionSection({ 
+    activeAction, 
+    client, 
+    onClose, 
+    onActionSuccess,
+    usdtAccounts,
+    serviceProviders,
+    defaultRecordingAccountId
+}: {
+    activeAction: ActiveAction,
+    client: Client | null,
+    onClose: () => void,
     onActionSuccess: () => void,
     usdtAccounts: Account[],
     serviceProviders: ServiceProvider[],
     defaultRecordingAccountId: string
 }) {
-    const [isCashInOpen, setIsCashInOpen] = React.useState(false);
-    const [isCashOutOpen, setIsCashOutOpen] = React.useState(false);
-    const [isUsdtInOpen, setIsUsdtInOpen] = React.useState(false);
-    const [isUsdtOutOpen, setIsUsdtOutOpen] = React.useState(false);
-
-    if (!client) return null;
+    if (!activeAction || !client) return null;
+    
+    const titles: Record<NonNullable<ActiveAction>, string> = {
+        'cash-in': 'Add Cash Inflow',
+        'cash-out': 'Add Cash Outflow',
+        'usdt-in': 'Add USDT Inflow',
+        'usdt-out': 'Add USDT Outflow',
+    };
 
     return (
-         <>
-            <QuickAddCashInflow client={client} isOpen={isCashInOpen} setIsOpen={setIsCashInOpen} onRecordCreated={onActionSuccess} />
-            <QuickAddCashOutflow client={client} isOpen={isCashOutOpen} setIsOpen={setIsCashOutOpen} onRecordCreated={onActionSuccess} />
-            <QuickAddUsdtInflow client={client} isOpen={isUsdtInOpen} setIsOpen={setIsUsdtInOpen} onRecordCreated={onActionSuccess} />
-            <QuickAddUsdtOutflow client={client} isOpen={isUsdtOutOpen} setIsOpen={setIsUsdtOutOpen} onRecordCreated={onActionSuccess} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} />
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                    <Button variant="outline" onClick={() => setIsCashInOpen(true)}>
-                        <ArrowDown className="mr-2 h-4 w-4 text-green-500" />
-                        Cash Inflow
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>{titles[activeAction]} for {client.name}</CardTitle>
+                    <Button variant="ghost" size="icon" onClick={onClose}>
+                        <X className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" onClick={() => setIsCashOutOpen(true)}>
-                         <ArrowUp className="mr-2 h-4 w-4 text-red-500" />
-                        Cash Outflow
-                    </Button>
-                     <Button variant="outline" onClick={() => setIsUsdtInOpen(true)}>
-                         <ArrowDown className="mr-2 h-4 w-4 text-green-500" />
-                        USDT Inflow
-                    </Button>
-                     <Button variant="outline" onClick={() => setIsUsdtOutOpen(true)}>
-                         <ArrowUp className="mr-2 h-4 w-4 text-red-500" />
-                        USDT Outflow
-                    </Button>
-                </CardContent>
-            </Card>
-        </>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {activeAction === 'cash-in' && <QuickAddCashInflow client={client} onRecordCreated={onActionSuccess} setIsOpen={onClose} />}
+                {activeAction === 'cash-out' && <QuickAddCashOutflow client={client} onRecordCreated={onActionSuccess} setIsOpen={onClose} />}
+                {activeAction === 'usdt-in' && <QuickAddUsdtInflow client={client} onRecordCreated={onActionSuccess} setIsOpen={onClose} />}
+                {activeAction === 'usdt-out' && <QuickAddUsdtOutflow client={client} onRecordCreated={onActionSuccess} setIsOpen={onClose} usdtAccounts={usdtAccounts} serviceProviders={serviceProviders} defaultRecordingAccountId={defaultRecordingAccountId} />}
+            </CardContent>
+        </Card>
     );
 }
+
 
 export default function ClientDashboardPage() {
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [records, setRecords] = React.useState<UnifiedFinancialRecord[]>([]);
     const [loadingRecords, setLoadingRecords] = React.useState(false);
     const [clientBalance, setClientBalance] = React.useState(0);
+    const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
     
     // State for data needed by QuickAddUsdtOutflow
     const [usdtAccounts, setUsdtAccounts] = React.useState<Account[]>([]);
@@ -216,6 +251,7 @@ export default function ClientDashboardPage() {
 
     const handleClientSelect = (client: Client | null) => {
         setSelectedClient(client);
+        setActiveAction(null);
         if (client) {
             fetchClientData(client.id);
         } else {
@@ -286,6 +322,17 @@ export default function ClientDashboardPage() {
         };
     }, []);
 
+    const handleActionSuccess = () => {
+        if (selectedClient) {
+            fetchClientData(selectedClient.id);
+        }
+        setActiveAction(null);
+    }
+    
+    const handleActionSelect = (action: ActiveAction) => {
+        setActiveAction(prev => prev === action ? null : action);
+    };
+
     return (
         <div className="space-y-6">
             <PageHeader
@@ -298,7 +345,8 @@ export default function ClientDashboardPage() {
             <div className="grid lg:grid-cols-3 gap-6 items-start">
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
-                    <Card>
+                    {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
+                     <Card>
                         <CardHeader>
                             <CardTitle>Financial Records</CardTitle>
                         </CardHeader>
@@ -342,17 +390,19 @@ export default function ClientDashboardPage() {
                     </Card>
                 </div>
                 <div className="lg:col-span-1">
-                    <ActionsCard 
-                        client={selectedClient} 
-                        onActionSuccess={() => selectedClient && fetchClientData(selectedClient.id)} 
-                        usdtAccounts={usdtAccounts}
-                        serviceProviders={serviceProviders}
-                        defaultRecordingAccountId={defaultRecordingAccountId}
-                    />
+                    {activeAction && (
+                         <ActionSection
+                            activeAction={activeAction}
+                            client={selectedClient}
+                            onClose={() => setActiveAction(null)}
+                            onActionSuccess={handleActionSuccess}
+                            usdtAccounts={usdtAccounts}
+                            serviceProviders={serviceProviders}
+                            defaultRecordingAccountId={defaultRecordingAccountId}
+                        />
+                    )}
                 </div>
             </div>
         </div>
     );
 }
-
-    

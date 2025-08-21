@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -24,10 +25,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Send } from 'lucide-react';
 
 interface QuickAddCashOutflowProps {
-  client: Client | null;
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
+  client: Client;
   onRecordCreated: () => void;
+  setIsOpen: (open: boolean) => void;
 }
 
 function CashOperationForm({ client, setIsOpen }: { client: Client, setIsOpen: (open: boolean) => void }) {
@@ -70,35 +70,33 @@ function CashOperationForm({ client, setIsOpen }: { client: Client, setIsOpen: (
     );
 }
 
-export function QuickAddCashOutflow({ client, isOpen, setIsOpen, onRecordCreated }: QuickAddCashOutflowProps) {
+export function QuickAddCashOutflow({ client, onRecordCreated, setIsOpen }: QuickAddCashOutflowProps) {
   if (!client) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add Cash Outflow for {client.name}</DialogTitle>
-          <DialogDescription>
-            Choose to record a manual payment, match an SMS, or request a new cash payment operation.
-          </DialogDescription>
-        </DialogHeader>
-        <Tabs defaultValue="manual" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="manual">Manual Payment</TabsTrigger>
-            <TabsTrigger value="sms">Match SMS</TabsTrigger>
-            <TabsTrigger value="operation">New Operation</TabsTrigger>
-          </TabsList>
-          <TabsContent value="manual">
-            <QuickCashPaymentForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
-          </TabsContent>
-          <TabsContent value="sms">
-            <MatchUnusedSmsForm client={client} onSmsMatched={onRecordCreated} setIsOpen={setIsOpen} />
-          </TabsContent>
-           <TabsContent value="operation">
-            <CashOperationForm client={client} setIsOpen={setIsOpen} />
-           </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+    <Tabs defaultValue="manual" className="w-full">
+      <TabsList className="grid w-full grid-cols-3">
+        <TabsTrigger value="manual">Manual Payment</TabsTrigger>
+        <TabsTrigger value="sms">Match SMS</TabsTrigger>
+        <TabsTrigger value="operation">New Operation</TabsTrigger>
+      </TabsList>
+      <TabsContent value="manual">
+        <QuickCashPaymentForm client={client} onPaymentCreated={onRecordCreated} setIsOpen={setIsOpen} />
+      </TabsContent>
+      <TabsContent value="sms">
+        <MatchUnusedSmsForm client={client} onSmsMatched={onRecordCreated} setIsOpen={setIsOpen} />
+      </TabsContent>
+       <TabsContent value="operation">
+        <Dialog>
+             <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>New Cash Operation</DialogTitle>
+                    <DialogDescription>Send a request to the operations team for a cash payment.</DialogDescription>
+                </DialogHeader>
+                <CashOperationForm client={client} setIsOpen={setIsOpen} />
+            </DialogContent>
+        </Dialog>
+       </TabsContent>
+    </Tabs>
   );
 }
