@@ -8,7 +8,6 @@ import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 interface AssetBalance {
@@ -117,27 +116,28 @@ export function AssetBalances() {
                 <CardDescription>Real-time overview of all asset accounts by provider.</CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="space-y-4">
+                 <div className="space-y-4">
                     {loading ? (
-                       [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
+                       [...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
                     ) : Object.keys(balances).length > 0 ? (
                        Object.entries(balances).map(([providerName, providerBalances]) => (
                            <div key={providerName}>
-                               <h4 className="font-semibold text-sm mb-1">{providerName}</h4>
-                               <div className="rounded-md border">
-                                   <Table>
-                                       <TableBody>
-                                           {providerBalances.map(asset => (
-                                               <TableRow key={asset.id} className="text-xs">
-                                                   <TableCell className="font-medium truncate p-2">{asset.name}</TableCell>
-                                                   <TableCell className="text-right font-mono p-2">
-                                                        {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                        <span className="text-muted-foreground ml-1">{asset.currency}</span>
-                                                   </TableCell>
-                                               </TableRow>
-                                           ))}
-                                       </TableBody>
-                                   </Table>
+                               <h4 className="font-semibold text-sm mb-1 px-1">{providerName}</h4>
+                               <div className="rounded-md border p-1">
+                                    <div className="space-y-1">
+                                        {providerBalances.map(asset => (
+                                            <div key={asset.id} className={cn(
+                                                "flex justify-between items-center p-2 rounded-md text-xs",
+                                                asset.balance > 0 ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"
+                                            )}>
+                                                <span className="font-medium truncate">{asset.name}</span>
+                                                <span className="font-mono whitespace-nowrap">
+                                                    {asset.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    <span className="text-muted-foreground ml-1">{asset.currency}</span>
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
                                </div>
                            </div>
                        ))
@@ -149,5 +149,3 @@ export function AssetBalances() {
         </Card>
     );
 }
-
-    
