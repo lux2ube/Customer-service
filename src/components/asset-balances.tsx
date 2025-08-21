@@ -120,7 +120,7 @@ export function AssetBalances() {
                 <ScrollArea className="h-72 pr-3">
                     <div className="space-y-4">
                         {loading ? (
-                           [...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)
+                           [...Array(3)].map((_, i) => <Skeleton key={`skel-${i}`} className="h-24 w-full" />)
                         ) : Object.keys(balances).length > 0 ? (
                            Object.entries(balances).map(([providerName, providerBalances]) => (
                                <div key={providerName}>
