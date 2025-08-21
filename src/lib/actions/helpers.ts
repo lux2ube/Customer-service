@@ -44,32 +44,31 @@ export async function logAction(
 
 // --- Notification Helper ---
 
-function escapeTelegramMarkdown(text: string | number | null | undefined): string {
+function escapeTelegramMarkdown(text: any): string {
     if (text === null || text === undefined) return '';
     const textStr = String(text);
     // Escape characters for MarkdownV2
-    const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+    const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
     return textStr.replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
 export async function sendTelegramNotification(message: string, customChatId?: string) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const defaultChatId = process.env.TELEGRAM_CHAT_ID;
+    
+    // Use the custom chat ID if provided, otherwise fall back to the environment variable.
     const chatId = customChatId || defaultChatId;
 
     if (!botToken || !chatId) {
-        console.error("Telegram bot token or Chat ID is not configured in environment variables.");
+        console.error("Telegram bot token or Chat ID is not configured.");
         return;
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
-    // We remove the backticks from the markdown escape because they are used for code blocks
-    const safeMessage = message.replace(/`/g, "'");
-
     const payload = {
         chat_id: chatId,
-        text: safeMessage,
+        text: message,
         parse_mode: 'MarkdownV2',
     };
 
@@ -179,7 +178,7 @@ export async function notifyClientTransaction(
 
     try {
         const clientAccountId = `6000${clientId}`;
-        const journalQuery = query(ref(db, 'journal_entries'), orderByChild('credit_account'), equalTo(clientAccountId));
+        const journalQuery = query(ref(db, 'journal_entries'));
         const journalSnapshot = await get(journalQuery);
         
         let balance = 0;
@@ -196,22 +195,18 @@ export async function notifyClientTransaction(
             }
         }
         
-        // Add the current transaction's amount to the balance before notifying
-        const currentTxAmountUsd = record.type === 'inflow' ? record.amountusd : -record.amountusd;
-        const newBalance = balance + currentTxAmountUsd;
-
-        const amountFormatted = `${record.amount.toLocaleString()} ${record.currency}`;
-        const usdFormatted = `($${record.amountusd.toFixed(2)} USD)`;
-        const flowDirection = record.type === 'inflow' ? 'from' : 'to';
-        const person = record.senderName || record.recipientName;
+        const amountFormatted = escapeTelegramMarkdown(`${record.amount.toLocaleString()} ${record.currency}`);
+        const usdFormatted = escapeTelegramMarkdown(`($${record.amountusd.toFixed(2)} USD)`);
+        const person = escapeTelegramMarkdown(record.senderName || record.recipientName);
+        const newBalanceFormatted = escapeTelegramMarkdown(`$${balance.toFixed(2)} USD`);
 
         let message = `
-✅ *${record.source} Record Matched/Created*
+✅ *${escapeTelegramMarkdown(record.source)} Record Matched/Created*
 
-*Client:* ${escapeTelegramMarkdown(clientName)} (\`${clientId}\`)
+*Client:* ${escapeTelegramMarkdown(clientName)} \`(${escapeTelegramMarkdown(clientId)})\`
 *Transaction:* ${record.type.toUpperCase()} of *${amountFormatted}* ${usdFormatted}
-*${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${escapeTelegramMarkdown(person)}
-*New Balance:* $${newBalance.toFixed(2)} USD
+*${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${person}
+*New Balance:* ${newBalanceFormatted}
         `;
         
         if (record.source === 'SMS' && record.rawSms) {
