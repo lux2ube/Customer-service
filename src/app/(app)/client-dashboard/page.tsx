@@ -3,6 +3,7 @@
 'use client';
 
 import * as React from 'react';
+import { useFormStatus } from 'react-dom';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
 import { useActionState } from 'react';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
@@ -234,7 +235,7 @@ function ActionSection({
 }
 
 function SubmitButton() {
-    const { pending } = React.useFormStatus();
+    const { pending } = useFormStatus();
     return (
         <Button type="submit" disabled={pending}>
             {pending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Create Transaction</>}
