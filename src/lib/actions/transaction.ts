@@ -30,13 +30,13 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
+        const allowedStatuses = ['Pending', 'Matched', 'Confirmed'];
 
         if (cashRecordsSnapshot.exists()) {
             const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
             for (const id in allCashRecords) {
                 const record = allCashRecords[id];
-                if (record.status === 'Used' || record.status === 'Cancelled') continue;
-                if (record.status !== 'Matched' && record.status !== 'Pending' && record.status !== 'Confirmed') continue;
+                if (!allowedStatuses.includes(record.status)) continue;
                 
                 unifiedRecords.push({
                     id,
@@ -59,8 +59,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
-                if (record.status === 'Used' || record.status === 'Cancelled') continue;
-                if (record.status !== 'Matched' && record.status !== 'Pending' && record.status !== 'Confirmed') continue;
+                if (!allowedStatuses.includes(record.status)) continue;
 
                  unifiedRecords.push({
                     id,
