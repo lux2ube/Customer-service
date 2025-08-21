@@ -35,38 +35,78 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
 function ClientSelector({
   selectedClient,
   onSelect,
-  clients
 }: {
   selectedClient: Client | null;
   onSelect: (client: Client | null) => void;
-  clients: Client[];
 }) {
     const [open, setOpen] = React.useState(false);
-    const [search, setSearch] = React.useState('');
+    const [inputValue, setInputValue] = React.useState(selectedClient?.name || '');
+    const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        setInputValue(selectedClient?.name || '');
+    }, [selectedClient]);
+
+    React.useEffect(() => {
+        if (inputValue.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsLoading(true);
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+
+        debounceTimeoutRef.current = setTimeout(async () => {
+            const results = await searchClients(inputValue);
+            setSearchResults(results);
+            setIsLoading(false);
+        }, 300);
+
+        return () => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current);
+            }
+        };
+    }, [inputValue]);
     
-    const filteredClients = React.useMemo(() => {
-        if (!search) return clients.slice(0, 100);
-        return clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
-    }, [search, clients]);
+    const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(', ') : phone || '';
+
+    const handleSelect = (client: Client) => {
+        onSelect(client);
+        setOpen(false);
+    };
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                    {selectedClient ? selectedClient.name : "Select a client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                 <div className="relative w-full">
+                    <Command shouldFilter={false}>
+                        <CommandInput
+                            placeholder="Search client by name or phone..."
+                            value={inputValue}
+                            onValueChange={setInputValue}
+                        />
+                    </Command>
+                </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
-                    <CommandInput placeholder="Search clients..." value={search} onValueChange={setSearch} />
                     <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
+                        {isLoading && <CommandEmpty>Searching...</CommandEmpty>}
+                        {!isLoading && searchResults.length === 0 && inputValue.length > 1 && <CommandEmpty>No client found.</CommandEmpty>}
                         <CommandGroup>
-                             {filteredClients.map(client => (
-                                <CommandItem key={client.id} value={client.name} onSelect={() => { onSelect(client); setOpen(false); }}>
+                            {searchResults.map(client => (
+                                <CommandItem key={client.id} value={client.name} onSelect={() => handleSelect(client)}>
                                     <Check className={cn("mr-2 h-4 w-4", selectedClient?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                    <span>{client.name}</span>
+                                    <div className="flex flex-col">
+                                        <span>{client.name}</span>
+                                        <span className="text-xs text-muted-foreground">{getPhone(client.phone)}</span>
+                                    </div>
                                 </CommandItem>
                             ))}
                         </CommandGroup>
@@ -149,7 +189,6 @@ export function UsdtManualPaymentForm({ record, clients, cryptoWallets }: { reco
                         <div className="space-y-2">
                            <Label htmlFor="clientId">Paid To (Client)</Label>
                             <ClientSelector 
-                                clients={clients}
                                 selectedClient={selectedClient}
                                 onSelect={setSelectedClient}
                             />
