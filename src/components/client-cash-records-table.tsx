@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -10,9 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { ModernCashRecord } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
+import type { UnifiedFinancialRecord } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -20,38 +19,25 @@ import { ArrowDown, ArrowUp, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Checkbox } from './ui/checkbox';
 
-export function ClientCashRecordsTable({ clientId }: { clientId: string }) {
-  const [records, setRecords] = React.useState<ModernCashRecord[]>([]);
-  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    if (!clientId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const recordsRef = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
-    const unsubscribe = onValue(recordsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const list: ModernCashRecord[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        setRecords(list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } else {
-        setRecords([]);
-      }
-      setLoading(false);
-    });
+interface ClientCashRecordsTableProps {
+  records: UnifiedFinancialRecord[];
+  loading: boolean;
+  selectedIds: string[];
+  onSelectionChange: (id: string, selected: boolean) => void;
+}
 
-    return () => unsubscribe();
-  }, [clientId]);
+export function ClientCashRecordsTable({ records, loading, selectedIds, onSelectionChange }: ClientCashRecordsTableProps) {
   
-  const getStatusVariant = (status: ModernCashRecord['status']) => {
+  const getStatusVariant = (status: UnifiedFinancialRecord['status']) => {
         switch(status) {
             case 'Pending': return 'secondary';
             case 'Matched': return 'default';
             case 'Used': return 'outline';
             case 'Cancelled': return 'destructive';
+            case 'Confirmed': return 'default';
             default: return 'secondary';
         }
     }
@@ -67,6 +53,12 @@ export function ClientCashRecordsTable({ clientId }: { clientId: string }) {
                 <Table>
                 <TableHeader>
                     <TableRow>
+                        <TableHead className="w-10">
+                            <Checkbox
+                                checked={records.length > 0 && records.every(r => selectedIds.includes(r.id))}
+                                onCheckedChange={(checked) => records.forEach(r => onSelectionChange(r.id, !!checked))}
+                             />
+                        </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Sender/Recipient</TableHead>
@@ -78,10 +70,16 @@ export function ClientCashRecordsTable({ clientId }: { clientId: string }) {
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading records...</TableCell></TableRow>
                     ) : records.length > 0 ? (
                     records.map((record) => (
-                        <TableRow key={record.id}>
+                        <TableRow key={record.id} data-state={selectedIds.includes(record.id) && "selected"}>
+                             <TableCell>
+                                <Checkbox
+                                    checked={selectedIds.includes(record.id)}
+                                    onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                                />
+                            </TableCell>
                             <TableCell>{record.date && !isNaN(new Date(record.date).getTime()) ? format(new Date(record.date), 'PPp') : 'N/A'}</TableCell>
                             <TableCell>
                                 <span className={cn('flex items-center gap-1', record.type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
@@ -90,7 +88,7 @@ export function ClientCashRecordsTable({ clientId }: { clientId: string }) {
                                 </span>
                             </TableCell>
                             <TableCell>{record.senderName || record.recipientName}</TableCell>
-                            <TableCell>{record.accountName}</TableCell>
+                            <TableCell>{record.bankAccountName}</TableCell>
                             <TableCell className="text-right font-mono">{new Intl.NumberFormat().format(record.amount)} {record.currency}</TableCell>
                             <TableCell><Badge variant={getStatusVariant(record.status)} className="capitalize">{record.status}</Badge></TableCell>
                             <TableCell className="text-right">
@@ -103,7 +101,7 @@ export function ClientCashRecordsTable({ clientId }: { clientId: string }) {
                         </TableRow>
                     ))
                     ) : (
-                        <TableRow><TableCell colSpan={7} className="h-24 text-center">No cash records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="h-24 text-center">No cash records found.</TableCell></TableRow>
                     )}
                 </TableBody>
                 </Table>

@@ -1,19 +1,20 @@
 
+
 'use client';
 
 import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { searchClients } from '@/lib/actions';
-import type { Client, JournalEntry } from '@/lib/types';
+import { searchClients, createModernTransaction, type TransactionFormState } from '@/lib/actions';
+import type { Client, JournalEntry, UnifiedFinancialRecord, CryptoFee, Account } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, X, ArrowDown, ArrowUp } from 'lucide-react';
+import { Check, X, ArrowDown, ArrowUp, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { ref, onValue, query } from 'firebase/database';
+import { ref, onValue, query, limitToLast } from 'firebase/database';
 import { QuickAddCashInflow } from '@/components/quick-add-cash-inflow';
 import { QuickAddCashOutflow } from '@/components/quick-add-cash-outflow';
 import { QuickAddUsdtInflow } from '@/components/quick-add-usdt-inflow';
@@ -21,6 +22,13 @@ import { QuickAddUsdtOutflow } from '@/components/quick-add-usdt-outflow';
 import { Badge } from '@/components/ui/badge';
 import { ClientCashRecordsTable } from '@/components/client-cash-records-table';
 import { ClientUsdtRecordsTable } from '@/components/client-usdt-records-table';
+import { getUnifiedClientRecords } from '@/lib/actions/transaction';
+import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
+import { useActionState, useFormStatus } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { Textarea } from '@/components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 type ActiveAction = 'cash-in' | 'cash-out' | 'usdt-in' | 'usdt-out' | null;
@@ -188,6 +196,123 @@ function ActionsCard({ client, onActionSelect }: {
     );
 }
 
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending}>
+            {pending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Create Transaction</>}
+        </Button>
+    );
+}
+
+
+function TransactionCreator({
+    client,
+    selectedRecords,
+    allAccounts,
+    calculation,
+    onTransactionCreated,
+}: {
+    client: Client;
+    selectedRecords: UnifiedFinancialRecord[];
+    allAccounts: Account[];
+    calculation: ReturnType<typeof useTransactionProcessor>['calculation'];
+    onTransactionCreated: () => void;
+}) {
+    const [state, formAction] = useActionState(createModernTransaction, undefined);
+    const { toast } = useToast();
+
+    const incomeAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Income'), [allAccounts]);
+    const expenseAccounts = React.useMemo(() => allAccounts.filter(acc => !acc.isGroup && acc.type === 'Expenses'), [allAccounts]);
+
+    React.useEffect(() => {
+        if (state?.success) {
+            toast({ title: 'Success', description: 'Transaction created successfully.' });
+            onTransactionCreated();
+        } else if (state?.message) {
+            toast({ variant: 'destructive', title: 'Error', description: state.message });
+        }
+    }, [state, toast, onTransactionCreated]);
+
+    if (selectedRecords.length === 0) {
+        return null;
+    }
+    
+    return (
+        <Card className="mt-6">
+            <form action={formAction}>
+                <input type="hidden" name="clientId" value={client.id} />
+                <input type="hidden" name="type" value="Transfer" />
+                {selectedRecords.map(r => <input key={r.id} type="hidden" name="linkedRecordIds" value={r.id} />)}
+                
+                <CardHeader>
+                    <CardTitle>Create Transaction</CardTitle>
+                    <CardDescription>{selectedRecords.length} records selected.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center pt-4 border-t">
+                        <div className="p-2 border rounded-md">
+                            <p className="text-xs text-muted-foreground">Total Inflow</p>
+                            <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
+                        </div>
+                        <div className="p-2 border rounded-md">
+                            <p className="text-xs text-muted-foreground">Total Outflow</p>
+                            <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
+                        </div>
+                        <div className="p-2 border rounded-md">
+                            <p className="text-xs text-muted-foreground">Fee</p>
+                            <p className="font-bold">${calculation.fee.toFixed(2)}</p>
+                        </div>
+                        <div className={cn("p-2 border rounded-md", calculation.difference.toFixed(2) !== '0.00' ? 'border-amber-500 bg-amber-50' : '')}>
+                            <p className="text-xs text-muted-foreground">Difference</p>
+                            <p className="font-bold">${calculation.difference.toFixed(2)}</p>
+                        </div>
+                    </div>
+                     {Math.abs(calculation.difference) > 0.01 && (
+                        <div className="pt-4 border-t mt-4">
+                             <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
+                            {calculation.difference > 0.01 ? (
+                                <RadioGroup name="differenceHandling" defaultValue="income" className="mt-2 space-y-2">
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="income" id="diff-income" />
+                                        <Label htmlFor="diff-income" className="font-normal">Record as Income (Gain)</Label>
+                                    </div>
+                                    <Select name="incomeAccountId">
+                                        <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select income account..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {incomeAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </RadioGroup>
+                            ) : (
+                                 <RadioGroup name="differenceHandling" defaultValue="expense" className="mt-2 space-y-2">
+                                     <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="expense" id="diff-expense" />
+                                        <Label htmlFor="diff-expense" className="font-normal">Record as an Expense/Discount</Label>
+                                    </div>
+                                     <Select name="expenseAccountId">
+                                        <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select expense account..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {expenseAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                        </SelectContent>
+                                     </Select>
+                                </RadioGroup>
+                            )}
+                        </div>
+                    )}
+                     <div className="space-y-2">
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea id="notes" name="notes" placeholder="Add any relevant notes for this consolidated transaction..." />
+                    </div>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                    <SubmitButton />
+                </CardFooter>
+            </form>
+        </Card>
+    );
+}
+
 function ActionSection({ 
     activeAction, 
     client, 
@@ -232,17 +357,32 @@ export default function ClientDashboardPage() {
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [clientBalance, setClientBalance] = React.useState(0);
     const [activeAction, setActiveAction] = React.useState<ActiveAction>(null);
+    const [allRecords, setAllRecords] = React.useState<UnifiedFinancialRecord[]>([]);
+    const [loadingRecords, setLoadingRecords] = React.useState(false);
+    const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+    const [cryptoFees, setCryptoFees] = React.useState<CryptoFee | null>(null);
+    const [allAccounts, setAllAccounts] = React.useState<Account[]>([]);
     
-    const [refreshKey, setRefreshKey] = React.useState(0);
-
-    const handleClientSelect = (client: Client | null) => {
+    const { calculation } = useTransactionProcessor({
+        selectedRecordIds: selectedIds,
+        records: allRecords,
+        cryptoFees: cryptoFees,
+        transactionType: null,
+    });
+    
+    const handleClientSelect = async (client: Client | null) => {
         setSelectedClient(client);
-        setActiveAction(null);
-        // Increment refresh key to trigger balance re-fetch and signal to child components
-        setRefreshKey(prev => prev + 1);
+        setAllRecords([]);
+        setSelectedIds([]);
+        if (client) {
+            setLoadingRecords(true);
+            const records = await getUnifiedClientRecords(client.id);
+            setAllRecords(records);
+            setLoadingRecords(false);
+        }
     };
     
-     React.useEffect(() => {
+    React.useEffect(() => {
         if (!selectedClient) {
             setClientBalance(0);
             return;
@@ -269,17 +409,54 @@ export default function ClientDashboardPage() {
         });
 
         return () => unsubscribe();
-
-    }, [selectedClient, refreshKey]);
+    }, [selectedClient]);
+    
+    React.useEffect(() => {
+        const feesRef = query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1));
+        const unsubFees = onValue(feesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                setCryptoFees(data[Object.keys(data)[0]]);
+            }
+        });
+        
+        const accountsRef = ref(db, 'accounts');
+        const unsubAccounts = onValue(accountsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setAllAccounts(Object.values(snapshot.val()));
+            }
+        });
+        
+        return () => {
+            unsubFees();
+            unsubAccounts();
+        };
+    }, []);
 
     const handleActionSuccess = () => {
-        setRefreshKey(prev => prev + 1);
+        if(selectedClient) handleClientSelect(selectedClient);
         setActiveAction(null);
     }
     
     const handleActionSelect = (action: ActiveAction) => {
         setActiveAction(prev => prev === action ? null : action);
     };
+
+    const handleSelectionChange = (id: string, selected: boolean) => {
+        setSelectedIds(prev => {
+            const newSet = new Set(prev);
+            if (selected) {
+                newSet.add(id);
+            } else {
+                newSet.delete(id);
+            }
+            return Array.from(newSet);
+        });
+    };
+    
+    const cashRecords = React.useMemo(() => allRecords.filter(r => r.category === 'fiat'), [allRecords]);
+    const usdtRecords = React.useMemo(() => allRecords.filter(r => r.category === 'crypto'), [allRecords]);
+    const selectedRecords = React.useMemo(() => allRecords.filter(r => selectedIds.includes(r.id)), [allRecords, selectedIds]);
 
     return (
         <div className="space-y-6">
@@ -293,12 +470,27 @@ export default function ClientDashboardPage() {
             <div className="grid lg:grid-cols-3 gap-6 items-start">
                 <div className="lg:col-span-2 space-y-6">
                     <ClientDetailsCard client={selectedClient} balance={clientBalance} />
+                    
                      {selectedClient && <ActionsCard client={selectedClient} onActionSelect={handleActionSelect} />}
+                     
                      {selectedClient && (
                         <div className="space-y-6">
-                            <ClientCashRecordsTable clientId={selectedClient.id} />
-                            <ClientUsdtRecordsTable clientId={selectedClient.id} />
+                            <ClientCashRecordsTable records={cashRecords} loading={loadingRecords} onSelectionChange={handleSelectionChange} selectedIds={selectedIds} />
+                            <ClientUsdtRecordsTable records={usdtRecords} loading={loadingRecords} onSelectionChange={handleSelectionChange} selectedIds={selectedIds} />
                         </div>
+                     )}
+
+                     {selectedClient && selectedIds.length > 0 && (
+                        <TransactionCreator
+                            client={selectedClient}
+                            selectedRecords={selectedRecords}
+                            allAccounts={allAccounts}
+                            calculation={calculation}
+                            onTransactionCreated={() => {
+                                handleClientSelect(selectedClient);
+                                setSelectedIds([]);
+                            }}
+                        />
                      )}
                 </div>
                 <div className="lg:col-span-1 space-y-6">

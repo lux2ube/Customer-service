@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import * as React from 'react';
@@ -10,9 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import type { ModernUsdtRecord } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
+import type { UnifiedFinancialRecord } from '@/lib/types';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from './ui/button';
@@ -20,33 +19,19 @@ import { ArrowDown, ArrowUp, Pencil, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Checkbox } from './ui/checkbox';
 
-export function ClientUsdtRecordsTable({ clientId }: { clientId: string }) {
-  const [records, setRecords] = React.useState<ModernUsdtRecord[]>([]);
-  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    if (!clientId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
-    const unsubscribe = onValue(recordsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const list: ModernUsdtRecord[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        setRecords(list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } else {
-        setRecords([]);
-      }
-      setLoading(false);
-    });
+interface ClientUsdtRecordsTableProps {
+  records: UnifiedFinancialRecord[];
+  loading: boolean;
+  selectedIds: string[];
+  onSelectionChange: (id: string, selected: boolean) => void;
+}
 
-    return () => unsubscribe();
-  }, [clientId]);
+export function ClientUsdtRecordsTable({ records, loading, selectedIds, onSelectionChange }: ClientUsdtRecordsTableProps) {
   
-  const getStatusVariant = (status: ModernUsdtRecord['status']) => {
+  const getStatusVariant = (status: UnifiedFinancialRecord['status']) => {
         switch(status) {
             case 'Pending': return 'secondary';
             case 'Used': return 'outline';
@@ -67,6 +52,12 @@ export function ClientUsdtRecordsTable({ clientId }: { clientId: string }) {
                 <Table>
                 <TableHeader>
                     <TableRow>
+                         <TableHead className="w-10">
+                             <Checkbox
+                                checked={records.length > 0 && records.every(r => selectedIds.includes(r.id))}
+                                onCheckedChange={(checked) => records.forEach(r => onSelectionChange(r.id, !!checked))}
+                             />
+                        </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Wallet</TableHead>
@@ -77,10 +68,16 @@ export function ClientUsdtRecordsTable({ clientId }: { clientId: string }) {
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={6} className="h-24 text-center">Loading records...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading records...</TableCell></TableRow>
                     ) : records.length > 0 ? (
                     records.map((record) => (
-                        <TableRow key={record.id}>
+                        <TableRow key={record.id} data-state={selectedIds.includes(record.id) && "selected"}>
+                             <TableCell>
+                                <Checkbox
+                                    checked={selectedIds.includes(record.id)}
+                                    onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                                />
+                            </TableCell>
                             <TableCell>{record.date && !isNaN(new Date(record.date).getTime()) ? format(new Date(record.date), 'PPp') : 'N/A'}</TableCell>
                             <TableCell>
                                 <span className={cn('flex items-center gap-1', record.type === 'inflow' ? 'text-green-600' : 'text-red-600')}>
@@ -103,12 +100,12 @@ export function ClientUsdtRecordsTable({ clientId }: { clientId: string }) {
                                     <Link href={`/modern-usdt-records/${record.id}/edit`}>
                                         <Pencil className="h-4 w-4" />
                                     </Link>
-                               </Button>
+                                </Button>
                             </TableCell>
                         </TableRow>
                     ))
                     ) : (
-                        <TableRow><TableCell colSpan={6} className="h-24 text-center">No USDT records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="h-24 text-center">No USDT records found.</TableCell></TableRow>
                     )}
                 </TableBody>
                 </Table>
