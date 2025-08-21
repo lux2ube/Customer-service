@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule, Transaction, ClientServiceProvider, JournalEntry } from '../types';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
-import { sendTelegramNotification } from './helpers';
+import { sendTelegramNotification, notifyClientTransaction } from './helpers';
 import { format } from 'date-fns';
 import { getNextSequentialId, stripUndefined } from './helpers';
 import { parseSmsWithCustomRules } from '../custom-sms-parser';
@@ -275,10 +275,9 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
     }
 
     try {
-        const [recordSnapshot, clientSnapshot, allJournalSnapshot] = await Promise.all([
+        const [recordSnapshot, clientSnapshot] = await Promise.all([
             get(ref(db, `cash_records/${recordId}`)),
-            get(ref(db, `clients/${clientId}`)),
-            get(ref(db, 'journal_entries')) // Get all journal entries
+            get(ref(db, `clients/${clientId}`))
         ]);
 
         if (!recordSnapshot.exists()) return { success: false, message: "Record not found." };
@@ -286,8 +285,7 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         
         const client = clientSnapshot.val() as Client;
         const record = recordSnapshot.val() as CashRecord;
-        const allJournalEntries: Record<string, JournalEntry> = allJournalSnapshot.val() || {};
-
+        
         const updates: { [key: string]: any } = {};
         updates[`/cash_records/${recordId}/clientId`] = clientId;
         updates[`/cash_records/${recordId}/clientName`] = client.name;
@@ -310,44 +308,9 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         };
         updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         
-        // --- Calculate New Balance ---
-        let currentBalance = 0;
-        for (const key in allJournalEntries) {
-            const entry = allJournalEntries[key];
-            if (entry.credit_account === clientAccountId) {
-                currentBalance += entry.amount_usd;
-            }
-            if (entry.debit_account === clientAccountId) {
-                currentBalance -= entry.amount_usd;
-            }
-        }
-        // Add the amount from the new journal entry we are about to create
-        const newBalance = currentBalance + journalEntry.amount_usd;
-
-
         await update(ref(db), updates);
         
-        // --- Send Telegram Notification ---
-        const amountFormatted = `${record.amount.toLocaleString()} ${record.currency}`;
-        const usdFormatted = `($${record.amountusd.toFixed(2)} USD)`;
-        const flowDirection = record.type === 'inflow' ? 'from' : 'to';
-        const person = record.senderName || record.recipientName;
-        
-        const message = `
-✅ *SMS Matched to Client*
-
-*Client:* ${client.name} (\`${clientId}\`)
-*Transaction:* ${record.type === 'inflow' ? 'INFLOW' : 'OUTFLOW'} of *${amountFormatted}* ${usdFormatted}
-*${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${person}
-*New Balance:* $${newBalance.toFixed(2)} USD
-
-*Original SMS:*
-\`\`\`
-${record.rawSms}
-\`\`\`
-        `;
-
-        await sendTelegramNotification(message, "-1002700770095");
+        await notifyClientTransaction(clientId, client.name, record);
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/cash-receipts');

@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider } from '../types';
-import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification } from './helpers';
+import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification, notifyClientTransaction } from './helpers';
 import { redirect } from 'next/navigation';
 
 
@@ -127,6 +127,10 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
 
         await update(ref(db), updates);
 
+        if (clientId && clientName) {
+            await notifyClientTransaction(clientId, clientName, { ...recordData, currency: account.currency! });
+        }
+
         revalidatePath('/modern-cash-records');
         revalidatePath('/accounting/journal');
         revalidatePath('/'); // For asset balance card
@@ -214,6 +218,8 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         
         await update(ref(db), updates);
+
+        await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
 
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
@@ -320,6 +326,10 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         }
 
         await update(ref(db), updates);
+
+        if (clientId && clientName) {
+            await notifyClientTransaction(clientId, clientName, { ...paymentData, currency: 'USDT', amountusd: amount });
+        }
         
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');

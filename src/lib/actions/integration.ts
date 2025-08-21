@@ -6,8 +6,8 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord } from '../types';
-import { stripUndefined, getNextSequentialId } from './helpers';
+import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord, JournalEntry } from '../types';
+import { stripUndefined, getNextSequentialId, notifyClientTransaction } from './helpers';
 import { findClientByAddress } from './client';
 
 export type SyncState = { message?: string; error?: boolean; } | undefined;
@@ -106,6 +106,29 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 blockNumber: txBlockNumber
             };
             updates[`/records/usdt/${newRecordId}`] = stripUndefined(newTxData);
+
+            if (existingClient) {
+                const clientAccountId = `6000${existingClient.id}`;
+                const journalDescription = `Synced USDT ${newTxData.type} from ${configName} for ${existingClient.name}`;
+                const journalRef = push(ref(db, 'journal_entries'));
+                
+                const journalEntry: Omit<JournalEntry, 'id'> = {
+                    date: newTxData.date,
+                    description: journalDescription,
+                    debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
+                    credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                    debit_amount: newTxData.amount,
+                    credit_amount: newTxData.amount,
+                    amount_usd: newTxData.amount,
+                    createdAt: new Date().toISOString(),
+                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : existingClient.name,
+                    credit_account_name: newTxData.type === 'inflow' ? existingClient.name : cryptoWalletName,
+                };
+                updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+
+                await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+            }
+
             newRecordsCount++;
         }
 

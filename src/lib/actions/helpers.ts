@@ -1,8 +1,8 @@
 
 
 import { db } from '../firebase';
-import { push, ref, set, runTransaction } from 'firebase/database';
-import type { AuditLog } from '../types';
+import { push, ref, set, runTransaction, get, query, orderByChild, equalTo } from 'firebase/database';
+import type { AuditLog, JournalEntry } from '../types';
 
 // Helper to strip undefined values from an object, which Firebase doesn't allow.
 export const stripUndefined = (obj: Record<string, any>): Record<string, any> => {
@@ -157,4 +157,76 @@ export async function getNextSequentialId(counterName: 'transactionId' | 'cashRe
     }
     
     return String(idNumber);
+}
+
+
+// --- Centralized Notification Logic ---
+export async function notifyClientTransaction(
+    clientId: string,
+    clientName: string,
+    record: {
+        type: 'inflow' | 'outflow';
+        amount: number;
+        currency: string;
+        amountusd: number;
+        source: string;
+        rawSms?: string;
+        senderName?: string;
+        recipientName?: string;
+    }
+) {
+    if (!clientId) return;
+
+    try {
+        const clientAccountId = `6000${clientId}`;
+        const journalQuery = query(ref(db, 'journal_entries'), orderByChild('credit_account'), equalTo(clientAccountId));
+        const journalSnapshot = await get(journalQuery);
+        
+        let balance = 0;
+        if (journalSnapshot.exists()) {
+            const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
+            for (const key in allEntries) {
+                const entry = allEntries[key];
+                 if (entry.credit_account === clientAccountId) {
+                    balance += entry.amount_usd;
+                }
+                if (entry.debit_account === clientAccountId) {
+                    balance -= entry.amount_usd;
+                }
+            }
+        }
+        
+        // Add the current transaction's amount to the balance before notifying
+        const currentTxAmountUsd = record.type === 'inflow' ? record.amountusd : -record.amountusd;
+        const newBalance = balance + currentTxAmountUsd;
+
+        const amountFormatted = `${record.amount.toLocaleString()} ${record.currency}`;
+        const usdFormatted = `($${record.amountusd.toFixed(2)} USD)`;
+        const flowDirection = record.type === 'inflow' ? 'from' : 'to';
+        const person = record.senderName || record.recipientName;
+
+        let message = `
+✅ *${record.source} Record Matched/Created*
+
+*Client:* ${escapeTelegramMarkdown(clientName)} (\`${clientId}\`)
+*Transaction:* ${record.type.toUpperCase()} of *${amountFormatted}* ${usdFormatted}
+*${record.type === 'inflow' ? 'Sender' : 'Recipient'}:* ${escapeTelegramMarkdown(person)}
+*New Balance:* $${newBalance.toFixed(2)} USD
+        `;
+        
+        if (record.source === 'SMS' && record.rawSms) {
+            message += `
+*Original SMS:*
+\`\`\`
+${escapeTelegramMarkdown(record.rawSms)}
+\`\`\`
+            `;
+        }
+
+        await sendTelegramNotification(message, "-1002700770095");
+
+    } catch (e) {
+        console.error("Failed to send transaction notification:", e);
+        // Do not block the main operation if notification fails
+    }
 }
