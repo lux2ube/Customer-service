@@ -27,9 +27,9 @@ import { QuickAddUsdtOutflow } from '@/components/quick-add-usdt-outflow';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
 import { useActionState } from 'react';
-import { Textarea } from '../ui/textarea';
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
 type ActiveAction = 'cash-in' | 'cash-out' | 'usdt-in' | 'usdt-out' | null;
