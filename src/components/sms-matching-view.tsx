@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Check, ChevronsUpDown, Loader2, Link as LinkIcon, User, Users } from 'lucide-react';
 import { cn, normalizeArabic } from '@/lib/utils';
-import { useActionState, useFormStatus } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 
 interface MatchSuggestion extends CashRecord {
     suggestedClient?: Client | null;

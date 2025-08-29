@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '../firebase';
@@ -50,7 +51,7 @@ export async function mergeDuplicateClients(prevState: MergeState, formData: For
 
             for (const duplicateClient of duplicates) {
                 // Reassign records
-                const pathsToUpdate = ['transactions', 'cash_records', 'modern_usdt_records'];
+                const pathsToUpdate = ['transactions', 'cash_records', 'records/usdt'];
                 for (const path of pathsToUpdate) {
                     const recordsSnapshot = await get(ref(db, path));
                     if (recordsSnapshot.exists()) {
