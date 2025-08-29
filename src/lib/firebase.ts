@@ -22,7 +22,8 @@ const storageFirebaseConfig = {
   projectId: "exchange-83a2f",
   storageBucket: "exchange-83a2f.appspot.com",
   messagingSenderId: "818879362173",
-  appId: "1:818879362173:android:5fb45ca7ec77d654ea2d14"
+  appId: "1:818879362173:android:5fb45ca7ec77d654ea2d14",
+  databaseURL: "https://exchange-83a2f-default-rtdb.firebaseio.com"
 };
 
 
