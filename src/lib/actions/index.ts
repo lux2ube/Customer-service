@@ -28,6 +28,10 @@ export {
     migrateBep20Addresses,
 } from './client';
 
+export {
+    mergeDuplicateClients
+} from './client-merge';
+
 // External Integrations (BSCScan)
 export { 
     syncBscTransactions,
@@ -76,6 +80,11 @@ export {
     deleteBscSyncedRecords,
     backfillCashRecordUsd
 } from './utility';
+
+export {
+    createLabel,
+    deleteLabel
+} from './label';
 
 // Wallet (Live Sending)
 export {

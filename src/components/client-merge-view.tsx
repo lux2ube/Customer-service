@@ -104,7 +104,7 @@ export function ClientMergeView({ clients }: { clients: Client[] }) {
                                             <p className="font-semibold text-sm">{clientIndex === 0 ? 'Primary Record' : 'Duplicate Record'}</p>
                                             <p className="text-xs text-muted-foreground">ID: {client.id}</p>
                                             <p className="text-xs text-muted-foreground">Phone(s): {(Array.isArray(client.phone) ? client.phone.join(', ') : client.phone) || 'N/A'}</p>
-                                             <p className="text-xs text-muted-foreground">Created: {format(parseISO(client.createdAt), 'PPp')}</p>
+                                             <p className="text-xs text-muted-foreground">Created: {client.createdAt ? format(parseISO(client.createdAt), 'PPp') : 'N/A'}</p>
                                         </li>
                                     ))}
                                 </ul>
