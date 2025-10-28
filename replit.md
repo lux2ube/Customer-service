@@ -6,6 +6,20 @@ Customer Central is a comprehensive financial transaction management system buil
 
 The system is designed to handle financial operations for a currency exchange business, tracking both fiat currency movements and cryptocurrency transactions while maintaining a complete audit trail through journal entries.
 
+## Recent Changes
+
+### October 28, 2025 - BSC API Settings & Etherscan v2 Migration
+- **Fixed BSC API Settings Page**: Resolved issue where "Linked Account" dropdown was not selectable when adding new configurations
+  - Migrated from manual form handling to `useActionState` hook for proper server action integration
+  - Added controlled Select component with hidden input for form submission
+  - Improved user feedback with toast notifications
+- **Migrated to Etherscan API v2**: Updated blockchain integration from legacy BSCScan API v1 to unified Etherscan API v2
+  - Changed endpoint from `api.bscscan.com/api` to `api.etherscan.io/v2/api`
+  - Added `chainid=56` parameter for BSC network
+  - Updated all error messages and user-facing text to reference Etherscan
+  - Maintains backward compatibility with existing wallet configurations
+- **Updated Documentation**: All references to BSCScan updated to reflect Etherscan API v2
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -67,11 +81,12 @@ Preferred communication style: Simple, everyday language.
    - Denormalized client and account names for performance
 
 3. **USDT Transaction Processing**:
-   - Manual entry or BSCScan blockchain synchronization
+   - Manual entry or Etherscan API v2 blockchain synchronization for BSC
    - Wallet address validation using ethers.js
    - Support for multiple system wallets
    - Transaction hash tracking for blockchain verification
    - Service provider integration for automated sends
+   - Multi-configuration support for monitoring different wallets
 
 4. **Accounting System**:
    - Chart of Accounts with hierarchical structure (groups and postable accounts)
@@ -131,10 +146,12 @@ Preferred communication style: Simple, everyday language.
 - Requires `GEMINI_API_KEY` environment variable
 
 **Blockchain Integration**:
-- BSCScan API for monitoring USDT transactions on Binance Smart Chain
+- Etherscan API v2 for monitoring USDT transactions on Binance Smart Chain (chainid: 56)
+- Unified API endpoint across 60+ supported blockchain networks
 - ethers.js library for wallet address validation
 - Transaction hash verification
-- Multiple wallet monitoring support
+- Multiple wallet monitoring support with configurable API settings
+- Automatic block tracking for incremental syncing
 
 **Third-Party Services**:
 - MEXC API SDK for cryptocurrency exchange rates
@@ -150,8 +167,10 @@ Preferred communication style: Simple, everyday language.
 **Environment Variables Required**:
 - `GEMINI_API_KEY` - Google AI API key for SMS parsing
 - `NEXT_PUBLIC_FIREBASE_*` - Firebase configuration
-- Telegram bot credentials (for notifications)
-- BSCScan API credentials (for blockchain monitoring)
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` - Telegram bot credentials (for notifications)
+- `BSC_RPC_URL` - Binance Smart Chain RPC endpoint for wallet operations
+- `TRUST_WALLET_MNEMONIC` - Trust Wallet recovery phrase for wallet operations
+- Etherscan API key (stored in database `/bsc_apis` collection for blockchain monitoring)
 
 **Image Hosting**:
 - Firebase Storage for uploaded documents
