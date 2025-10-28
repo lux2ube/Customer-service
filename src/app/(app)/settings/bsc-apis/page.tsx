@@ -32,7 +32,7 @@ export default async function BscApiSettingsPage() {
         <>
             <PageHeader
                 title="BSC API Settings"
-                description="Manage BSCScan API keys and wallet addresses for transaction syncing."
+                description="Manage Etherscan API v2 keys for BSC (Binance Smart Chain) transaction monitoring. Get your API key from etherscan.io."
             />
             <Suspense fallback={<div>Loading...</div>}>
                 <BscApiManager initialSettings={apiSettings} usdtAccounts={usdtAccounts} />

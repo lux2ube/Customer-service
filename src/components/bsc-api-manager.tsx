@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
 import { Save, Trash2, DatabaseZap } from 'lucide-react';
-import { useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
 import { createBscApiSetting, deleteBscApiSetting, migrateExistingBscApi } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { BscApiSetting, Account } from '@/lib/types';
@@ -27,8 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
-function SubmitButton() {
-    const { pending } = useFormStatus();
+function SubmitButton({ pending }: { pending: boolean }) {
     return (
         <Button type="submit" disabled={pending}>
             {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Setting</>}
@@ -36,8 +35,7 @@ function SubmitButton() {
     );
 }
 
-function MigrateButton() {
-    const { pending } = useFormStatus();
+function MigrateButton({ pending }: { pending: boolean }) {
     return (
         <Button type="submit" variant="outline" disabled={pending}>
             {pending ? 'Migrating...' : <><DatabaseZap className="mr-2 h-4 w-4" />Migrate Old Setting</>}
@@ -51,6 +49,10 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
 
     const [settings, setSettings] = React.useState<BscApiSetting[]>(initialSettings);
     const [itemToDelete, setItemToDelete] = React.useState<BscApiSetting | null>(null);
+    const [selectedAccountId, setSelectedAccountId] = React.useState<string>('');
+
+    const [addState, addFormAction, addPending] = useActionState(createBscApiSetting, undefined);
+    const [migrateState, migrateFormAction, migratePending] = useActionState(migrateExistingBscApi, undefined);
 
     React.useEffect(() => {
         const settingsRef = ref(db, 'bsc_apis/');
@@ -64,24 +66,27 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
         return () => unsubscribe();
     }, []);
 
-    const handleAddSubmit = async (formData: FormData) => {
-        const result = await createBscApiSetting(formData);
-        if (result?.error) {
-            toast({ variant: 'destructive', title: 'Error', description: result.message });
-        } else {
-            toast({ title: 'Success', description: 'BSC API setting saved.' });
-            formRef.current?.reset();
+    React.useEffect(() => {
+        if (addState && !addPending) {
+            if (addState.error) {
+                toast({ variant: 'destructive', title: 'Error', description: addState.message });
+            } else if (addState.message) {
+                toast({ title: 'Success', description: addState.message });
+                formRef.current?.reset();
+                setSelectedAccountId('');
+            }
         }
-    };
-    
-     const handleMigrate = async (formData: FormData) => {
-        const result = await migrateExistingBscApi(formData);
-        if (result?.error) {
-            toast({ variant: 'destructive', title: 'Error', description: result.message });
-        } else {
-            toast({ title: 'Success', description: result.message });
+    }, [addState, addPending, toast]);
+
+    React.useEffect(() => {
+        if (migrateState && !migratePending) {
+            if (migrateState.error) {
+                toast({ variant: 'destructive', title: 'Error', description: migrateState.message });
+            } else if (migrateState.message) {
+                toast({ title: 'Success', description: migrateState.message });
+            }
         }
-    };
+    }, [migrateState, migratePending, toast]);
 
     const handleDeleteClick = (item: BscApiSetting) => {
         setItemToDelete(item);
@@ -102,9 +107,10 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
     return (
         <div className="space-y-4">
             <Card>
-                <form action={handleAddSubmit} ref={formRef}>
+                <form action={addFormAction} ref={formRef}>
                     <CardHeader>
                         <CardTitle>Add New BSC API Configuration</CardTitle>
+                        <CardDescription>Configure Etherscan API v2 for BSC transaction monitoring</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -113,7 +119,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="accountId">Linked Account</Label>
-                             <Select name="accountId" required>
+                             <Select name="accountId" value={selectedAccountId} onValueChange={setSelectedAccountId} required>
                                 <SelectTrigger><SelectValue placeholder="Select a USDT account..."/></SelectTrigger>
                                 <SelectContent>
                                     {usdtAccounts.map(acc => (
@@ -121,18 +127,19 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                                     ))}
                                 </SelectContent>
                             </Select>
+                            <input type="hidden" name="accountId" value={selectedAccountId} />
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="walletAddress">Wallet Address</Label>
                             <Input id="walletAddress" name="walletAddress" placeholder="0x..." required />
                         </div>
                          <div className="space-y-2">
-                            <Label htmlFor="apiKey">BSCScan API Key</Label>
-                            <Input id="apiKey" name="apiKey" type="password" required />
+                            <Label htmlFor="apiKey">Etherscan API Key</Label>
+                            <Input id="apiKey" name="apiKey" type="password" placeholder="Get from etherscan.io" required />
                         </div>
                     </CardContent>
                     <CardFooter className="flex justify-end">
-                        <SubmitButton />
+                        <SubmitButton pending={addPending} />
                     </CardFooter>
                 </form>
             </Card>
@@ -174,8 +181,8 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                     </div>
                 </CardContent>
                 <CardFooter>
-                     <form action={handleMigrate}>
-                        <MigrateButton />
+                     <form action={migrateFormAction}>
+                        <MigrateButton pending={migratePending} />
                     </form>
                 </CardFooter>
             </Card>

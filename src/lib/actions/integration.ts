@@ -14,6 +14,7 @@ export type SyncState = { message?: string; error?: boolean; } | undefined;
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const USDT_DECIMALS = 18;
+const BSC_CHAIN_ID = 56;
 
 const SyncBscSchema = z.object({
   apiId: z.string().min(1, 'An API configuration must be selected.'),
@@ -39,24 +40,24 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
 
-        let apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
+        let apiUrl = `https://api.etherscan.io/v2/api?chainid=${BSC_CHAIN_ID}&module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1000&sort=asc&apikey=${apiKey}`;
         
         if (lastSyncedBlock > 0) {
             apiUrl += `&startblock=${lastSyncedBlock + 1}`;
         } else {
              // First time sync: get only the single most recent transaction to establish a starting point.
-             apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
+             apiUrl = `https://api.etherscan.io/v2/api?chainid=${BSC_CHAIN_ID}&module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
         }
         
         const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error(`BscScan API request failed: ${response.statusText}`);
+        if (!response.ok) throw new Error(`Etherscan API request failed: ${response.statusText}`);
 
         const data = await response.json();
         if (data.status !== "1") {
              if (data.message === "No transactions found" || (Array.isArray(data.result) && data.result.length === 0)) {
                 return { message: `No new transactions found for ${configName}.`, error: false };
             }
-            throw new Error(`BscScan API Error for ${configName}: ${data.message}`);
+            throw new Error(`Etherscan API Error for ${configName}: ${data.message}`);
         }
         
         const fetchedTransactions: any[] = Array.isArray(data.result) ? data.result : [];
@@ -146,7 +147,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         return { message: `${newRecordsCount} new transaction(s) were successfully synced for ${configName}.`, error: false };
 
     } catch (error: any) {
-        console.error("BscScan Sync Error:", error);
+        console.error("Etherscan BSC Sync Error:", error);
         return { message: error.message || "An unknown error occurred during sync.", error: true };
     }
 }
