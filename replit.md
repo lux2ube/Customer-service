@@ -8,6 +8,19 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
+### November 28, 2025 - BSC API V2 Migration & Modern USDT Records
+- **Fixed Linked Account Dropdown**: Changed filter from `currency='USDT'` to `parentId='1000'` to show only child accounts of the USDT parent account
+- **Added Last Synced Block Field**: New field in BSC API configuration form to specify starting block for sync
+- **Migrated Sync Logic to Etherscan V2**:
+  - Updated API endpoint to `https://api.etherscan.io/v2/api?chainid=56`
+  - Changed batch size from 1000 to 100 transactions per sync
+  - Added proper startblock handling for incremental syncing
+- **New Modern USDT Records Collection**:
+  - Changed storage from `/records/usdt` to `/modern_usdt_records`
+  - Implemented USDT1, USDT2, USDT3... counter pattern for document IDs
+  - Added `modernUsdtRecordId` counter type
+- **Enhanced Sync Feedback**: Detailed toast notification showing synced count, skipped count, and last synced block
+
 ### October 28, 2025 - BSC API Settings & Etherscan v2 Migration
 - **Fixed BSC API Settings Page**: Resolved issue where "Linked Account" dropdown was not selectable when adding new configurations
   - Migrated from manual form handling to `useActionState` hook for proper server action integration
