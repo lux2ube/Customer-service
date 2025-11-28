@@ -119,12 +119,16 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="accountId">Linked Account</Label>
-                             <Select name="accountId" value={selectedAccountId} onValueChange={setSelectedAccountId} required>
+                             <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                                 <SelectTrigger><SelectValue placeholder="Select a USDT account..."/></SelectTrigger>
                                 <SelectContent>
-                                    {usdtAccounts.map(acc => (
-                                        <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.id})</SelectItem>
-                                    ))}
+                                    {usdtAccounts.length > 0 ? (
+                                        usdtAccounts.map(acc => (
+                                            <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.id})</SelectItem>
+                                        ))
+                                    ) : (
+                                        <SelectItem key="no-accounts" value="" disabled>No USDT accounts found</SelectItem>
+                                    )}
                                 </SelectContent>
                             </Select>
                             <input type="hidden" name="accountId" value={selectedAccountId} />

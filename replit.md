@@ -9,7 +9,7 @@ The system is designed to handle financial operations for a currency exchange bu
 ## Recent Changes
 
 ### November 28, 2025 - BSC API V2 Migration & Modern USDT Records
-- **Fixed Linked Account Dropdown**: Changed filter from `currency='USDT'` to `parentId='1000'` to show only child accounts of the USDT parent account
+- **Fixed Linked Account Dropdown**: Updated to properly filter accounts with `currency='USDT'` and include the account ID in the data
 - **Added Last Synced Block Field**: New field in BSC API configuration form to specify starting block for sync
 - **Migrated Sync Logic to Etherscan V2**:
   - Updated API endpoint to `https://api.etherscan.io/v2/api?chainid=56`
