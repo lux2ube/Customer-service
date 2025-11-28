@@ -128,13 +128,13 @@ export async function sendTelegramPhoto(photoUrl: string, caption: string) {
 }
 
 // --- Shared Helper for Sequential IDs ---
-export async function getNextSequentialId(counterName: 'transactionId' | 'cashRecordId' | 'usdtRecordId' | 'bscApiId'): Promise<string> {
+export async function getNextSequentialId(counterName: 'transactionId' | 'cashRecordId' | 'usdtRecordId' | 'bscApiId' | 'modernUsdtRecordId'): Promise<string> {
     const counterRef = ref(db, `counters/${counterName}`);
     
     let startValue = 1000;
      if (counterName === 'transactionId') {
         startValue = 0; // Start T-series from 1
-    } else if (counterName === 'usdtRecordId' || counterName === 'bscApiId') {
+    } else if (counterName === 'usdtRecordId' || counterName === 'bscApiId' || counterName === 'modernUsdtRecordId') {
         startValue = 0;
     }
     
@@ -151,6 +151,11 @@ export async function getNextSequentialId(counterName: 'transactionId' | 'cashRe
     // Add prefix for transactions
     if (counterName === 'transactionId') {
         return `T${idNumber}`;
+    }
+    
+    // Add USDT prefix for modern USDT records
+    if (counterName === 'modernUsdtRecordId') {
+        return `USDT${idNumber}`;
     }
     
     return String(idNumber);

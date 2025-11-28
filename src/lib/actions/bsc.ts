@@ -23,6 +23,7 @@ const BscApiSettingSchema = z.object({
   accountId: z.string().min(1, { message: "An account must be selected." }),
   walletAddress: z.string().startsWith('0x', { message: "Wallet address must start with 0x."}),
   apiKey: z.string().min(1, { message: "API key is required." }),
+  lastSyncedBlock: z.coerce.number().optional(),
 });
 
 export async function createBscApiSetting(prevState: BscApiFormState, formData: FormData) {
@@ -42,7 +43,8 @@ export async function createBscApiSetting(prevState: BscApiFormState, formData: 
         await set(ref(db, `bsc_apis/BSC${newId}`), {
             ...validatedFields.data,
             id: `BSC${newId}`,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            lastSyncedBlock: validatedFields.data.lastSyncedBlock || 0
         });
 
         revalidatePath('/settings/bsc-apis');

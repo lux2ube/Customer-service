@@ -20,7 +20,7 @@ async function getPageData(): Promise<{ apiSettings: BscApiSetting[], usdtAccoun
         : [];
         
     const usdtAccounts: Account[] = accountsSnapshot.exists()
-        ? Object.values(accountsSnapshot.val()).filter((acc: any) => acc.currency === 'USDT' && !acc.isGroup) as Account[]
+        ? Object.values(accountsSnapshot.val()).filter((acc: any) => acc.parentId === '1000' && !acc.isGroup) as Account[]
         : [];
 
     return { apiSettings, usdtAccounts };

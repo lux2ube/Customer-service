@@ -137,6 +137,10 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                             <Label htmlFor="apiKey">Etherscan API Key</Label>
                             <Input id="apiKey" name="apiKey" type="password" placeholder="Get from etherscan.io" required />
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="lastSyncedBlock">Last Synced Block</Label>
+                            <Input id="lastSyncedBlock" name="lastSyncedBlock" type="number" placeholder="Block number to start syncing from" />
+                        </div>
                     </CardContent>
                     <CardFooter className="flex justify-end">
                         <SubmitButton pending={addPending} />

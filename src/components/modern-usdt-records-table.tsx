@@ -73,7 +73,7 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
       return;
     }
 
-    const recordsRef = query(ref(db, 'records/usdt'), orderByChild('createdAt'));
+    const recordsRef = query(ref(db, 'modern_usdt_records'), orderByChild('createdAt'));
     const unsubscribe = onValue(recordsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
