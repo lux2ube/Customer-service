@@ -3,6 +3,9 @@
   "rules": {
     ".read": true,
     ".write": true,
+    "accounts": {
+      ".indexOn": ["parentId", "currency", "type"]
+    },
     "cash_records": {
       ".indexOn": ["clientId", "source", "createdAt"]
     },
