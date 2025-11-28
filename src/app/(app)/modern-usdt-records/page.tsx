@@ -104,7 +104,7 @@ function SyncBscForm() {
     
     return (
         <form action={formAction} className="flex flex-wrap items-center gap-2">
-            <Select name="apiId" value={selectedApi} onValueChange={setSelectedApi} required>
+            <Select value={selectedApi} onValueChange={setSelectedApi}>
                 <SelectTrigger className="w-full md:w-[250px]">
                     <SelectValue placeholder="Select a wallet to sync..." />
                 </SelectTrigger>
@@ -114,6 +114,7 @@ function SyncBscForm() {
                     ))}
                 </SelectContent>
             </Select>
+            <input type="hidden" name="apiId" value={selectedApi} />
             <SyncBscButton />
         </form>
     );
