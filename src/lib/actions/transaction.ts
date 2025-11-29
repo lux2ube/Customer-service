@@ -30,7 +30,8 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
-        const allowedStatuses = ['Pending', 'Matched', 'Confirmed'];
+        // Only show Pending and Matched records - exclude 'Confirmed' (old synced records) and 'Used' (already in transaction)
+        const allowedStatuses = ['Pending', 'Matched'];
 
         if (cashRecordsSnapshot.exists()) {
             const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
