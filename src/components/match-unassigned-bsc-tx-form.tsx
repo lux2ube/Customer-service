@@ -25,7 +25,7 @@ export function MatchUnassignedBscTxForm({ client, onTxMatched, setIsOpen }: Mat
 
   React.useEffect(() => {
     setLoading(true);
-    const txRef = ref(db, 'transactions');
+    const txRef = ref(db, 'modern_transactions');
     const unsubscribe = onValue(txRef, (snapshot) => {
       if (snapshot.exists()) {
         const allTxs: Transaction[] = Object.values(snapshot.val());
@@ -41,8 +41,8 @@ export function MatchUnassignedBscTxForm({ client, onTxMatched, setIsOpen }: Mat
     if (!tx.id) return;
     try {
         const updates: {[key: string]: any} = {};
-        updates[`/transactions/${tx.id}/clientId`] = client.id;
-        updates[`/transactions/${tx.id}/clientName`] = client.name;
+        updates[`/modern_transactions/${tx.id}/clientId`] = client.id;
+        updates[`/modern_transactions/${tx.id}/clientName`] = client.name;
         
         await update(ref(db), updates);
 

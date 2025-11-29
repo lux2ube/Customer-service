@@ -172,7 +172,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             txHash: txid, notes, createdAt: new Date().toISOString(),
         };
 
-        const recordRef = ref(db, `/records/usdt/${newId}`);
+        const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(receiptData));
 
         await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
@@ -235,7 +235,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         
         let existingRecord: Partial<UsdtRecord> = {};
         if (recordId) {
-            const existingSnapshot = await get(ref(db, `records/usdt/${recordId}`));
+            const existingSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
             if (existingSnapshot.exists()) {
                 existingRecord = existingSnapshot.val();
             }
@@ -258,7 +258,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             createdAt: existingRecord.createdAt || new Date().toISOString(),
         };
 
-        const recordRef = ref(db, `/records/usdt/${newId}`);
+        const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(paymentData));
 
         if (clientId && clientName) {
