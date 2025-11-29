@@ -89,7 +89,7 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
   }, [recordsFromProps]);
   
   const filteredRecords = React.useMemo(() => {
-    return records.filter(r => {
+    const filtered = records.filter(r => {
         if (sourceFilter !== 'all' && r.source !== sourceFilter) return false;
         if (statusFilter !== 'all' && r.status !== statusFilter) return false;
         if (typeFilter !== 'all' && r.type !== typeFilter) return false;
@@ -119,6 +119,13 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
         }
 
         return true;
+    });
+
+    // Sort by numeric ID (extract number from "USDT999" format)
+    return filtered.sort((a, b) => {
+        const numA = parseInt(a.id.replace(/[^\d]/g, '')) || 0;
+        const numB = parseInt(b.id.replace(/[^\d]/g, '')) || 0;
+        return numB - numA; // Descending (newest first)
     });
   }, [records, search, statusFilter, sourceFilter, typeFilter, dateRange]);
   
