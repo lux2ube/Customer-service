@@ -223,91 +223,97 @@ export async function syncBscCsv(prevState: SyncState, formData: FormData): Prom
         }
         const cryptoWalletName = (walletAccountSnapshot.val() as Account).name || 'Synced USDT Wallet';
 
-        const updates: { [key: string]: any } = {};
+        const BATCH_SIZE = 100; // Process 100 rows per batch to avoid timeout
         let newRecordsCount = 0;
         let skippedCount = 0;
         const processedHashes = new Set<string>();
 
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
+        // Process rows in batches
+        for (let startIdx = 1; startIdx < lines.length; startIdx += BATCH_SIZE) {
+            const endIdx = Math.min(startIdx + BATCH_SIZE, lines.length);
+            const batchUpdates: { [key: string]: any } = {};
+            
+            for (let i = startIdx; i < endIdx; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
 
-            const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
-            if (values.length < requiredHeaders.length) continue;
+                const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
+                if (values.length < requiredHeaders.length) continue;
 
-            const hash = values[headerMap['transaction hash']] || '';
-            const blockNumber = values[headerMap['blockno']] || '0';
-            const timeStamp = values[headerMap['unixtimestamp']] || '0';
-            const from = values[headerMap['from']]?.toLowerCase() || '';
-            const to = values[headerMap['to']]?.toLowerCase() || '';
-            let tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
+                const hash = values[headerMap['transaction hash']] || '';
+                const blockNumber = values[headerMap['blockno']] || '0';
+                const timeStamp = values[headerMap['unixtimestamp']] || '0';
+                const from = values[headerMap['from']]?.toLowerCase() || '';
+                const to = values[headerMap['to']]?.toLowerCase() || '';
+                let tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
 
-            if (processedHashes.has(hash)) {
-                skippedCount++;
-                continue;
-            }
-            processedHashes.add(hash);
+                if (processedHashes.has(hash)) {
+                    skippedCount++;
+                    continue;
+                }
+                processedHashes.add(hash);
 
-            if (!hash || !from || !to) {
-                skippedCount++;
-                continue;
-            }
+                if (!hash || !from || !to) {
+                    skippedCount++;
+                    continue;
+                }
 
-            const syncedAmount = parseFloat(tokenValue.replace(/,/g, ''));
-            if (syncedAmount <= 0.01) {
-                skippedCount++;
-                continue;
-            }
+                const syncedAmount = parseFloat(tokenValue.replace(/,/g, ''));
+                if (syncedAmount <= 0.01) {
+                    skippedCount++;
+                    continue;
+                }
 
-            const isIncoming = to === walletAddress;
-            const clientWalletAddress = isIncoming ? from : to;
+                const isIncoming = to === walletAddress;
+                const clientWalletAddress = isIncoming ? from : to;
 
-            const existingClient = await findClientByAddress(clientWalletAddress);
+                const existingClient = await findClientByAddress(clientWalletAddress);
+                const newRecordId = await getNextSequentialId('modernUsdtRecordId');
 
-            const newRecordId = await getNextSequentialId('modernUsdtRecordId');
-
-            const newTxData: Omit<ModernUsdtRecord, 'id'> = {
-                date: new Date(parseInt(timeStamp) * 1000).toISOString(),
-                type: isIncoming ? 'inflow' : 'outflow',
-                source: 'CSV',
-                status: 'Confirmed',
-                clientId: existingClient ? existingClient.id : null,
-                clientName: existingClient ? existingClient.name : 'Unassigned',
-                accountId: accountId,
-                accountName: cryptoWalletName,
-                amount: syncedAmount,
-                clientWalletAddress: clientWalletAddress,
-                txHash: hash,
-                notes: `Synced from CSV: ${configName}`,
-                createdAt: new Date().toISOString(),
-            };
-
-            updates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: parseInt(blockNumber) };
-
-            if (existingClient) {
-                const clientAccountId = `6000${existingClient.id}`;
-                const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
-                const journalRef = push(ref(db, 'journal_entries'));
-
-                const journalEntry: Omit<JournalEntry, 'id'> = {
-                    date: newTxData.date,
-                    description: journalDescription,
-                    debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
-                    credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
-                    debit_amount: newTxData.amount,
-                    credit_amount: newTxData.amount,
-                    amount_usd: newTxData.amount,
+                const newTxData: Omit<ModernUsdtRecord, 'id'> = {
+                    date: new Date(parseInt(timeStamp) * 1000).toISOString(),
+                    type: isIncoming ? 'inflow' : 'outflow',
+                    source: 'CSV',
+                    status: 'Confirmed',
+                    clientId: existingClient ? existingClient.id : null,
+                    clientName: existingClient ? existingClient.name : 'Unassigned',
+                    accountId: accountId,
+                    accountName: cryptoWalletName,
+                    amount: syncedAmount,
+                    clientWalletAddress: clientWalletAddress,
+                    txHash: hash,
+                    notes: `Synced from CSV: ${configName}`,
                     createdAt: new Date().toISOString(),
                 };
-                updates[`/journal_entries/${journalRef.key}`] = journalEntry;
-                await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+
+                batchUpdates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: parseInt(blockNumber) };
+
+                if (existingClient) {
+                    const clientAccountId = `6000${existingClient.id}`;
+                    const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
+                    const journalRef = push(ref(db, 'journal_entries'));
+
+                    const journalEntry: Omit<JournalEntry, 'id'> = {
+                        date: newTxData.date,
+                        description: journalDescription,
+                        debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
+                        credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                        debit_amount: newTxData.amount,
+                        credit_amount: newTxData.amount,
+                        amount_usd: newTxData.amount,
+                        createdAt: new Date().toISOString(),
+                    };
+                    batchUpdates[`/journal_entries/${journalRef.key}`] = journalEntry;
+                    await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+                }
+
+                newRecordsCount++;
             }
 
-            newRecordsCount++;
-        }
-
-        if (Object.keys(updates).length > 0) {
-            await update(ref(db), updates);
+            // Write batch to database
+            if (Object.keys(batchUpdates).length > 0) {
+                await update(ref(db), batchUpdates);
+            }
         }
 
         revalidatePath('/modern-usdt-records');

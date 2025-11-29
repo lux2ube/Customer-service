@@ -8,7 +8,16 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### November 29, 2025 - Manual CSV Sync for USDT Transactions
+### November 29, 2025 - Batch Processing for Large CSV Files
+- **Optimized CSV Sync for Large Datasets**: Implemented batch processing to handle CSVs with hundreds/thousands of rows
+  - Processes rows in batches of 100 to avoid server timeouts and payload limits
+  - Each batch writes to Firebase independently for reliable handling
+  - Fixed CSV header validation logic for proper column detection
+  - Prevents "An unexpected response was received from the server" errors
+  - Maintains deduplication and client matching across all batches
+  - Shows total synced and skipped counts after all batches complete
+
+### November 29, 2025 (Earlier) - Manual CSV Sync for USDT Transactions
 - **Added CSV Upload Sync**: New feature to manually import USDT transactions from exported CSV files
   - Form selects existing BSC API configuration (reuses wallet address and linked account)
   - CSV is parsed and synced using identical logic as Etherscan API syncing
