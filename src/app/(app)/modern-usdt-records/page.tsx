@@ -105,13 +105,18 @@ function AutoMatchButton() {
             const updates: { [key: string]: any } = {};
             let matched = 0;
 
+            let recordsChecked = 0;
+            let recordsWithAddress = 0;
+            
             unassignedRecords.forEach(record => {
+                recordsChecked++;
                 // Skip if no wallet address
                 if (!record.clientWalletAddress) {
-                    console.warn(`Record ${record.id} has no clientWalletAddress`);
+                    console.warn(`[${record.id}] No clientWalletAddress`);
                     return;
                 }
                 
+                recordsWithAddress++;
                 const walletAddress = record.clientWalletAddress.toLowerCase();
                 
                 // Find matching client
@@ -127,12 +132,18 @@ function AutoMatchButton() {
                             updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
                             updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
                             matched++;
-                            console.log(`✅ Matched ${record.id} to client ${client.name}`);
+                            console.log(`✅ [${record.id}] Matched to ${client.name} (${walletAddress})`);
                             break;
                         }
+                    } else if (recordsChecked === 1) {
+                        // Log for first record to debug why clients don't match
+                        console.debug(`[${client.id}] ${client.name} - bep20_addresses:`, client.bep20_addresses);
                     }
                 }
             });
+            
+            console.log(`📊 Auto-match debug: ${recordsChecked} records checked, ${recordsWithAddress} have wallet address, ${matched} matched`);
+            console.log(`📊 Total clients checked: ${Object.keys(clients).length}`);
 
             if (Object.keys(updates).length > 0) {
                 await update(ref(db), updates);
