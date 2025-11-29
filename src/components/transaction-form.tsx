@@ -251,136 +251,140 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
             <QuickAddUsdtInflow client={selectedClient!} isOpen={isQuickAddUsdtInOpen} setIsOpen={setIsQuickAddUsdtInOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
             <QuickAddCashOutflow client={selectedClient!} isOpen={isQuickAddCashOutOpen} setIsOpen={setIsQuickAddCashOutOpen} onRecordCreated={() => { if (selectedClient?.id) fetchAvailableFunds(selectedClient.id); }} />
 
-            <div className="space-y-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Step 1: Select Transaction Type</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <RadioGroup
-                            value={transactionType || ''}
-                            onValueChange={(value) => setTimeout(() => setTransactionType(value as any), 0)}
-                            className="grid grid-cols-1 md:grid-cols-3 gap-4"
-                        >
-                             <div>
-                                <RadioGroupItem value="Deposit" id="type-deposit" className="peer sr-only" />
-                                <Label htmlFor="type-deposit" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                    <ArrowDown className="mb-3 h-6 w-6" />
-                                    Deposit (Client Buys USDT)
-                                </Label>
-                             </div>
-                              <div>
-                                <RadioGroupItem value="Withdraw" id="type-withdraw" className="peer sr-only" />
-                                <Label htmlFor="type-withdraw" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                    <ArrowUp className="mb-3 h-6 w-6" />
-                                    Withdraw (Client Sells USDT)
-                                </Label>
-                             </div>
-                             <div>
-                                <RadioGroupItem value="Transfer" id="type-transfer" className="peer sr-only" />
-                                <Label htmlFor="type-transfer" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                    <Repeat className="mb-3 h-6 w-6" />
-                                    Internal Transfer
-                                </Label>
-                             </div>
-                        </RadioGroup>
-                    </CardContent>
-                </Card>
-                
-                {transactionType && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Step 2: Select a Client</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <ClientSelector onSelect={handleClientSelect} selectedClient={selectedClient} />
-                    </CardContent>
-                </Card>
-                )}
-
-                {selectedClient && (
+            <div className="max-w-3xl mx-auto space-y-4">
+                {!selectedClient ? (
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Step 3: Link Financial Records</CardTitle>
-                            <CardDescription>Select records to consolidate into this transaction.</CardDescription>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg">Create Transaction</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            {loadingRecords ? (
-                                <div className="flex flex-col gap-4">
-                                    <Skeleton className="h-48 w-full" />
-                                    <Skeleton className="h-48 w-full" />
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {transactionType === 'Deposit' && (
-                                        <>
-                                            <div className="space-y-2">
-                                                 <div className="flex justify-between items-center mb-2">
-                                                    <Label>Client Gives (Fiat)</Label>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
-                                                </div>
-                                                <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                            </div>
-                                             <div className="space-y-2">
-                                                 <div className="flex justify-between items-center mb-2">
-                                                    <Label>Client Gets (USDT)</Label>
-                                                    <div className="flex items-center gap-2">
-                                                        <Button type="button" variant="outline" size="sm" onClick={handleAutoProcess}><Bot className="mr-2 h-4 w-4" />Auto Process</Button>
-                                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
-                                                    </div>
-                                                </div>
-                                                 <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                             </div>
-                                        </>
-                                    )}
-                                    {transactionType === 'Withdraw' && (
-                                        <>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <Label>Client Gives (USDT)</Label>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
-                                                </div>
-                                                <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <Label>Client Gets (Fiat)</Label>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="mr-2 h-4 w-4" />Add</Button>
-                                                </div>
-                                                <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                            </div>
-                                        </>
-                                    )}
-                                    {transactionType === 'Transfer' && (
-                                        <>
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <Label className="mb-2 block">Inflows (Money Received)</Label>
-                                                    <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                    <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                </div>
-                                            </div>
-                                             <div className="space-y-4">
-                                                <div>
-                                                    <Label className="mb-2 block">Outflows (Money Sent)</Label>
-                                                    <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                    <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
+                        <CardContent className="space-y-4">
+                            <div>
+                                <Label className="text-sm font-semibold mb-3 block">Transaction Type</Label>
+                                <RadioGroup
+                                    value={transactionType || ''}
+                                    onValueChange={(value) => setTimeout(() => setTransactionType(value as any), 0)}
+                                    className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                                >
+                                    <div>
+                                        <RadioGroupItem value="Deposit" id="type-deposit" className="peer sr-only" />
+                                        <Label htmlFor="type-deposit" className="flex flex-col items-center gap-2 p-3 rounded border border-input hover:bg-accent cursor-pointer peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-blue-50">
+                                            <ArrowDown className="h-5 w-5" />
+                                            <span className="text-xs font-medium text-center">Deposit</span>
+                                        </Label>
+                                    </div>
+                                    <div>
+                                        <RadioGroupItem value="Withdraw" id="type-withdraw" className="peer sr-only" />
+                                        <Label htmlFor="type-withdraw" className="flex flex-col items-center gap-2 p-3 rounded border border-input hover:bg-accent cursor-pointer peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-blue-50">
+                                            <ArrowUp className="h-5 w-5" />
+                                            <span className="text-xs font-medium text-center">Withdraw</span>
+                                        </Label>
+                                    </div>
+                                    <div>
+                                        <RadioGroupItem value="Transfer" id="type-transfer" className="peer sr-only" />
+                                        <Label htmlFor="type-transfer" className="flex flex-col items-center gap-2 p-3 rounded border border-input hover:bg-accent cursor-pointer peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-blue-50">
+                                            <Repeat className="h-5 w-5" />
+                                            <span className="text-xs font-medium text-center">Transfer</span>
+                                        </Label>
+                                    </div>
+                                </RadioGroup>
+                            </div>
+
+                            {transactionType && (
+                                <div>
+                                    <Label className="text-sm font-semibold mb-3 block">Select Client</Label>
+                                    <ClientSelector onSelect={handleClientSelect} selectedClient={selectedClient} />
                                 </div>
                             )}
                         </CardContent>
                     </Card>
+                ) : (
+                    <>
+                        <div className="flex items-center justify-between p-4 bg-blue-50 rounded border border-blue-200">
+                            <div>
+                                <p className="text-xs text-muted-foreground">Transaction Type</p>
+                                <p className="font-semibold">{transactionType}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-muted-foreground">Client</p>
+                                <p className="font-semibold">{selectedClient.name}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => { setSelectedClient(null); setTransactionType(null); setSelectedRecordIds([]); }}>Change</Button>
+                        </div>
+
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base">Select Records</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {loadingRecords ? (
+                                    <Skeleton className="h-40 w-full" />
+                                ) : (
+                                    <div className="space-y-4">
+                                        {transactionType === 'Deposit' && (
+                                            <>
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <Label className="text-sm font-medium">Client Gives Fiat</Label>
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                    </div>
+                                                    <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <Label className="text-sm font-medium">Client Gets USDT</Label>
+                                                        <div className="flex gap-1">
+                                                            <Button type="button" variant="ghost" size="sm" onClick={handleAutoProcess}><Bot className="h-4 w-4" /></Button>
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                        </div>
+                                                    </div>
+                                                    <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                            </>
+                                        )}
+                                        {transactionType === 'Withdraw' && (
+                                            <>
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <Label className="text-sm font-medium">Client Gives USDT</Label>
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                    </div>
+                                                    <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <Label className="text-sm font-medium">Client Gets Fiat</Label>
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                    </div>
+                                                    <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                            </>
+                                        )}
+                                        {transactionType === 'Transfer' && (
+                                            <>
+                                                <div>
+                                                    <Label className="text-sm font-medium mb-2 block">Money In</Label>
+                                                    <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                    <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-sm font-medium mb-2 block">Money Out</Label>
+                                                    <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                    <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </>
                 )}
 
 
                 {selectedRecordIds.length > 0 && (
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Step 4: Financial Summary</CardTitle>
-                            <CardDescription>Review the complete financial breakdown of this transaction</CardDescription>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Summary</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {/* Transaction Flow */}
@@ -470,16 +474,16 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                     </Card>
                 )}
 
-                 {selectedRecordIds.length > 0 && (
+                {selectedRecordIds.length > 0 && (
                     <Card>
-                        <CardHeader><CardTitle>Step 5: Final Details</CardTitle></CardHeader>
+                        <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="notes">Notes</Label>
-                                <Textarea id="notes" name="notes" placeholder="Add any relevant notes for this consolidated transaction..." />
+                            <div className="space-y-2">
+                                <Label htmlFor="notes" className="text-sm">Notes</Label>
+                                <Textarea id="notes" name="notes" placeholder="Add notes for this transaction..." className="min-h-20" />
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="attachment">Attachment</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="attachment" className="text-sm">Attachment</Label>
                                 <Input id="attachment" name="attachment" type="file" />
                             </div>
                         </CardContent>
@@ -487,7 +491,7 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                             <SubmitButton />
                         </CardFooter>
                     </Card>
-                 )}
+                )}
             </div>
         </form>
     );
