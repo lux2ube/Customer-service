@@ -31,6 +31,27 @@ const nextConfig: NextConfig = {
       }
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Robots-Tag',
+            value: 'noindex, nofollow, nocache, noarchive',
+          },
+          {
+            key: 'X-UA-Compatible',
+            value: 'IE=edge',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate, private',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
