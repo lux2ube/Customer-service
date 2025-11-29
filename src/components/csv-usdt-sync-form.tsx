@@ -10,15 +10,6 @@ import { ref, onValue } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 
-interface CsvRow {
-    hash: string;
-    blockNumber: string;
-    timeStamp: string;
-    from: string;
-    to: string;
-    amount: number;
-}
-
 export function CsvUsdtSyncForm() {
     const { toast } = useToast();
     const [apiSettings, setApiSettings] = React.useState<BscApiSetting[]>([]);
@@ -43,76 +34,85 @@ export function CsvUsdtSyncForm() {
         return () => unsubscribe();
     }, [selectedApi]);
 
-    const parseCsv = (csvText: string): CsvRow[] => {
-        const lines = csvText.trim().split('\n');
-        if (lines.length < 2) return [];
-
-        const headers = lines[0].split(',').map((h: string) => h.replace(/^"|"$/g, '').trim());
-        const headerMap: { [key: string]: number } = {};
-        headers.forEach((header: string, index: number) => {
-            headerMap[header.toLowerCase()] = index;
-        });
-
-        const rows: CsvRow[] = [];
-        const processedHashes = new Set<string>();
-
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-
-            const values = line
-                .match(/"([^"]*)"|([^,]+)/g)
-                ?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
-
-            if (values.length < 6) continue;
-
-            const hash = values[headerMap['transaction hash']]?.toLowerCase() || '';
-            const blockNumber = values[headerMap['blockno']] || '0';
-            const timeStamp = values[headerMap['unixtimestamp']] || '0';
-            const from = values[headerMap['from']]?.toLowerCase() || '';
-            const to = values[headerMap['to']]?.toLowerCase() || '';
-            const tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
-
-            if (processedHashes.has(hash)) continue;
-            if (!hash || !from || !to) continue;
-
-            const amount = parseFloat(tokenValue);
-            if (amount <= 0.01) continue;
-
-            processedHashes.add(hash);
-            rows.push({
-                hash,
-                blockNumber,
-                timeStamp,
-                from,
-                to,
-                amount,
-            });
-        }
-
-        return rows;
-    };
-
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file || !selectedApi) return;
+        if (!file || !selectedApi) {
+            toast({
+                title: 'Error',
+                description: 'Please select a file and API configuration',
+                variant: 'destructive',
+            });
+            return;
+        }
 
         setIsProcessing(true);
+
         try {
             const csvText = await file.text();
-            const rows = parseCsv(csvText);
+            const lines = csvText.trim().split('\n');
 
-            if (rows.length === 0) {
+            if (lines.length < 2) {
                 toast({
-                    title: 'No Valid Rows',
-                    description: 'CSV has no valid transactions (all filtered or invalid format)',
+                    title: 'Error',
+                    description: 'CSV file is empty',
                     variant: 'destructive',
                 });
                 setIsProcessing(false);
                 return;
             }
 
-            // Send in batches of 10 rows
+            // Parse CSV headers
+            const headers = lines[0].split(',').map((h: string) => h.replace(/^"|"$/g, '').trim());
+            const headerMap: { [key: string]: number } = {};
+            headers.forEach((header: string, index: number) => {
+                headerMap[header.toLowerCase()] = index;
+            });
+
+            // Parse and validate rows
+            const rows: any[] = [];
+            const processedHashes = new Set<string>();
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
+
+                const hash = values[headerMap['transaction hash']]?.toLowerCase() || '';
+                const blockNumber = values[headerMap['blockno']] || '0';
+                const timeStamp = values[headerMap['unixtimestamp']] || '0';
+                const from = values[headerMap['from']]?.toLowerCase() || '';
+                const to = values[headerMap['to']]?.toLowerCase() || '';
+                const tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
+
+                if (processedHashes.has(hash)) continue;
+                if (!hash || !from || !to) continue;
+
+                const amount = parseFloat(tokenValue);
+                if (amount <= 0.01) continue;
+
+                processedHashes.add(hash);
+                rows.push({
+                    hash,
+                    blockNumber,
+                    timeStamp,
+                    from,
+                    to,
+                    amount,
+                });
+            }
+
+            if (rows.length === 0) {
+                toast({
+                    title: 'No Valid Rows',
+                    description: 'CSV has no valid transactions',
+                    variant: 'destructive',
+                });
+                setIsProcessing(false);
+                return;
+            }
+
+            // Process in batches of 10
             const BATCH_SIZE = 10;
             let totalSynced = 0;
             let totalSkipped = 0;
@@ -124,50 +124,31 @@ export function CsvUsdtSyncForm() {
 
                 toast({
                     title: 'Processing',
-                    description: `Batch ${batchNum}/${totalBatches}: Syncing ${batch.length} rows...`,
+                    description: `Batch ${batchNum}/${totalBatches}...`,
                 });
 
-                try {
-                    const response = await fetch('/api/sync-usdt-csv', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ apiId: selectedApi, rows: batch }),
-                    });
+                const response = await fetch('/api/sync-usdt-csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiId: selectedApi, rows: batch }),
+                });
 
-                    const data = await response.json();
+                const data = await response.json();
 
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Batch sync failed');
-                    }
-
-                    totalSynced += data.synced;
-                    totalSkipped += data.skipped;
-                } catch (batchError: any) {
-                    toast({
-                        title: 'Batch Failed',
-                        description: `Batch ${batchNum} error: ${batchError.message}`,
-                        variant: 'destructive',
-                    });
-                    setIsProcessing(false);
-                    return;
+                if (!response.ok) {
+                    throw new Error(data.error || `Batch ${batchNum} failed`);
                 }
+
+                totalSynced += data.synced || 0;
+                totalSkipped += data.skipped || 0;
             }
 
-            // Success summary
-            const summary = [
-                `CSV sync completed.`,
-                `${totalSynced} transaction(s) synced.`,
-                totalSkipped > 0 ? `${totalSkipped} transaction(s) skipped.` : null,
-            ]
-                .filter(Boolean)
-                .join(' ');
-
+            // Success
             toast({
                 title: 'CSV Sync Complete',
-                description: summary,
+                description: `${totalSynced} synced, ${totalSkipped} skipped`,
             });
 
-            // Reset form
             if (fileInputRef.current) {
                 fileInputRef.current.value = '';
             }
@@ -195,7 +176,7 @@ export function CsvUsdtSyncForm() {
         <div className="flex flex-wrap items-center gap-2">
             <Select value={selectedApi} onValueChange={setSelectedApi}>
                 <SelectTrigger className="w-full md:w-[250px]">
-                    <SelectValue placeholder="Select API configuration..." />
+                    <SelectValue placeholder="Select API config..." />
                 </SelectTrigger>
                 <SelectContent>
                     {apiSettings.map(api => (

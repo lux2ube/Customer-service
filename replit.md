@@ -8,15 +8,18 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### November 29, 2025 - Redesigned CSV Sync with API Endpoint & Client-Side Parsing
-- **Fixed CSV Upload Errors**: Completely redesigned CSV sync from server action to API endpoint
-  - Created `/api/sync-usdt-csv` endpoint for reliable batch processing
-  - Client-side CSV parsing (faster, doesn't block server)
-  - Sends rows in small batches (10 at a time) to API
-  - Prevents "An unexpected response was received from the server" errors
-  - Better error handling and progress feedback per batch
-  - Shows total synced and skipped counts after all batches complete
-  - Updated CSV sync form component to use fetch API instead of server action
+### November 29, 2025 - Complete API-Based CSV Sync (No Server Actions)
+- **Completely Redesigned CSV Sync**: Replaced server action with pure API + client-side processing
+  - Created `/api/sync-usdt-csv` endpoint for backend batch processing
+  - Form component uses **zero server actions** - pure fetch API calls
+  - CSV parsing happens in browser (JavaScript, not server)
+  - Sends rows in batches of 10 to prevent payload limits
+  - Shows progress toast: "Batch X/Y..." for each batch
+  - Graceful error handling per batch (if one fails, user knows which batch)
+  - Final summary: "X synced, Y skipped"
+  - No more "An unexpected response was received from the server" errors
+  - Maintains full double-entry accounting with automatic journal entries
+  - Client can upload large CSVs (100+, 1000+ rows) without timeout
 
 ### November 29, 2025 (Earlier) - Manual CSV Sync for USDT Transactions
 - **Added CSV Upload Sync**: New feature to manually import USDT transactions from exported CSV files
