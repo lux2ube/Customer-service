@@ -97,7 +97,7 @@ export function ClientUsdtRecordsTable({ records, loading, selectedIds, onSelect
                                     </Button>
                                 )}
                                 <Button asChild variant="ghost" size="icon">
-                                    <Link href={`/records/usdt/${record.id}/edit`}>
+                                    <Link href={`/modern-usdt-records/${record.id}/edit`}>
                                         <Pencil className="h-4 w-4" />
                                     </Link>
                                 </Button>
