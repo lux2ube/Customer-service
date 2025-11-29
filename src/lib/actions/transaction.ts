@@ -143,16 +143,32 @@ const ModernTransactionSchema = z.object({
 
 
 export async function createModernTransaction(prevState: TransactionFormState, formData: FormData): Promise<TransactionFormState> {
-    const validatedFields = ModernTransactionSchema.safeParse(Object.fromEntries(formData.entries()));
+    // Handle multiple linkedRecordIds - use getAll() to capture all values
+    const linkedRecordIds = formData.getAll('linkedRecordIds') as string[];
+    
+    // Convert rest of FormData to object
+    const formObject = Object.fromEntries(formData.entries());
+    
+    // Remove the single linkedRecordIds entry (we need the array from getAll())
+    delete formObject.linkedRecordIds;
+    
+    // Add the complete array of linkedRecordIds
+    const formDataWithAllRecords = { ...formObject, linkedRecordIds };
+    
+    console.log('📝 Form submission - linkedRecordIds:', linkedRecordIds);
+    
+    const validatedFields = ModernTransactionSchema.safeParse(formDataWithAllRecords);
 
     if (!validatedFields.success) {
+        console.error('❌ Validation failed:', validatedFields.error);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',
         };
     }
     
-    const { clientId, type, linkedRecordIds, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
+    const { clientId, type, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
+    const allLinkedRecordIds = validatedFields.data.linkedRecordIds;
     
     try {
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot, serviceProvidersSnapshot] = await Promise.all([
@@ -172,7 +188,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         const allServiceProviders: Record<string, ServiceProvider> = serviceProvidersSnapshot.val() || {};
         const lastFeeEntry = cryptoFeesSnapshot.exists() ? Object.values(cryptoFeesSnapshot.val())[0] as CryptoFee : null;
 
-        const allLinkedRecords = linkedRecordIds.map(id => {
+        const allLinkedRecords = allLinkedRecordIds.map(id => {
             if (allCashRecords[id]) return { ...allCashRecords[id], id, recordType: 'cash', amount_usd: allCashRecords[id].amountusd };
             if (allUsdtRecords[id]) return { ...allUsdtRecords[id], id, recordType: 'usdt', amount_usd: allUsdtRecords[id].amount };
             return null;
