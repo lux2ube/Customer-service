@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { syncUsdtCsvBatch } from '@/lib/actions/csv-sync';
 
 export function CsvUsdtSyncForm() {
     const { toast } = useToast();
@@ -127,20 +128,13 @@ export function CsvUsdtSyncForm() {
                     description: `Batch ${batchNum}/${totalBatches}...`,
                 });
 
-                const response = await fetch('/api/sync-usdt-csv', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ apiId: selectedApi, rows: batch }),
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || `Batch ${batchNum} failed`);
+                try {
+                    const result = await syncUsdtCsvBatch(selectedApi, batch);
+                    totalSynced += result.synced || 0;
+                    totalSkipped += result.skipped || 0;
+                } catch (batchError: any) {
+                    throw new Error(`Batch ${batchNum} failed: ${batchError.message}`);
                 }
-
-                totalSynced += data.synced || 0;
-                totalSkipped += data.skipped || 0;
             }
 
             // Success
