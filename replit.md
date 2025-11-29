@@ -8,6 +8,17 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
+### November 29, 2025 - Auto-Match USDT Records Fixed
+- **Fixed Auto-Match Unassigned Button**: Now matches records to clients using BOTH wallet address storage methods:
+  - Check 1: Direct `bep20_addresses` array in client profile
+  - Check 2: Service Provider addresses for Crypto providers (`serviceProviders[].details['Address']`)
+  - Properly validates data before saving to prevent Firebase "undefined in property" errors
+  - Console logging shows: "✅ Matched {recordId} to {clientName}"
+  - Toast summary: "Matched X of Y unassigned transactions"
+- **Fixed React Hydration Warning**: Added `suppressHydrationWarning={true}` and color scheme fix to root layout
+  - Resolves Replit dev environment script injection mismatch
+  - App now loads cleanly without React hydration errors
+
 ### November 29, 2025 - Complete API-Based CSV Sync (No Server Actions)
 - **Completely Redesigned CSV Sync**: Replaced server action with pure API + client-side processing
   - Created `/api/sync-usdt-csv` endpoint for backend batch processing
