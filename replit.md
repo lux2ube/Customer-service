@@ -8,6 +8,20 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
+### November 29, 2025 - Complete Authentication & SEO Security
+- **Authentication System Added**: Secure login with demo credentials
+  - Demo credentials: Email `demogmail` | Password `demo`
+  - Server-side cookie-based sessions (httpOnly, secure, 7-day expiry)
+  - Middleware protection on all `/app` routes - unauthorized access redirected to `/login`
+  - Logout button in header to clear auth and return to login
+  - Protected route: GET `/login` public, all others require authentication
+- **Search Engine Blocking - 3 Layers**: 
+  - `robots.txt` file blocks ALL crawlers (Google, Bing, Yahoo, DuckDuckGo, etc.)
+  - HTML metadata tags: `robots: 'noindex, nofollow, nocache, noarchive'`
+  - HTTP headers: `X-Robots-Tag` and `Cache-Control: no-cache, no-store, must-revalidate, private`
+  - Prevents indexing, link following, caching, and web archiving
+- **Result**: Financial data completely invisible to search engines + login-protected access
+
 ### November 29, 2025 - Modern USDT Records Complete Fix
 - **Fixed Auto-Match Unassigned Button**: Now matches records to clients using BOTH wallet address storage methods:
   - Check 1: Direct `bep20_addresses` array in client profile
