@@ -32,7 +32,7 @@ export interface DocumentClientFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   extractedData: Record<string, any>;
-  documentType: string;
+  documentType: 'yemeni_id_front' | 'yemeni_id_back' | 'passport' | 'unknown';
 }
 
 export function DocumentClientForm({
@@ -52,13 +52,20 @@ export function DocumentClientForm({
     verification_status: 'Pending',
   });
 
-  // Pre-fill form with extracted data
+  // Pre-fill form with extracted data based on document type
   React.useEffect(() => {
     if (open && extractedData) {
-      const name = extractedData.fullName || extractedData.name || '';
-      const phone = documentType === 'passport' 
-        ? extractedData.phoneNumber || ''
-        : extractedData.phone || '';
+      let name = '';
+      let phone = '';
+
+      if (documentType === 'passport') {
+        name = extractedData.fullName || '';
+      } else if (documentType === 'yemeni_id_front') {
+        name = extractedData.name || extractedData.nameArabic || '';
+      } else if (documentType === 'yemeni_id_back') {
+        // ID back usually doesn't have name, keep from previous extraction
+        name = extractedData.name || '';
+      }
       
       setFormData({
         name,

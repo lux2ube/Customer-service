@@ -97,7 +97,8 @@ export {
 
 // Document Processing (OCR)
 export {
-    processDocument
+    processDocument,
+    type DocumentParsingState,
 } from './document';
 
 // Service Provider Management

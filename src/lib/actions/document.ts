@@ -7,14 +7,46 @@ import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 
+export type PassportDetails = {
+  fullName?: string;
+  surname?: string;
+  passportNumber?: string;
+  nationality?: string;
+  dateOfBirth?: string;
+  sex?: string;
+  dateOfIssue?: string;
+  expiryDate?: string;
+  placeOfBirth?: string;
+  issuingAuthority?: string;
+};
+
+export type YemeniIDFrontDetails = {
+  name?: string;
+  nameArabic?: string;
+  idNumber?: string;
+  dateOfBirth?: string;
+  governorate?: string;
+  gender?: string;
+  nationality?: string;
+  religion?: string;
+  profession?: string;
+};
+
+export type YemeniIDBackDetails = {
+  idNumber?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  maritalStatus?: string;
+};
+
 export type DocumentParsingState = {
   success?: boolean;
   error?: boolean;
   message?: string;
   rawText?: string;
   parsedData?: {
-    documentType: 'passport' | 'national_id' | 'unknown';
-    details: any;
+    documentType: 'yemeni_id_front' | 'yemeni_id_back' | 'passport' | 'unknown';
+    details: PassportDetails | YemeniIDFrontDetails | YemeniIDBackDetails | Record<string, any>;
   }
 } | undefined;
 
@@ -114,34 +146,45 @@ export async function processDocument(
     
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
-    const extractionPrompt = `Analyze this document image and extract all information. Determine if it's a Yemeni ID or Passport.
+    const extractionPrompt = `Analyze this document image and determine its type and extract specific fields.
 
-For Yemeni ID:
-- Name (English & Arabic)
-- ID Number
-- Date of Birth
-- Governorate
-- Gender
-- Nationality
-- Religion
-- Profession
-- Issue Date
-- Expiry Date
-- Marital Status
+FIRST, identify which document this is:
+- Yemeni ID Front (has personal info, photo, ID number, governorate)
+- Yemeni ID Back (has dates, marital status, signatures)
+- Passport (has machine readable zone, passport number, travel pages)
 
-For Passport:
-- Full Name
-- Surname
-- Passport Number
-- Nationality
-- Date of Birth
-- Date of Issue
-- Date of Expiry
-- Place of Birth
-- Sex (M/F)
-- Issuing Authority
+THEN extract ONLY the fields relevant to that document type:
 
-Return ONLY valid JSON with extracted fields. If a field isn't visible, omit it.`;
+For Yemeni ID FRONT:
+- name (English)
+- nameArabic (Arabic name)
+- idNumber
+- dateOfBirth (format: DD/MM/YYYY)
+- governorate
+- gender
+- nationality
+- religion
+- profession
+
+For Yemeni ID BACK:
+- idNumber (to verify it's the same ID)
+- issueDate (format: DD/MM/YYYY)
+- expiryDate (format: DD/MM/YYYY)
+- maritalStatus
+
+For PASSPORT:
+- fullName
+- surname
+- passportNumber
+- nationality
+- dateOfBirth (format: DD/MM/YYYY)
+- sex (M or F)
+- dateOfIssue (format: DD/MM/YYYY)
+- expiryDate (format: DD/MM/YYYY)
+- placeOfBirth
+- issuingAuthority
+
+Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_back", or "passport", and the extracted fields. If a field isn't visible, omit it.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-pro',
@@ -173,32 +216,57 @@ Return ONLY valid JSON with extracted fields. If a field isn't visible, omit it.
       }
     }
 
-    // Determine document type and extract fields
-    let documentType: 'passport' | 'national_id' | 'unknown' = 'unknown';
+    // Get document type from response or determine it
+    let documentType: 'yemeni_id_front' | 'yemeni_id_back' | 'passport' | 'unknown' = 
+      extractedData.documentType || 'unknown';
     let details: any = {};
 
-    if (extractedData.passportNumber || extractedData['Passport Number']) {
-      documentType = 'passport';
+    if (documentType === 'passport') {
       details = {
-        fullName: extractedData.fullName || extractedData['Full Name'],
-        surname: extractedData.surname || extractedData['Surname'],
-        passportNumber: extractedData.passportNumber || extractedData['Passport Number'],
-        nationality: extractedData.nationality || extractedData['Nationality'],
-        dateOfBirth: extractedData.dateOfBirth || extractedData['Date of Birth'],
-        sex: extractedData.sex || extractedData['Sex'],
-        dateOfIssue: extractedData.dateOfIssue || extractedData['Date of Issue'],
-        expiryDate: extractedData.expiryDate || extractedData['Date of Expiry'],
-        placeOfBirth: extractedData.placeOfBirth || extractedData['Place of Birth'],
-        issuingAuthority: extractedData.issuingAuthority || extractedData['Issuing Authority'],
+        fullName: extractedData.fullName,
+        surname: extractedData.surname,
+        passportNumber: extractedData.passportNumber,
+        nationality: extractedData.nationality,
+        dateOfBirth: extractedData.dateOfBirth,
+        sex: extractedData.sex,
+        dateOfIssue: extractedData.dateOfIssue,
+        expiryDate: extractedData.expiryDate,
+        placeOfBirth: extractedData.placeOfBirth,
+        issuingAuthority: extractedData.issuingAuthority,
       };
-    } else if (extractedData.idNumber || extractedData['ID Number']) {
-      documentType = 'national_id';
+    } else if (documentType === 'yemeni_id_front') {
       details = {
-        name: extractedData.name || extractedData['Name'],
-        idNumber: extractedData.idNumber || extractedData['ID Number'],
-        birthDate: extractedData.dateOfBirth || extractedData['Date of Birth'],
-        birthPlace: extractedData.governorate || extractedData['Governorate'],
+        name: extractedData.name,
+        nameArabic: extractedData.nameArabic,
+        idNumber: extractedData.idNumber,
+        dateOfBirth: extractedData.dateOfBirth,
+        governorate: extractedData.governorate,
+        gender: extractedData.gender,
+        nationality: extractedData.nationality,
+        religion: extractedData.religion,
+        profession: extractedData.profession,
       };
+    } else if (documentType === 'yemeni_id_back') {
+      details = {
+        idNumber: extractedData.idNumber,
+        issueDate: extractedData.issueDate,
+        expiryDate: extractedData.expiryDate,
+        maritalStatus: extractedData.maritalStatus,
+      };
+    }
+    
+    // Fallback: if no documentType detected, try to infer
+    if (documentType === 'unknown') {
+      if (extractedData.passportNumber) {
+        documentType = 'passport';
+        details = extractedData;
+      } else if (extractedData.name && extractedData.profession) {
+        documentType = 'yemeni_id_front';
+        details = extractedData;
+      } else if (extractedData.idNumber && extractedData.issueDate) {
+        documentType = 'yemeni_id_back';
+        details = extractedData;
+      }
     }
 
     const rawText = JSON.stringify(extractedData, null, 2);
