@@ -69,7 +69,6 @@ const menuItems = [
   { href: '/sms/parsing', label: 'SMS Parsing Rules', icon: Pilcrow },
   { href: '/sms/parsing-failures', label: 'SMS Failures', icon: FileWarning },
   { href: '/settings/bsc-apis', label: 'BSC API Settings', icon: Plug },
-  { href: '/document-ocr', label: 'Document OCR', icon: FileScan },
   { href: '/document-processing', label: 'Document Processing', icon: FileScan },
   { href: '/service-providers', label: 'Service Providers', icon: Globe },
   { href: '/blacklist', label: 'Blacklist', icon: ShieldAlert },

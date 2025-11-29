@@ -1,4 +1,3 @@
-export const revalidate = 0;
 
 
 import { InvoiceView } from '@/components/invoice-view';

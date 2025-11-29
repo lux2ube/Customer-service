@@ -1,5 +1,3 @@
-export const revalidate = 0;
-
 
 import { PageHeader } from "@/components/page-header";
 import { AccountForm } from "@/components/account-form";
