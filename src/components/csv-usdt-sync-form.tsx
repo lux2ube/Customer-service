@@ -6,10 +6,9 @@ import { Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { BscApiSetting } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get, update } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { syncUsdtCsvBatch } from '@/lib/actions/csv-sync';
 
 export function CsvUsdtSyncForm() {
     const { toast } = useToast();
@@ -113,6 +112,28 @@ export function CsvUsdtSyncForm() {
                 return;
             }
 
+            // Get API config
+            const apiRef = ref(db, `bsc_apis/${selectedApi}`);
+            const apiSnapshot = await get(apiRef);
+            
+            if (!apiSnapshot.exists()) {
+                throw new Error('API Configuration not found');
+            }
+
+            const setting = apiSnapshot.val();
+            const { walletAddress, accountId, name: configName } = setting;
+
+            if (!walletAddress || !accountId) {
+                throw new Error('Missing wallet address or account ID');
+            }
+
+            // Get wallet account name
+            const accountRef = ref(db, `accounts/${accountId}`);
+            const accountSnapshot = await get(accountRef);
+            const cryptoWalletName = accountSnapshot.exists()
+                ? accountSnapshot.val().name
+                : 'Synced USDT Wallet';
+
             // Process in batches of 10
             const BATCH_SIZE = 10;
             let totalSynced = 0;
@@ -128,13 +149,70 @@ export function CsvUsdtSyncForm() {
                     description: `Batch ${batchNum}/${totalBatches}...`,
                 });
 
-                try {
-                    const result = await syncUsdtCsvBatch(selectedApi, batch);
-                    totalSynced += result.synced || 0;
-                    totalSkipped += result.skipped || 0;
-                } catch (batchError: any) {
-                    throw new Error(`Batch ${batchNum} failed: ${batchError.message}`);
+                // Get current counter
+                const counterRef = ref(db, 'counters/modernUsdtRecordId');
+                const counterSnapshot = await get(counterRef);
+                let sequenceCounter = counterSnapshot.exists() ? counterSnapshot.val() || 0 : 0;
+
+                const updates: { [key: string]: any } = {};
+                let batchSynced = 0;
+                let batchSkipped = 0;
+
+                // Process batch rows
+                for (const row of batch) {
+                    try {
+                        const { hash, blockNumber, timeStamp, from, to, amount } = row;
+
+                        if (!hash || !from || !to || !timeStamp || amount === undefined) {
+                            batchSkipped++;
+                            continue;
+                        }
+
+                        const syncedAmount = parseFloat(String(amount));
+                        if (syncedAmount <= 0.01) {
+                            batchSkipped++;
+                            continue;
+                        }
+
+                        const isIncoming = String(to).toLowerCase() === String(walletAddress).toLowerCase();
+                        const clientWalletAddress = isIncoming ? String(from) : String(to);
+
+                        sequenceCounter++;
+                        const newRecordId = `USDT${sequenceCounter}`;
+                        const dateISO = new Date(parseInt(String(timeStamp)) * 1000).toISOString();
+
+                        const newTxData = {
+                            id: newRecordId,
+                            date: dateISO,
+                            type: isIncoming ? 'inflow' : 'outflow',
+                            source: 'CSV',
+                            status: 'Confirmed',
+                            clientId: null,
+                            clientName: 'Unassigned',
+                            accountId: accountId,
+                            accountName: cryptoWalletName,
+                            amount: syncedAmount,
+                            clientWalletAddress: clientWalletAddress,
+                            txHash: String(hash),
+                            notes: `Synced from CSV: ${configName}`,
+                            createdAt: new Date().toISOString(),
+                        };
+
+                        updates[`/modern_usdt_records/${newRecordId}`] = newTxData;
+                        batchSynced++;
+                    } catch (rowError) {
+                        batchSkipped++;
+                    }
                 }
+
+                // Write batch to database
+                if (Object.keys(updates).length > 0) {
+                    updates['/counters/modernUsdtRecordId'] = sequenceCounter;
+                    await update(ref(db), updates);
+                }
+
+                totalSynced += batchSynced;
+                totalSkipped += batchSkipped;
             }
 
             // Success
@@ -167,35 +245,35 @@ export function CsvUsdtSyncForm() {
     }
 
     return (
-        <div className="flex flex-wrap items-center gap-2">
-            <Select value={selectedApi} onValueChange={setSelectedApi}>
-                <SelectTrigger className="w-full md:w-[250px]">
-                    <SelectValue placeholder="Select API config..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {apiSettings.map(api => (
-                        <SelectItem key={api.id} value={api.id}>
-                            {api.name}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-
-            <Input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                disabled={isProcessing}
-                className="w-full md:w-[200px]"
-            />
-
-            {isProcessing && (
-                <Button disabled>
-                    <Upload className="mr-2 h-4 w-4 animate-spin" />
-                    Syncing...
+        <div className="space-y-4">
+            <div className="flex gap-2 items-end">
+                <Select value={selectedApi} onValueChange={setSelectedApi}>
+                    <SelectTrigger className="w-48">
+                        <SelectValue placeholder="Select API configuration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {apiSettings.map((setting) => (
+                            <SelectItem key={setting.id} value={setting.id}>
+                                {setting.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                
+                <Input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    disabled={isProcessing}
+                    className="max-w-sm"
+                />
+                
+                <Button onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    {isProcessing ? 'Processing...' : 'Upload CSV'}
                 </Button>
-            )}
+            </div>
         </div>
     );
 }
