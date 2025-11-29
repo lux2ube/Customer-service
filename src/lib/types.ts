@@ -133,7 +133,7 @@ export interface UsdtRecord {
     date: string;
     type: 'inflow' | 'outflow';
     source: 'Manual' | 'BSCScan';
-    status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
+    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed';
     clientId: string | null;
     clientName: string | null;
     accountId: string; // The system's internal crypto wallet account ID
