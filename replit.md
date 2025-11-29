@@ -8,14 +8,15 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### November 29, 2025 - Batch Processing for Large CSV Files
-- **Optimized CSV Sync for Large Datasets**: Implemented batch processing to handle CSVs with hundreds/thousands of rows
-  - Processes rows in batches of 100 to avoid server timeouts and payload limits
-  - Each batch writes to Firebase independently for reliable handling
-  - Fixed CSV header validation logic for proper column detection
+### November 29, 2025 - Redesigned CSV Sync with API Endpoint & Client-Side Parsing
+- **Fixed CSV Upload Errors**: Completely redesigned CSV sync from server action to API endpoint
+  - Created `/api/sync-usdt-csv` endpoint for reliable batch processing
+  - Client-side CSV parsing (faster, doesn't block server)
+  - Sends rows in small batches (10 at a time) to API
   - Prevents "An unexpected response was received from the server" errors
-  - Maintains deduplication and client matching across all batches
+  - Better error handling and progress feedback per batch
   - Shows total synced and skipped counts after all batches complete
+  - Updated CSV sync form component to use fetch API instead of server action
 
 ### November 29, 2025 (Earlier) - Manual CSV Sync for USDT Transactions
 - **Added CSV Upload Sync**: New feature to manually import USDT transactions from exported CSV files
