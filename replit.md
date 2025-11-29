@@ -8,13 +8,17 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### November 29, 2025 - Auto-Match USDT Records Fixed
+### November 29, 2025 - Modern USDT Records Complete Fix
 - **Fixed Auto-Match Unassigned Button**: Now matches records to clients using BOTH wallet address storage methods:
   - Check 1: Direct `bep20_addresses` array in client profile
   - Check 2: Service Provider addresses for Crypto providers (`serviceProviders[].details['Address']`)
   - Properly validates data before saving to prevent Firebase "undefined in property" errors
   - Console logging shows: "✅ Matched {recordId} to {clientName}"
   - Toast summary: "Matched X of Y unassigned transactions"
+- **Fixed Modern USDT Transactions Visibility**: BSCScan and CSV synced records now appear in transaction form
+  - Changed synced record status from `'Confirmed'` to `'Pending'` (or `'Matched'` if client found immediately)
+  - Transaction form now shows all newly synced USDT records, not just old data
+  - Applies to both Etherscan API sync and CSV import sync
 - **Fixed React Hydration Warning**: Added `suppressHydrationWarning={true}` and color scheme fix to root layout
   - Resolves Replit dev environment script injection mismatch
   - App now loads cleanly without React hydration errors
