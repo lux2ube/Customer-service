@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2, Link2 } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ModernUsdtRecordsTable } from "@/components/modern-usdt-records-table";
@@ -13,9 +13,9 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, deleteBscSyncedRecords, type SyncState } from '@/lib/actions';
-import type { BscApiSetting } from '@/lib/types';
+import type { BscApiSetting, UsdtRecord, Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get, update } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
@@ -58,6 +58,93 @@ function DeleteSyncedForm() {
             <DeleteSyncedButton />
         </form>
     )
+}
+
+function AutoMatchButton() {
+    const { toast } = useToast();
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    const handleAutoMatch = async () => {
+        setIsLoading(true);
+        try {
+            // Get all unassigned records
+            const recordsSnapshot = await get(ref(db, 'modern_usdt_records'));
+            const unassignedRecords: (UsdtRecord & { id: string })[] = [];
+            
+            if (recordsSnapshot.exists()) {
+                const data = recordsSnapshot.val();
+                Object.keys(data).forEach(key => {
+                    const record = { id: key, ...data[key] };
+                    if (record.clientName === 'Unassigned' || !record.clientId) {
+                        unassignedRecords.push(record);
+                    }
+                });
+            }
+
+            if (unassignedRecords.length === 0) {
+                toast({
+                    title: 'No Unassigned Records',
+                    description: 'All transactions are already assigned',
+                });
+                setIsLoading(false);
+                return;
+            }
+
+            // Get all clients
+            const clientsSnapshot = await get(ref(db, 'clients'));
+            const clients: { [key: string]: Client & { id: string } } = {};
+            
+            if (clientsSnapshot.exists()) {
+                const data = clientsSnapshot.val();
+                Object.keys(data).forEach(key => {
+                    clients[key] = { id: key, ...data[key] };
+                });
+            }
+
+            // Match records to clients by wallet address
+            const updates: { [key: string]: any } = {};
+            let matched = 0;
+
+            unassignedRecords.forEach(record => {
+                const walletAddress = record.clientWalletAddress?.toLowerCase();
+                
+                // Find matching client
+                for (const clientId in clients) {
+                    const client = clients[clientId];
+                    if (client.wallet_address?.toLowerCase() === walletAddress) {
+                        updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
+                        updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
+                        matched++;
+                        break;
+                    }
+                }
+            });
+
+            if (Object.keys(updates).length > 0) {
+                await update(ref(db), updates);
+            }
+
+            toast({
+                title: 'Auto-Match Complete',
+                description: `Matched ${matched} of ${unassignedRecords.length} unassigned transactions`,
+            });
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Button onClick={handleAutoMatch} disabled={isLoading} variant="outline">
+            <Link2 className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'Matching...' : 'Auto-Match Unassigned'}
+        </Button>
+    );
 }
 
 
@@ -131,6 +218,7 @@ export default function ModernUsdtRecordsPage() {
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center gap-2">
                         <SyncBscForm />
+                        <AutoMatchButton />
                          <Button asChild>
                             <Link href="/financial-records/usdt-manual-receipt">
                                 <ArrowDownToLine className="mr-2 h-4 w-4" />
