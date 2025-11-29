@@ -211,7 +211,7 @@ export async function syncBscCsv(prevState: SyncState, formData: FormData): Prom
         });
 
         const requiredHeaders = ['transaction hash', 'blockno', 'unixtimestamp', 'from', 'to', 'tokenvalue'];
-        const missingHeaders = requiredHeaders.filter(h => !(h in Object.keys(headerMap).map(k => k.toLowerCase())));
+        const missingHeaders = requiredHeaders.filter(h => !Object.keys(headerMap).includes(h));
         if (missingHeaders.length > 0) {
             return { message: `CSV is missing required columns: ${missingHeaders.join(', ')}`, error: true };
         }
