@@ -19,15 +19,14 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
     try {
         const cashRecordsQuery = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
-        // For USDT: fetch ALL modern records, then filter for those linked to client OR unassigned
-        const allUsdtRecordsRef = ref(db, 'modern_usdt_records');
+        const usdtRecordsQuery = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
 
         const [
             cashRecordsSnapshot,
-            allUsdtSnapshot
+            usdtRecordsSnapshot
         ] = await Promise.all([
             get(cashRecordsQuery),
-            get(allUsdtRecordsRef),
+            get(usdtRecordsQuery),
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
@@ -57,18 +56,12 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
         
-        // Include USDT records that are either: linked to this client OR unassigned
-        if (allUsdtSnapshot.exists()) {
-            const allUsdtRecords: Record<string, UsdtRecord> = allUsdtSnapshot.val();
+        // Include only USDT records linked to this client from modern collection
+        if (usdtRecordsSnapshot.exists()) {
+            const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
                 if (!allowedStatuses.includes(record.status)) continue;
-                
-                // Only include if linked to this client OR if unassigned
-                const isLinkedToThisClient = record.clientId === clientId;
-                const isUnassigned = !record.clientId || record.clientName === 'Unassigned';
-                
-                if (!isLinkedToThisClient && !isUnassigned) continue;
 
                 unifiedRecords.push({
                     id,
