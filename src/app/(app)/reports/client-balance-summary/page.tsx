@@ -1,4 +1,6 @@
 
+export const dynamic = 'force-dynamic';
+
 import { PageHeader } from "@/components/page-header";
 import { ClientBalanceSummaryReport } from "@/components/client-balance-summary-report";
 import { Suspense } from "react";

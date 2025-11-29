@@ -1,4 +1,6 @@
 
+export const dynamic = 'force-dynamic';
+
 import { PageHeader } from "@/components/page-header";
 import { Suspense } from "react";
 import { UsdtManualPaymentForm } from "@/components/usdt-manual-payment-form";
