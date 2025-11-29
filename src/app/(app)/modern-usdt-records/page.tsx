@@ -111,11 +111,15 @@ function AutoMatchButton() {
                 // Find matching client
                 for (const clientId in clients) {
                     const client = clients[clientId];
-                    if (client.wallet_address?.toLowerCase() === walletAddress) {
-                        updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
-                        updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
-                        matched++;
-                        break;
+                    // Check against bep20_addresses array
+                    if (client.bep20_addresses && client.bep20_addresses.length > 0) {
+                        const addressMatch = client.bep20_addresses.some(addr => addr.toLowerCase() === walletAddress);
+                        if (addressMatch) {
+                            updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
+                            updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
+                            matched++;
+                            break;
+                        }
                     }
                 }
             });
