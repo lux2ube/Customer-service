@@ -1,5 +1,4 @@
 
-export const dynamic = 'force-dynamic';
 
 import { InvoiceView } from '@/components/invoice-view';
 import { db } from '@/lib/firebase';

@@ -1,5 +1,4 @@
 
-export const dynamic = 'force-dynamic';
 
 import { PageHeader } from "@/components/page-header";
 import { JournalEntryForm } from "@/components/journal-entry-form";
