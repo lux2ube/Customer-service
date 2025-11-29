@@ -160,7 +160,8 @@ export async function createModernTransaction(prevState: TransactionFormState, f
     const validatedFields = ModernTransactionSchema.safeParse(formDataWithAllRecords);
 
     if (!validatedFields.success) {
-        console.error('❌ Validation failed:', validatedFields.error);
+        console.error('❌ Validation failed:', JSON.stringify(validatedFields.error.flatten(), null, 2));
+        console.error('Form data received:', { linkedRecordIds, clientId: formObject.clientId, type: formObject.type });
         return {
             errors: validatedFields.error.flatten().fieldErrors,
             message: 'Failed to create transaction. Please check the fields.',

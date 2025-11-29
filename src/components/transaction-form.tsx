@@ -33,10 +33,11 @@ import { useSearchParams } from 'next/navigation';
 import { useTransactionProcessor } from '@/hooks/use-transaction-processor';
 
 
-function SubmitButton() {
+function SubmitButton({ selectedClient, transactionType, selectedRecordIds }: { selectedClient: Client | null, transactionType: string | null, selectedRecordIds: string[] }) {
     const { pending } = useFormStatus();
+    const isDisabled = pending || !selectedClient || !transactionType || selectedRecordIds.length === 0;
     return (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={isDisabled}>
             {pending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Create Transaction</>}
         </Button>
     );
@@ -488,7 +489,7 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-end">
-                            <SubmitButton />
+                            <SubmitButton selectedClient={selectedClient} transactionType={transactionType} selectedRecordIds={selectedRecordIds} />
                         </CardFooter>
                     </Card>
                 )}
