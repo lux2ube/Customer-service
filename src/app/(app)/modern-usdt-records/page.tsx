@@ -105,45 +105,46 @@ function AutoMatchButton() {
             const updates: { [key: string]: any } = {};
             let matched = 0;
 
-            let recordsChecked = 0;
-            let recordsWithAddress = 0;
-            
             unassignedRecords.forEach(record => {
-                recordsChecked++;
                 // Skip if no wallet address
                 if (!record.clientWalletAddress) {
-                    console.warn(`[${record.id}] No clientWalletAddress`);
                     return;
                 }
                 
-                recordsWithAddress++;
                 const walletAddress = record.clientWalletAddress.toLowerCase();
                 
                 // Find matching client
                 for (const clientId in clients) {
                     const client = clients[clientId];
-                    // Check against bep20_addresses array
+                    let foundMatch = false;
+                    
+                    // Check 1: Direct bep20_addresses array
                     if (client.bep20_addresses && Array.isArray(client.bep20_addresses) && client.bep20_addresses.length > 0) {
-                        const addressMatch = client.bep20_addresses.some(addr => {
+                        foundMatch = client.bep20_addresses.some(addr => {
                             if (!addr) return false;
                             return addr.toLowerCase() === walletAddress;
                         });
-                        if (addressMatch) {
-                            updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
-                            updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
-                            matched++;
-                            console.log(`✅ [${record.id}] Matched to ${client.name} (${walletAddress})`);
-                            break;
-                        }
-                    } else if (recordsChecked === 1) {
-                        // Log for first record to debug why clients don't match
-                        console.debug(`[${client.id}] ${client.name} - bep20_addresses:`, client.bep20_addresses);
+                    }
+                    
+                    // Check 2: Service Providers - crypto providers with Address details
+                    if (!foundMatch && client.serviceProviders && Array.isArray(client.serviceProviders)) {
+                        foundMatch = client.serviceProviders.some(provider => {
+                            if (provider.providerType !== 'Crypto') return false;
+                            const providerAddress = provider.details?.['Address'];
+                            if (!providerAddress) return false;
+                            return providerAddress.toLowerCase() === walletAddress;
+                        });
+                    }
+                    
+                    if (foundMatch) {
+                        updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
+                        updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
+                        matched++;
+                        console.log(`✅ Matched ${record.id} to ${client.name}`);
+                        break;
                     }
                 }
             });
-            
-            console.log(`📊 Auto-match debug: ${recordsChecked} records checked, ${recordsWithAddress} have wallet address, ${matched} matched`);
-            console.log(`📊 Total clients checked: ${Object.keys(clients).length}`);
 
             if (Object.keys(updates).length > 0) {
                 await update(ref(db), updates);
