@@ -47,27 +47,41 @@ function FinancialRecordTable({ records, selectedIds, onSelectionChange }: { rec
         return <p className="text-xs text-muted-foreground text-center p-4 border rounded-md">No available records.</p>;
     }
 
+    const selectedTotal = records
+        .filter(r => selectedIds.includes(r.id))
+        .reduce((sum, r) => sum + (r.amount_usd || 0), 0);
+
     return (
-        <div className="space-y-2">
+        <div className="space-y-3">
             {records.map(record => (
-                <div key={record.id} className="flex items-center gap-3 p-2 border rounded-md has-[:checked]:bg-muted has-[:checked]:border-primary">
+                <div key={record.id} className="flex items-start gap-3 p-3 border rounded-md hover:bg-muted/30 has-[:checked]:bg-muted has-[:checked]:border-primary transition-colors">
                     <Checkbox
                         id={record.id}
                         checked={selectedIds.includes(record.id)}
                         onCheckedChange={(checked) => onSelectionChange(record.id, !!checked)}
+                        className="mt-1"
                     />
-                    <Label htmlFor={record.id} className="flex-1 cursor-pointer w-full">
-                        <div className="flex justify-between items-center text-sm">
+                    <Label htmlFor={record.id} className="flex-1 cursor-pointer w-full space-y-1">
+                        <div className="flex justify-between items-baseline gap-2">
                             <span className="font-semibold">{record.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {record.currency}</span>
-                            <span className="text-xs text-muted-foreground">{record.source}</span>
+                            <span className="text-sm font-medium text-blue-600">${(record.amount_usd || 0).toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
-                            <span>{format(new Date(record.date), 'PP')}</span>
-                            <span className="truncate max-w-[100px]">{record.bankAccountName || record.cryptoWalletName}</span>
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
+                            <div className="space-x-2">
+                                <span>{format(new Date(record.date), 'PPp')}</span>
+                                <span className="inline-block px-2 py-0.5 bg-slate-100 rounded text-xs">{record.source}</span>
+                            </div>
+                            <span className="truncate">{record.bankAccountName || record.cryptoWalletName}</span>
                         </div>
                     </Label>
                 </div>
             ))}
+            {selectedTotal > 0 && (
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-200 flex justify-between items-center">
+                    <span className="text-sm font-semibold">Subtotal ({selectedIds.length} record{selectedIds.length !== 1 ? 's' : ''})</span>
+                    <span className="text-lg font-bold text-blue-600">${selectedTotal.toFixed(2)}</span>
+                </div>
+            )}
         </div>
     );
 }
@@ -359,30 +373,61 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                 {selectedRecordIds.length > 0 && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Step 4: Calculations Summary</CardTitle>
+                            <CardTitle>Step 4: Financial Summary</CardTitle>
+                            <CardDescription>Review the complete financial breakdown of this transaction</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                                <div className="p-2 border rounded-md">
-                                    <p className="text-xs text-muted-foreground">Total Inflow</p>
-                                    <p className="font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</p>
-                                </div>
-                                <div className="p-2 border rounded-md">
-                                    <p className="text-xs text-muted-foreground">Total Outflow</p>
-                                    <p className="font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</p>
-                                </div>
-                                <div className="p-2 border rounded-md">
-                                    <p className="text-xs text-muted-foreground">Fee</p>
-                                    <p className="font-bold">${calculation.fee.toFixed(2)}</p>
-                                </div>
-                                <div className={cn("p-2 border rounded-md", calculation.difference.toFixed(2) !== '0.00' ? 'border-amber-500 bg-amber-50' : '')}>
-                                    <p className="text-xs text-muted-foreground">Difference</p>
-                                    <p className="font-bold">${calculation.difference.toFixed(2)}</p>
+                        <CardContent className="space-y-6">
+                            {/* Transaction Flow */}
+                            <div className="space-y-3 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border">
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-semibold text-green-700">Money Inflow</span>
+                                        <span className="text-2xl font-bold text-green-600">${calculation.totalInflowUSD.toFixed(2)}</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Total received by the system</p>
                                 </div>
                             </div>
-                             <p className="text-xs text-muted-foreground pt-2">
-                                Formula: Inflow - (Outflow + Fee) = Difference.
-                            </p>
+
+                            {/* Outflows and Fees */}
+                            <div className="space-y-3 p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border">
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-semibold text-red-700">Outflow to Client</span>
+                                        <span className="text-xl font-bold text-red-600">${calculation.totalOutflowUSD.toFixed(2)}</span>
+                                    </div>
+                                    {calculation.fee > 0.01 && (
+                                        <div className="flex justify-between items-center pl-4 border-l-2 border-orange-300">
+                                            <span className="text-sm text-muted-foreground">Transaction Fee</span>
+                                            <span className="font-semibold text-orange-600">${calculation.fee.toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">Total going out from the system</p>
+                                </div>
+                            </div>
+
+                            {/* Final Balance */}
+                            <div className={cn("p-4 rounded-lg border-2", 
+                                Math.abs(calculation.difference) < 0.01 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300')}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-sm font-semibold">Net Difference</span>
+                                    <span className={cn("text-2xl font-bold", 
+                                        Math.abs(calculation.difference) < 0.01 ? 'text-green-600' : 'text-amber-600')}>
+                                        ${calculation.difference.toFixed(2)}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {Math.abs(calculation.difference) < 0.01 
+                                        ? 'Perfect balance - all funds accounted for' 
+                                        : calculation.difference > 0 
+                                            ? 'Surplus - will be recorded as income'
+                                            : 'Shortfall - will be recorded as expense'}
+                                </p>
+                            </div>
+
+                             <div className="text-xs text-muted-foreground pt-2 space-y-1 border-t">
+                                <p>Formula: Inflow - (Outflow + Fee) = Difference</p>
+                                <p>${calculation.totalInflowUSD.toFixed(2)} - (${calculation.totalOutflowUSD.toFixed(2)} + ${calculation.fee.toFixed(2)}) = ${calculation.difference.toFixed(2)}</p>
+                            </div>
                             {Math.abs(calculation.difference) > 0.01 && (
                                 <div className="pt-4 border-t mt-4">
                                      <Label className="font-semibold">How should this difference of ${Math.abs(calculation.difference).toFixed(2)} be recorded?</Label>
