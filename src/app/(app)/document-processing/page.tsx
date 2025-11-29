@@ -9,11 +9,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, UploadCloud, FileText, User, Fingerprint, Calendar, Building, ShieldAlert, BadgeInfo } from 'lucide-react';
+import { Loader2, UploadCloud, FileText, User, Fingerprint, Calendar, Building, ShieldAlert, BadgeInfo, UserPlus } from 'lucide-react';
 import { processDocument, type DocumentParsingState } from '@/lib/actions/document';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { DocumentClientForm } from '@/components/document-client-form';
 
 function SubmitButton() {
     const { pending } = useFormStatus();
@@ -34,7 +35,13 @@ function SubmitButton() {
     );
 }
 
-function ParsedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['parsedData']> }) {
+function ParsedDataDisplay({ 
+    data, 
+    onAddClient 
+}: { 
+    data: NonNullable<DocumentParsingState['parsedData']>,
+    onAddClient: () => void
+}) {
     if (!data.details || data.documentType === 'unknown') {
         return (
             <Alert>
@@ -87,6 +94,12 @@ function ParsedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['p
                     </div>
                 ))}
             </CardContent>
+            <CardFooter>
+                <Button onClick={onAddClient} className="w-full">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add New Client
+                </Button>
+            </CardFooter>
         </Card>
     );
 }
@@ -94,6 +107,7 @@ function ParsedDataDisplay({ data }: { data: NonNullable<DocumentParsingState['p
 export default function DocumentProcessingPage() {
     const [state, formAction] = useActionState<DocumentParsingState, FormData>(processDocument, undefined);
     const [preview, setPreview] = React.useState<string | null>(null);
+    const [showClientForm, setShowClientForm] = React.useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,7 +181,12 @@ export default function DocumentProcessingPage() {
                             <AlertDescription>{state.message}</AlertDescription>
                         </Alert>
                     )}
-                    {state?.success && state.parsedData && <ParsedDataDisplay data={state.parsedData} />}
+                    {state?.success && state.parsedData && (
+                        <ParsedDataDisplay 
+                            data={state.parsedData}
+                            onAddClient={() => setShowClientForm(true)}
+                        />
+                    )}
 
                     {state?.rawText && (
                         <Card>
@@ -188,6 +207,15 @@ export default function DocumentProcessingPage() {
                     )}
                 </div>
             </div>
+
+            {state?.success && state.parsedData && (
+                <DocumentClientForm
+                    open={showClientForm}
+                    onOpenChange={setShowClientForm}
+                    extractedData={state.parsedData.details}
+                    documentType={state.parsedData.documentType}
+                />
+            )}
         </div>
     );
 }

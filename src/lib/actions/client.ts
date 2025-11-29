@@ -531,3 +531,18 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
         return { message: e.message || 'An unknown error occurred during migration.', error: true };
     }
 }
+
+export async function getClientsByName(name: string): Promise<Client[]> {
+    try {
+        const snapshot = await get(ref(db, 'clients'));
+        if (!snapshot.exists()) return [];
+        
+        const allClients: Record<string, Client> = snapshot.val();
+        return Object.entries(allClients)
+            .filter(([_, client]) => client.name && client.name.toLowerCase() === name.toLowerCase())
+            .map(([id, client]) => ({ ...client, id }));
+    } catch (error) {
+        console.error("Error fetching clients by name:", error);
+        return [];
+    }
+}
