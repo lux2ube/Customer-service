@@ -6,7 +6,12 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   
   // Allow public routes
-  if (publicRoutes.includes(pathname)) {
+  if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
+    return NextResponse.next();
+  }
+
+  // Allow static assets
+  if (pathname.startsWith('/_next') || pathname.startsWith('/api')) {
     return NextResponse.next();
   }
 
@@ -21,5 +26,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt).*)'],
 };

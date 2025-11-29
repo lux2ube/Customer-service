@@ -29,7 +29,7 @@ export default function LoginPage() {
       });
 
       if (response.ok) {
-        router.push('/');
+        router.push('/dashboard');
         router.refresh();
       } else {
         setError('Invalid email or password. Use: demogmail / demo');
