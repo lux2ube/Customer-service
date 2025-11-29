@@ -35,6 +35,8 @@ export {
 // External Integrations (BSCScan)
 export { 
     syncBscTransactions,
+    syncBscCsv,
+    type SyncState,
 } from './integration';
 
 export {

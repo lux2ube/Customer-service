@@ -20,6 +20,13 @@ const SyncBscSchema = z.object({
   apiId: z.string().min(1, 'An API configuration must be selected.'),
 });
 
+const SyncCsvSchema = z.object({
+  accountId: z.string().min(1, 'Account ID is required.'),
+  configName: z.string().min(1, 'Configuration name is required.'),
+  csvData: z.string().min(1, 'CSV data is required.'),
+  walletAddress: z.string().min(1, 'Wallet address is required.'),
+});
+
 export async function syncBscTransactions(prevState: SyncState, formData: FormData): Promise<SyncState> {
     const validatedFields = SyncBscSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
@@ -165,5 +172,145 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
     } catch (error: any) {
         console.error("Etherscan BSC Sync Error:", error);
         return { message: error.message || "An unknown error occurred during sync.", error: true };
+    }
+}
+
+export async function syncBscCsv(prevState: SyncState, formData: FormData): Promise<SyncState> {
+    const csvFile = formData.get('csvFile') as File;
+    const accountId = formData.get('accountId') as string;
+    const configName = formData.get('configName') as string;
+    const walletAddress = formData.get('walletAddress') as string;
+    
+    if (!csvFile || !accountId || !configName || !walletAddress) {
+        return { message: 'CSV file, account ID, configuration name, and wallet address are required.', error: true };
+    }
+
+    try {
+        const csvText = await csvFile.text();
+        const lines = csvText.trim().split('\n');
+        
+        if (lines.length < 2) {
+            return { message: 'CSV file is empty or has no data rows.', error: true };
+        }
+
+        const headers = lines[0].split(',').map((h: string) => h.replace(/^"|"$/g, '').trim());
+        const headerMap: { [key: string]: number } = {};
+        headers.forEach((header: string, index: number) => {
+            headerMap[header.toLowerCase()] = index;
+        });
+
+        const requiredHeaders = ['transaction hash', 'blockno', 'unixtimestamp', 'from', 'to', 'tokenvalue'];
+        const missingHeaders = requiredHeaders.filter(h => !(h in Object.keys(headerMap).map(k => k.toLowerCase())));
+        if (missingHeaders.length > 0) {
+            return { message: `CSV is missing required columns: ${missingHeaders.join(', ')}`, error: true };
+        }
+
+        const walletAccountRef = ref(db, `accounts/${accountId}`);
+        const walletAccountSnapshot = await get(walletAccountRef);
+        if (!walletAccountSnapshot.exists()) {
+            return { message: `Account with ID "${accountId}" not found.`, error: true };
+        }
+        const cryptoWalletName = (walletAccountSnapshot.val() as Account).name || 'Synced USDT Wallet';
+
+        const updates: { [key: string]: any } = {};
+        let newRecordsCount = 0;
+        let skippedCount = 0;
+        const processedHashes = new Set<string>();
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
+            if (values.length < requiredHeaders.length) continue;
+
+            const hash = values[headerMap['transaction hash']] || '';
+            const blockNumber = values[headerMap['blockno']] || '0';
+            const timeStamp = values[headerMap['unixtimestamp']] || '0';
+            const from = values[headerMap['from']]?.toLowerCase() || '';
+            const to = values[headerMap['to']]?.toLowerCase() || '';
+            let tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
+
+            if (processedHashes.has(hash)) {
+                skippedCount++;
+                continue;
+            }
+            processedHashes.add(hash);
+
+            if (!hash || !from || !to) {
+                skippedCount++;
+                continue;
+            }
+
+            const syncedAmount = parseFloat(tokenValue.replace(/,/g, ''));
+            if (syncedAmount <= 0.01) {
+                skippedCount++;
+                continue;
+            }
+
+            const isIncoming = to === walletAddress;
+            const clientWalletAddress = isIncoming ? from : to;
+
+            const existingClient = await findClientByAddress(clientWalletAddress);
+
+            const newRecordId = await getNextSequentialId('modernUsdtRecordId');
+
+            const newTxData: Omit<ModernUsdtRecord, 'id'> = {
+                date: new Date(parseInt(timeStamp) * 1000).toISOString(),
+                type: isIncoming ? 'inflow' : 'outflow',
+                source: 'CSV',
+                status: 'Confirmed',
+                clientId: existingClient ? existingClient.id : null,
+                clientName: existingClient ? existingClient.name : 'Unassigned',
+                accountId: accountId,
+                accountName: cryptoWalletName,
+                amount: syncedAmount,
+                clientWalletAddress: clientWalletAddress,
+                txHash: hash,
+                notes: `Synced from CSV: ${configName}`,
+                createdAt: new Date().toISOString(),
+            };
+
+            updates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: parseInt(blockNumber) };
+
+            if (existingClient) {
+                const clientAccountId = `6000${existingClient.id}`;
+                const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
+                const journalRef = push(ref(db, 'journal_entries'));
+
+                const journalEntry: Omit<JournalEntry, 'id'> = {
+                    date: newTxData.date,
+                    description: journalDescription,
+                    debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
+                    credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                    debit_amount: newTxData.amount,
+                    credit_amount: newTxData.amount,
+                    amount_usd: newTxData.amount,
+                    createdAt: new Date().toISOString(),
+                };
+                updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+                await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+            }
+
+            newRecordsCount++;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+        }
+
+        revalidatePath('/modern-usdt-records');
+
+        const summary = [
+            `CSV sync completed for "${configName}".`,
+            `${newRecordsCount} new transaction(s) synced.`,
+            skippedCount > 0 ? `${skippedCount} transaction(s) skipped.` : null,
+        ].filter(Boolean).join(' ');
+
+        return { message: summary, error: false };
+
+    } catch (error: any) {
+        console.error("CSV Sync Error:", error);
+        return { message: error.message || "An error occurred during CSV sync.", error: true };
     }
 }

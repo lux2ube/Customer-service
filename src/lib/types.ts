@@ -330,7 +330,7 @@ export interface ModernUsdtRecord {
     id: string;
     date: string;
     type: 'inflow' | 'outflow';
-    source: 'Manual' | 'BSCScan';
+    source: 'Manual' | 'BSCScan' | 'CSV';
     status: 'Pending' | 'Used' | 'Cancelled' | 'Confirmed';
     clientId: string | null;
     clientName: string | null;
