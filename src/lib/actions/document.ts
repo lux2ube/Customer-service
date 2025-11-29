@@ -2,17 +2,9 @@
 'use server';
 
 import { z } from 'zod';
+import { GoogleGenAI } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-const OcrSpaceResponseSchema = z.object({
-  ParsedResults: z.array(z.object({
-    ParsedText: z.string(),
-  })).optional(),
-  OCRExitCode: z.number(),
-  IsErroredOnProcessing: z.boolean(),
-  ErrorMessage: z.union([z.string(), z.array(z.string())]).optional(),
-});
 
 
 export type DocumentParsingState = {
@@ -110,61 +102,118 @@ export async function processDocument(
   }
   
   const { documentImage } = validatedFields.data;
-  const ocrApiKey = 'K87110746488957'; // As provided by user
 
   try {
-     // 1. Upload file to get a URL
-    const fileRef = storageRef(storage, `document_uploads/${Date.now()}-${documentImage.name}`);
-    await uploadBytes(fileRef, documentImage);
-    const imageUrl = await getDownloadURL(fileRef);
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY not configured');
+    }
 
-    // 2. Call OCR.space API
-    const ocrFormData = new FormData();
-    ocrFormData.append('apikey', ocrApiKey);
-    ocrFormData.append('url', imageUrl);
-    ocrFormData.append('language', 'ara');
-    ocrFormData.append('isOverlayRequired', 'false');
+    // Convert file to base64
+    const arrayBuffer = await documentImage.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    
+    const extractionPrompt = `Analyze this document image and extract all information. Determine if it's a Yemeni ID or Passport.
 
-    const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      body: ocrFormData,
+For Yemeni ID:
+- Name (English & Arabic)
+- ID Number
+- Date of Birth
+- Governorate
+- Gender
+- Nationality
+- Religion
+- Profession
+- Issue Date
+- Expiry Date
+- Marital Status
+
+For Passport:
+- Full Name
+- Surname
+- Passport Number
+- Nationality
+- Date of Birth
+- Date of Issue
+- Date of Expiry
+- Place of Birth
+- Sex (M/F)
+- Issuing Authority
+
+Return ONLY valid JSON with extracted fields. If a field isn't visible, omit it.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-pro',
+      contents: [
+        {
+          inlineData: {
+            data: base64,
+            mimeType: documentImage.type,
+          },
+        },
+        {
+          text: extractionPrompt,
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+      },
     });
 
-    if (!ocrResponse.ok) {
-      throw new Error(`OCR API failed with status: ${ocrResponse.statusText}`);
+    const responseText = response.text || '{}';
+    let extractedData: any = {};
+    
+    try {
+      extractedData = JSON.parse(responseText);
+    } catch (parseError) {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        extractedData = JSON.parse(jsonMatch[0]);
+      }
     }
 
-    const ocrData = await ocrResponse.json();
-    const validatedOcr = OcrSpaceResponseSchema.safeParse(ocrData);
+    // Determine document type and extract fields
+    let documentType: 'passport' | 'national_id' | 'unknown' = 'unknown';
+    let details: any = {};
 
-    if (!validatedOcr.success || validatedOcr.data.IsErroredOnProcessing || !validatedOcr.data.ParsedResults?.[0]?.ParsedText) {
-      console.error("OCR Error:", validatedOcr.data?.ErrorMessage);
-      throw new Error(validatedOcr.data.ErrorMessage?.[0] || 'Failed to extract text from the document.');
-    }
-    
-    const rawText = validatedOcr.data.ParsedResults[0].ParsedText;
-    const treatedText = treatOcrText(rawText);
-    
-    // Attempt to parse as a passport
-    const parsedData = parsePassport(treatedText);
-    
-    if (parsedData) {
-        return {
-            success: true,
-            rawText: treatedText,
-            parsedData: parsedData,
-        };
+    if (extractedData.passportNumber || extractedData['Passport Number']) {
+      documentType = 'passport';
+      details = {
+        fullName: extractedData.fullName || extractedData['Full Name'],
+        surname: extractedData.surname || extractedData['Surname'],
+        passportNumber: extractedData.passportNumber || extractedData['Passport Number'],
+        nationality: extractedData.nationality || extractedData['Nationality'],
+        dateOfBirth: extractedData.dateOfBirth || extractedData['Date of Birth'],
+        sex: extractedData.sex || extractedData['Sex'],
+        dateOfIssue: extractedData.dateOfIssue || extractedData['Date of Issue'],
+        expiryDate: extractedData.expiryDate || extractedData['Date of Expiry'],
+        placeOfBirth: extractedData.placeOfBirth || extractedData['Place of Birth'],
+        issuingAuthority: extractedData.issuingAuthority || extractedData['Issuing Authority'],
+      };
+    } else if (extractedData.idNumber || extractedData['ID Number']) {
+      documentType = 'national_id';
+      details = {
+        name: extractedData.name || extractedData['Name'],
+        idNumber: extractedData.idNumber || extractedData['ID Number'],
+        birthDate: extractedData.dateOfBirth || extractedData['Date of Birth'],
+        birthPlace: extractedData.governorate || extractedData['Governorate'],
+      };
     }
 
+    const rawText = JSON.stringify(extractedData, null, 2);
+    
     return {
       success: true,
-      rawText: treatedText,
-      parsedData: { documentType: 'unknown', details: {} },
-      message: 'Text extracted, but could not determine document type or fields.'
+      rawText: rawText,
+      parsedData: {
+        documentType,
+        details,
+      },
     };
 
   } catch (error: any) {
-    console.error("OCR/Parsing Error:", error);
+    console.error("Document Processing Error:", error);
     return { error: true, message: error.message || 'An unexpected error occurred during processing.' };
   }
 }
