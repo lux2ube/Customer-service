@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { Client, Transaction } from '@/lib/types';
+import type { Client, UsdtRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
 import { Loader2, Check } from 'lucide-react';
@@ -19,37 +19,39 @@ interface MatchUnassignedBscTxFormProps {
 }
 
 export function MatchUnassignedBscTxForm({ client, onTxMatched, setIsOpen }: MatchUnassignedBscTxFormProps) {
-  const [txList, setTxList] = React.useState<Transaction[]>([]);
+  const [recordList, setRecordList] = React.useState<UsdtRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const { toast } = useToast();
 
   React.useEffect(() => {
     setLoading(true);
-    const txRef = ref(db, 'modern_transactions');
-    const unsubscribe = onValue(txRef, (snapshot) => {
+    const recordRef = ref(db, 'modern_usdt_records');
+    const unsubscribe = onValue(recordRef, (snapshot) => {
       if (snapshot.exists()) {
-        const allTxs: Transaction[] = Object.values(snapshot.val());
-        const unassigned = allTxs.filter(tx => tx.clientId === 'unassigned-bscscan');
-        setTxList(unassigned.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        const allRecords: UsdtRecord[] = Object.values(snapshot.val());
+        const unassigned = allRecords.filter(r => !r.clientId);
+        setRecordList(unassigned.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      } else {
+        setRecordList([]);
       }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const handleMatch = async (tx: Transaction) => {
-    if (!tx.id) return;
+  const handleMatch = async (record: UsdtRecord) => {
+    if (!record.id) return;
     try {
         const updates: {[key: string]: any} = {};
-        updates[`/modern_transactions/${tx.id}/clientId`] = client.id;
-        updates[`/modern_transactions/${tx.id}/clientName`] = client.name;
+        updates[`/modern_usdt_records/${record.id}/clientId`] = client.id;
+        updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
         
         await update(ref(db), updates);
 
         await logAction(
             'match_bscscan_tx',
-            { type: 'transaction', id: tx.id, name: `Matched BSC Tx for ${client.name}` },
-            { oldClientId: tx.clientId, newClientId: client.id }
+            { type: 'usdt_record', id: record.id, name: `Matched BSC Tx for ${client.name}` },
+            { oldClientId: record.clientId, newClientId: client.id }
         );
 
         toast({ title: 'Success', description: 'BSCScan transaction matched.' });
@@ -66,19 +68,19 @@ export function MatchUnassignedBscTxForm({ client, onTxMatched, setIsOpen }: Mat
         <div className="flex justify-center items-center h-40">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : txList.length > 0 ? (
+      ) : recordList.length > 0 ? (
         <ScrollArea className="h-72">
           <div className="space-y-2 pr-4">
-            {txList.map(tx => (
-              <div key={tx.id} className="flex items-center gap-3 p-2 border rounded-md">
+            {recordList.map(record => (
+              <div key={record.id} className="flex items-center gap-3 p-2 border rounded-md">
                 <div className="flex-1">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="font-semibold">{tx.amount_usdt.toLocaleString()} USDT</span>
-                    <span className="text-xs text-muted-foreground">{format(new Date(tx.date), 'PP')}</span>
+                    <span className="font-semibold">{record.amount.toLocaleString()} USDT</span>
+                    <span className="text-xs text-muted-foreground">{format(new Date(record.date), 'PP')}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">From: {tx.client_wallet_address}</p>
+                  <p className="text-xs text-muted-foreground truncate">From: {record.clientWalletAddress || 'N/A'}</p>
                 </div>
-                <Button size="sm" onClick={() => handleMatch(tx)}>
+                <Button size="sm" onClick={() => handleMatch(record)}>
                     <Check className="mr-2 h-4 w-4" /> Match
                 </Button>
               </div>
