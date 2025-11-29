@@ -63,6 +63,8 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                 const record = allUsdtRecords[id];
                 if (!allowedStatuses.includes(record.status)) continue;
 
+                console.log('✅ Loading USDT record from modern_usdt_records:', id, record);
+
                 unifiedRecords.push({
                     id,
                     date: record.date,
@@ -80,6 +82,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
 
+        console.log(`Loaded ${unifiedRecords.length} total records for client ${clientId}`);
         unifiedRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return unifiedRecords;
 

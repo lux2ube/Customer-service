@@ -306,12 +306,12 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                         </CardHeader>
                         <CardContent>
                             {loadingRecords ? (
-                                <div className="flex gap-4">
+                                <div className="flex flex-col gap-4">
                                     <Skeleton className="h-48 w-full" />
                                     <Skeleton className="h-48 w-full" />
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-6">
                                     {transactionType === 'Deposit' && (
                                         <>
                                             <div className="space-y-2">
@@ -354,12 +354,18 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                                     {transactionType === 'Transfer' && (
                                         <>
                                             <div className="space-y-4">
-                                                <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                <div>
+                                                    <Label className="mb-2 block">Inflows (Money Received)</Label>
+                                                    <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                    <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
                                             </div>
                                              <div className="space-y-4">
-                                                <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                <div>
+                                                    <Label className="mb-2 block">Outflows (Money Sent)</Label>
+                                                    <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                    <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
                                             </div>
                                         </>
                                     )}
