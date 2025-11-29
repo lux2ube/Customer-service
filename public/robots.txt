@@ -1,0 +1,15 @@
+User-agent: *
+Disallow: /
+
+# Explicitly block all search engines from indexing sensitive financial data
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /

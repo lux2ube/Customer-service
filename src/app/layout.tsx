@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster"
 export const metadata: Metadata = {
   title: 'كوين كاش',
   description: 'A professional CRM built with Firebase Studio.',
+  robots: 'noindex, nofollow',
 };
 
 export default function RootLayout({
