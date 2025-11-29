@@ -137,10 +137,18 @@ function AutoMatchButton() {
                     }
                     
                     if (foundMatch) {
-                        updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
-                        updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
-                        matched++;
-                        console.log(`✅ Matched ${record.id} to ${client.name}`);
+                        // Only add if values are defined
+                        if (clientId) {
+                            updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
+                        }
+                        if (client.name) {
+                            updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
+                        }
+                        // Only count as matched if we have a clientId
+                        if (clientId && client.name) {
+                            matched++;
+                            console.log(`✅ Matched ${record.id} to ${client.name}`);
+                        }
                         break;
                     }
                 }
