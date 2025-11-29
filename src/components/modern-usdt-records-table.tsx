@@ -43,7 +43,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from './ui/checkbox';
-
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { Client } from '@/lib/types';
+import { update } from 'firebase/database';
+import { Link as LinkIcon } from 'lucide-react';
 
 const statuses: UsdtRecord['status'][] = ['Pending', 'Used', 'Cancelled', 'Confirmed'];
 const sources: UsdtRecord['source'][] = ['Manual', 'BSCScan'];
@@ -62,8 +71,26 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
   const [typeFilter, setTypeFilter] = React.useState('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
   const [recordToCancel, setRecordToCancel] = React.useState<UsdtRecord | null>(null);
+  const [recordToMatch, setRecordToMatch] = React.useState<UsdtRecord | null>(null);
+  const [clients, setClients] = React.useState<(Client & { id: string })[]>([]);
+  const [selectedClient, setSelectedClient] = React.useState('');
+  const [matchingLoading, setMatchingLoading] = React.useState(false);
   const { toast } = useToast();
 
+
+  React.useEffect(() => {
+    // Load clients for matching
+    const clientsRef = ref(db, 'clients');
+    const unsubscribeClients = onValue(clientsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        setClients(list);
+      }
+    });
+
+    return () => unsubscribeClients();
+  }, []);
 
   React.useEffect(() => {
     // If records are passed as props, don't fetch from DB. This is for the client dashboard.
@@ -141,14 +168,42 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
     
     const handleCancelAction = async () => {
         if (!recordToCancel) return;
-        // This needs a generic cancel action for different record types
-        // For now, we'll assume a generic cancellation logic
         toast({
             title: "Action Not Implemented",
             description: "Cancelling USDT records is not yet supported.",
             variant: "destructive"
         });
         setRecordToCancel(null);
+    }
+
+    const handleMatchClient = async () => {
+        if (!recordToMatch || !selectedClient) return;
+        
+        setMatchingLoading(true);
+        try {
+            const selectedClientData = clients.find(c => c.id === selectedClient);
+            if (!selectedClientData) throw new Error('Client not found');
+
+            await update(ref(db), {
+                [`/modern_usdt_records/${recordToMatch.id}/clientId`]: selectedClient,
+                [`/modern_usdt_records/${recordToMatch.id}/clientName`]: selectedClientData.name,
+            });
+
+            toast({
+                title: 'Success',
+                description: `Transaction matched to ${selectedClientData.name}`,
+            });
+            setRecordToMatch(null);
+            setSelectedClient('');
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.message,
+                variant: 'destructive',
+            });
+        } finally {
+            setMatchingLoading(false);
+        }
     }
 
   return (
@@ -249,6 +304,9 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
                            <DropdownMenu>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                     <DropdownMenuItem onClick={() => { setRecordToMatch(record); setSelectedClient(''); }}>
+                                        <LinkIcon className="mr-2 h-4 w-4" /> Match to Client
+                                    </DropdownMenuItem>
                                      <DropdownMenuItem asChild>
                                         <Link href={`/modern-usdt-records/${record.id}/edit`}>
                                             <Pencil className="mr-2 h-4 w-4" /> Edit
@@ -291,6 +349,37 @@ export function ModernUsdtRecordsTable({ records: recordsFromProps, selectedIds,
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
+
+    <Dialog open={!!recordToMatch} onOpenChange={(open) => !open && setRecordToMatch(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Match Transaction to Client</DialogTitle>
+                <DialogDescription>Select a client to match this USDT transaction</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+                <Select value={selectedClient} onValueChange={setSelectedClient}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select a client..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {clients.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>
+                                {client.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setRecordToMatch(null)}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleMatchClient} disabled={!selectedClient || matchingLoading}>
+                        {matchingLoading ? 'Matching...' : 'Match'}
+                    </Button>
+                </div>
+            </div>
+        </DialogContent>
+    </Dialog>
     </>
   );
 }
