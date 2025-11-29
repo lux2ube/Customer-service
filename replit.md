@@ -8,6 +8,16 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
+### November 29, 2025 - Manual CSV Sync for USDT Transactions
+- **Added CSV Upload Sync**: New feature to manually import USDT transactions from exported CSV files
+  - Form selects existing BSC API configuration (reuses wallet address and linked account)
+  - CSV is parsed and synced using identical logic as Etherscan API syncing
+  - Records marked as source 'CSV' (not API)
+  - Supports same CSV format exported from Etherscan: Transaction Hash, Blockno, UnixTimestamp, From, To, TokenValue
+  - Handles deduplication and filters transactions ≤0.01 USDT
+  - Creates journal entries for matched clients automatically
+  - Shows detailed sync results: count synced, count skipped
+
 ### November 28, 2025 - BSC API V2 Migration & Modern USDT Records
 - **Fixed Linked Account Dropdown**: Updated to properly filter accounts with `currency='USDT'` and include the account ID in the data
 - **Added Last Synced Block Field**: New field in BSC API configuration form to specify starting block for sync

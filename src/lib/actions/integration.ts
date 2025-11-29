@@ -177,15 +177,26 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
 export async function syncBscCsv(prevState: SyncState, formData: FormData): Promise<SyncState> {
     const csvFile = formData.get('csvFile') as File;
-    const accountId = formData.get('accountId') as string;
-    const configName = formData.get('configName') as string;
-    const walletAddress = formData.get('walletAddress') as string;
+    const apiId = formData.get('apiId') as string;
     
-    if (!csvFile || !accountId || !configName || !walletAddress) {
-        return { message: 'CSV file, account ID, configuration name, and wallet address are required.', error: true };
+    if (!csvFile || !apiId) {
+        return { message: 'CSV file and API configuration are required.', error: true };
     }
 
     try {
+        // Get API configuration
+        const apiSettingRef = ref(db, `bsc_apis/${apiId}`);
+        const apiSettingSnapshot = await get(apiSettingRef);
+        if (!apiSettingSnapshot.exists()) {
+            return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
+        }
+        const setting: BscApiSetting = apiSettingSnapshot.val();
+        const { walletAddress, accountId, name: configName } = setting;
+        
+        if (!walletAddress || !accountId) {
+            return { message: `API config "${configName}" is missing wallet address or linked account.`, error: true };
+        }
+
         const csvText = await csvFile.text();
         const lines = csvText.trim().split('\n');
         
