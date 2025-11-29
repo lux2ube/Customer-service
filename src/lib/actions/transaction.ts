@@ -19,14 +19,15 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
 
     try {
         const cashRecordsQuery = query(ref(db, 'cash_records'), orderByChild('clientId'), equalTo(clientId));
-        const usdtRecordsQuery = query(ref(db, 'modern_usdt_records'), orderByChild('clientId'), equalTo(clientId));
+        // For USDT: fetch ALL modern records, then filter for those linked to client OR unassigned
+        const allUsdtRecordsRef = ref(db, 'modern_usdt_records');
 
         const [
             cashRecordsSnapshot,
-            usdtRecordsSnapshot
+            allUsdtSnapshot
         ] = await Promise.all([
             get(cashRecordsQuery),
-            get(usdtRecordsQuery),
+            get(allUsdtRecordsRef),
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
@@ -56,13 +57,20 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             }
         }
         
-        if (usdtRecordsSnapshot.exists()) {
-            const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
+        // Include USDT records that are either: linked to this client OR unassigned
+        if (allUsdtSnapshot.exists()) {
+            const allUsdtRecords: Record<string, UsdtRecord> = allUsdtSnapshot.val();
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
                 if (!allowedStatuses.includes(record.status)) continue;
+                
+                // Only include if linked to this client OR if unassigned
+                const isLinkedToThisClient = record.clientId === clientId;
+                const isUnassigned = !record.clientId || record.clientName === 'Unassigned';
+                
+                if (!isLinkedToThisClient && !isUnassigned) continue;
 
-                 unifiedRecords.push({
+                unifiedRecords.push({
                     id,
                     date: record.date,
                     type: record.type,
@@ -247,6 +255,12 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         for (const record of allLinkedRecords) {
             const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
             updates[`${recordPath}/status`] = 'Used';
+            
+            // If USDT record was unassigned, link it to the client now
+            if (record.recordType === 'usdt' && (!record.clientId || record.clientName === 'Unassigned')) {
+                updates[`${recordPath}/clientId`] = clientId;
+                updates[`${recordPath}/clientName`] = client.name;
+            }
         }
         
         const journalEntries = createJournalEntriesForTransaction(newTransactionData, client, allAccounts);
