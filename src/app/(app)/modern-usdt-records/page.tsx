@@ -106,18 +106,28 @@ function AutoMatchButton() {
             let matched = 0;
 
             unassignedRecords.forEach(record => {
-                const walletAddress = record.clientWalletAddress?.toLowerCase();
+                // Skip if no wallet address
+                if (!record.clientWalletAddress) {
+                    console.warn(`Record ${record.id} has no clientWalletAddress`);
+                    return;
+                }
+                
+                const walletAddress = record.clientWalletAddress.toLowerCase();
                 
                 // Find matching client
                 for (const clientId in clients) {
                     const client = clients[clientId];
                     // Check against bep20_addresses array
-                    if (client.bep20_addresses && client.bep20_addresses.length > 0) {
-                        const addressMatch = client.bep20_addresses.some(addr => addr.toLowerCase() === walletAddress);
+                    if (client.bep20_addresses && Array.isArray(client.bep20_addresses) && client.bep20_addresses.length > 0) {
+                        const addressMatch = client.bep20_addresses.some(addr => {
+                            if (!addr) return false;
+                            return addr.toLowerCase() === walletAddress;
+                        });
                         if (addressMatch) {
                             updates[`/modern_usdt_records/${record.id}/clientId`] = clientId;
                             updates[`/modern_usdt_records/${record.id}/clientName`] = client.name;
                             matched++;
+                            console.log(`✅ Matched ${record.id} to client ${client.name}`);
                             break;
                         }
                     }
