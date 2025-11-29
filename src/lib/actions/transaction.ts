@@ -30,14 +30,15 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
         ]);
 
         const unifiedRecords: UnifiedFinancialRecord[] = [];
-        // Only show Pending and Matched records - exclude 'Confirmed' (old synced records) and 'Used' (already in transaction)
-        const allowedStatuses = ['Pending', 'Matched'];
 
         if (cashRecordsSnapshot.exists()) {
             const allCashRecords: Record<string, CashRecord> = cashRecordsSnapshot.val();
+            console.log(`🔍 Found ${Object.keys(allCashRecords).length} cash records for client ${clientId}`);
             for (const id in allCashRecords) {
                 const record = allCashRecords[id];
-                if (!allowedStatuses.includes(record.status)) continue;
+                console.log(`  - Cash record ${id}: status="${record.status}", clientId="${record.clientId}"`);
+                // Show all records so user can see everything linked to them
+                // Status filtering is NOT applied - user needs to see what they have
                 
                 unifiedRecords.push({
                     id,
@@ -54,16 +55,19 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     recipientName: record.recipientName,
                 });
             }
+        } else {
+            console.log(`🔍 No cash records found for client ${clientId}`);
         }
         
-        // Include only USDT records linked to this client from modern collection
+        // Include all USDT records linked to this client from modern collection
         if (usdtRecordsSnapshot.exists()) {
             const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
+            console.log(`🔍 Found ${Object.keys(allUsdtRecords).length} USDT records for client ${clientId}`);
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
-                if (!allowedStatuses.includes(record.status)) continue;
-
-                console.log('✅ Loading USDT record from modern_usdt_records:', id, record);
+                console.log(`  - USDT record ${id}: status="${record.status}", clientId="${record.clientId}", amount="${record.amount}"`);
+                // Show all records so user can see everything linked to them
+                console.log(`    ✅ Including USDT record in results`);
 
                 unifiedRecords.push({
                     id,
@@ -80,14 +84,16 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
                     clientWalletAddress: record.clientWalletAddress,
                 });
             }
+        } else {
+            console.log(`🔍 No USDT records found for client ${clientId} in modern_usdt_records`);
         }
 
-        console.log(`Loaded ${unifiedRecords.length} total records for client ${clientId}`);
+        console.log(`📊 Final result: ${unifiedRecords.length} total records for client ${clientId}`);
         unifiedRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return unifiedRecords;
 
     } catch (error) {
-        console.error("Error fetching unified client records:", error);
+        console.error("❌ Error fetching unified client records:", error);
         return [];
     }
 }
