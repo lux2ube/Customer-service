@@ -250,7 +250,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
         
         const updates: { [key: string]: any } = {};
-        updates[`/transactions/${newId}`] = stripUndefined(newTransactionData);
+        updates[`/modern_transactions/${newId}`] = stripUndefined(newTransactionData);
         
         for (const record of allLinkedRecords) {
             const recordPath = record.recordType === 'cash' ? `/cash_records/${record.id}` : `/modern_usdt_records/${record.id}`;
@@ -427,7 +427,7 @@ export async function updateBulkTransactions(prevState: BulkUpdateState, formDat
     try {
         const updates: { [key: string]: any } = {};
         for (const id of transactionIds) {
-            updates[`/transactions/${id}/status`] = status;
+            updates[`/modern_transactions/${id}/status`] = status;
         }
 
         await update(ref(db), updates);

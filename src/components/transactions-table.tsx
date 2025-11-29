@@ -247,23 +247,23 @@ export function TransactionsTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row items-center gap-4 py-4">
+      <div className="space-y-4">
         <Input
           placeholder="Search transactions..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="max-w-sm"
+          className="w-full md:max-w-sm"
         />
-        <div className="flex gap-2 flex-wrap">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by type..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Filter by type..." /></SelectTrigger>
                 <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
                     {types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Filter by status..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Filter by status..." /></SelectTrigger>
                 <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
                     {statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -274,18 +274,20 @@ export function TransactionsTable() {
                 <Button
                 id="date"
                 variant={"outline"}
-                className={cn("w-[260px] justify-start text-left font-normal",!dateRange && "text-muted-foreground")}
+                className={cn("justify-start text-left font-normal",!dateRange && "text-muted-foreground")}
                 >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {dateRange?.from ? ( dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}
+                {dateRange?.from ? ( dateRange.to ? (<span className="hidden sm:inline">{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</span>) : <span className="hidden sm:inline">{format(dateRange.from, "LLL dd, y")}</span>) : (<span>Pick dates</span>)}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
                 <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/>
             </PopoverContent>
             </Popover>
-            <Button variant="ghost" onClick={clearFilters}><X className="mr-2 h-4 w-4" />Clear Filters</Button>
-            <ExportButton data={exportableData} filename="transactions" />
+            <Button variant="ghost" onClick={clearFilters} size="sm"><X className="mr-2 h-4 w-4" />Clear</Button>
+            <div className="flex justify-end">
+              <ExportButton data={exportableData} filename="transactions" />
+            </div>
         </div>
       </div>
 
