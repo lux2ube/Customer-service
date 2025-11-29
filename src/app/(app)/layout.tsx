@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { Logo } from '@/components/logo';
 import { Nav } from '@/components/nav';
