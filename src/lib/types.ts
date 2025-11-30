@@ -23,7 +23,7 @@ export interface ClientServiceProvider {
 
 export interface Client {
     id: string;
-    name: string; // The full name of the client
+    name: string;
     phone: string[];
     kyc_documents?: KycDocument[];
     verification_status: VerificationStatus;
@@ -34,6 +34,20 @@ export interface Client {
     favoriteBankAccountId?: string;
     favoriteBankAccountName?: string;
     serviceProviders?: ClientServiceProvider[];
+    
+    // Document Fields - from Yemeni ID Front
+    dateOfBirth?: string;
+    placeOfBirth?: string;
+    bloodGroup?: string;
+    idNumber?: string;
+    
+    // Document Fields - from Yemeni ID Back
+    dateOfIssue?: string;
+    dateOfExpiry?: string;
+    placeOfIssue?: string;
+    
+    // Document Fields - from Passport
+    passportNumber?: string;
 }
 
 export interface ClientActivity {

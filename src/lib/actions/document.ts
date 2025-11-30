@@ -25,6 +25,8 @@ export type YemeniIDFrontDetails = {
   nameArabic?: string;
   idNumber?: string;
   dateOfBirth?: string;
+  placeOfBirth?: string;
+  bloodGroup?: string;
   governorate?: string;
   gender?: string;
   nationality?: string;
@@ -34,8 +36,9 @@ export type YemeniIDFrontDetails = {
 
 export type YemeniIDBackDetails = {
   idNumber?: string;
-  issueDate?: string;
-  expiryDate?: string;
+  dateOfIssue?: string;
+  dateOfExpiry?: string;
+  placeOfIssue?: string;
   maritalStatus?: string;
 };
 
@@ -160,6 +163,8 @@ For Yemeni ID FRONT:
 - nameArabic (Arabic name)
 - idNumber
 - dateOfBirth (format: DD/MM/YYYY)
+- placeOfBirth (location/city)
+- bloodGroup (A+, B+, O+, etc.)
 - governorate
 - gender
 - nationality
@@ -168,8 +173,9 @@ For Yemeni ID FRONT:
 
 For Yemeni ID BACK:
 - idNumber (to verify it's the same ID)
-- issueDate (format: DD/MM/YYYY)
-- expiryDate (format: DD/MM/YYYY)
+- dateOfIssue (format: DD/MM/YYYY)
+- dateOfExpiry (format: DD/MM/YYYY)
+- placeOfIssue (location where ID was issued)
 - maritalStatus
 
 For PASSPORT:
@@ -178,10 +184,11 @@ For PASSPORT:
 - passportNumber
 - nationality
 - dateOfBirth (format: DD/MM/YYYY)
+- placeOfBirth (location/city)
 - sex (M or F)
 - dateOfIssue (format: DD/MM/YYYY)
-- expiryDate (format: DD/MM/YYYY)
-- placeOfBirth
+- dateOfExpiry (format: DD/MM/YYYY)
+- placeOfIssue (location where passport was issued)
 - issuingAuthority
 
 Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_back", or "passport", and the extracted fields. If a field isn't visible, omit it.`;
@@ -240,6 +247,8 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
         nameArabic: extractedData.nameArabic,
         idNumber: extractedData.idNumber,
         dateOfBirth: extractedData.dateOfBirth,
+        placeOfBirth: extractedData.placeOfBirth,
+        bloodGroup: extractedData.bloodGroup,
         governorate: extractedData.governorate,
         gender: extractedData.gender,
         nationality: extractedData.nationality,
@@ -249,8 +258,9 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
     } else if (documentType === 'yemeni_id_back') {
       details = {
         idNumber: extractedData.idNumber,
-        issueDate: extractedData.issueDate,
-        expiryDate: extractedData.expiryDate,
+        dateOfIssue: extractedData.dateOfIssue,
+        dateOfExpiry: extractedData.dateOfExpiry,
+        placeOfIssue: extractedData.placeOfIssue,
         maritalStatus: extractedData.maritalStatus,
       };
     }

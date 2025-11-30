@@ -53,26 +53,47 @@ function ParsedDataDisplay({
     }
     
     const isPassport = data.documentType === 'passport';
+    const isIdFront = data.documentType === 'yemeni_id_front';
+    const isIdBack = data.documentType === 'yemeni_id_back';
 
-    const fields = isPassport ?
-        [
-            { label: "Full Name", value: data.details.fullName, icon: User },
-            { label: "Surname", value: data.details.surname, icon: User },
-            { label: "Passport No.", value: data.details.passportNumber, icon: Fingerprint },
-            { label: "Nationality", value: data.details.nationality, icon: ShieldAlert },
-            { label: "Date of Birth", value: data.details.dateOfBirth, icon: Calendar },
-            { label: "Date of Issue", value: data.details.dateOfIssue, icon: Calendar },
-            { label: "Date of Expiry", value: data.details.expiryDate, icon: Calendar },
-            { label: "Place of Birth", value: data.details.placeOfBirth, icon: Building },
-            { label: "Sex", value: data.details.sex, icon: User },
-            { label: "Issuing Authority", value: data.details.issuingAuthority, icon: Building },
-        ] :
-        [ // For National ID, can be expanded later
-            { label: "Name", value: data.details.name, icon: User },
-            { label: "ID Number", value: data.details.idNumber, icon: Fingerprint },
-            { label: "Date of Birth", value: data.details.birthDate, icon: Calendar },
-            { label: "Place of Birth", value: data.details.birthPlace, icon: Building },
-        ];
+    let fields: { label: string; value: any; icon: any }[] = [];
+
+    if (isPassport) {
+      fields = [
+        { label: "Passport Number", value: data.details.passportNumber, icon: Fingerprint },
+        { label: "Full Name", value: data.details.fullName, icon: User },
+        { label: "Surname", value: data.details.surname, icon: User },
+        { label: "Date of Birth", value: data.details.dateOfBirth, icon: Calendar },
+        { label: "Place of Birth", value: data.details.placeOfBirth, icon: Building },
+        { label: "Date of Issue", value: data.details.dateOfIssue, icon: Calendar },
+        { label: "Date of Expiry", value: data.details.dateOfExpiry, icon: Calendar },
+        { label: "Place of Issue", value: data.details.placeOfIssue, icon: Building },
+        { label: "Sex", value: data.details.sex, icon: User },
+        { label: "Nationality", value: data.details.nationality, icon: ShieldAlert },
+        { label: "Issuing Authority", value: data.details.issuingAuthority, icon: Building },
+      ];
+    } else if (isIdFront) {
+      fields = [
+        { label: "Name", value: data.details.name, icon: User },
+        { label: "ID Number", value: data.details.idNumber, icon: Fingerprint },
+        { label: "Date of Birth", value: data.details.dateOfBirth, icon: Calendar },
+        { label: "Place of Birth", value: data.details.placeOfBirth, icon: Building },
+        { label: "Blood Group", value: data.details.bloodGroup, icon: User },
+        { label: "Gender", value: data.details.gender, icon: User },
+        { label: "Nationality", value: data.details.nationality, icon: ShieldAlert },
+        { label: "Governorate", value: data.details.governorate, icon: Building },
+        { label: "Religion", value: data.details.religion, icon: User },
+        { label: "Profession", value: data.details.profession, icon: User },
+      ];
+    } else if (isIdBack) {
+      fields = [
+        { label: "ID Number", value: data.details.idNumber, icon: Fingerprint },
+        { label: "Date of Issue", value: data.details.dateOfIssue, icon: Calendar },
+        { label: "Date of Expiry", value: data.details.dateOfExpiry, icon: Calendar },
+        { label: "Place of Issue", value: data.details.placeOfIssue, icon: Building },
+        { label: "Marital Status", value: data.details.maritalStatus, icon: User },
+      ];
+    }
 
 
     return (

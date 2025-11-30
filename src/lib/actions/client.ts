@@ -87,6 +87,24 @@ export async function createClient(clientId: string | null, formData: FormData):
     
     let finalData: Partial<Omit<Client, 'id' | 'kyc_documents'>> = validatedFields.data;
     
+    // Add document-extracted fields if present
+    const documentFields = {
+        dateOfBirth: formData.get('dateOfBirth'),
+        placeOfBirth: formData.get('placeOfBirth'),
+        bloodGroup: formData.get('bloodGroup'),
+        idNumber: formData.get('idNumber'),
+        dateOfIssue: formData.get('dateOfIssue'),
+        dateOfExpiry: formData.get('dateOfExpiry'),
+        placeOfIssue: formData.get('placeOfIssue'),
+        passportNumber: formData.get('passportNumber'),
+    };
+    
+    Object.entries(documentFields).forEach(([key, value]) => {
+        if (value) {
+            (finalData as any)[key] = value;
+        }
+    });
+    
     const dataForFirebase = stripUndefined(finalData);
 
     try {

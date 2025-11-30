@@ -63,7 +63,6 @@ export function DocumentClientForm({
       } else if (documentType === 'yemeni_id_front') {
         name = extractedData.name || extractedData.nameArabic || '';
       } else if (documentType === 'yemeni_id_back') {
-        // ID back usually doesn't have name, keep from previous extraction
         name = extractedData.name || '';
       }
       
@@ -72,6 +71,12 @@ export function DocumentClientForm({
         phone,
         verification_status: 'Pending',
       });
+
+      // Store extracted data for later client creation with all fields
+      (window as any).extractedDocumentData = {
+        ...extractedData,
+        documentType,
+      };
     }
   }, [open, extractedData, documentType]);
 
@@ -123,6 +128,13 @@ export function DocumentClientForm({
       fData.set('name', formData.name);
       fData.set('phone', formData.phone);
       fData.set('verification_status', formData.verification_status);
+
+      // Add extracted document fields
+      Object.entries(extractedData).forEach(([key, value]) => {
+        if (value && key !== 'name' && key !== 'nameArabic') {
+          fData.set(key, String(value));
+        }
+      });
 
       const result = await createClient(null, fData);
 
