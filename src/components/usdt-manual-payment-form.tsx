@@ -23,7 +23,8 @@ import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/fi
 import { searchClients } from '@/lib/actions/client';
 
 import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
-import type { Client, Account, UsdtRecord } from '@/lib/types';
+import type { Client, Account, UsdtRecord, ServiceProvider } from '@/lib/types';
+import { onValue, ref } from 'firebase/database';
 
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
@@ -183,6 +184,20 @@ export function UsdtManualPaymentForm({
    // Wallets state
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
   const [loadingWallets, setLoadingWallets] = React.useState(true);
+  const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
+  const [loadingProviders, setLoadingProviders] = React.useState(true);
+   // Get service provider for selected account
+  const selectedAccountProvider = React.useMemo(() => {
+    if (!accountId) return null;
+    return serviceProviders.find(sp => sp.accountIds.includes(accountId)) || null;
+  }, [accountId, serviceProviders]);
+
+  // Check if BEP20 address field should be shown
+  const shouldShowBep20Address = React.useMemo(() => {
+    if (!selectedAccountProvider) return true; // Default to showing if no provider
+    return selectedAccountProvider.cryptoFormula?.includes('Address') ?? true;
+  }, [selectedAccountProvider]);
+
    // ----------------- Effects -----------------
   // Load wallets from Firebase
   React.useEffect(() => {
@@ -200,6 +215,20 @@ export function UsdtManualPaymentForm({
       setLoadingWallets(false);
     });
      return () => unsubscribe();
+  }, []);
+
+  // Load service providers from Firebase
+  React.useEffect(() => {
+    setLoadingProviders(true);
+    const providersRef = ref(db, 'serviceProviders');
+    const unsubscribe = onValue(providersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const providersData: Record<string, ServiceProvider> = snapshot.val();
+        setServiceProviders(Object.values(providersData));
+      }
+      setLoadingProviders(false);
+    });
+    return () => unsubscribe();
   }, []);
    // Initialize new record with today's date
   React.useEffect(() => {
@@ -330,23 +359,25 @@ export function UsdtManualPaymentForm({
               </p>
             )}
           </div>
-           {/* Recipient Address */}
-          <div className="space-y-2">
-            <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
-            <Input
-               id="recipientAddress"
-               name="recipientAddress"
-               placeholder="0x..."
-               required
-               value={recipientAddress}
-               onChange={(e) => setRecipientAddress(e.target.value)}
-             />
-            {state?.errors?.recipientAddress && (
-              <p className="text-sm text-destructive">
-                {state.errors.recipientAddress[0]}
-              </p>
-            )}
-          </div>
+           {/* Recipient Address - only show if service provider requires it */}
+          {shouldShowBep20Address && (
+            <div className="space-y-2">
+              <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
+              <Input
+                 id="recipientAddress"
+                 name="recipientAddress"
+                 placeholder="0x..."
+                 required
+                 value={recipientAddress}
+                 onChange={(e) => setRecipientAddress(e.target.value)}
+               />
+              {state?.errors?.recipientAddress && (
+                <p className="text-sm text-destructive">
+                  {state.errors.recipientAddress[0]}
+                </p>
+              )}
+            </div>
+          )}
            {/* Amount + TxHash */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
