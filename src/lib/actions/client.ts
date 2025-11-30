@@ -600,9 +600,25 @@ export async function getClientsByName(name: string): Promise<Client[]> {
         if (!snapshot.exists()) return [];
         
         const allClients: Record<string, Client> = snapshot.val();
+        const normalizedSearch = normalizeArabic(name.toLowerCase().trim());
+        
         return Object.entries(allClients)
-            .filter(([_, client]) => client.name && client.name.toLowerCase() === name.toLowerCase())
-            .map(([id, client]) => ({ ...client, id }));
+            .filter(([_, client]) => {
+                if (!client.name) return false;
+                const normalizedName = normalizeArabic(client.name.toLowerCase());
+                // Use substring matching (lenient) instead of exact matching
+                return normalizedName.includes(normalizedSearch) || 
+                       normalizedName.startsWith(normalizedSearch);
+            })
+            .map(([id, client]) => ({ ...client, id }))
+            .sort((a, b) => {
+                const aName = normalizeArabic((a.name || '').toLowerCase());
+                const bName = normalizeArabic((b.name || '').toLowerCase());
+                // Prioritize exact matches first
+                if (aName === normalizedSearch && bName !== normalizedSearch) return -1;
+                if (bName === normalizedSearch && aName !== normalizedSearch) return 1;
+                return aName.localeCompare(bName);
+            });
     } catch (error) {
         console.error("Error fetching clients by name:", error);
         return [];
