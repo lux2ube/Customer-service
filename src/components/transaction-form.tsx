@@ -121,11 +121,12 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
 
     const fetchAvailableFunds = React.useCallback(async (clientId: string) => {
         setLoadingRecords(true);
-        // Only fetch "Pending" records - used records are excluded from transactions
-        const fetchedRecords = await getUnifiedClientRecords(clientId, 'Pending');
-        setRecords(fetchedRecords);
+        // Fetch all records and filter out "Used" ones - keeps "Pending" and "Matched"
+        const allRecords = await getUnifiedClientRecords(clientId);
+        const availableRecords = allRecords.filter(r => r.status !== 'Used');
+        setRecords(availableRecords);
         setLoadingRecords(false);
-        return fetchedRecords;
+        return availableRecords;
     }, []);
 
     const handleClientSelect = React.useCallback((client: Client | null) => {
