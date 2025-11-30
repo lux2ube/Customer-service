@@ -49,11 +49,19 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         }
 
         // Use free BSC public node endpoint to fetch USDT transactions
-        const startBlock = lastSyncedBlock > 0 ? lastSyncedBlock : 0;
-        
         try {
             // Connect to free BSC public node RPC
             const provider = new ethers.JsonRpcProvider('https://bsc.publicnode.com');
+            
+            // Get current block number
+            const currentBlock = await provider.getBlockNumber();
+            
+            // Free RPC limitation: only query recent blocks (last ~1000 blocks)
+            // If lastSyncedBlock is too old, reset to recent blocks
+            const MAX_LOOKBACK = 1000;
+            const queryStartBlock = Math.max(lastSyncedBlock > 0 ? lastSyncedBlock : 0, currentBlock - MAX_LOOKBACK);
+            
+            console.log(`🔍 BSC Sync: Current block ${currentBlock}, querying from block ${queryStartBlock} to ${currentBlock}`);
             
             // USDT contract interface to get Transfer events
             const USDT_ABI = [
@@ -65,14 +73,13 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const toFilter = usdtContract.filters.Transfer(null, walletAddress);
             const fromFilter = usdtContract.filters.Transfer(walletAddress, null);
             
-            // Fetch events from startBlock to latest (10000 blocks at a time to avoid rate limits)
-            const currentBlock = await provider.getBlockNumber();
-            const endBlock = Math.min(currentBlock, startBlock + 10000);
-            
+            // Fetch events in smaller batches to avoid rate limits
             const [toEvents, fromEvents] = await Promise.all([
-                usdtContract.queryFilter(toFilter, startBlock, endBlock),
-                usdtContract.queryFilter(fromFilter, startBlock, endBlock),
+                usdtContract.queryFilter(toFilter, queryStartBlock, currentBlock),
+                usdtContract.queryFilter(fromFilter, queryStartBlock, currentBlock),
             ]);
+            
+            console.log(`✓ Found ${toEvents.length} incoming + ${fromEvents.length} outgoing USDT events`);
             
             // Combine and sort events
             const allEvents = [...toEvents, ...fromEvents].sort((a, b) => {
@@ -99,7 +106,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 };
             }));
         } catch (error: any) {
-            console.error("BSC PublicNode RPC Error:", error);
+            console.error("❌ BSC PublicNode RPC Error:", error);
             throw new Error(`Failed to fetch from BSC public node: ${error.message}`);
         }
 
