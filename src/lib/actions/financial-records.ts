@@ -234,12 +234,14 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         
         // Get the service provider for this account
         let providerId: string | null = null;
+        let providerData: any = null;
         const providersSnapshot = await get(ref(db, 'serviceProviders'));
         if (providersSnapshot.exists()) {
             const providers = providersSnapshot.val();
             for (const [pId, provider] of Object.entries(providers)) {
                 if ((provider as any).accountIds?.includes(accountId)) {
                     providerId = pId;
+                    providerData = provider;
                     break;
                 }
             }
@@ -276,7 +278,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         await set(recordRef, stripUndefined(paymentData));
 
         // Store provider details in client profile if present
-        if (clientId && recipientDetails && providerId) {
+        if (clientId && recipientDetails && providerId && providerData) {
             try {
                 const detailsObj = JSON.parse(recipientDetails);
                 const clientRef = ref(db, `clients/${clientId}`);
@@ -294,19 +296,21 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
                         serviceProviders[existingIndex].details = detailsObj;
                     } else {
                         // Add new provider to client profile
-                        const provider = (providersSnapshot.val()?.[providerId] || {}) as any;
                         serviceProviders.push({
                             providerId,
-                            providerName: provider.name,
-                            providerType: provider.type,
+                            providerName: providerData.name,
+                            providerType: providerData.type,
                             details: detailsObj,
                         });
                     }
                     
                     await update(clientRef, { serviceProviders });
+                    console.log(`Stored provider details for client ${clientId}, provider ${providerId}`);
+                } else {
+                    console.warn(`Client ${clientId} not found for storing provider details`);
                 }
             } catch (e) {
-                console.warn("Could not store provider details:", e);
+                console.error("Error storing provider details:", e, { recipientDetails });
             }
         }
 

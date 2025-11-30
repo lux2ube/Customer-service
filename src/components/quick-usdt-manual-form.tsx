@@ -96,8 +96,17 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, onClo
     setDynamicFields({});
   }
 
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    // Ensure recipientDetails is captured right before submission
+    const formElement = e.currentTarget;
+    const detailsInput = formElement.querySelector('input[name="recipientDetails"]') as HTMLInputElement;
+    if (detailsInput) {
+      detailsInput.value = JSON.stringify(dynamicFields);
+    }
+  };
+
   return (
-    <form action={formAction} ref={formRef} className="pt-4 space-y-4">
+    <form action={formAction} ref={formRef} className="pt-4 space-y-4" onSubmit={handleSubmit}>
       <input type="hidden" name="clientId" value={client.id} />
       <input type="hidden" name="clientName" value={client.name} />
       <input type="hidden" name="date" value={new Date().toISOString()} />
