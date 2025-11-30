@@ -24,7 +24,6 @@ import { searchClients } from '@/lib/actions/client';
 
 import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 import type { Client, Account, UsdtRecord, ServiceProvider } from '@/lib/types';
-import { onValue, ref } from 'firebase/database';
 
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
