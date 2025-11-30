@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
 
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 import type { Client, Account, UsdtRecord } from '@/lib/types';
 
 import {
@@ -165,6 +166,7 @@ export function UsdtManualPaymentForm({
   const formRef = React.useRef<HTMLFormElement>(null);
    const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
   const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
+    useFormHotkeys(formRef);
    // ----------------- Local State -----------------
   const [date, setDate] = React.useState<Date | undefined>(
     record?.date ? parseISO(record.date) : undefined

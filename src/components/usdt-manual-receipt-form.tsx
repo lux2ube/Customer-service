@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { createUsdtManualReceipt, type UsdtManualReceiptState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
 import { format, parseISO } from 'date-fns';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { useRouter } from 'next/navigation';
 
@@ -122,6 +123,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
     const actionWithId = createUsdtManualReceipt.bind(null, record?.id || null);
+    useFormHotkeys(formRef);
     const [state, formAction] = useActionState<UsdtManualReceiptState, FormData>(actionWithId, undefined);
     
     // Form state managed here

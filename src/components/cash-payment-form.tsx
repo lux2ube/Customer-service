@@ -20,6 +20,7 @@ import type { Client, Account, CashRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { createCashReceipt, type CashReceiptFormState } from '@/lib/actions';
 import { searchClients } from '@/lib/actions/client';
+import { useFormHotkeys } from '@/hooks/use-form-hotkeys';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
@@ -133,6 +134,7 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
     const router = useRouter();
     const formRef = React.useRef<HTMLFormElement>(null);
     const actionWithId = createCashReceipt.bind(null, record?.id || null);
+    useFormHotkeys(formRef);
     const [state, formAction] = useActionState<CashReceiptFormState, FormData>(actionWithId, undefined);
     
     const [date, setDate] = React.useState<Date | undefined>(record ? parseISO(record.date) : new Date());
