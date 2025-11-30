@@ -59,23 +59,35 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             // Get current block number
             const currentBlock = await provider.getBlockNumber();
             
+            // Free RPC limitation: only query recent blocks (last ~1000 blocks = ~60 minutes)
+            const MAX_LOOKBACK = 1000;
+            
             // Calculate start block
-            let queryStartBlock = lastSyncedBlock > 0 ? lastSyncedBlock : 0;
+            let queryStartBlock = lastSyncedBlock > 0 ? lastSyncedBlock : (currentBlock - MAX_LOOKBACK);
             
             // If startDate provided, calculate block from date (BSC ~3 seconds per block)
             if (startDate) {
                 const startTimestamp = new Date(startDate).getTime() / 1000;
                 const currentTimestamp = Math.floor(Date.now() / 1000);
+                
+                // Check if date is in the future
+                if (startTimestamp > currentTimestamp) {
+                    return { message: `Start date cannot be in the future. Please select a past date.`, error: true };
+                }
+                
                 const secondsDiff = currentTimestamp - startTimestamp;
                 const blocksDiff = Math.floor(secondsDiff / 3);
-                queryStartBlock = Math.max(0, currentBlock - blocksDiff);
-                console.log(`📅 Syncing from date ${startDate}: calculated as block ${queryStartBlock}`);
+                const calculatedBlock = Math.max(0, currentBlock - blocksDiff);
+                
+                // If calculated block is too old for free RPC, warn user
+                if (calculatedBlock < currentBlock - MAX_LOOKBACK) {
+                    console.log(`⚠️ Date ${startDate} is too far in the past. Free RPC can only query last ${MAX_LOOKBACK} blocks (~60 minutes).`);
+                    console.log(`   Using most recent ${MAX_LOOKBACK} blocks instead.`);
+                }
+                
+                queryStartBlock = Math.max(calculatedBlock, currentBlock - MAX_LOOKBACK);
+                console.log(`📅 Syncing from date ${startDate}: calculated as block ${calculatedBlock}, adjusted to ${queryStartBlock}`);
             }
-            
-            // Free RPC limitation: only query recent blocks (last ~1000 blocks)
-            // If lastSyncedBlock is too old, reset to recent blocks
-            const MAX_LOOKBACK = 1000;
-            queryStartBlock = Math.max(queryStartBlock, currentBlock - MAX_LOOKBACK);
             
             console.log(`🔍 BSC Sync for wallet ${walletAddress}`);
             console.log(`   Current block: ${currentBlock}, querying blocks ${queryStartBlock}-${currentBlock} (${currentBlock - queryStartBlock} blocks)`);

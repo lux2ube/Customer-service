@@ -250,8 +250,8 @@ function SyncBscForm() {
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     className="w-[200px]"
-                    placeholder="Optional: start date"
-                    title="Leave empty for recent blocks only"
+                    placeholder="Last 60 minutes only"
+                    title="Enter a date/time within last 60 minutes (free RPC limitation)"
                 />
             </div>
             
