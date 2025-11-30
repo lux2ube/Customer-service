@@ -20,7 +20,7 @@ import {
   reconcileTransactionPosting
 } from './reconciliation';
 
-export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
+export async function getUnifiedClientRecords(clientId: string, filterStatus?: 'Pending' | 'Matched' | 'Used'): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
 
     try {
@@ -42,9 +42,14 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             console.log(`🔍 Found ${Object.keys(allCashRecords).length} cash records for client ${clientId}`);
             for (const id in allCashRecords) {
                 const record = allCashRecords[id];
-                console.log(`  - Cash record ${id}: status="${record.status}", clientId="${record.clientId}"`);
-                // Show all records so user can see everything linked to them
-                // Status filtering is NOT applied - user needs to see what they have
+                
+                // Filter by status if specified
+                if (filterStatus && record.status !== filterStatus) {
+                    console.log(`  - Filtering out cash record ${id}: status="${record.status}" (looking for "${filterStatus}")`);
+                    continue;
+                }
+                
+                console.log(`  - Cash record ${id}: status="${record.status}" ✓ included`);
                 
                 unifiedRecords.push({
                     id,
@@ -65,15 +70,19 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             console.log(`🔍 No cash records found for client ${clientId}`);
         }
         
-        // Include all USDT records linked to this client from modern collection
         if (usdtRecordsSnapshot.exists()) {
             const allUsdtRecords: Record<string, UsdtRecord> = usdtRecordsSnapshot.val();
             console.log(`🔍 Found ${Object.keys(allUsdtRecords).length} USDT records for client ${clientId}`);
             for (const id in allUsdtRecords) {
                 const record = allUsdtRecords[id];
-                console.log(`  - USDT record ${id}: status="${record.status}", clientId="${record.clientId}", amount="${record.amount}"`);
-                // Show all records so user can see everything linked to them
-                console.log(`    ✅ Including USDT record in results`);
+                
+                // Filter by status if specified
+                if (filterStatus && record.status !== filterStatus) {
+                    console.log(`  - Filtering out USDT record ${id}: status="${record.status}" (looking for "${filterStatus}")`);
+                    continue;
+                }
+                
+                console.log(`  - USDT record ${id}: status="${record.status}" ✓ included`);
 
                 unifiedRecords.push({
                     id,
@@ -94,7 +103,7 @@ export async function getUnifiedClientRecords(clientId: string): Promise<Unified
             console.log(`🔍 No USDT records found for client ${clientId} in modern_usdt_records`);
         }
 
-        console.log(`📊 Final result: ${unifiedRecords.length} total records for client ${clientId}`);
+        console.log(`📊 Final result: ${unifiedRecords.length} total records for client ${clientId} (filter: ${filterStatus || 'none'})`);
         unifiedRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return unifiedRecords;
 

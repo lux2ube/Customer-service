@@ -218,7 +218,7 @@ export function FinancialRecordsTable({ client, onTransactionCreated }: { client
     React.useEffect(() => {
         const fetchClientData = async (clientId: string) => {
             setLoadingRecords(true);
-            const fetchedRecords = await getUnifiedClientRecords(clientId);
+            const fetchedRecords = await getUnifiedClientRecords(clientId, 'Pending');
             setRecords(fetchedRecords);
             setSelectedRecordIds([]); // Reset selection when client changes
             setLoadingRecords(false);
