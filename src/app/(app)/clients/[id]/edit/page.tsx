@@ -110,7 +110,7 @@ async function getOtherClientsWithSameName(client: Client): Promise<Client[]> {
 }
 
 async function getServiceProviders(): Promise<ServiceProvider[]> {
-    const providersRef = ref(db, 'service_providers');
+    const providersRef = ref(db, 'serviceProviders');
     const snapshot = await get(providersRef);
     if (snapshot.exists()) {
         const data = snapshot.val();

@@ -92,10 +92,10 @@ export async function createServiceProvider(providerId: string | null, prevState
     
     try {
         if (isEditing) {
-            const providerRef = ref(db, `service_providers/${providerId}`);
+            const providerRef = ref(db, `serviceProviders/${providerId}`);
             await update(providerRef, data);
         } else {
-            const newProviderRef = push(ref(db, 'service_providers'));
+            const newProviderRef = push(ref(db, 'serviceProviders'));
             await set(newProviderRef, {
                 ...data,
                 createdAt: new Date().toISOString(),
@@ -121,7 +121,7 @@ export async function deleteServiceProvider(providerId: string) {
         return { message: 'Invalid provider ID.' };
     }
     try {
-        const providerRef = ref(db, `service_providers/${providerId}`);
+        const providerRef = ref(db, `serviceProviders/${providerId}`);
         const snapshot = await get(providerRef);
         if (!snapshot.exists()) {
             return { message: 'Service Provider not found.' };

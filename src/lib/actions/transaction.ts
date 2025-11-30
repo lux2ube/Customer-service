@@ -178,7 +178,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             get(ref(db, 'modern_usdt_records')),
             get(query(ref(db, 'rate_history/crypto_fees'), orderByChild('timestamp'), limitToLast(1))),
             get(ref(db, 'accounts')),
-            get(ref(db, 'service_providers'))
+            get(ref(db, 'serviceProviders'))
         ]);
 
         if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };

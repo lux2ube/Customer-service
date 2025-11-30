@@ -191,7 +191,7 @@ export async function createSendRequest(prevState: SendRequestState, formData: F
 
         // --- Save new address to client profile if needed ---
         if (isNewAddress && client && serviceProviderId) {
-            const serviceProvidersSnapshot = await get(ref(db, `service_providers/${serviceProviderId}`));
+            const serviceProvidersSnapshot = await get(ref(db, `serviceProviders/${serviceProviderId}`));
             if (serviceProvidersSnapshot.exists()) {
                 const providerDetails = serviceProvidersSnapshot.val();
                 const existingClientProviders = client.serviceProviders || [];

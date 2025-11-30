@@ -537,7 +537,7 @@ export async function migrateBep20Addresses(prevState: SetupState, formData: For
     try {
         const [clientsSnapshot, providersSnapshot] = await Promise.all([
             get(ref(db, 'clients')),
-            get(ref(db, 'service_providers'))
+            get(ref(db, 'serviceProviders'))
         ]);
         
         if (!clientsSnapshot.exists()) {
