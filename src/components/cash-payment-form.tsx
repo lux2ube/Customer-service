@@ -305,10 +305,10 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="remittanceNumber">Remittance Number</Label>
-                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" defaultValue={record?.notes} />
+                            <Input id="remittanceNumber" name="remittanceNumber" placeholder="Optional" />
                         </div>
                          <div className="space-y-2">
-                            <Label htmlFor="note">Note</Label>
+                            <Label htmlFor="note">Notes</Label>
                             <Textarea id="note" name="note" placeholder="Optional notes about the transaction" value={notes} onChange={(e) => setNotes(e.target.value)} />
                         </div>
                     </div>
