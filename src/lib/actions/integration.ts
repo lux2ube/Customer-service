@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLast, push } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
+import { ethers } from 'ethers';
 import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord, JournalEntry, ModernUsdtRecord } from '../types';
 import { stripUndefined, getNextSequentialId, notifyClientTransaction } from './helpers';
 import { findClientByAddress } from './client';
@@ -47,22 +48,60 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
 
-        // Etherscan V2 API - fetch 100 transactions per batch, sorted by asc, starting from lastSyncedBlock
+        // Use free BSC public node endpoint to fetch USDT transactions
         const startBlock = lastSyncedBlock > 0 ? lastSyncedBlock : 0;
-        const apiUrl = `https://api.etherscan.io/v2/api?chainid=${BSC_CHAIN_ID}&module=account&action=tokentx&contractaddress=${USDT_CONTRACT_ADDRESS}&address=${walletAddress}&page=1&offset=100&startblock=${startBlock}&sort=asc&apikey=${apiKey}`;
         
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error(`Etherscan API request failed: ${response.statusText}`);
-
-        const data = await response.json();
-        if (data.status !== "1") {
-             if (data.message === "No transactions found" || (Array.isArray(data.result) && data.result.length === 0)) {
-                return { message: `No new transactions found for ${configName}.`, error: false };
-            }
-            throw new Error(`Etherscan API Error for ${configName}: ${data.message}`);
+        try {
+            // Connect to free BSC public node RPC
+            const provider = new ethers.JsonRpcProvider('https://bsc.publicnode.com');
+            
+            // USDT contract interface to get Transfer events
+            const USDT_ABI = [
+                'event Transfer(address indexed from, address indexed to, uint256 value)',
+            ];
+            const usdtContract = new ethers.Contract(USDT_CONTRACT_ADDRESS, USDT_ABI, provider);
+            
+            // Filter transfers to/from the wallet address
+            const toFilter = usdtContract.filters.Transfer(null, walletAddress);
+            const fromFilter = usdtContract.filters.Transfer(walletAddress, null);
+            
+            // Fetch events from startBlock to latest (10000 blocks at a time to avoid rate limits)
+            const currentBlock = await provider.getBlockNumber();
+            const endBlock = Math.min(currentBlock, startBlock + 10000);
+            
+            const [toEvents, fromEvents] = await Promise.all([
+                usdtContract.queryFilter(toFilter, startBlock, endBlock),
+                usdtContract.queryFilter(fromFilter, startBlock, endBlock),
+            ]);
+            
+            // Combine and sort events
+            const allEvents = [...toEvents, ...fromEvents].sort((a, b) => {
+                if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
+                return (a.transactionIndex || 0) - (b.transactionIndex || 0);
+            });
+            
+            // Convert events to transaction objects
+            const fetchedTransactions = await Promise.all(allEvents.map(async (event) => {
+                const block = await provider.getBlock(event.blockNumber);
+                
+                const from = event.args?.from || '';
+                const to = event.args?.to || '';
+                const value = event.args?.value?.toString() || '0';
+                
+                return {
+                    hash: event.transactionHash,
+                    blockNumber: event.blockNumber.toString(),
+                    timeStamp: Math.floor((block?.timestamp || Date.now() / 1000)).toString(),
+                    from: from,
+                    to: to,
+                    value: value,
+                    transactionIndex: event.transactionIndex?.toString() || '0',
+                };
+            }));
+        } catch (error: any) {
+            console.error("BSC PublicNode RPC Error:", error);
+            throw new Error(`Failed to fetch from BSC public node: ${error.message}`);
         }
-        
-        const fetchedTransactions: any[] = Array.isArray(data.result) ? data.result : [];
 
         if (fetchedTransactions.length === 0) {
             return { message: `No new transactions found for ${configName}.`, error: false };
