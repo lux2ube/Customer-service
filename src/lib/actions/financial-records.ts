@@ -163,7 +163,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
 
         const wallet = walletSnapshot.val() as Account;
-        const newId = recordId || await getNextSequentialId('usdtRecordId');
+        const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
         
         const receiptData: Omit<UsdtRecord, 'id'> = {
             date: date!, type: 'inflow', source: 'Manual', status: status!,
@@ -247,7 +247,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             }
         }
         
-        const newId = recordId || await getNextSequentialId('usdtRecordId');
+        const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
         
         let existingRecord: Partial<UsdtRecord> = {};
         if (recordId) {

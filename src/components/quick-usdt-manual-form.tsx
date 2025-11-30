@@ -55,52 +55,51 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, onClo
   const formulaFields = selectedProvider?.cryptoFormula || [];
 
   React.useEffect(() => {
-    // Smart defaults: Load latest used account and provider details from client's recent records
-    if (usdtAccounts.length > 0 && !selectedAccountId) {
-      (async () => {
-        try {
-          const records = await getUnifiedClientRecords(client.id);
-          // Find the latest USDT outflow record
-          const latestUsdtRecord = records
-            .filter(r => r.type === 'outflow')
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .find(r => usdtAccounts.some(acc => acc.id === (r as any).accountId));
+    // Smart defaults: Load latest used account and provider details from client's recent records (only once)
+    const loadSmartDefaults = async () => {
+      try {
+        const records = await getUnifiedClientRecords(client.id);
+        // Find the latest USDT outflow record
+        const latestUsdtRecord = records
+          .filter(r => r.type === 'outflow')
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .find(r => usdtAccounts.some(acc => acc.id === (r as any).accountId));
+        
+        if (latestUsdtRecord && (latestUsdtRecord as any).accountId) {
+          const accountId = (latestUsdtRecord as any).accountId;
+          setSelectedAccountId(accountId);
           
-          if (latestUsdtRecord && (latestUsdtRecord as any).accountId) {
-            const accountId = (latestUsdtRecord as any).accountId;
-            setSelectedAccountId(accountId);
-            
-            // Load saved provider details from client profile if available
-            if (client.serviceProviders && client.serviceProviders.length > 0) {
-              const provider = serviceProviders.find(sp => sp.accountIds.includes(accountId));
-              if (provider && client.serviceProviders) {
-                const savedProvider = client.serviceProviders.find(sp => sp.providerId === provider.id);
-                if (savedProvider && savedProvider.details) {
-                  setDynamicFields(savedProvider.details);
-                }
+          // Load saved provider details from client profile if available
+          if (client.serviceProviders && client.serviceProviders.length > 0) {
+            const provider = serviceProviders.find(sp => sp.accountIds.includes(accountId));
+            if (provider && client.serviceProviders) {
+              const savedProvider = client.serviceProviders.find(sp => sp.providerId === provider.id);
+              if (savedProvider && savedProvider.details) {
+                setDynamicFields(savedProvider.details);
               }
             }
-          } else {
-            // Default fallback
-            const defaultAccount = usdtAccounts.find(acc => acc.id === '1001');
-            if (defaultAccount) {
-              setSelectedAccountId(defaultAccount.id);
-            } else {
-              setSelectedAccountId(usdtAccounts[0].id);
-            }
           }
-        } catch (e) {
-          console.warn("Could not load recent records:", e);
-          // Fallback to default
+        } else {
+          // Default fallback
           const defaultAccount = usdtAccounts.find(acc => acc.id === '1001');
           setSelectedAccountId(defaultAccount?.id || usdtAccounts[0]?.id || '');
         }
-      })();
+      } catch (e) {
+        console.warn("Could not load recent records:", e);
+        // Fallback to default
+        const defaultAccount = usdtAccounts.find(acc => acc.id === '1001');
+        setSelectedAccountId(defaultAccount?.id || usdtAccounts[0]?.id || '');
+      }
+    };
+
+    if (usdtAccounts.length > 0 && !selectedAccountId) {
+      loadSmartDefaults();
     }
-  }, [usdtAccounts, client.id, client.serviceProviders, serviceProviders]);
+  }, [usdtAccounts.length]); // Only on mount and when usdtAccounts length changes
 
   React.useEffect(() => {
     if (state && state !== stateRef.current) {
+      stateRef.current = state;
       if (state.success) {
         toast({ title: 'Success', description: state.message });
         onPaymentCreated(state.newRecordId);
@@ -110,14 +109,12 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, onClo
             setIsOpen(false);
         }
         formRef.current?.reset();
-        setSelectedAccountId(usdtAccounts.length > 0 ? usdtAccounts[0].id : '');
         setDynamicFields({});
       } else if (state.message) {
         toast({ title: 'Error', variant: 'destructive', description: state.message });
       }
-      stateRef.current = state;
     }
-  }, [state, toast, onPaymentCreated, setIsOpen, usdtAccounts, onClose]);
+  }, [state, toast, onPaymentCreated, setIsOpen, onClose]);
 
   const handleDynamicFieldChange = (key: string, value: string) => {
     setDynamicFields(prev => ({ ...prev, [key]: value }));
