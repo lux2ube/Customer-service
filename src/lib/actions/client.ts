@@ -35,12 +35,45 @@ const ClientSchema = z.object({
 
 
 export async function createClient(clientId: string | null, formData: FormData): Promise<ClientFormState> {
-    const isEditing = !!clientId;
-    const newId = isEditing ? clientId : (await get(ref(db, 'clients'))).size + 1000001;
+    const mode = formData.get('mode') as string;
+    const isAddingToExisting = mode === 'add-to-existing';
+    const targetClientId = isAddingToExisting ? formData.get('clientId') as string : clientId;
+    const isEditing = !!targetClientId;
+    const newId = isEditing ? targetClientId : (await get(ref(db, 'clients'))).size + 1000001;
 
     if (!newId) {
         const errorMsg = "Could not generate a client ID.";
         throw new Error(errorMsg);
+    }
+    
+    // For add-to-existing mode, skip validation and just add document fields
+    if (isAddingToExisting) {
+        const documentFields = {
+            dateOfBirth: formData.get('dateOfBirth'),
+            placeOfBirth: formData.get('placeOfBirth'),
+            bloodGroup: formData.get('bloodGroup'),
+            idNumber: formData.get('idNumber'),
+            dateOfIssue: formData.get('dateOfIssue'),
+            dateOfExpiry: formData.get('dateOfExpiry'),
+            placeOfIssue: formData.get('placeOfIssue'),
+            passportNumber: formData.get('passportNumber'),
+        };
+        
+        const updateData: any = {};
+        Object.entries(documentFields).forEach(([key, value]) => {
+            if (value) {
+                updateData[key] = value;
+            }
+        });
+
+        try {
+            await update(ref(db, `clients/${newId}`), updateData);
+            await logAction('update', 'client', newId, 'Document data added to client');
+            revalidatePath('/clients');
+            return { success: true, message: 'Document data added successfully', clientId: newId };
+        } catch (error: any) {
+            return { message: `Failed to add document data: ${error.message}` };
+        }
     }
     
     const kycFiles = formData.getAll('kyc_files') as File[];

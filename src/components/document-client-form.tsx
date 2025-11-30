@@ -46,6 +46,10 @@ export function DocumentClientForm({
   const [loading, setLoading] = React.useState(false);
   const [duplicateClients, setDuplicateClients] = React.useState<Client[]>([]);
   const [showDuplicateDialog, setShowDuplicateDialog] = React.useState(false);
+  const [mode, setMode] = React.useState<'create' | 'add-to-existing'>('create');
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [searchResults, setSearchResults] = React.useState<Client[]>([]);
+  const [selectedClientId, setSelectedClientId] = React.useState<string | null>(null);
   const [formData, setFormData] = React.useState<Record<string, string>>({
     name: '',
     phone: '',
@@ -88,6 +92,80 @@ export function DocumentClientForm({
 
   const handleFieldChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      const results = await getClientsByName(query);
+      setSearchResults(results);
+    } catch (error) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error', 
+        description: 'Failed to search clients' 
+      });
+    }
+  };
+
+  const handleAddToExisting = async () => {
+    if (!selectedClientId) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error', 
+        description: 'Please select a client' 
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const fData = new FormData();
+      
+      // Add all document fields
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value && key !== 'phone' && key !== 'verification_status') {
+          fData.set(key, String(value));
+        }
+      });
+
+      // Add the client ID and set to add mode
+      fData.set('clientId', selectedClientId);
+      fData.set('mode', 'add-to-existing');
+
+      const result = await createClient(null, fData);
+
+      if (result?.success) {
+        toast({ 
+          title: 'Success', 
+          description: 'Document data added to client successfully' 
+        });
+        onOpenChange(false);
+        setMode('create');
+        setSearchQuery('');
+        setSearchResults([]);
+        setSelectedClientId(null);
+      } else {
+        toast({ 
+          variant: 'destructive', 
+          title: 'Error', 
+          description: result?.message || 'Failed to add document data' 
+        });
+      }
+    } catch (error) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error', 
+        description: 'An unexpected error occurred' 
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const checkForDuplicates = async () => {
@@ -180,45 +258,118 @@ export function DocumentClientForm({
             </DialogDescription>
           </DialogHeader>
 
+          {/* Mode Toggle */}
+          <div className="flex gap-2 mb-4">
+            <Button 
+              type="button"
+              variant={mode === 'create' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setMode('create');
+                setSearchQuery('');
+                setSearchResults([]);
+                setSelectedClientId(null);
+              }}
+            >
+              Create New
+            </Button>
+            <Button 
+              type="button"
+              variant={mode === 'add-to-existing' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setMode('add-to-existing')}
+            >
+              Add to Existing
+            </Button>
+          </div>
+
+          {/* Add to Existing Mode */}
+          {mode === 'add-to-existing' && (
+            <div className="space-y-3 mb-4 p-3 border rounded bg-blue-50">
+              <div className="space-y-2">
+                <Label htmlFor="search">Search for Client</Label>
+                <Input
+                  id="search"
+                  placeholder="Type client name to search..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {searchResults.map(client => (
+                    <div
+                      key={client.id}
+                      onClick={() => setSelectedClientId(client.id)}
+                      className={`p-2 border rounded cursor-pointer transition ${
+                        selectedClientId === client.id
+                          ? 'bg-blue-100 border-blue-500'
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <p className="font-medium text-sm">{client.name}</p>
+                      <p className="text-xs text-gray-600">
+                        {Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-2">No clients found</p>
+              )}
+            </div>
+          )}
+
           <form ref={formRef} className="space-y-4 max-h-96 overflow-y-auto pr-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={(e) => handleFieldChange('name', e.target.value)}
-                placeholder="Enter client name"
-                required
-              />
-            </div>
+            {/* Only show name field when creating new */}
+            {mode === 'create' && (
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name *</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={(e) => handleFieldChange('name', e.target.value)}
+                  placeholder="Enter client name"
+                  required
+                />
+              </div>
+            )}
+            
+            {/* Only show phone when creating new */}
+            {mode === 'create' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={(e) => handleFieldChange('phone', e.target.value)}
+                    placeholder="Enter phone number"
+                    required
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number *</Label>
-              <Input
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={(e) => handleFieldChange('phone', e.target.value)}
-                placeholder="Enter phone number"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="verification_status">Status</Label>
-              <select
-                id="verification_status"
-                name="verification_status"
-                value={formData.verification_status}
-                onChange={(e) => handleFieldChange('verification_status', e.target.value)}
-                className="w-full px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="verification_status">Status</Label>
+                  <select
+                    id="verification_status"
+                    name="verification_status"
+                    value={formData.verification_status}
+                    onChange={(e) => handleFieldChange('verification_status', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             {/* Document Fields - shown based on document type */}
             {(documentType === 'yemeni_id_front' || documentType === 'passport') && (
@@ -347,16 +498,30 @@ export function DocumentClientForm({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button onClick={checkForDuplicates} disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                'Create Client'
-              )}
-            </Button>
+            {mode === 'create' && (
+              <Button onClick={checkForDuplicates} disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  'Create Client'
+                )}
+              </Button>
+            )}
+            {mode === 'add-to-existing' && (
+              <Button onClick={handleAddToExisting} disabled={loading || !selectedClientId}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  'Add to Client'
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
