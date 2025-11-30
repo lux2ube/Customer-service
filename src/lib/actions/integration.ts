@@ -63,7 +63,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const MAX_LOOKBACK = 1000;
             const queryStartBlock = Math.max(lastSyncedBlock > 0 ? lastSyncedBlock : 0, currentBlock - MAX_LOOKBACK);
             
-            console.log(`🔍 BSC Sync: Current block ${currentBlock}, querying from block ${queryStartBlock} to ${currentBlock}`);
+            console.log(`🔍 BSC Sync for wallet ${walletAddress}`);
+            console.log(`   Current block: ${currentBlock}, querying blocks ${queryStartBlock}-${currentBlock} (${currentBlock - queryStartBlock} blocks)`);
             
             // USDT contract interface to get Transfer events
             const USDT_ABI = [
@@ -82,6 +83,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             ]);
             
             console.log(`✓ Found ${toEvents.length} incoming + ${fromEvents.length} outgoing USDT events`);
+            if (toEvents.length === 0 && fromEvents.length === 0) {
+                console.log(`   → Wallet has no recent USDT transactions. Send a test USDT transfer and sync again.`);
+            }
             
             // Combine and sort events
             const allEvents = [...toEvents, ...fromEvents].sort((a, b) => {
