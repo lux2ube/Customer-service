@@ -54,10 +54,10 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         
         // Try multiple free RPC providers in order of preference
         const rpcProviders = [
-            'https://bsc-dataseed1.bnbchain.org:443',  // Official BNB Chain - most reliable
+            'https://rpc.ankr.com/bsc',                // Ankr - MORE permissive with queries
+            'https://bsc-rpc.publicnode.com',          // PublicNode - good uptime
+            'https://bsc-dataseed1.bnbchain.org:443',  // Official BNB Chain
             'https://bsc-dataseed2.bnbchain.org:443',  // Official BNB Chain backup
-            'https://rpc.ankr.com/bsc',                // Ankr - good uptime
-            'https://bsc-rpc.publicnode.com',          // PublicNode BSC endpoint
             'https://bsc.publicnode.com',              // PublicNode fallback
         ];
         
@@ -142,33 +142,36 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const toFilter = usdtContract.filters.Transfer(null, walletAddress);
             const fromFilter = usdtContract.filters.Transfer(walletAddress, null);
             
-            // Fetch events in smaller batches to avoid rate limits
-            // Official RPC rate limits large batch queries, so split into smaller chunks
-            const BATCH_SIZE = 100; // Query 100 blocks at a time
+            // Fetch events in VERY small batches with long delays to avoid rate limits
+            // Official RPC is aggressive with rate limiting, so be very conservative
+            const BATCH_SIZE = 50; // Query just 50 blocks at a time
             const toEvents: any[] = [];
             const fromEvents: any[] = [];
             
-            // Query in smaller batches with delays to avoid rate limiting
+            // Query in smaller batches with long delays, and SEQUENTIALLY (not parallel)
             for (let blockStart = queryStartBlock; blockStart < currentBlock; blockStart += BATCH_SIZE) {
                 const blockEnd = Math.min(blockStart + BATCH_SIZE, currentBlock);
                 
                 try {
                     console.log(`   Querying blocks ${blockStart}-${blockEnd}...`);
                     
-                    const [batch1, batch2] = await Promise.all([
-                        usdtContract.queryFilter(toFilter, blockStart, blockEnd),
-                        usdtContract.queryFilter(fromFilter, blockStart, blockEnd),
-                    ]);
+                    // Query sequentially (one at a time) not in parallel to reduce server load
+                    const batch1 = await usdtContract.queryFilter(toFilter, blockStart, blockEnd);
+                    
+                    // Long delay between queries
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    const batch2 = await usdtContract.queryFilter(fromFilter, blockStart, blockEnd);
                     
                     toEvents.push(...batch1);
                     fromEvents.push(...batch2);
                     
-                    // Add small delay between batches to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    // Long delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (e: any) {
                     console.log(`   ⚠️ Batch ${blockStart}-${blockEnd} failed: ${e.message}`);
-                    // Continue with next batch
-                    continue;
+                    // Try fallback RPC by returning error
+                    throw new Error(`Batch query failed: ${e.message}`);
                 }
             }
             
