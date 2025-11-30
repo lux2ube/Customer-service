@@ -46,17 +46,24 @@ export function DocumentClientForm({
   const [loading, setLoading] = React.useState(false);
   const [duplicateClients, setDuplicateClients] = React.useState<Client[]>([]);
   const [showDuplicateDialog, setShowDuplicateDialog] = React.useState(false);
-  const [formData, setFormData] = React.useState({
+  const [formData, setFormData] = React.useState<Record<string, string>>({
     name: '',
     phone: '',
     verification_status: 'Pending',
+    dateOfBirth: '',
+    placeOfBirth: '',
+    bloodGroup: '',
+    idNumber: '',
+    dateOfIssue: '',
+    dateOfExpiry: '',
+    placeOfIssue: '',
+    passportNumber: '',
   });
 
-  // Pre-fill form with extracted data based on document type
+  // Pre-fill form with extracted data
   React.useEffect(() => {
     if (open && extractedData) {
       let name = '';
-      let phone = '';
 
       if (documentType === 'passport') {
         name = extractedData.fullName || '';
@@ -66,26 +73,23 @@ export function DocumentClientForm({
         name = extractedData.name || '';
       }
       
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         name,
-        phone,
-        verification_status: 'Pending',
-      });
-
-      // Store extracted data for later client creation with all fields
-      (window as any).extractedDocumentData = {
-        ...extractedData,
-        documentType,
-      };
+        dateOfBirth: extractedData.dateOfBirth || '',
+        placeOfBirth: extractedData.placeOfBirth || '',
+        bloodGroup: extractedData.bloodGroup || '',
+        idNumber: extractedData.idNumber || '',
+        dateOfIssue: extractedData.dateOfIssue || '',
+        dateOfExpiry: extractedData.dateOfExpiry || '',
+        placeOfIssue: extractedData.placeOfIssue || '',
+        passportNumber: extractedData.passportNumber || '',
+      }));
     }
   }, [open, extractedData, documentType]);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, name: e.target.value }));
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, phone: e.target.value }));
+  const handleFieldChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const checkForDuplicates = async () => {
@@ -129,9 +133,9 @@ export function DocumentClientForm({
       fData.set('phone', formData.phone);
       fData.set('verification_status', formData.verification_status);
 
-      // Add extracted document fields
-      Object.entries(extractedData).forEach(([key, value]) => {
-        if (value && key !== 'name' && key !== 'nameArabic') {
+      // Add all document fields from form state
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value && key !== 'name' && key !== 'phone' && key !== 'verification_status') {
           fData.set(key, String(value));
         }
       });
@@ -178,14 +182,14 @@ export function DocumentClientForm({
             </DialogDescription>
           </DialogHeader>
 
-          <form ref={formRef} className="space-y-4">
+          <form ref={formRef} className="space-y-4 max-h-96 overflow-y-auto pr-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name *</Label>
               <Input
                 id="name"
                 name="name"
                 value={formData.name}
-                onChange={handleNameChange}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
                 placeholder="Enter client name"
                 required
               />
@@ -197,7 +201,7 @@ export function DocumentClientForm({
                 id="phone"
                 name="phone"
                 value={formData.phone}
-                onChange={handlePhoneChange}
+                onChange={(e) => handleFieldChange('phone', e.target.value)}
                 placeholder="Enter phone number"
                 required
               />
@@ -209,8 +213,8 @@ export function DocumentClientForm({
                 id="verification_status"
                 name="verification_status"
                 value={formData.verification_status}
-                onChange={(e) => setFormData(prev => ({ ...prev, verification_status: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-md"
+                onChange={(e) => handleFieldChange('verification_status', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
               >
                 <option value="Pending">Pending</option>
                 <option value="Active">Active</option>
@@ -218,8 +222,127 @@ export function DocumentClientForm({
               </select>
             </div>
 
-            {/* Hidden field for phone array */}
+            {/* Document Fields - shown based on document type */}
+            {(documentType === 'yemeni_id_front' || documentType === 'passport') && (
+              <>
+                <hr className="my-3" />
+                <h3 className="text-sm font-semibold">Personal Information</h3>
+                
+                {formData.dateOfBirth && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                    <Input
+                      id="dateOfBirth"
+                      name="dateOfBirth"
+                      value={formData.dateOfBirth}
+                      onChange={(e) => handleFieldChange('dateOfBirth', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.placeOfBirth && (
+                  <div className="space-y-2">
+                    <Label htmlFor="placeOfBirth">Place of Birth</Label>
+                    <Input
+                      id="placeOfBirth"
+                      name="placeOfBirth"
+                      value={formData.placeOfBirth}
+                      onChange={(e) => handleFieldChange('placeOfBirth', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.bloodGroup && (
+                  <div className="space-y-2">
+                    <Label htmlFor="bloodGroup">Blood Group</Label>
+                    <Input
+                      id="bloodGroup"
+                      name="bloodGroup"
+                      value={formData.bloodGroup}
+                      onChange={(e) => handleFieldChange('bloodGroup', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.idNumber && documentType === 'yemeni_id_front' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="idNumber">ID Number</Label>
+                    <Input
+                      id="idNumber"
+                      name="idNumber"
+                      value={formData.idNumber}
+                      onChange={(e) => handleFieldChange('idNumber', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.passportNumber && documentType === 'passport' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="passportNumber">Passport Number</Label>
+                    <Input
+                      id="passportNumber"
+                      name="passportNumber"
+                      value={formData.passportNumber}
+                      onChange={(e) => handleFieldChange('passportNumber', e.target.value)}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {(documentType === 'yemeni_id_back' || documentType === 'passport') && (
+              <>
+                <hr className="my-3" />
+                <h3 className="text-sm font-semibold">Document Details</h3>
+                
+                {formData.dateOfIssue && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfIssue">Date of Issue</Label>
+                    <Input
+                      id="dateOfIssue"
+                      name="dateOfIssue"
+                      value={formData.dateOfIssue}
+                      onChange={(e) => handleFieldChange('dateOfIssue', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.dateOfExpiry && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfExpiry">Date of Expiry</Label>
+                    <Input
+                      id="dateOfExpiry"
+                      name="dateOfExpiry"
+                      value={formData.dateOfExpiry}
+                      onChange={(e) => handleFieldChange('dateOfExpiry', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {formData.placeOfIssue && (
+                  <div className="space-y-2">
+                    <Label htmlFor="placeOfIssue">Place of Issue</Label>
+                    <Input
+                      id="placeOfIssue"
+                      name="placeOfIssue"
+                      value={formData.placeOfIssue}
+                      onChange={(e) => handleFieldChange('placeOfIssue', e.target.value)}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Hidden fields for FormData */}
             <input type="hidden" name="phone" value={formData.phone} />
+            <input type="hidden" name="dateOfBirth" value={formData.dateOfBirth} />
+            <input type="hidden" name="placeOfBirth" value={formData.placeOfBirth} />
+            <input type="hidden" name="bloodGroup" value={formData.bloodGroup} />
+            <input type="hidden" name="idNumber" value={formData.idNumber} />
+            <input type="hidden" name="dateOfIssue" value={formData.dateOfIssue} />
+            <input type="hidden" name="dateOfExpiry" value={formData.dateOfExpiry} />
+            <input type="hidden" name="placeOfIssue" value={formData.placeOfIssue} />
+            <input type="hidden" name="passportNumber" value={formData.passportNumber} />
           </form>
 
           <DialogFooter>
