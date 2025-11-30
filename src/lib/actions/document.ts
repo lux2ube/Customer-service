@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { GoogleGenAI } from '@google/genai';
 import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { yemenGovernorates, allYemenDistricts, normalizeYemenLocation } from '../yemen-locations';
 
 
 export type PassportDetails = {
@@ -165,11 +166,14 @@ For Yemeni ID FRONT:
 - dateOfBirth (format: DD/MM/YYYY)
 - placeOfBirth (location/city)
 - bloodGroup (A+, B+, O+, etc.)
-- governorate
+- governorate (MUST BE ONE OF: ${yemenGovernorates.join(', ')})
 - gender
 - nationality
 - religion
 - profession
+
+Valid Yemen Governorates: ${yemenGovernorates.join(', ')}
+Valid Yemen Districts: ${allYemenDistricts.join(', ')}
 
 For Yemeni ID BACK:
 - idNumber (to verify it's the same ID)
@@ -237,8 +241,9 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
         dateOfBirth: extractedData.dateOfBirth,
         sex: extractedData.sex,
         dateOfIssue: extractedData.dateOfIssue,
-        expiryDate: extractedData.expiryDate,
+        dateOfExpiry: extractedData.dateOfExpiry,
         placeOfBirth: extractedData.placeOfBirth,
+        placeOfIssue: normalizeYemenLocation(extractedData.placeOfIssue),
         issuingAuthority: extractedData.issuingAuthority,
       };
     } else if (documentType === 'yemeni_id_front') {
@@ -249,7 +254,7 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
         dateOfBirth: extractedData.dateOfBirth,
         placeOfBirth: extractedData.placeOfBirth,
         bloodGroup: extractedData.bloodGroup,
-        governorate: extractedData.governorate,
+        governorate: normalizeYemenLocation(extractedData.governorate),
         gender: extractedData.gender,
         nationality: extractedData.nationality,
         religion: extractedData.religion,
@@ -260,7 +265,7 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
         idNumber: extractedData.idNumber,
         dateOfIssue: extractedData.dateOfIssue,
         dateOfExpiry: extractedData.dateOfExpiry,
-        placeOfIssue: extractedData.placeOfIssue,
+        placeOfIssue: normalizeYemenLocation(extractedData.placeOfIssue),
         maritalStatus: extractedData.maritalStatus,
       };
     }
