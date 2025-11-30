@@ -263,7 +263,7 @@ export async function manageClient(clientId: string, formData: FormData): Promis
 }
 
 export async function searchClients(searchTerm: string): Promise<Client[]> {
-    if (!searchTerm || searchTerm.trim().length < 2) {
+    if (!searchTerm || searchTerm.trim().length < 1) {
         return [];
     }
 
@@ -278,41 +278,52 @@ export async function searchClients(searchTerm: string): Promise<Client[]> {
         const allClientsData: Record<string, Client> = snapshot.val();
         
         const normalizedSearch = normalizeArabic(searchTerm.toLowerCase().trim());
-        const searchTerms = normalizedSearch.split(' ').filter(Boolean);
         const getPhone = (phone: string | string[] | undefined) => Array.isArray(phone) ? phone.join(' ') : phone || '';
 
-        const filtered = Object.keys(allClientsData).map(key => ({ id: key, ...allClientsData[key] })).filter(client => {
-            const phone = getPhone(client.phone).toLowerCase();
-            
-            if (phone.includes(searchTerm.trim())) {
-                return true;
-            }
+        const filtered = Object.keys(allClientsData)
+            .map(key => ({ id: key, ...allClientsData[key] }))
+            .filter(client => {
+                // Phone number matching (exact substring)
+                const phone = getPhone(client.phone).toLowerCase();
+                if (phone.includes(searchTerm.trim())) {
+                    return true;
+                }
 
-            const name = normalizeArabic((client.name || '').toLowerCase());
-            const nameWords = name.split(' ');
-            return searchTerms.every(term => 
-                nameWords.some(nameWord => nameWord.startsWith(term))
-            );
-        });
+                // Name matching (normalized substring - more lenient)
+                const normalizedName = normalizeArabic((client.name || '').toLowerCase());
+                if (normalizedName.includes(normalizedSearch)) {
+                    return true;
+                }
+
+                // ID matching
+                const clientId = (client.id || '').toString();
+                if (clientId.includes(searchTerm.trim())) {
+                    return true;
+                }
+
+                return false;
+            });
 
         // Sort results to prioritize better matches
         filtered.sort((a, b) => {
             const aName = normalizeArabic((a.name || '').toLowerCase());
             const bName = normalizeArabic((b.name || '').toLowerCase());
+            const aPhone = getPhone(a.phone).toLowerCase();
+            const bPhone = getPhone(b.phone).toLowerCase();
 
-            // 1. Exact match = highest priority
-            const aIsExact = aName === normalizedSearch;
-            const bIsExact = bName === normalizedSearch;
-            if (aIsExact && !bIsExact) return -1;
-            if (!aIsExact && bIsExact) return 1;
+            // 1. Exact name match = highest priority
+            if (aName === normalizedSearch && bName !== normalizedSearch) return -1;
+            if (bName === normalizedSearch && aName !== normalizedSearch) return 1;
 
-            // 2. Starts with the search term = second highest priority
-            const aStartsWith = aName.startsWith(normalizedSearch);
-            const bStartsWith = bName.startsWith(normalizedSearch);
-            if (aStartsWith && !bStartsWith) return -1;
-            if (!aStartsWith && bStartsWith) return 1;
+            // 2. Name starts with search term
+            if (aName.startsWith(normalizedSearch) && !bName.startsWith(normalizedSearch)) return -1;
+            if (bName.startsWith(normalizedSearch) && !aName.startsWith(normalizedSearch)) return 1;
+
+            // 3. Phone number match
+            if (aPhone.includes(searchTerm.trim()) && !bPhone.includes(searchTerm.trim())) return -1;
+            if (bPhone.includes(searchTerm.trim()) && !aPhone.includes(searchTerm.trim())) return 1;
             
-            // 3. Fallback to alphabetical sort
+            // 4. Alphabetical sort
             return aName.localeCompare(bName);
         });
 
