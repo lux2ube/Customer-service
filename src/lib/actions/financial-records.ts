@@ -209,6 +209,7 @@ const UsdtManualPaymentSchema = z.object({
   date: z.string(),
   status: z.enum(['Pending', 'Used', 'Cancelled', 'Confirmed']),
   recipientAddress: z.string().optional(),
+  recipientDetails: z.string().optional(),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
   accountId: z.string().min(1, "A sending wallet must be selected"),
   txid: z.string().optional(),
@@ -222,7 +223,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
     if (!validatedFields.success) {
         return { errors: validatedFields.error.flatten().fieldErrors, message: 'Failed to record payment.', success: false };
     }
-    const { clientId, clientName, date, status, recipientAddress, amount, accountId, txid, notes, source } = validatedFields.data;
+    const { clientId, clientName, date, status, recipientAddress, recipientDetails, amount, accountId, txid, notes, source } = validatedFields.data;
     
     try {
         const accountSnapshot = await get(ref(db, `accounts/${accountId}`));
@@ -230,6 +231,19 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             return { message: 'Selected sending wallet not found.', success: false };
         }
         const accountName = (accountSnapshot.val() as Account).name;
+        
+        // Get the service provider for this account
+        let providerId: string | null = null;
+        const providersSnapshot = await get(ref(db, 'serviceProviders'));
+        if (providersSnapshot.exists()) {
+            const providers = providersSnapshot.val();
+            for (const [pId, provider] of Object.entries(providers)) {
+                if ((provider as any).accountIds?.includes(accountId)) {
+                    providerId = pId;
+                    break;
+                }
+            }
+        }
         
         const newId = recordId || await getNextSequentialId('usdtRecordId');
         
@@ -260,6 +274,41 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
 
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(paymentData));
+
+        // Store provider details in client profile if present
+        if (clientId && recipientDetails && providerId) {
+            try {
+                const detailsObj = JSON.parse(recipientDetails);
+                const clientRef = ref(db, `clients/${clientId}`);
+                const clientSnapshot = await get(clientRef);
+                
+                if (clientSnapshot.exists()) {
+                    const client = clientSnapshot.val();
+                    const serviceProviders = client.serviceProviders || [];
+                    
+                    // Check if this provider already exists for the client
+                    const existingIndex = serviceProviders.findIndex((sp: any) => sp.providerId === providerId);
+                    
+                    if (existingIndex >= 0) {
+                        // Update existing provider details
+                        serviceProviders[existingIndex].details = detailsObj;
+                    } else {
+                        // Add new provider to client profile
+                        const provider = (providersSnapshot.val()?.[providerId] || {}) as any;
+                        serviceProviders.push({
+                            providerId,
+                            providerName: provider.name,
+                            providerType: provider.type,
+                            details: detailsObj,
+                        });
+                    }
+                    
+                    await update(clientRef, { serviceProviders });
+                }
+            } catch (e) {
+                console.warn("Could not store provider details:", e);
+            }
+        }
 
         if (clientId && clientName) {
             await notifyClientTransaction(clientId, clientName, { ...paymentData, currency: 'USDT', amountusd: amount });
