@@ -49,15 +49,55 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
         }
 
-        // Use free BSC public node endpoint to fetch USDT transactions
+        // Use free BSC RPC providers with fallback support
         let fetchedTransactions: any[] = [];
         
+        // Try multiple free RPC providers in order of preference
+        const rpcProviders = [
+            'https://bsc-dataseed1.bnbchain.org:443',  // Official BNB Chain - most reliable
+            'https://bsc-dataseed2.bnbchain.org:443',  // Official BNB Chain backup
+            'https://rpc.ankr.com/bsc',                // Ankr - good uptime
+            'https://bsc-rpc.publicnode.com',          // PublicNode BSC endpoint
+            'https://bsc.publicnode.com',              // PublicNode fallback
+        ];
+        
+        let provider: ethers.JsonRpcProvider | null = null;
+        let lastError: any = null;
+        
+        for (const rpcUrl of rpcProviders) {
+            try {
+                provider = new ethers.JsonRpcProvider(rpcUrl);
+                // Test connection with a simple call
+                await provider.getBlockNumber();
+                console.log(`✓ Connected to RPC: ${rpcUrl}`);
+                break;
+            } catch (e) {
+                console.log(`✗ Failed to connect to ${rpcUrl}: ${e.message}`);
+                lastError = e;
+                provider = null;
+                continue;
+            }
+        }
+        
+        if (!provider) {
+            return { 
+                message: `Failed to connect to any BSC RPC provider. Last error: ${lastError?.message || 'Unknown error'}`, 
+                error: true 
+            };
+        }
+        
         try {
-            // Connect to free BSC public node RPC
-            const provider = new ethers.JsonRpcProvider('https://bsc.publicnode.com');
             
             // Get current block number
-            const currentBlock = await provider.getBlockNumber();
+            let currentBlock: number;
+            try {
+                currentBlock = await provider.getBlockNumber();
+            } catch (e: any) {
+                return { 
+                    message: `Failed to get current block number: ${e.message}`, 
+                    error: true 
+                };
+            }
             
             // Free RPC limitation: only query recent blocks (last ~1000 blocks = ~60 minutes)
             const MAX_LOOKBACK = 1000;
