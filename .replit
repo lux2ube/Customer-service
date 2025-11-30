@@ -28,7 +28,3 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[[ports]]
-localPort = 46613
-externalPort = 80

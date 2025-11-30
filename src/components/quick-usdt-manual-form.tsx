@@ -133,6 +133,7 @@ export function QuickUsdtManualForm({ client, onPaymentCreated, setIsOpen, onClo
     if (detailsInput) {
       detailsInput.value = JSON.stringify(dynamicFields);
     }
+    // Let form submit naturally with the updated hidden input value
   };
 
   return (
