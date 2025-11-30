@@ -13,6 +13,12 @@ import { createJournalEntryFromTransaction } from './journal';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 import { normalizeArabic } from '../utils';
+import { 
+  verifyNoExistingEntries, 
+  verifyRecordsNotAlreadyUsed,
+  validateJournalEntriesBalanced,
+  reconcileTransactionPosting
+} from './reconciliation';
 
 export async function getUnifiedClientRecords(clientId: string): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
@@ -282,7 +288,44 @@ export async function createModernTransaction(prevState: TransactionFormState, f
             }
         }
         
+        // ===== DEDUPLICATION SAFEGUARDS =====
+        
+        // SAFEGUARD #1: Verify no existing journal entries for this transaction
+        const existingCheck = await verifyNoExistingEntries(newId);
+        if (!existingCheck.isClean) {
+            console.error(`❌ DUPLICATE PREVENTION: Journal entries already exist for Tx #${newId}`);
+            return { 
+              message: `Error: Journal entries already exist for this transaction. ${existingCheck.errorMessage}`,
+              success: false 
+            };
+        }
+        
+        // SAFEGUARD #2: Verify records not already marked "Used"
+        const recordStatusCheck = await verifyRecordsNotAlreadyUsed(
+          allLinkedRecords.map(r => ({ recordId: r.id, recordType: r.recordType as 'cash' | 'usdt' }))
+        );
+        if (!recordStatusCheck.allClean) {
+            console.error(`❌ DUPLICATE PREVENTION: Some records already used`);
+            return { 
+              message: `Error: Some records are already marked as "Used" in other transactions.`,
+              success: false 
+            };
+        }
+        
+        // Create journal entries
         const journalEntries = createJournalEntriesForTransaction(newTransactionData, client, allAccounts);
+        
+        // SAFEGUARD #3: Validate entries are balanced
+        const balanceCheck = await validateJournalEntriesBalanced(journalEntries);
+        if (!balanceCheck.isBalanced) {
+            console.error(`❌ BALANCE CHECK FAILED: ${balanceCheck.errorMessage}`);
+            return { 
+              message: `Error: Journal entries are not balanced. ${balanceCheck.errorMessage}`,
+              success: false 
+            };
+        }
+        
+        // Post entries
         for (const entry of journalEntries) {
             const entryRef = push(ref(db, 'journal_entries'));
             updates[`/journal_entries/${entryRef.key}`] = entry;
@@ -330,12 +373,23 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         await update(ref(db), updates);
 
+        // SAFEGUARD #4: Post-transaction reconciliation verification
+        const reconciliation = await reconcileTransactionPosting(newId, clientId);
+        if (reconciliation.status !== 'verified') {
+            console.warn(`⚠️ RECONCILIATION WARNING for Tx #${newId}: ${reconciliation.status}`);
+            console.warn(`Warnings: ${reconciliation.warnings.join(', ')}`);
+        }
+
         revalidatePath('/transactions');
         revalidatePath('/accounting/journal');
         revalidatePath('/modern-cash-records');
         revalidatePath('/modern-usdt-records');
 
-        return { success: true, message: `Transaction ${newId} created and confirmed successfully.` };
+        return { 
+          success: true, 
+          message: `Transaction ${newId} created and confirmed successfully.`,
+          reconciliationStatus: reconciliation.status
+        };
 
     } catch (e: any) {
         console.error("Error creating modern transaction:", e);
