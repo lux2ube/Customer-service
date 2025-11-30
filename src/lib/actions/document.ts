@@ -9,15 +9,15 @@ import { yemenGovernorates, allYemenDistricts, normalizeYemenLocation } from '..
 
 
 export type PassportDetails = {
-  fullName?: string;
-  surname?: string;
+  name?: string;
   passportNumber?: string;
   nationality?: string;
   dateOfBirth?: string;
   sex?: string;
   dateOfIssue?: string;
-  expiryDate?: string;
+  dateOfExpiry?: string;
   placeOfBirth?: string;
+  placeOfIssue?: string;
   issuingAuthority?: string;
 };
 
@@ -181,16 +181,15 @@ For Yemeni ID BACK:
 - maritalStatus
 
 For PASSPORT:
-- fullName
-- surname
+- name (Arabic name from the document)
 - passportNumber
 - nationality
 - dateOfBirth (format: DD/MM/YYYY)
-- placeOfBirth (location/city)
+- placeOfBirth (Arabic location/city from document)
 - sex (M or F)
 - dateOfIssue (format: DD/MM/YYYY)
 - dateOfExpiry (format: DD/MM/YYYY)
-- placeOfIssue (location where passport was issued)
+- placeOfIssue (Arabic location where passport was issued)
 - issuingAuthority
 
 Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_back", or "passport", and the extracted fields. If a field isn't visible, omit it.`;
@@ -232,8 +231,7 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
 
     if (documentType === 'passport') {
       details = {
-        fullName: extractedData.fullName,
-        surname: extractedData.surname,
+        name: extractedData.name,
         passportNumber: extractedData.passportNumber,
         nationality: extractedData.nationality,
         dateOfBirth: extractedData.dateOfBirth,
