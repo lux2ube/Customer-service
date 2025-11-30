@@ -67,9 +67,7 @@ export function DocumentClientForm({
 
       if (documentType === 'passport') {
         name = extractedData.fullName || '';
-      } else if (documentType === 'yemeni_id_front') {
-        name = extractedData.name || extractedData.nameArabic || '';
-      } else if (documentType === 'yemeni_id_back') {
+      } else if (documentType === 'yemeni_id_front' || documentType === 'yemeni_id_back') {
         name = extractedData.name || '';
       }
       

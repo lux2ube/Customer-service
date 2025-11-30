@@ -23,7 +23,6 @@ export type PassportDetails = {
 
 export type YemeniIDFrontDetails = {
   name?: string;
-  nameArabic?: string;
   idNumber?: string;
   dateOfBirth?: string;
   placeOfBirth?: string;
@@ -160,8 +159,7 @@ FIRST, identify which document this is:
 THEN extract ONLY the fields relevant to that document type:
 
 For Yemeni ID FRONT:
-- name (English)
-- nameArabic (Arabic name)
+- name (Arabic name from the document)
 - idNumber
 - dateOfBirth (format: DD/MM/YYYY)
 - placeOfBirth (location/city)
@@ -249,7 +247,6 @@ Return ONLY valid JSON with the documentType as "yemeni_id_front", "yemeni_id_ba
     } else if (documentType === 'yemeni_id_front') {
       details = {
         name: extractedData.name,
-        nameArabic: extractedData.nameArabic,
         idNumber: extractedData.idNumber,
         dateOfBirth: extractedData.dateOfBirth,
         placeOfBirth: extractedData.placeOfBirth,
