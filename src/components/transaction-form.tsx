@@ -324,54 +324,62 @@ export function TransactionForm({ initialClients, allAccounts, serviceProviders,
                                 {loadingRecords ? (
                                     <Skeleton className="h-40 w-full" />
                                 ) : (
-                                    <div className="space-y-4">
+                                    <div className="grid lg:grid-cols-2 gap-8">
                                         {transactionType === 'Deposit' && (
                                             <>
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <Label className="text-sm font-medium">Client Gives Fiat</Label>
-                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
-                                                    </div>
-                                                    <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
-                                                </div>
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <Label className="text-sm font-medium">Client Gets USDT</Label>
-                                                        <div className="flex gap-1">
-                                                            <Button type="button" variant="ghost" size="sm" onClick={handleAutoProcess}><Bot className="h-4 w-4" /></Button>
-                                                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <Label className="text-sm font-medium">Client Gives Fiat</Label>
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
                                                         </div>
+                                                        <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                     </div>
-                                                    <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <Label className="text-sm font-medium">Client Gets USDT</Label>
+                                                            <div className="flex gap-1">
+                                                                <Button type="button" variant="ghost" size="sm" onClick={handleAutoProcess}><Bot className="h-4 w-4" /></Button>
+                                                                <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                            </div>
+                                                        </div>
+                                                        <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
+                                                    </div>
                                                 </div>
                                             </>
                                         )}
                                         {transactionType === 'Withdraw' && (
                                             <>
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <Label className="text-sm font-medium">Client Gives USDT</Label>
-                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <Label className="text-sm font-medium">Client Gives USDT</Label>
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddUsdtInOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                        </div>
+                                                        <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                     </div>
-                                                    <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                 </div>
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <Label className="text-sm font-medium">Client Gets Fiat</Label>
-                                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <Label className="text-sm font-medium">Client Gets Fiat</Label>
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsQuickAddCashOutOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                                                        </div>
+                                                        <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                     </div>
-                                                    <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                 </div>
                                             </>
                                         )}
                                         {transactionType === 'Transfer' && (
                                             <>
-                                                <div>
+                                                <div className="space-y-4">
                                                     <Label className="text-sm font-medium mb-2 block">Money In</Label>
                                                     <FinancialRecordTable records={recordCategories.fiatInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                     <FinancialRecordTable records={recordCategories.cryptoInflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                 </div>
-                                                <div>
+                                                <div className="space-y-4">
                                                     <Label className="text-sm font-medium mb-2 block">Money Out</Label>
                                                     <FinancialRecordTable records={recordCategories.fiatOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
                                                     <FinancialRecordTable records={recordCategories.cryptoOutflows} selectedIds={selectedRecordIds} onSelectionChange={handleSelectionChange} />
