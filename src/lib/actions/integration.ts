@@ -49,6 +49,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         }
 
         // Use free BSC public node endpoint to fetch USDT transactions
+        let fetchedTransactions: any[] = [];
+        
         try {
             // Connect to free BSC public node RPC
             const provider = new ethers.JsonRpcProvider('https://bsc.publicnode.com');
@@ -88,7 +90,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             });
             
             // Convert events to transaction objects
-            const fetchedTransactions = await Promise.all(allEvents.map(async (event) => {
+            fetchedTransactions = await Promise.all(allEvents.map(async (event) => {
                 const block = await provider.getBlock(event.blockNumber);
                 
                 const from = event.args?.from || '';
