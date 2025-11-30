@@ -19,6 +19,7 @@ const BSC_CHAIN_ID = 56;
 
 const SyncBscSchema = z.object({
   apiId: z.string().min(1, 'An API configuration must be selected.'),
+  startDate: z.string().optional(),
 });
 
 const SyncCsvSchema = z.object({
@@ -33,7 +34,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
     if (!validatedFields.success) {
         return { message: 'Invalid data submitted. An API configuration must be selected.', error: true };
     }
-    const { apiId } = validatedFields.data;
+    const { apiId, startDate } = validatedFields.data;
 
     try {
         const apiSettingRef = ref(db, `bsc_apis/${apiId}`);
@@ -58,10 +59,23 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             // Get current block number
             const currentBlock = await provider.getBlockNumber();
             
+            // Calculate start block
+            let queryStartBlock = lastSyncedBlock > 0 ? lastSyncedBlock : 0;
+            
+            // If startDate provided, calculate block from date (BSC ~3 seconds per block)
+            if (startDate) {
+                const startTimestamp = new Date(startDate).getTime() / 1000;
+                const currentTimestamp = Math.floor(Date.now() / 1000);
+                const secondsDiff = currentTimestamp - startTimestamp;
+                const blocksDiff = Math.floor(secondsDiff / 3);
+                queryStartBlock = Math.max(0, currentBlock - blocksDiff);
+                console.log(`📅 Syncing from date ${startDate}: calculated as block ${queryStartBlock}`);
+            }
+            
             // Free RPC limitation: only query recent blocks (last ~1000 blocks)
             // If lastSyncedBlock is too old, reset to recent blocks
             const MAX_LOOKBACK = 1000;
-            const queryStartBlock = Math.max(lastSyncedBlock > 0 ? lastSyncedBlock : 0, currentBlock - MAX_LOOKBACK);
+            queryStartBlock = Math.max(queryStartBlock, currentBlock - MAX_LOOKBACK);
             
             console.log(`🔍 BSC Sync for wallet ${walletAddress}`);
             console.log(`   Current block: ${currentBlock}, querying blocks ${queryStartBlock}-${currentBlock} (${currentBlock - queryStartBlock} blocks)`);

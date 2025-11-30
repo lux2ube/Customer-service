@@ -17,6 +17,8 @@ import type { BscApiSetting, UsdtRecord, Client } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, get, update } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 
 function SyncBscButton() {
@@ -187,6 +189,7 @@ function SyncBscForm() {
     const [state, formAction] = useActionState<SyncState, FormData>(syncBscTransactions, undefined);
     const [apiSettings, setApiSettings] = React.useState<BscApiSetting[]>([]);
     const [selectedApi, setSelectedApi] = React.useState('');
+    const [startDate, setStartDate] = React.useState('');
 
     React.useEffect(() => {
         const settingsRef = ref(db, 'bsc_apis');
@@ -225,7 +228,7 @@ function SyncBscForm() {
     }
     
     return (
-        <form action={formAction} className="flex flex-wrap items-center gap-2">
+        <form action={formAction} className="flex flex-wrap items-center gap-3">
             <Select value={selectedApi} onValueChange={setSelectedApi}>
                 <SelectTrigger className="w-full md:w-[250px]">
                     <SelectValue placeholder="Select a wallet to sync..." />
@@ -237,6 +240,21 @@ function SyncBscForm() {
                 </SelectContent>
             </Select>
             <input type="hidden" name="apiId" value={selectedApi} />
+            
+            <div className="flex items-center gap-2">
+                <Label htmlFor="startDate" className="text-sm">From:</Label>
+                <Input 
+                    id="startDate"
+                    name="startDate" 
+                    type="datetime-local" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-[200px]"
+                    placeholder="Optional: start date"
+                    title="Leave empty for recent blocks only"
+                />
+            </div>
+            
             <SyncBscButton />
         </form>
     );
