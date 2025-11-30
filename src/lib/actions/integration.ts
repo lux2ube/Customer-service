@@ -143,10 +143,34 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const fromFilter = usdtContract.filters.Transfer(walletAddress, null);
             
             // Fetch events in smaller batches to avoid rate limits
-            const [toEvents, fromEvents] = await Promise.all([
-                usdtContract.queryFilter(toFilter, queryStartBlock, currentBlock),
-                usdtContract.queryFilter(fromFilter, queryStartBlock, currentBlock),
-            ]);
+            // Official RPC rate limits large batch queries, so split into smaller chunks
+            const BATCH_SIZE = 100; // Query 100 blocks at a time
+            const toEvents: any[] = [];
+            const fromEvents: any[] = [];
+            
+            // Query in smaller batches with delays to avoid rate limiting
+            for (let blockStart = queryStartBlock; blockStart < currentBlock; blockStart += BATCH_SIZE) {
+                const blockEnd = Math.min(blockStart + BATCH_SIZE, currentBlock);
+                
+                try {
+                    console.log(`   Querying blocks ${blockStart}-${blockEnd}...`);
+                    
+                    const [batch1, batch2] = await Promise.all([
+                        usdtContract.queryFilter(toFilter, blockStart, blockEnd),
+                        usdtContract.queryFilter(fromFilter, blockStart, blockEnd),
+                    ]);
+                    
+                    toEvents.push(...batch1);
+                    fromEvents.push(...batch2);
+                    
+                    // Add small delay between batches to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (e: any) {
+                    console.log(`   ⚠️ Batch ${blockStart}-${blockEnd} failed: ${e.message}`);
+                    // Continue with next batch
+                    continue;
+                }
+            }
             
             console.log(`✓ Found ${toEvents.length} incoming + ${fromEvents.length} outgoing USDT events`);
             if (toEvents.length === 0 && fromEvents.length === 0) {
