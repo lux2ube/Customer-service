@@ -48,6 +48,14 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
         phone: client?.phone ? (Array.isArray(client.phone) ? (client.phone.length > 0 ? client.phone : ['']) : [client.phone]) : [''],
         verification_status: client?.verification_status || 'Pending',
         prioritize_sms_matching: client?.prioritize_sms_matching || false,
+        dateOfBirth: client?.dateOfBirth || '',
+        placeOfBirth: client?.placeOfBirth || '',
+        bloodGroup: client?.bloodGroup || '',
+        idNumber: client?.idNumber || '',
+        dateOfIssue: client?.dateOfIssue || '',
+        dateOfExpiry: client?.dateOfExpiry || '',
+        placeOfIssue: client?.placeOfIssue || '',
+        passportNumber: client?.passportNumber || '',
     });
     
     const [filesToUpload, setFilesToUpload] = React.useState<File[]>([]);
@@ -221,6 +229,44 @@ export function ClientForm({ client, activityHistory, otherClientsWithSameName, 
                                             <UiAlertDescription>Warning: {otherClientsWithSameName?.length} other clients share a similar name. Enabling this option will prevent them from being auto-matched.</UiAlertDescription>
                                         </Alert>
                                     )}
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t">
+                                    <h3 className="font-semibold text-base mb-4">Document Information (from OCR)</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                                            <Input id="dateOfBirth" name="dateOfBirth" type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="placeOfBirth">Place of Birth</Label>
+                                            <Input id="placeOfBirth" name="placeOfBirth" placeholder="e.g., Sana'a" value={formData.placeOfBirth} onChange={(e) => setFormData({...formData, placeOfBirth: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="bloodGroup">Blood Group</Label>
+                                            <Input id="bloodGroup" name="bloodGroup" placeholder="e.g., O+, A-" value={formData.bloodGroup} onChange={(e) => setFormData({...formData, bloodGroup: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="idNumber">ID Number</Label>
+                                            <Input id="idNumber" name="idNumber" placeholder="National ID number" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="dateOfIssue">Date of Issue</Label>
+                                            <Input id="dateOfIssue" name="dateOfIssue" type="date" value={formData.dateOfIssue} onChange={(e) => setFormData({...formData, dateOfIssue: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="dateOfExpiry">Date of Expiry</Label>
+                                            <Input id="dateOfExpiry" name="dateOfExpiry" type="date" value={formData.dateOfExpiry} onChange={(e) => setFormData({...formData, dateOfExpiry: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="placeOfIssue">Place of Issue</Label>
+                                            <Input id="placeOfIssue" name="placeOfIssue" placeholder="e.g., Ministry of Interior" value={formData.placeOfIssue} onChange={(e) => setFormData({...formData, placeOfIssue: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="passportNumber">Passport Number</Label>
+                                            <Input id="passportNumber" name="passportNumber" placeholder="Passport number if available" value={formData.passportNumber} onChange={(e) => setFormData({...formData, passportNumber: e.target.value})} />
+                                        </div>
+                                    </div>
                                 </div>
                             </TabsContent>
                             <TabsContent value="history" className="mt-6">
