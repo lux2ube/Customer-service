@@ -251,7 +251,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
                 type: isIncoming ? 'inflow' : 'outflow',
                 source: 'BSCScan',
-                status: existingClient ? 'Matched' : 'Pending',
+                status: 'Pending', // Status starts as Pending, clientId presence = assigned
                 clientId: existingClient ? existingClient.id : null,
                 clientName: existingClient ? existingClient.name : 'Unassigned',
                 accountId: accountId,
@@ -419,7 +419,7 @@ export async function syncBscCsv(prevState: SyncState, formData: FormData): Prom
                     date: new Date(parseInt(timeStamp) * 1000).toISOString(),
                     type: isIncoming ? 'inflow' : 'outflow',
                     source: 'CSV',
-                    status: existingClient ? 'Matched' : 'Pending',
+                    status: 'Pending', // Status starts as Pending, clientId presence = assigned
                     clientId: existingClient ? existingClient.id : null,
                     clientName: existingClient ? existingClient.name : 'Unassigned',
                     accountId: accountId,

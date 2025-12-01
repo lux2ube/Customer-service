@@ -477,7 +477,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             if (bestMatch) {
                 updates[`/cash_records/${record.id}/clientId`] = bestMatch.id;
                 updates[`/cash_records/${record.id}/clientName`] = bestMatch.name;
-                updates[`/cash_records/${record.id}/status`] = 'Matched';
+                // Status remains Pending - setting clientId = matched/assigned
                 matchedCount++;
             }
 

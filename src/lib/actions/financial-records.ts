@@ -86,8 +86,8 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             date: date,
             type: type,
             source: 'Manual',
-            status: clientId ? 'Matched' : 'Pending', // If client is provided, it's matched
-            clientId: clientId,
+            status: 'Pending', // Status starts as Pending (not in journal yet)
+            clientId: clientId, // clientId presence = matched/assigned, null = unassigned
             clientName: clientName,
             accountId: bankAccountId,
             accountName: account.name,
@@ -459,7 +459,7 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
 /**
  * Update record status and create journal entries if status changes to "Confirmed"
  */
-export async function updateCashRecordStatus(recordId: string, newStatus: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed') {
+export async function updateCashRecordStatus(recordId: string, newStatus: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used') {
     try {
         const recordRef = ref(db, `cash_records/${recordId}`);
         const recordSnapshot = await get(recordRef);
@@ -558,7 +558,7 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
 /**
  * Update USDT record status and create journal entries if status changes to "Confirmed"
  */
-export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed') {
+export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used') {
     try {
         const recordRef = ref(db, `modern_usdt_records/${recordId}`);
         const recordSnapshot = await get(recordRef);

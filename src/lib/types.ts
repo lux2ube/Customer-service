@@ -127,8 +127,9 @@ export interface CashRecord {
     date: string;
     type: 'inflow' | 'outflow';
     source: 'Manual' | 'SMS';
-    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed';
-    clientId: string | null;
+    status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used';
+    // matched: boolean - use clientId presence instead (clientId = matched/assigned, null = unassigned)
+    clientId: string | null; // null = unassigned/not matched, value = assigned/matched
     clientName: string | null;
     accountId: string;
     accountName: string;
@@ -147,8 +148,9 @@ export interface UsdtRecord {
     date: string;
     type: 'inflow' | 'outflow';
     source: 'Manual' | 'BSCScan';
-    status: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed';
-    clientId: string | null;
+    status: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used';
+    // matched: boolean - use clientId presence instead (clientId = matched/assigned, null = unassigned)
+    clientId: string | null; // null = unassigned/not matched, value = assigned/matched
     clientName: string | null;
     accountId: string; // The system's internal crypto wallet account ID
     accountName: string; // The system's internal crypto wallet name

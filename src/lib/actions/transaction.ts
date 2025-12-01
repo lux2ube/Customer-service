@@ -20,7 +20,7 @@ import {
   reconcileTransactionPosting
 } from './reconciliation';
 
-export async function getUnifiedClientRecords(clientId: string, filterStatus?: 'Pending' | 'Matched' | 'Used'): Promise<UnifiedFinancialRecord[]> {
+export async function getUnifiedClientRecords(clientId: string, filterStatus?: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used'): Promise<UnifiedFinancialRecord[]> {
     if (!clientId) return [];
 
     try {

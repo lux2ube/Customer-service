@@ -567,13 +567,28 @@ Key: Only "Pending" or "Matched" can be used in new transactions
 
 ---
 
-## ✅ CONFIRMED RECORDS & UNASSIGNED LIABILITY (NEW)
+## ✅ STANDARDIZED TERMINOLOGY (IMPORTANT)
+
+### Status Field (Same Across All Records)
+- **Pending** = Record exists but NOT added to journal yet → NO balance impact
+- **Confirmed** = Record added to journal → AFFECTS balances immediately
+- **Cancelled** = Creates REVERSE journal entry → Undoes confirmed entry
+- **Used** = Record cannot be used for transactions again → Locked status
+
+### Matched / Unassigned (Boolean via ClientId)
+- **Unassigned** = clientId is NULL → money goes to account 7000
+- **Assigned** = clientId has value → money goes to client account 6000{clientId}
+
+---
+
+## ✅ CONFIRMED RECORDS & UNASSIGNED LIABILITY
 
 ### Unassigned Records Flow
 
 **When creating unassigned record (no clientId):**
-- Status: Pending
-- Journal entry goes to **Account 7000** (Unassigned Receipts/Payments)
+- Status: `Pending` (not yet journaled)
+- clientId: `null` (unassigned)
+- When confirmed → Journal entry goes to **Account 7000** (Unassigned Receipts/Payments)
 
 **When record is confirmed while unassigned:**
 - Account 7000 records liability for unassigned money
