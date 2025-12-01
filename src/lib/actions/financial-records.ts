@@ -352,21 +352,36 @@ export async function cancelCashPayment(recordId: string) {
 
 /**
  * When a cash record is confirmed, create journal entries
- * INFLOW: DEBIT bank account (asset ↑), CREDIT client account (liability ↓)
- * OUTFLOW: DEBIT client account (liability ↑), CREDIT bank account (asset ↓)
+ * UNASSIGNED: Record to 7000 (unassigned liability) until assigned to client
+ * ASSIGNED: DEBIT bank account (asset ↑), CREDIT client account (liability ↓)
  */
 async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & { id: string }, client: Client | null) {
     try {
-        if (!client || !record.clientId) {
-            console.log(`⏭️  Skipping journal entry for cash record ${record.id}: no client`);
-            return { success: true, skipped: true };
-        }
-
-        const clientAccountId = `6000${client.id}`;
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
-        
-        let entry: Omit<JournalEntry, 'id'> = {
+
+        // If unassigned, record goes to account 7000 (unassigned liability)
+        if (!record.clientId || !client) {
+            const entry: Omit<JournalEntry, 'id'> = {
+                date: record.date,
+                description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
+                debit_account: record.type === 'inflow' ? record.accountId : '7000',
+                credit_account: record.type === 'inflow' ? '7000' : record.accountId,
+                debit_amount: record.amountusd,
+                credit_amount: record.amountusd,
+                amount_usd: record.amountusd,
+                createdAt: date,
+                debit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
+                credit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
+            };
+            await set(journalRef, entry);
+            console.log(`✅ Journal entry created for unassigned cash record ${record.id} → account 7000`);
+            return { success: true };
+        }
+
+        // If assigned, normal client account entry
+        const clientAccountId = `6000${client.id}`;
+        const entry: Omit<JournalEntry, 'id'> = {
             date: record.date,
             description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${record.id} | ${client.name}`,
             debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
@@ -390,21 +405,36 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 
 /**
  * When a USDT record is confirmed, create journal entries
- * INFLOW: DEBIT wallet account (asset ↑), CREDIT client account (liability ↓)
- * OUTFLOW: DEBIT client account (liability ↑), CREDIT wallet account (asset ↓)
+ * UNASSIGNED: Record to 7000 until assigned to client
+ * ASSIGNED: DEBIT wallet account (asset ↑), CREDIT client account (liability ↓)
  */
 async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & { id: string }, client: Client | null) {
     try {
-        if (!client || !record.clientId) {
-            console.log(`⏭️  Skipping journal entry for USDT record ${record.id}: no client`);
-            return { success: true, skipped: true };
-        }
-
-        const clientAccountId = `6000${client.id}`;
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
-        
-        let entry: Omit<JournalEntry, 'id'> = {
+
+        // If unassigned, record goes to account 7000
+        if (!record.clientId || !client) {
+            const entry: Omit<JournalEntry, 'id'> = {
+                date: record.date,
+                description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
+                debit_account: record.type === 'inflow' ? record.accountId : '7000',
+                credit_account: record.type === 'inflow' ? '7000' : record.accountId,
+                debit_amount: record.amount,
+                credit_amount: record.amount,
+                amount_usd: record.amount,
+                createdAt: date,
+                debit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
+                credit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
+            };
+            await set(journalRef, entry);
+            console.log(`✅ Journal entry created for unassigned USDT record ${record.id} → account 7000`);
+            return { success: true };
+        }
+
+        // If assigned, normal client account entry
+        const clientAccountId = `6000${client.id}`;
+        const entry: Omit<JournalEntry, 'id'> = {
             date: record.date,
             description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${record.id} | ${client.name}`,
             debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
@@ -462,6 +492,70 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
 }
 
 /**
+ * Transfer journal entries from 7000 (unassigned) to client account when assigned
+ * Creates reversing entries on 7000 and new entries on client account
+ */
+async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
+    try {
+        console.log(`🔄 Transferring record ${recordId} from 7000 to client ${clientId}`);
+        
+        // Fetch the record to get its details
+        const recordRef = recordType === 'cash' 
+            ? ref(db, `cash_records/${recordId}`)
+            : ref(db, `modern_usdt_records/${recordId}`);
+        const recordSnapshot = await get(recordRef);
+        
+        if (!recordSnapshot.exists()) {
+            console.error(`Record not found: ${recordId}`);
+            return { success: false };
+        }
+
+        const record = recordSnapshot.val() as any;
+        const clientAccountId = `6000${clientId}`;
+        const amount = recordType === 'cash' ? record.amountusd : record.amount;
+        const date = new Date().toISOString();
+
+        // Create reversing entry: Remove from 7000
+        const reversingRef = push(ref(db, 'journal_entries'));
+        const reversingEntry: Omit<JournalEntry, 'id'> = {
+            date: record.date,
+            description: `[Reversal] ${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | Removed from Unassigned`,
+            debit_account: record.type === 'inflow' ? '7000' : record.accountId,
+            credit_account: record.type === 'inflow' ? record.accountId : '7000',
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amount,
+            createdAt: date,
+            debit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
+            credit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
+        };
+        await set(reversingRef, reversingEntry);
+
+        // Create new entry: Add to client account
+        const newRef = push(ref(db, 'journal_entries'));
+        const newEntry: Omit<JournalEntry, 'id'> = {
+            date: record.date,
+            description: `${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Now Assigned) - Rec #${recordId} | ${client.name}`,
+            debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
+            credit_account: record.type === 'inflow' ? clientAccountId : record.accountId,
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amount,
+            createdAt: date,
+            debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
+            credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
+        };
+        await set(newRef, newEntry);
+
+        console.log(`✅ Transferred record ${recordId} from 7000 to client account ${clientAccountId}`);
+        return { success: true };
+    } catch (error) {
+        console.error(`❌ Error transferring record ${recordId}:`, error);
+        return { success: false, error: String(error) };
+    }
+}
+
+/**
  * Update USDT record status and create journal entries if status changes to "Confirmed"
  */
 export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pending' | 'Matched' | 'Used' | 'Cancelled' | 'Confirmed') {
@@ -475,6 +569,7 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
 
         const record = recordSnapshot.val() as UsdtRecord;
         const oldStatus = record.status;
+        const wasUnassigned = !record.clientId;
 
         // Update status
         await update(recordRef, { status: newStatus });
@@ -493,5 +588,49 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
     } catch (error) {
         console.error('Error updating USDT record status:', error);
         return { success: false, message: 'Failed to update record status.' };
+    }
+}
+
+/**
+ * When assigning a previously unassigned record to a client
+ * Move journal entries from 7000 to client account
+ */
+export async function assignRecordToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string) {
+    try {
+        // Fetch client
+        const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+        if (!clientSnapshot.exists()) {
+            return { success: false, message: 'Client not found.' };
+        }
+        const client = clientSnapshot.val() as Client;
+
+        // Fetch record
+        const recordRef = recordType === 'cash'
+            ? ref(db, `cash_records/${recordId}`)
+            : ref(db, `modern_usdt_records/${recordId}`);
+        const recordSnapshot = await get(recordRef);
+        
+        if (!recordSnapshot.exists()) {
+            return { success: false, message: 'Record not found.' };
+        }
+
+        const record = recordSnapshot.val() as any;
+        const wasUnassigned = !record.clientId;
+
+        // Update record with client info
+        await update(recordRef, { clientId, clientName: client.name });
+
+        // If was unassigned and confirmed, transfer from 7000 to client
+        if (wasUnassigned && record.status === 'Confirmed') {
+            await transferFromUnassignedToClient(recordId, recordType, clientId, client);
+        }
+
+        revalidatePath('/modern-cash-records');
+        revalidatePath('/modern-usdt-records');
+        revalidatePath('/accounting/journal');
+        return { success: true, message: 'Record assigned to client.' };
+    } catch (error) {
+        console.error('Error assigning record to client:', error);
+        return { success: false, message: 'Failed to assign record.' };
     }
 }

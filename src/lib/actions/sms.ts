@@ -480,6 +480,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 updates[`/cash_records/${record.id}/status`] = 'Matched';
                 matchedCount++;
             }
+
         }
 
         if (matchedCount > 0) {

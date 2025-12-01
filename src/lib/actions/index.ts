@@ -113,4 +113,7 @@ export {
     createUsdtManualReceipt,
     createUsdtManualPayment,
     cancelCashPayment,
+    updateCashRecordStatus,
+    updateUsdtRecordStatus,
+    assignRecordToClient,
 } from './financial-records';

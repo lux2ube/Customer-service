@@ -567,7 +567,24 @@ Key: Only "Pending" or "Matched" can be used in new transactions
 
 ---
 
-## ✅ CONFIRMED RECORDS BEHAVIOR (NEW)
+## ✅ CONFIRMED RECORDS & UNASSIGNED LIABILITY (NEW)
+
+### Unassigned Records Flow
+
+**When creating unassigned record (no clientId):**
+- Status: Pending
+- Journal entry goes to **Account 7000** (Unassigned Receipts/Payments)
+
+**When record is confirmed while unassigned:**
+- Account 7000 records liability for unassigned money
+- Awaits assignment to client
+
+### Transfer to Client When Assigned
+
+**When assigning unassigned + confirmed record to client:**
+1. Creates **reversing entry** on 7000 (removes amount)
+2. Creates **new entry** on client account (6000{clientId})
+3. Amount now tracked under client liability
 
 ### Auto-Journal Entries on Record Confirmation
 
@@ -604,6 +621,7 @@ Impact: Your USDT decreases, client owes you more
 ### Record Confirmation Functions
 - `updateCashRecordStatus()` - Change cash record status and auto-create journal entries
 - `updateUsdtRecordStatus()` - Change USDT record status and auto-create journal entries
+- `assignRecordToClient()` - Assign unassigned record to client and transfer from 7000 to 6000{clientId}
 
 ---
 
