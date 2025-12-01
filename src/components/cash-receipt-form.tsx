@@ -149,6 +149,7 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
     const [amountusd, setAmountusd] = React.useState(record?.amountusd || 0);
     const [senderName, setSenderName] = React.useState(record?.senderName || '');
     const [notes, setNotes] = React.useState(record?.notes || '');
+    const [status, setStatus] = React.useState<string>(record?.status || 'Confirmed');
 
     const [fiatRates, setFiatRates] = React.useState<Record<string, FiatRate>>({});
     
@@ -280,12 +281,16 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                     <CardDescription>Fill in the details of the cash transaction.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <div>
-                            <p className="text-sm font-medium text-green-900">Status: Confirmed</p>
-                            <p className="text-xs text-green-700">This record will be auto-journaled immediately upon creation</p>
-                        </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Select name="status" value={status} onValueChange={setStatus}>
+                            <SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Confirmed">Confirmed (Auto-journaled)</SelectItem>
+                                <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                <SelectItem value="Used">Used</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
