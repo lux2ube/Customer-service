@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Save, Loader2, Check, ChevronsUpDown, ClipboardPaste, Calendar as CalendarIcon } from 'lucide-react';
+import { Save, Loader2, Check, ChevronsUpDown, ClipboardPaste, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
@@ -244,6 +244,14 @@ export function CashPaymentForm({ record, clients, bankAccounts }: { record?: Ca
                     <CardDescription>Fill in the details of the cash payment.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm font-medium text-green-900">Status: Confirmed</p>
+                            <p className="text-xs text-green-700">This record will be auto-journaled immediately upon creation</p>
+                        </div>
+                    </div>
+
                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                              <Label>Date</Label>
