@@ -567,6 +567,60 @@ Key: Only "Pending" or "Matched" can be used in new transactions
 
 ---
 
+## ✅ CONFIRMED RECORDS BEHAVIOR (NEW)
+
+### Auto-Journal Entries on Record Confirmation
+
+When a cash or USDT record status changes to **"Confirmed"**, the system **automatically creates journal entries**:
+
+#### Cash Receipt Confirmed (Inflow)
+```
+DEBIT:  Bank Account (asset ↑)
+CREDIT: Client Account (liability ↓)
+Impact: Your cash increases, client owes you less
+```
+
+#### Cash Payment Confirmed (Outflow)
+```
+DEBIT:  Client Account (liability ↑)
+CREDIT: Bank Account (asset ↓)
+Impact: Your cash decreases, client owes you more
+```
+
+#### USDT Receipt Confirmed (Inflow)
+```
+DEBIT:  Crypto Wallet (asset ↑)
+CREDIT: Client Account (liability ↓)
+Impact: Your USDT increases, client owes you less
+```
+
+#### USDT Payment Confirmed (Outflow)
+```
+DEBIT:  Client Account (liability ↑)
+CREDIT: Crypto Wallet (asset ↓)
+Impact: Your USDT decreases, client owes you more
+```
+
+### Record Confirmation Functions
+- `updateCashRecordStatus()` - Change cash record status and auto-create journal entries
+- `updateUsdtRecordStatus()` - Change USDT record status and auto-create journal entries
+
+---
+
+## TRANSACTIONS & REVENUE/EXPENSE (VERIFIED)
+
+### Transaction Journal Entries Always Include Revenue Impact
+
+Each transaction automatically creates:
+1. **Inflow Entry** - DEBIT asset, CREDIT client account
+2. **Outflow Entry** - DEBIT client account, CREDIT asset
+3. **Fee Entry** - DEBIT client account, CREDIT Fee Income (4002)
+4. **Variance Entry** - DEBIT/CREDIT based on profit/loss
+
+**Result:** All transactions automatically impact revenue/expense through fees and variances!
+
+---
+
 ## CURRENT FEES & CONFIGURATION
 
 ### Crypto Fees (from `/rate_history/crypto_fees`)

@@ -183,8 +183,9 @@ export async function createModernTransaction(prevState: TransactionFormState, f
         };
     }
     
-    const { clientId, type, notes, attachment, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
+    const { clientId, type, notes, differenceHandling, incomeAccountId, expenseAccountId } = validatedFields.data;
     const allLinkedRecordIds = validatedFields.data.linkedRecordIds;
+    const attachmentFile = formData.get('attachment') as File | null;
     
     try {
         const [clientSnapshot, cashRecordsSnapshot, usdtRecordsSnapshot, cryptoFeesSnapshot, accountsSnapshot, serviceProvidersSnapshot] = await Promise.all([
@@ -254,9 +255,9 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         const newId = await getNextSequentialId('transactionId');
         let attachmentUrl = '';
-        if (attachment?.size > 0) {
-             const fileRef = storageRef(storage, `transaction_attachments/${newId}/${attachment.name}`);
-             await uploadBytes(fileRef, attachment);
+        if (attachmentFile && attachmentFile.size > 0) {
+             const fileRef = storageRef(storage, `transaction_attachments/${newId}/${attachmentFile.name}`);
+             await uploadBytes(fileRef, attachmentFile);
              attachmentUrl = await getDownloadURL(fileRef);
         }
 
@@ -396,8 +397,7 @@ export async function createModernTransaction(prevState: TransactionFormState, f
 
         return { 
           success: true, 
-          message: `Transaction ${newId} created and confirmed successfully.`,
-          reconciliationStatus: reconciliation.status
+          message: `Transaction ${newId} created and confirmed successfully.`
         };
 
     } catch (e: any) {
