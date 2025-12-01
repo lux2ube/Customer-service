@@ -80,7 +80,7 @@ export async function deleteSmsEndpoint(endpointId: string): Promise<SmsEndpoint
         return { message: 'Endpoint ID is required.', error: true };
     }
     try {
-        await remove(ref(db, `sms_endpoints/${endpointId}`));
+        await set(ref(db, `sms_endpoints/${endpointId}`), null);
         revalidatePath('/sms/settings');
         return { message: 'Endpoint deleted successfully.' };
     } catch (error) {
@@ -589,7 +589,7 @@ export async function deleteSmsParsingRule(id: string): Promise<{ message?: stri
         return { message: 'Invalid rule ID.' };
     }
     try {
-        await remove(ref(db, `sms_parsing_rules/${id}`));
+        await set(ref(db, `sms_parsing_rules/${id}`), null);
         revalidatePath('/sms/parsing');
         return {};
     } catch (error) {

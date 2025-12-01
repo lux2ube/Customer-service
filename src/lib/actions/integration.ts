@@ -71,7 +71,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 await provider.getBlockNumber();
                 console.log(`✓ Connected to RPC: ${rpcUrl}`);
                 break;
-            } catch (e) {
+            } catch (e: any) {
                 console.log(`✗ Failed to connect to ${rpcUrl}: ${e.message}`);
                 lastError = e;
                 provider = null;

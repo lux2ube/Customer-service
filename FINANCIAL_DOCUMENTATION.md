@@ -634,9 +634,18 @@ Impact: Your USDT decreases, client owes you more
 ```
 
 ### Record Confirmation Functions
-- `updateCashRecordStatus()` - Change cash record status and auto-create journal entries
-- `updateUsdtRecordStatus()` - Change USDT record status and auto-create journal entries
+- `updateCashRecordStatus()` - Change cash record status and auto-create journal entries with balance tracking
+- `updateUsdtRecordStatus()` - Change USDT record status and auto-create journal entries with balance tracking
 - `assignRecordToClient()` - Assign unassigned record to client and transfer from 7000 to 6000{clientId}
+
+### Balance Tracking (NEW!)
+When a record is confirmed, the system captures:
+- **debit_account_balance_before** - Account balance BEFORE this entry
+- **debit_account_balance_after** - Account balance AFTER this entry
+- **credit_account_balance_before** - Account balance BEFORE this entry
+- **credit_account_balance_after** - Account balance AFTER this entry
+
+This provides complete audit trail of how assets and liabilities changed with each transaction.
 
 ---
 

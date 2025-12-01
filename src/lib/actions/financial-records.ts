@@ -348,10 +348,44 @@ export async function cancelCashPayment(recordId: string) {
     }
 }
 
+// ===== BALANCE CALCULATION =====
+
+/**
+ * Calculate account balance before a transaction (sum of all previous journal entries)
+ */
+async function calculateAccountBalanceBefore(accountId: string, beforeDate?: string): Promise<number> {
+    try {
+        const journalSnapshot = await get(ref(db, 'journal_entries'));
+        if (!journalSnapshot.exists()) return 0;
+
+        const allEntries = journalSnapshot.val();
+        let balance = 0;
+
+        for (const entryId in allEntries) {
+            const entry = allEntries[entryId] as JournalEntry;
+            
+            // Filter by date if provided
+            if (beforeDate && new Date(entry.date) >= new Date(beforeDate)) continue;
+
+            if (entry.debit_account === accountId) {
+                balance += entry.debit_amount;
+            }
+            if (entry.credit_account === accountId) {
+                balance -= entry.credit_amount;
+            }
+        }
+
+        return Math.round(balance * 100) / 100;
+    } catch (error) {
+        console.error(`Error calculating balance for account ${accountId}:`, error);
+        return 0;
+    }
+}
+
 // ===== AUTO-JOURNAL ENTRIES FOR CONFIRMED RECORDS =====
 
 /**
- * When a cash record is confirmed, create journal entries
+ * When a cash record is confirmed, create journal entries with balance tracking
  * UNASSIGNED: Record to 7000 (unassigned liability) until assigned to client
  * ASSIGNED: DEBIT bank account (asset ↑), CREDIT client account (liability ↓)
  */
@@ -362,17 +396,29 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 
         // If unassigned, record goes to account 7000 (unassigned liability)
         if (!record.clientId || !client) {
+            const debitAcc = record.type === 'inflow' ? record.accountId : '7000';
+            const creditAcc = record.type === 'inflow' ? '7000' : record.accountId;
+            
+            const [debitBefore, creditBefore] = await Promise.all([
+                calculateAccountBalanceBefore(debitAcc, record.date),
+                calculateAccountBalanceBefore(creditAcc, record.date)
+            ]);
+
             const entry: Omit<JournalEntry, 'id'> = {
                 date: record.date,
                 description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
-                debit_account: record.type === 'inflow' ? record.accountId : '7000',
-                credit_account: record.type === 'inflow' ? '7000' : record.accountId,
+                debit_account: debitAcc,
+                credit_account: creditAcc,
                 debit_amount: record.amountusd,
                 credit_amount: record.amountusd,
                 amount_usd: record.amountusd,
+                debit_account_balance_before: debitBefore,
+                debit_account_balance_after: debitBefore + record.amountusd,
+                credit_account_balance_before: creditBefore,
+                credit_account_balance_after: creditBefore - record.amountusd,
                 createdAt: date,
-                debit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
-                credit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
+                debit_account_name: debitAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
+                credit_account_name: creditAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
             };
             await set(journalRef, entry);
             console.log(`✅ Journal entry created for unassigned cash record ${record.id} → account 7000`);
@@ -381,14 +427,26 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 
         // If assigned, normal client account entry
         const clientAccountId = `6000${client.id}`;
+        const debitAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
+        const creditAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        
+        const [debitBefore, creditBefore] = await Promise.all([
+            calculateAccountBalanceBefore(debitAcc, record.date),
+            calculateAccountBalanceBefore(creditAcc, record.date)
+        ]);
+
         const entry: Omit<JournalEntry, 'id'> = {
             date: record.date,
             description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${record.id} | ${client.name}`,
-            debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
-            credit_account: record.type === 'inflow' ? clientAccountId : record.accountId,
+            debit_account: debitAcc,
+            credit_account: creditAcc,
             debit_amount: record.amountusd,
             credit_amount: record.amountusd,
             amount_usd: record.amountusd,
+            debit_account_balance_before: debitBefore,
+            debit_account_balance_after: debitBefore + record.amountusd,
+            credit_account_balance_before: creditBefore,
+            credit_account_balance_after: creditBefore - record.amountusd,
             createdAt: date,
             debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
             credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
@@ -404,7 +462,7 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 }
 
 /**
- * When a USDT record is confirmed, create journal entries
+ * When a USDT record is confirmed, create journal entries with balance tracking
  * UNASSIGNED: Record to 7000 until assigned to client
  * ASSIGNED: DEBIT wallet account (asset ↑), CREDIT client account (liability ↓)
  */
@@ -415,17 +473,29 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
 
         // If unassigned, record goes to account 7000
         if (!record.clientId || !client) {
+            const debitAcc = record.type === 'inflow' ? record.accountId : '7000';
+            const creditAcc = record.type === 'inflow' ? '7000' : record.accountId;
+            
+            const [debitBefore, creditBefore] = await Promise.all([
+                calculateAccountBalanceBefore(debitAcc, record.date),
+                calculateAccountBalanceBefore(creditAcc, record.date)
+            ]);
+
             const entry: Omit<JournalEntry, 'id'> = {
                 date: record.date,
                 description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
-                debit_account: record.type === 'inflow' ? record.accountId : '7000',
-                credit_account: record.type === 'inflow' ? '7000' : record.accountId,
+                debit_account: debitAcc,
+                credit_account: creditAcc,
                 debit_amount: record.amount,
                 credit_amount: record.amount,
                 amount_usd: record.amount,
+                debit_account_balance_before: debitBefore,
+                debit_account_balance_after: debitBefore + record.amount,
+                credit_account_balance_before: creditBefore,
+                credit_account_balance_after: creditBefore - record.amount,
                 createdAt: date,
-                debit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
-                credit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
+                debit_account_name: debitAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
+                credit_account_name: creditAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
             };
             await set(journalRef, entry);
             console.log(`✅ Journal entry created for unassigned USDT record ${record.id} → account 7000`);
@@ -434,14 +504,26 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
 
         // If assigned, normal client account entry
         const clientAccountId = `6000${client.id}`;
+        const debitAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
+        const creditAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        
+        const [debitBefore, creditBefore] = await Promise.all([
+            calculateAccountBalanceBefore(debitAcc, record.date),
+            calculateAccountBalanceBefore(creditAcc, record.date)
+        ]);
+
         const entry: Omit<JournalEntry, 'id'> = {
             date: record.date,
             description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${record.id} | ${client.name}`,
-            debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
-            credit_account: record.type === 'inflow' ? clientAccountId : record.accountId,
+            debit_account: debitAcc,
+            credit_account: creditAcc,
             debit_amount: record.amount,
             credit_amount: record.amount,
             amount_usd: record.amount,
+            debit_account_balance_before: debitBefore,
+            debit_account_balance_after: debitBefore + record.amount,
+            credit_account_balance_before: creditBefore,
+            credit_account_balance_after: creditBefore - record.amount,
             createdAt: date,
             debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
             credit_account_name: record.type === 'inflow' ? client.name : record.accountName,

@@ -203,6 +203,11 @@ export interface JournalEntry {
   createdAt: string;
   debit_account_name?: string; // For display
   credit_account_name?: string; // For display
+  // Balance tracking (before/after this entry)
+  debit_account_balance_before?: number;
+  debit_account_balance_after?: number;
+  credit_account_balance_before?: number;
+  credit_account_balance_after?: number;
   details?: { accountId: string, debit: number, credit: number }[]; // For multi-leg entries
 }
 
