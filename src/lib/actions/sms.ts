@@ -420,7 +420,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
     try {
         const [clientsSnapshot, smsRecordsSnapshot, endpointsSnapshot, transactionsSnapshot] = await Promise.all([
             get(ref(db, 'clients')),
-            get(query(ref(db, 'cash_records'), orderByChild('status'), equalTo('Pending'))),
+            get(ref(db, 'cash_records')), // Get all confirmed records, filter unassigned (clientId is null)
             get(ref(db, 'sms_endpoints')),
             get(ref(db, 'transactions'))
         ]);
@@ -432,7 +432,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const allTransactions: Transaction[] = transactionsSnapshot.exists() ? Object.values(transactionsSnapshot.val()) : [];
 
         const smsRecords = Object.entries<CashRecord>(smsRecordsSnapshot.val())
-            .map(([id, record]) => ({ id, ...record }))
+            .map(([id, record]) => ({ ...record, id }))
             .filter(record => record.source === 'SMS' && !record.clientId);
 
         let matchedCount = 0;

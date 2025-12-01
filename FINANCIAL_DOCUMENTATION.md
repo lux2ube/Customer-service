@@ -583,12 +583,19 @@ Key: Only "Pending" or "Matched" can be used in new transactions
 
 ## ✅ CONFIRMED RECORDS & UNASSIGNED LIABILITY
 
+### All Records Confirmed by Default!
+
+**When creating ANY record:**
+- Status: `Confirmed` (automatically journaled on creation)
+- clientId: `null` = unassigned, or value = assigned
+- **Journal entry created IMMEDIATELY** regardless of assigned/unassigned status
+
 ### Unassigned Records Flow
 
 **When creating unassigned record (no clientId):**
-- Status: `Pending` (not yet journaled)
+- Status: `Confirmed` (automatically journaled)
 - clientId: `null` (unassigned)
-- When confirmed → Journal entry goes to **Account 7000** (Unassigned Receipts/Payments)
+- Journal entry goes to **Account 7000** (Unassigned Receipts/Payments)
 
 **When record is confirmed while unassigned:**
 - Account 7000 records liability for unassigned money

@@ -3,12 +3,14 @@
 All financial records (Cash Records, USDT Records, Transactions) use consistent terminology:
 
 ## Status Field (Required - Affects Journal)
-- **Pending** 
-  - Record exists but NOT added to journal yet
-  - NO balance impact
-  - Can be transitioned to: Confirmed, Cancelled
+
+**Note: All records are CONFIRMED by default when created - automatically journaled!**
+
+- **Pending** (DEPRECATED - no longer used)
+  - Previously used for records not yet journaled
+  - All records now confirm immediately on creation
   
-- **Confirmed**
+- **Confirmed** (DEFAULT)
   - Record added to journal
   - AFFECTS balances immediately
   - Unassigned → Account 7000 (liability)

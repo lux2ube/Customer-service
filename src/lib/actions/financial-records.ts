@@ -86,7 +86,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             date: date,
             type: type,
             source: 'Manual',
-            status: 'Pending', // Status starts as Pending (not in journal yet)
+            status: 'Confirmed', // All records confirmed by default (auto-journaled)
             clientId: clientId, // clientId presence = matched/assigned, null = unassigned
             clientName: clientName,
             accountId: bankAccountId,
@@ -103,6 +103,10 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         const recordRef = ref(db, `/cash_records/${newId}`);
         await set(recordRef, stripUndefined(recordData));
 
+        // Auto-create journal entry since record is confirmed by default
+        const client = clientSnapshot?.exists() ? (clientSnapshot.val() as Client) : null;
+        await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
+
         if (clientId && clientName) {
             await notifyClientTransaction(clientId, clientName, { ...recordData, currency: account.currency! });
         }
@@ -110,7 +114,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         revalidatePath('/modern-cash-records');
         revalidatePath('/accounting/journal');
         revalidatePath('/'); // For asset balance card
-        return { success: true, message: 'Cash record saved successfully.' };
+        return { success: true, message: 'Cash record saved and journaled successfully.' };
 
     } catch (error) {
         console.error("Create Cash Record Error:", error);
@@ -166,7 +170,7 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
         
         const receiptData: Omit<UsdtRecord, 'id'> = {
-            date: date!, type: 'inflow', source: 'Manual', status: status!,
+            date: date!, type: 'inflow', source: 'Manual', status: 'Confirmed',
             clientId: clientId!, clientName: clientName!, accountId: cryptoWalletId!,
             accountName: wallet.name, amount: amount!, clientWalletAddress: walletAddress,
             txHash: txid, notes, createdAt: new Date().toISOString(),
@@ -175,12 +179,16 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(receiptData));
 
+        // Auto-create journal entry since record is confirmed by default
+        const client = (clientSnapshot.val() as Client);
+        await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
+
         await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
 
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
         revalidatePath('/'); // For asset balance card
-        return { success: true, message: 'USDT Receipt recorded successfully.' };
+        return { success: true, message: 'USDT Receipt recorded and journaled successfully.' };
     } catch (error) {
         console.error("Create USDT Manual Receipt Error:", error);
         return { message: 'Database Error: Could not record receipt.', success: false };
@@ -262,7 +270,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             date: date!, 
             type: 'outflow', 
             source: (source === 'BSCScan' ? 'BSCScan' : 'Manual') as 'Manual' | 'BSCScan', 
-            status: status!,
+            status: 'Confirmed',
             clientId: clientId, 
             clientName: clientName, 
             accountId: accountId,
@@ -276,6 +284,13 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
 
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(paymentData));
+
+        // Auto-create journal entry since record is confirmed by default
+        if (clientId) {
+            const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+            const client = clientSnapshot?.exists() ? (clientSnapshot.val() as Client) : null;
+            await createJournalEntriesForConfirmedUsdtRecord({ ...paymentData, id: newId }, client);
+        }
 
         // Store provider details in client profile if present
         if (clientId && recipientDetails && providerId && providerData) {
