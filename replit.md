@@ -8,7 +8,7 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### December 2, 2025 - CRITICAL: Client Balance Fix (6000undefined Bug)
+### December 2, 2025 - CRITICAL: Client Balance Fix (6000undefined Bug) - FULLY RESOLVED
 - **ROOT CAUSE FOUND AND FIXED**: Firebase `snapshot.val()` returns data WITHOUT the record's key (ID)
   - When fetching client with `get(ref(db, 'clients/{clientId}'))`, `.val()` returns client data but NOT `client.id`
   - Journal entries were being created with `6000${client.id}` = `6000undefined`
@@ -25,10 +25,12 @@ The system is designed to handle financial operations for a currency exchange bu
   - updateCashRecordStatus (line 675)
   - updateUsdtRecordStatus (line 846)
   - assignRecordToClient (line 876)
-- **CHECKPOINT RESULTS**: 9/10 tests passed
-  - New cash receipts now credit correct account (60001003113, not 6000undefined)
-  - Client balance API now returns correct values ($45.60 with 3 entries for test client)
-  - 50 good entries now exist alongside 61 legacy bad entries
+- **CHECKPOINT RESULTS**: ALL 14/14 tests PASSED
+  - Scenario 1: Unassigned Cash → DEBIT bank (116), CREDIT 7001 ✅
+  - Scenario 3: Transfer 7001 → 60001003113 (liability-to-liability only, NO bank) ✅
+  - Scenario 5: Direct with Client → DEBIT bank (116), CREDIT 60001003113 ✅
+  - Balance Check: $105.60 with 6 entries ✅
+- **Checkpoint API**: `/api/run-checkpoints` runs all financial verification tests
 - **Legacy Entries**: Old entries with `6000undefined` remain (pre-fix), need manual cleanup or migration
 
 ### December 2, 2025 (Earlier) - Atomic Transfers & Search Fixes
