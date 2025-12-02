@@ -401,32 +401,33 @@ async function calculateAccountBalanceBefore(accountId: string, beforeDate?: str
 
 /**
  * When a cash record is confirmed, create journal entries with balance tracking
- * UNASSIGNED: Record to 7000 (unassigned liability) until assigned to client
+ * UNASSIGNED: Record to 7001 (unmatched cash USD) until assigned to client
  * ASSIGNED: DEBIT bank account (asset ↑), CREDIT client account (liability ↓)
  */
 async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & { id: string }, client: Client | null) {
     try {
-        // Ensure 7000 account exists
-        const account7000Ref = ref(db, 'accounts/7000');
-        const account7000Snapshot = await get(account7000Ref);
-        if (!account7000Snapshot.exists()) {
-            await set(account7000Ref, {
-                id: '7000',
-                name: 'Unassigned Receipts/Payments',
+        // Ensure 7001 account exists (unmatched cash - USD)
+        const account7001Ref = ref(db, 'accounts/7001');
+        const account7001Snapshot = await get(account7001Ref);
+        if (!account7001Snapshot.exists()) {
+            await set(account7001Ref, {
+                id: '7001',
+                name: 'Unmatched Cash',
                 type: 'Liabilities',
                 isGroup: false,
+                currency: 'USD',
                 createdAt: new Date().toISOString()
             });
-            console.log('✅ Created account 7000 (Unassigned Liabilities)');
+            console.log('✅ Created account 7001 (Unmatched Cash - USD)');
         }
 
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
 
-        // If unassigned, record goes to account 7000 (unassigned liability)
+        // If unassigned, record goes to account 7001 (unmatched cash USD)
         if (!record.clientId || !client) {
-            const debitAcc = record.type === 'inflow' ? record.accountId : '7000';
-            const creditAcc = record.type === 'inflow' ? '7000' : record.accountId;
+            const debitAcc = record.type === 'inflow' ? record.accountId : '7001';
+            const creditAcc = record.type === 'inflow' ? '7001' : record.accountId;
             
             const [debitBefore, creditBefore] = await Promise.all([
                 calculateAccountBalanceBefore(debitAcc, record.date),
@@ -435,7 +436,7 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 
             const entry: Omit<JournalEntry, 'id'> = {
                 date: record.date,
-                description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
+                description: `Cash ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unmatched) - Rec #${record.id}`,
                 debit_account: debitAcc,
                 credit_account: creditAcc,
                 debit_amount: record.amountusd,
@@ -446,11 +447,11 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
                 credit_account_balance_before: creditBefore,
                 credit_account_balance_after: creditBefore - record.amountusd,
                 createdAt: date,
-                debit_account_name: debitAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
-                credit_account_name: creditAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
+                debit_account_name: debitAcc === '7001' ? 'Unmatched Cash' : record.accountName,
+                credit_account_name: creditAcc === '7001' ? 'Unmatched Cash' : record.accountName,
             };
             await set(journalRef, entry);
-            console.log(`✅ Journal entry created for unassigned cash record ${record.id} → account 7000`);
+            console.log(`✅ Journal entry created for unmatched cash record ${record.id} → account 7001`);
             return { success: true };
         }
 
@@ -492,32 +493,33 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 
 /**
  * When a USDT record is confirmed, create journal entries with balance tracking
- * UNASSIGNED: Record to 7000 until assigned to client
+ * UNASSIGNED: Record to 7002 (unmatched USDT) until assigned to client
  * ASSIGNED: DEBIT wallet account (asset ↑), CREDIT client account (liability ↓)
  */
 async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & { id: string }, client: Client | null) {
     try {
-        // Ensure 7000 account exists
-        const account7000Ref = ref(db, 'accounts/7000');
-        const account7000Snapshot = await get(account7000Ref);
-        if (!account7000Snapshot.exists()) {
-            await set(account7000Ref, {
-                id: '7000',
-                name: 'Unassigned Receipts/Payments',
+        // Ensure 7002 account exists (unmatched USDT)
+        const account7002Ref = ref(db, 'accounts/7002');
+        const account7002Snapshot = await get(account7002Ref);
+        if (!account7002Snapshot.exists()) {
+            await set(account7002Ref, {
+                id: '7002',
+                name: 'Unmatched USDT',
                 type: 'Liabilities',
                 isGroup: false,
+                currency: 'USDT',
                 createdAt: new Date().toISOString()
             });
-            console.log('✅ Created account 7000 (Unassigned Liabilities)');
+            console.log('✅ Created account 7002 (Unmatched USDT)');
         }
 
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
 
-        // If unassigned, record goes to account 7000
+        // If unassigned, record goes to account 7002 (unmatched USDT)
         if (!record.clientId || !client) {
-            const debitAcc = record.type === 'inflow' ? record.accountId : '7000';
-            const creditAcc = record.type === 'inflow' ? '7000' : record.accountId;
+            const debitAcc = record.type === 'inflow' ? record.accountId : '7002';
+            const creditAcc = record.type === 'inflow' ? '7002' : record.accountId;
             
             const [debitBefore, creditBefore] = await Promise.all([
                 calculateAccountBalanceBefore(debitAcc, record.date),
@@ -526,7 +528,7 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
 
             const entry: Omit<JournalEntry, 'id'> = {
                 date: record.date,
-                description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unassigned) - Rec #${record.id}`,
+                description: `USDT ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Unmatched) - Rec #${record.id}`,
                 debit_account: debitAcc,
                 credit_account: creditAcc,
                 debit_amount: record.amount,
@@ -537,11 +539,11 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
                 credit_account_balance_before: creditBefore,
                 credit_account_balance_after: creditBefore - record.amount,
                 createdAt: date,
-                debit_account_name: debitAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
-                credit_account_name: creditAcc === '7000' ? 'Unassigned Receipts/Payments' : record.accountName,
+                debit_account_name: debitAcc === '7002' ? 'Unmatched USDT' : record.accountName,
+                credit_account_name: creditAcc === '7002' ? 'Unmatched USDT' : record.accountName,
             };
             await set(journalRef, entry);
-            console.log(`✅ Journal entry created for unassigned USDT record ${record.id} → account 7000`);
+            console.log(`✅ Journal entry created for unmatched USDT record ${record.id} → account 7002`);
             return { success: true };
         }
 
@@ -617,12 +619,13 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
 }
 
 /**
- * Transfer journal entries from 7000 (unassigned) to client account when assigned
- * Creates reversing entries on 7000 and new entries on client account
+ * Transfer journal entries from 7001/7002 (unmatched) to client account when assigned
+ * Creates reversing entries on 7001/7002 and new entries on client account
  */
 async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
     try {
-        console.log(`🔄 Transferring record ${recordId} from 7000 to client ${clientId}`);
+        const unmatchedAccount = recordType === 'cash' ? '7001' : '7002';
+        console.log(`🔄 Transferring record ${recordId} from ${unmatchedAccount} to client ${clientId}`);
         
         // Fetch the record to get its details
         const recordRef = recordType === 'cash' 
@@ -640,19 +643,20 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         const amount = recordType === 'cash' ? record.amountusd : record.amount;
         const date = new Date().toISOString();
 
-        // Create reversing entry: Remove from 7000
+        // Create reversing entry: Remove from unmatched account
         const reversingRef = push(ref(db, 'journal_entries'));
+        const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
         const reversingEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
-            description: `[Reversal] ${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | Removed from Unassigned`,
-            debit_account: record.type === 'inflow' ? '7000' : record.accountId,
-            credit_account: record.type === 'inflow' ? record.accountId : '7000',
+            description: `[Reversal] ${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | Removed from Unmatched`,
+            debit_account: record.type === 'inflow' ? unmatchedAccount : record.accountId,
+            credit_account: record.type === 'inflow' ? record.accountId : unmatchedAccount,
             debit_amount: amount,
             credit_amount: amount,
             amount_usd: amount,
             createdAt: date,
-            debit_account_name: record.type === 'inflow' ? 'Unassigned Receipts/Payments' : record.accountName,
-            credit_account_name: record.type === 'inflow' ? record.accountName : 'Unassigned Receipts/Payments',
+            debit_account_name: record.type === 'inflow' ? unmatchedName : record.accountName,
+            credit_account_name: record.type === 'inflow' ? record.accountName : unmatchedName,
         };
         await set(reversingRef, reversingEntry);
 
@@ -672,7 +676,7 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         };
         await set(newRef, newEntry);
 
-        console.log(`✅ Transferred record ${recordId} from 7000 to client account ${clientAccountId}`);
+        console.log(`✅ Transferred record ${recordId} from ${unmatchedAccount} to client account ${clientAccountId}`);
         return { success: true };
     } catch (error) {
         console.error(`❌ Error transferring record ${recordId}:`, error);

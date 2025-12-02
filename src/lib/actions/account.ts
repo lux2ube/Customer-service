@@ -102,39 +102,64 @@ export async function createAccount(accountId: string | null, prevState: Account
 }
 
 /**
- * Fix account 7000 (Unassigned Liabilities) to be a posting account, not a group
+ * Fix accounts 7001 (unmatched cash) and 7002 (unmatched USDT) to be posting accounts
  */
 export async function fixAccount7000() {
     try {
-        const accountRef = ref(db, 'accounts/7000');
-        const snapshot = await get(accountRef);
+        // Fix/create 7001 (Unmatched Cash)
+        const account7001Ref = ref(db, 'accounts/7001');
+        const snapshot7001 = await get(account7001Ref);
         
-        if (!snapshot.exists()) {
-            // Create it if doesn't exist
-            await set(accountRef, {
-                id: '7000',
-                name: 'Unassigned Receipts/Payments',
+        if (!snapshot7001.exists()) {
+            await set(account7001Ref, {
+                id: '7001',
+                name: 'Unmatched Cash',
                 type: 'Liabilities',
                 isGroup: false,
+                currency: 'USD',
                 createdAt: new Date().toISOString(),
                 priority: 0
             });
-            console.log('✅ Created account 7000 as posting account');
+            console.log('✅ Created account 7001 (Unmatched Cash)');
         } else {
-            // Update existing to not be group
-            await update(accountRef, {
-                name: 'Unassigned Receipts/Payments',
-                isGroup: false
+            await update(account7001Ref, {
+                name: 'Unmatched Cash',
+                isGroup: false,
+                currency: 'USD'
             });
-            console.log('✅ Fixed account 7000 - set isGroup to false');
+            console.log('✅ Fixed account 7001');
+        }
+
+        // Fix/create 7002 (Unmatched USDT)
+        const account7002Ref = ref(db, 'accounts/7002');
+        const snapshot7002 = await get(account7002Ref);
+        
+        if (!snapshot7002.exists()) {
+            await set(account7002Ref, {
+                id: '7002',
+                name: 'Unmatched USDT',
+                type: 'Liabilities',
+                isGroup: false,
+                currency: 'USDT',
+                createdAt: new Date().toISOString(),
+                priority: 1
+            });
+            console.log('✅ Created account 7002 (Unmatched USDT)');
+        } else {
+            await update(account7002Ref, {
+                name: 'Unmatched USDT',
+                isGroup: false,
+                currency: 'USDT'
+            });
+            console.log('✅ Fixed account 7002');
         }
 
         revalidatePath('/accounting/chart-of-accounts');
         revalidatePath('/');
-        return { success: true, message: 'Account 7000 fixed - now accepting transactions' };
+        return { success: true, message: 'Accounts 7001 & 7002 fixed - now accepting transactions' };
     } catch (error) {
-        console.error('Error fixing account 7000:', error);
-        return { success: false, message: 'Failed to fix account 7000' };
+        console.error('Error fixing accounts:', error);
+        return { success: false, message: 'Failed to fix accounts' };
     }
 }
 

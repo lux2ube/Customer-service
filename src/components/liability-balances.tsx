@@ -29,7 +29,7 @@ export function LiabilityBalances() {
                 return;
             }
             const allAccounts: Record<string, Account> = accSnapshot.val();
-            const liabilityAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Liabilities' && !acc.isGroup && (acc.id === '7000' || acc.id.startsWith('6000')));
+            const liabilityAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Liabilities' && !acc.isGroup && (acc.id === '7001' || acc.id === '7002' || acc.id.startsWith('6000')));
 
             const unsubJournal = onValue(journalRef, (journalSnapshot) => {
                 const accountBalances: Record<string, number> = {};
@@ -53,7 +53,7 @@ export function LiabilityBalances() {
                 
                 liabilityAccounts.forEach(account => {
                     const balance = accountBalances[account.id] || 0;
-                    if (account.id === '7000' || (account.id.startsWith('6000') && Math.abs(balance) > 0.01)) {
+                    if (account.id === '7001' || account.id === '7002' || (account.id.startsWith('6000') && Math.abs(balance) > 0.01)) {
                         newBalances.push({
                             id: account.id,
                             name: account.name,
@@ -77,7 +77,7 @@ export function LiabilityBalances() {
         <Card>
             <CardHeader>
                 <CardTitle>Liability Balances</CardTitle>
-                <CardDescription>Account 7000 (unassigned) and client balances.</CardDescription>
+                <CardDescription>Unmatched accounts (7001/7002) and client balances.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-3">
