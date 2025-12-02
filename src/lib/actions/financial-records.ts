@@ -56,6 +56,19 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
     try {
         let { date, clientId, bankAccountId, amount, amountusd, senderName, recipientName, remittanceNumber, note, type } = validatedFields.data;
         
+        // CRITICAL: When EDITING, check if record was previously unassigned
+        // If so, we need to do a TRANSFER instead of creating new journal entry
+        let oldRecord: CashRecord | null = null;
+        let wasUnassigned = false;
+        if (recordId) {
+            const oldRecordSnapshot = await get(ref(db, `cash_records/${recordId}`));
+            if (oldRecordSnapshot.exists()) {
+                oldRecord = oldRecordSnapshot.val() as CashRecord;
+                wasUnassigned = !oldRecord.clientId && oldRecord.status === 'Confirmed';
+                console.log(`📝 EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${oldRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
+            }
+        }
+        
         const [accountSnapshot, clientSnapshot, fiatRatesSnapshot] = await Promise.all([
             get(ref(db, `accounts/${bankAccountId}`)),
             clientId ? get(ref(db, `clients/${clientId}`)) : Promise.resolve(null),
@@ -82,7 +95,7 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         
         const newId = recordId || await getNextSequentialId('cashRecordId');
         
-        const recordData: Omit<CashRecord, 'id'> = {
+        const recordData = {
             date: date,
             type: type,
             source: 'Manual',
@@ -97,14 +110,15 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             currency: account.currency!,
             amountusd: amountusd,
             notes: note,
-            createdAt: new Date().toISOString(),
-        };
+            createdAt: oldRecord?.createdAt || new Date().toISOString(),
+            ...(recordId && { updatedAt: new Date().toISOString() }),
+        } as Omit<CashRecord, 'id'>;
 
         const recordRef = ref(db, `/cash_records/${newId}`);
         await set(recordRef, stripUndefined(recordData));
 
-        // Log cash record creation
-        await logAction('CREATE_CASH_RECORD', { type: 'cash_record', id: newId, name: `Cash ${type} - ${amount} ${account.currency}` }, {
+        // Log cash record creation/update
+        await logAction(recordId ? 'UPDATE_CASH_RECORD' : 'CREATE_CASH_RECORD', { type: 'cash_record', id: newId, name: `Cash ${type} - ${amount} ${account.currency}` }, {
             type,
             amount,
             currency: account.currency,
@@ -113,13 +127,38 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
             accountName: account.name,
             clientId: clientId || 'Unassigned',
             clientName: clientName || 'Unassigned',
-            status: 'Confirmed'
+            status: 'Confirmed',
+            wasUnassigned,
+            isEdit: !!recordId
         });
 
-        // Auto-create journal entry since record is confirmed by default
-        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
+        // CRITICAL JOURNAL ENTRY LOGIC:
+        // Case 1: EDIT and was unassigned and now has client → TRANSFER (no new bank debit!)
+        // Case 2: EDIT and already had client → NO new journal (just updated record)
+        // Case 3: NEW record → create journal entry normally
         const client = clientSnapshot?.exists() ? { ...clientSnapshot.val() as Client, id: clientId! } : null;
-        await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
+        
+        if (recordId && wasUnassigned && clientId && client) {
+            // TRANSFER: Was unassigned (7001), now assigned to client
+            console.log(`🔄 EDIT TRANSFER: Record ${recordId} was unassigned, transferring from 7001 to 6000${clientId}`);
+            const transferResult = await transferFromUnassignedToClient(newId, 'cash', clientId, client, true);
+            if (!transferResult.success) {
+                console.error(`❌ Transfer failed during edit:`, transferResult.error);
+                // Record already saved, log the error but continue
+            } else {
+                console.log(`✅ EDIT TRANSFER COMPLETE: Journal entry ${transferResult.journalEntryId}`);
+            }
+        } else if (recordId && oldRecord?.clientId) {
+            // EDIT: Already had client, no new journal entry needed
+            console.log(`📝 EDIT: Record ${recordId} already had client, no new journal entry`);
+        } else if (!recordId) {
+            // NEW: Create journal entry normally
+            await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
+        } else if (recordId && !wasUnassigned && !oldRecord?.clientId && clientId) {
+            // EDIT: Record was Pending (not confirmed), now confirmed with client
+            console.log(`📝 EDIT: Record ${recordId} was Pending, now Confirmed with client`);
+            await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
+        }
 
         if (clientId && clientName) {
             await notifyClientTransaction(clientId, clientName, { ...recordData, currency: account.currency! });
@@ -692,11 +731,11 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
  * 
  * ATOMIC: Uses Firebase multi-path update to ensure ALL OR NONE
  */
-async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
+async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client, skipRecordUpdate: boolean = false) {
     try {
         const unmatchedAccount = recordType === 'cash' ? '7001' : '7002';
         const clientAccountId = `6000${clientId}`;
-        console.log(`🔄 ATOMIC TRANSFER: Record ${recordId} from ${unmatchedAccount} to ${clientAccountId}`);
+        console.log(`🔄 ATOMIC TRANSFER: Record ${recordId} from ${unmatchedAccount} to ${clientAccountId}${skipRecordUpdate ? ' (skip record update)' : ''}`);
         
         // Fetch the record to get its details
         const recordPath = recordType === 'cash' ? 'cash_records' : 'modern_usdt_records';
@@ -769,10 +808,12 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             entry_type: 'transfer'
         };
         
-        // 3. Update record with client info
-        atomicUpdates[`${recordPath}/${recordId}/clientId`] = clientId;
-        atomicUpdates[`${recordPath}/${recordId}/clientName`] = client.name;
-        atomicUpdates[`${recordPath}/${recordId}/assignedAt`] = date;
+        // 3. Update record with client info (skip if already updated by caller)
+        if (!skipRecordUpdate) {
+            atomicUpdates[`${recordPath}/${recordId}/clientId`] = clientId;
+            atomicUpdates[`${recordPath}/${recordId}/clientName`] = client.name;
+            atomicUpdates[`${recordPath}/${recordId}/assignedAt`] = date;
+        }
         
         // Execute atomic update
         await update(ref(db), atomicUpdates);
