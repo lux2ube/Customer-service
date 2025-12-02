@@ -11,7 +11,7 @@ import { Button } from './ui/button';
 import { Wallet, Send, Copy, RefreshCw, Loader2, ExternalLink, Check, ChevronsUpDown, ClipboardPaste, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getWalletDetails, createSendRequest, searchClients, findClientByAddress, updateWalletSettings, type WalletDetailsState, type SendRequestState } from '@/lib/actions';
-import type { SendRequest, Client, Account, ServiceProvider } from '../types';
+import type { SendRequest, Client, Account, ServiceProvider, ClientServiceProvider } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue, query, limitToLast, orderByChild, get } from 'firebase/database';
 import { Skeleton } from './ui/skeleton';
@@ -102,7 +102,7 @@ function WalletInfoCard({ details, onRefresh }: { details: WalletDetailsState, o
 function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId: string; serviceProviders: ServiceProvider[] }) {
     const { toast } = useToast();
     const formRef = React.useRef<HTMLFormElement>(null);
-    const [state, formAction] = useActionState<SendRequestState, FormData>(createSendRequest, undefined);
+    const [state, formAction] = useActionState<SendRequestState | undefined, FormData>(createSendRequest, undefined);
     
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [selectedAddress, setSelectedAddress] = React.useState<string | undefined>(undefined);

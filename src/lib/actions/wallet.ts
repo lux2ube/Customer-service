@@ -52,9 +52,9 @@ const SendRequestSchema = z.object({
 });
 
 function getRpcUrl() {
-    const rpcUrl = process.env.BSC_RPC_URL;
+    const rpcUrl = process.env.ANKR_BSC_RPC_URL;
     if (!rpcUrl) {
-        throw new Error("BSC_RPC_URL is not set in environment variables.");
+        throw new Error("ANKR_BSC_RPC_URL is not set in environment variables.");
     }
     return rpcUrl;
 }
@@ -103,7 +103,7 @@ function escapeTelegramMarkdown(text: string): string {
   return String(text).replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
 
-export async function createSendRequest(prevState: SendRequestState, formData: FormData): Promise<SendRequestState> {
+export async function createSendRequest(prevState: SendRequestState | undefined, formData: FormData): Promise<SendRequestState> {
     const validatedFields = SendRequestSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {

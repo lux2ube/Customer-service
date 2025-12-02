@@ -93,7 +93,9 @@ export {
 export {
     getWalletDetails,
     createSendRequest,
-    updateWalletSettings
+    updateWalletSettings,
+    type WalletDetailsState,
+    type SendRequestState,
 } from './wallet';
 
 // Document Processing (OCR)
