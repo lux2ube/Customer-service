@@ -681,12 +681,31 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
 
 /**
  * Transfer journal entries from 7001/7002 (unmatched) to client account when assigned
- * Creates reversing entries on 7001/7002 and new entries on client account
+ * STEP 1: Ensure client account (6000{clientId}) exists
+ * STEP 2: Create reversing entry on 7001/7002
+ * STEP 3: Create new entry on client account
  */
 async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
     try {
         const unmatchedAccount = recordType === 'cash' ? '7001' : '7002';
-        console.log(`🔄 Transferring record ${recordId} from ${unmatchedAccount} to client ${clientId}`);
+        const clientAccountId = `6000${clientId}`;
+        console.log(`🔄 Transferring record ${recordId} from ${unmatchedAccount} to client account ${clientAccountId}`);
+        
+        // STEP 1: Ensure client account exists
+        const clientAccRef = ref(db, `accounts/${clientAccountId}`);
+        const clientAccSnapshot = await get(clientAccRef);
+        if (!clientAccSnapshot.exists()) {
+            console.log(`📋 Creating client account ${clientAccountId} for ${client.name}`);
+            await set(clientAccRef, {
+                id: clientAccountId,
+                name: client.name,
+                type: 'Liabilities',
+                isGroup: false,
+                currency: 'USD',
+                parentId: '6000',
+                createdAt: new Date().toISOString()
+            });
+        }
         
         // Fetch the record to get its details
         const recordRef = recordType === 'cash' 
@@ -700,16 +719,15 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         }
 
         const record = recordSnapshot.val() as any;
-        const clientAccountId = `6000${clientId}`;
         const amount = recordType === 'cash' ? record.amountusd : record.amount;
         const date = new Date().toISOString();
 
-        // Create reversing entry: Remove from unmatched account
+        // STEP 2: Create reversing entry to remove from unmatched account
         const reversingRef = push(ref(db, 'journal_entries'));
         const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
         const reversingEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
-            description: `[Reversal] ${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | Removed from Unmatched`,
+            description: `[Reversal] ${recordType.toUpperCase()} - Rec #${recordId} | Assigned to ${client.name}`,
             debit_account: record.type === 'inflow' ? unmatchedAccount : record.accountId,
             credit_account: record.type === 'inflow' ? record.accountId : unmatchedAccount,
             debit_amount: amount,
@@ -720,12 +738,13 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             credit_account_name: record.type === 'inflow' ? record.accountName : unmatchedName,
         };
         await set(reversingRef, reversingEntry);
+        console.log(`✅ Created reversing entry to remove $${amount} from ${unmatchedAccount}`);
 
-        // Create new entry: Add to client account
+        // STEP 3: Create new entry on client account
         const newRef = push(ref(db, 'journal_entries'));
         const newEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
-            description: `${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} (Now Assigned) - Rec #${recordId} | ${client.name}`,
+            description: `${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | ${client.name}`,
             debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
             credit_account: record.type === 'inflow' ? clientAccountId : record.accountId,
             debit_amount: amount,
@@ -736,8 +755,19 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
         };
         await set(newRef, newEntry);
+        console.log(`✅ Created entry to assign $${amount} to client ${client.name} (Account: ${clientAccountId})`);
 
-        console.log(`✅ Transferred record ${recordId} from ${unmatchedAccount} to client account ${clientAccountId}`);
+        // Log the transfer
+        await logAction('TRANSFER_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `Transfer to ${client.name}` }, {
+            recordId,
+            recordType,
+            from: unmatchedAccount,
+            to: clientAccountId,
+            clientId,
+            clientName: client.name,
+            amount
+        });
+
         return { success: true };
     } catch (error) {
         console.error(`❌ Error transferring record ${recordId}:`, error);
