@@ -117,7 +117,8 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         });
 
         // Auto-create journal entry since record is confirmed by default
-        const client = clientSnapshot?.exists() ? (clientSnapshot.val() as Client) : null;
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
+        const client = clientSnapshot?.exists() ? { ...clientSnapshot.val() as Client, id: clientId! } : null;
         await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
 
         if (clientId && clientName) {
@@ -206,7 +207,8 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         });
 
         // Auto-create journal entry since record is confirmed by default
-        const client = (clientSnapshot.val() as Client);
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
+        const client = { ...clientSnapshot.val() as Client, id: clientId! };
         await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
 
         await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
@@ -325,9 +327,10 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         });
 
         // Auto-create journal entry since record is confirmed by default
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
         if (clientId) {
             const clientSnapshot = await get(ref(db, `clients/${clientId}`));
-            const client = clientSnapshot?.exists() ? (clientSnapshot.val() as Client) : null;
+            const client = clientSnapshot?.exists() ? { ...clientSnapshot.val() as Client, id: clientId } : null;
             await createJournalEntriesForConfirmedUsdtRecord({ ...paymentData, id: newId }, client);
         }
 
@@ -663,9 +666,12 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
         });
 
         // If changing to "Confirmed", create journal entry
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
         if (newStatus === 'Confirmed' && oldStatus !== 'Confirmed') {
             const clientSnapshot = record.clientId ? await get(ref(db, `clients/${record.clientId}`)) : null;
-            const client = clientSnapshot?.exists() ? clientSnapshot.val() as Client : null;
+            const client = clientSnapshot?.exists() && record.clientId 
+                ? { ...clientSnapshot.val() as Client, id: record.clientId as string } 
+                : null;
             
             await createJournalEntriesForConfirmedCashRecord({ ...record, id: recordId }, client);
         }
@@ -831,9 +837,12 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
         });
 
         // If changing to "Confirmed", create journal entry
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
         if (newStatus === 'Confirmed' && oldStatus !== 'Confirmed') {
             const clientSnapshot = record.clientId ? await get(ref(db, `clients/${record.clientId}`)) : null;
-            const client = clientSnapshot?.exists() ? clientSnapshot.val() as Client : null;
+            const client = clientSnapshot?.exists() && record.clientId 
+                ? { ...clientSnapshot.val() as Client, id: record.clientId as string } 
+                : null;
             
             await createJournalEntriesForConfirmedUsdtRecord({ ...record, id: recordId }, client);
         }
@@ -859,12 +868,13 @@ export async function assignRecordToClient(recordId: string, recordType: 'cash' 
         console.log(`📋 ASSIGN RECORD: ${recordId} (${recordType}) → Client ${clientId}`);
         
         // Fetch client
+        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
         const clientSnapshot = await get(ref(db, `clients/${clientId}`));
         if (!clientSnapshot.exists()) {
             console.error(`❌ Client not found: ${clientId}`);
             return { success: false, message: 'Client not found.' };
         }
-        const client = clientSnapshot.val() as Client;
+        const client = { ...clientSnapshot.val() as Client, id: clientId };
 
         // Fetch record
         const recordPath = recordType === 'cash' ? 'cash_records' : 'modern_usdt_records';
