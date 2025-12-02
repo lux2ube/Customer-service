@@ -222,18 +222,32 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         const wallet = walletSnapshot.val() as Account;
         const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
         
-        const receiptData: Omit<UsdtRecord, 'id'> = {
-            date: date!, type: 'inflow', source: 'Manual', status: 'Confirmed',
+        // CRITICAL: When EDITING, check if record was previously unassigned (e.g., BSCScan synced)
+        let existingRecord: Partial<UsdtRecord> = {};
+        let wasUnassigned = false;
+        if (recordId) {
+            const existingSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
+            if (existingSnapshot.exists()) {
+                existingRecord = existingSnapshot.val();
+                wasUnassigned = !existingRecord.clientId && existingRecord.status === 'Confirmed';
+                console.log(`📝 USDT RECEIPT EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${existingRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
+            }
+        }
+        
+        const receiptData = {
+            date: date!, type: 'inflow' as const, source: 'Manual' as const, status: 'Confirmed' as const,
             clientId: clientId!, clientName: clientName!, accountId: cryptoWalletId!,
             accountName: wallet.name, amount: amount!, clientWalletAddress: walletAddress,
-            txHash: txid, notes, createdAt: new Date().toISOString(),
-        };
+            txHash: txid, notes, 
+            createdAt: existingRecord.createdAt || new Date().toISOString(),
+            ...(recordId && { updatedAt: new Date().toISOString() }),
+        } as Omit<UsdtRecord, 'id'>;
 
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(receiptData));
 
-        // Log USDT receipt creation
-        await logAction('CREATE_USDT_RECEIPT', { type: 'usdt_record', id: newId, name: `USDT Receipt - ${amount} USDT` }, {
+        // Log USDT receipt creation/update
+        await logAction(recordId ? 'UPDATE_USDT_RECEIPT' : 'CREATE_USDT_RECEIPT', { type: 'usdt_record', id: newId, name: `USDT Receipt - ${amount} USDT` }, {
             amount,
             currency: 'USDT',
             clientId,
@@ -242,13 +256,33 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
             accountName: wallet.name,
             walletAddress,
             txHash: txid,
-            status: 'Confirmed'
+            status: 'Confirmed',
+            wasUnassigned,
+            isEdit: !!recordId
         });
 
-        // Auto-create journal entry since record is confirmed by default
-        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
+        // CRITICAL JOURNAL ENTRY LOGIC (same as cash):
+        // Case 1: EDIT and was unassigned and now has client → TRANSFER (no new wallet debit!)
+        // Case 2: EDIT and already had client → NO new journal (just updated record)
+        // Case 3: NEW record → create journal entry normally
         const client = { ...clientSnapshot.val() as Client, id: clientId! };
-        await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
+        
+        if (recordId && wasUnassigned) {
+            // TRANSFER: Was unassigned (7002), now assigned to client
+            console.log(`🔄 USDT RECEIPT EDIT TRANSFER: Record ${recordId} was unassigned, transferring from 7002 to 6000${clientId}`);
+            const transferResult = await transferFromUnassignedToClient(newId, 'usdt', clientId, client, true);
+            if (!transferResult.success) {
+                console.error(`❌ USDT Receipt Transfer failed during edit:`, transferResult.error);
+            } else {
+                console.log(`✅ USDT RECEIPT EDIT TRANSFER COMPLETE: Journal entry ${transferResult.journalEntryId}`);
+            }
+        } else if (recordId && existingRecord.clientId) {
+            // EDIT: Already had client, no new journal entry needed
+            console.log(`📝 USDT RECEIPT EDIT: Record ${recordId} already had client, no new journal entry`);
+        } else if (!recordId) {
+            // NEW: Create journal entry normally
+            await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
+        }
 
         await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
 
@@ -324,20 +358,24 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         
         const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
         
+        // CRITICAL: When EDITING, check if record was previously unassigned
         let existingRecord: Partial<UsdtRecord> = {};
+        let wasUnassigned = false;
         if (recordId) {
             const existingSnapshot = await get(ref(db, `modern_usdt_records/${recordId}`));
             if (existingSnapshot.exists()) {
                 existingRecord = existingSnapshot.val();
+                wasUnassigned = !existingRecord.clientId && existingRecord.status === 'Confirmed';
+                console.log(`📝 USDT EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${existingRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
             }
         }
         
-        const paymentData: Omit<UsdtRecord, 'id'> = {
+        const paymentData = {
             ...existingRecord,
             date: date!, 
-            type: 'outflow', 
+            type: 'outflow' as const, 
             source: (source === 'BSCScan' ? 'BSCScan' : 'Manual') as 'Manual' | 'BSCScan', 
-            status: 'Confirmed',
+            status: 'Confirmed' as const,
             clientId: clientId, 
             clientName: clientName, 
             accountId: accountId,
@@ -347,13 +385,14 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             txHash: txid, 
             notes, 
             createdAt: existingRecord.createdAt || new Date().toISOString(),
-        };
+            ...(recordId && { updatedAt: new Date().toISOString() }),
+        } as Omit<UsdtRecord, 'id'>;
 
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(paymentData));
 
-        // Log USDT payment creation
-        await logAction('CREATE_USDT_PAYMENT', { type: 'usdt_record', id: newId, name: `USDT Payment - ${amount} USDT` }, {
+        // Log USDT payment creation/update
+        await logAction(recordId ? 'UPDATE_USDT_PAYMENT' : 'CREATE_USDT_PAYMENT', { type: 'usdt_record', id: newId, name: `USDT Payment - ${amount} USDT` }, {
             amount,
             currency: 'USDT',
             clientId: clientId || 'Unassigned',
@@ -362,12 +401,42 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
             accountName,
             recipientAddress,
             txHash: txid,
-            status: 'Confirmed'
+            status: 'Confirmed',
+            wasUnassigned,
+            isEdit: !!recordId
         });
 
-        // Auto-create journal entry since record is confirmed by default
-        // CRITICAL: Firebase snapshot.val() does NOT include the id - we must add it explicitly
-        if (clientId) {
+        // CRITICAL JOURNAL ENTRY LOGIC (same as cash):
+        // Case 1: EDIT and was unassigned and now has client → TRANSFER (no new wallet debit!)
+        // Case 2: EDIT and already had client → NO new journal (just updated record)
+        // Case 3: NEW record → create journal entry normally
+        if (recordId && wasUnassigned && clientId) {
+            // TRANSFER: Was unassigned (7002), now assigned to client
+            const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+            if (clientSnapshot?.exists()) {
+                const client = { ...clientSnapshot.val() as Client, id: clientId };
+                console.log(`🔄 USDT EDIT TRANSFER: Record ${recordId} was unassigned, transferring from 7002 to 6000${clientId}`);
+                const transferResult = await transferFromUnassignedToClient(newId, 'usdt', clientId, client, true);
+                if (!transferResult.success) {
+                    console.error(`❌ USDT Transfer failed during edit:`, transferResult.error);
+                } else {
+                    console.log(`✅ USDT EDIT TRANSFER COMPLETE: Journal entry ${transferResult.journalEntryId}`);
+                }
+            }
+        } else if (recordId && existingRecord.clientId) {
+            // EDIT: Already had client, no new journal entry needed
+            console.log(`📝 USDT EDIT: Record ${recordId} already had client, no new journal entry`);
+        } else if (!recordId && clientId) {
+            // NEW: Create journal entry normally
+            const clientSnapshot = await get(ref(db, `clients/${clientId}`));
+            const client = clientSnapshot?.exists() ? { ...clientSnapshot.val() as Client, id: clientId } : null;
+            await createJournalEntriesForConfirmedUsdtRecord({ ...paymentData, id: newId }, client);
+        } else if (!recordId && !clientId) {
+            // NEW without client: Create unassigned journal entry
+            await createJournalEntriesForConfirmedUsdtRecord({ ...paymentData, id: newId }, null);
+        } else if (recordId && !wasUnassigned && !existingRecord.clientId && clientId) {
+            // EDIT: Record was Pending (not confirmed), now confirmed with client
+            console.log(`📝 USDT EDIT: Record ${recordId} was Pending, now Confirmed with client`);
             const clientSnapshot = await get(ref(db, `clients/${clientId}`));
             const client = clientSnapshot?.exists() ? { ...clientSnapshot.val() as Client, id: clientId } : null;
             await createJournalEntriesForConfirmedUsdtRecord({ ...paymentData, id: newId }, client);
