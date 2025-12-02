@@ -94,7 +94,7 @@ export function ClientBalanceDetailReport() {
         }
 
         // Get USDT records
-        const usdtRef = ref(db, 'usdt_records');
+        const usdtRef = ref(db, 'modern_usdt_records');
         const usdtSnapshot = await get(usdtRef);
         if (usdtSnapshot.exists()) {
           Object.entries(usdtSnapshot.val()).forEach(([id, record]: any) => {
