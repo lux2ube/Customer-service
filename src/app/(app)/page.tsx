@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { syncBscTransactions, processIncomingSms, migrateBep20Addresses, type SyncState, type ProcessSmsState, type SetupState, setupClientParentAccount, backfillCashRecordUsd } from '@/lib/actions';
 import { DashboardChart } from '@/components/dashboard-chart';
 import { ExportJsonButton } from '@/components/export-json-button';
+import { LiabilityBalances } from '@/components/liability-balances';
 
 interface AssetBalance {
     id: string;
@@ -371,6 +372,8 @@ export default function DashboardPage() {
                      )}
                  </div>
             </div>
+
+            <LiabilityBalances />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 <div className="lg:col-span-2 grid gap-6">

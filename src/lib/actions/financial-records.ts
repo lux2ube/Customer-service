@@ -406,6 +406,20 @@ async function calculateAccountBalanceBefore(accountId: string, beforeDate?: str
  */
 async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & { id: string }, client: Client | null) {
     try {
+        // Ensure 7000 account exists
+        const account7000Ref = ref(db, 'accounts/7000');
+        const account7000Snapshot = await get(account7000Ref);
+        if (!account7000Snapshot.exists()) {
+            await set(account7000Ref, {
+                id: '7000',
+                name: 'Unassigned Receipts/Payments',
+                type: 'Liabilities',
+                isGroup: false,
+                createdAt: new Date().toISOString()
+            });
+            console.log('✅ Created account 7000 (Unassigned Liabilities)');
+        }
+
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
 
@@ -483,6 +497,20 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
  */
 async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & { id: string }, client: Client | null) {
     try {
+        // Ensure 7000 account exists
+        const account7000Ref = ref(db, 'accounts/7000');
+        const account7000Snapshot = await get(account7000Ref);
+        if (!account7000Snapshot.exists()) {
+            await set(account7000Ref, {
+                id: '7000',
+                name: 'Unassigned Receipts/Payments',
+                type: 'Liabilities',
+                isGroup: false,
+                createdAt: new Date().toISOString()
+            });
+            console.log('✅ Created account 7000 (Unassigned Liabilities)');
+        }
+
         const journalRef = push(ref(db, 'journal_entries'));
         const date = new Date().toISOString();
 
