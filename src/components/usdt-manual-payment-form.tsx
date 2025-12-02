@@ -13,7 +13,8 @@ import {
    Save,
    Loader2,
    Check,
-   ChevronsUpDown
+   ChevronsUpDown,
+   CheckCircle2
 } from 'lucide-react';
 
 import { db } from '@/lib/firebase';
@@ -178,7 +179,7 @@ export function UsdtManualPaymentForm({
   const [recipientAddress, setRecipientAddress] = React.useState(record?.clientWalletAddress || '');
   const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
   const [txHash, setTxHash] = React.useState(record?.txHash || '');
-  const [status, setStatus] = React.useState(record?.status || 'Confirmed');
+  const [status, setStatus] = React.useState<string>(record?.status || 'Confirmed');
   const [notes, setNotes] = React.useState(record?.notes || '');
    // Wallets state
   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
@@ -415,14 +416,13 @@ export function UsdtManualPaymentForm({
               <Select
                  name="status"
                  value={status}
-                 onValueChange={(v) => setStatus(v as any)}
+                 onValueChange={setStatus}
               >
-                <SelectTrigger><SelectValue/></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Used">Used</SelectItem>
+                  <SelectItem value="Confirmed">Confirmed (Auto-journaled)</SelectItem>
                   <SelectItem value="Cancelled">Cancelled</SelectItem>
-                  <SelectItem value="Confirmed">Confirmed</SelectItem>
+                  <SelectItem value="Used">Used</SelectItem>
                 </SelectContent>
               </Select>
             </div>

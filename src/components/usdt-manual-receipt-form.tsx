@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Calendar as CalendarIcon, Save, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Loader2, Check, ChevronsUpDown, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
@@ -133,7 +133,7 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     const [walletAddress, setWalletAddress] = React.useState(record?.clientWalletAddress || '');
     const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
     const [txHash, setTxHash] = React.useState(record?.txHash || '');
-    const [status, setStatus] = React.useState(record?.status || 'Confirmed');
+    const [status, setStatus] = React.useState<string>(record?.status || 'Confirmed');
     const [notes, setNotes] = React.useState(record?.notes || '');
 
     React.useEffect(() => {
@@ -235,13 +235,12 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                         </div>
                          <div className="space-y-2">
                             <Label>Status</Label>
-                            <Select name="status" value={status} onValueChange={(v) => setStatus(v as any)}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
+                            <Select name="status" value={status} onValueChange={setStatus}>
+                                <SelectTrigger><SelectValue placeholder="Select status..." /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Pending">Pending</SelectItem>
-                                    <SelectItem value="Used">Used</SelectItem>
+                                    <SelectItem value="Confirmed">Confirmed (Auto-journaled)</SelectItem>
                                     <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                    <SelectItem value="Used">Used</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
