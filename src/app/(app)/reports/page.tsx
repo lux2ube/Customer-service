@@ -46,6 +46,12 @@ const clientReports = [
         href: "/reports/client-balance-summary",
     },
     {
+        title: "Client Balance Detail",
+        description: "Shows all records for a client with journal entries and running balance before/after each transaction.",
+        icon: <List className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/client-balance-detail",
+    },
+    {
         title: "Accounts Receivable Aging",
         description: "Lists outstanding receivables by client, showing how long invoices have been unpaid.",
         icon: <Hourglass className="h-6 w-6 text-muted-foreground" />,
