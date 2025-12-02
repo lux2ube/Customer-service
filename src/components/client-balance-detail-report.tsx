@@ -34,6 +34,7 @@ interface DetailedEntry {
 export function ClientBalanceDetailReport() {
   const [clients, setClients] = React.useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = React.useState('');
+  const [searchQuery, setSearchQuery] = React.useState('');
   const [records, setRecords] = React.useState<ClientRecord[]>([]);
   const [entries, setEntries] = React.useState<DetailedEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -167,19 +168,39 @@ export function ClientBalanceDetailReport() {
         <CardContent>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Select Client</label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a client..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map(client => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Search Client</label>
+              <input
+                type="text"
+                placeholder="Type client name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchQuery && (
+                <div className="max-h-48 overflow-y-auto border rounded-lg bg-white">
+                  {clients
+                    .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(client => (
+                      <button
+                        key={client.id}
+                        onClick={() => {
+                          setSelectedClientId(client.id);
+                          setSearchQuery('');
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                          selectedClientId === client.id ? 'bg-blue-100 font-semibold' : ''
+                        }`}
+                      >
+                        {client.name}
+                      </button>
+                    ))}
+                </div>
+              )}
+              {selectedClientId && (
+                <div className="text-sm text-green-600 font-medium">
+                  ✓ Selected: {clients.find(c => c.id === selectedClientId)?.name}
+                </div>
+              )}
             </div>
 
             {selectedClientId && (
