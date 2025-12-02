@@ -683,63 +683,67 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
  * Transfer journal entries from 7001/7002 (unmatched) to client account when assigned
  * SIMPLE TRANSFER: Only involves two LIABILITY accounts, NO bank account
  * Entry: DEBIT 7001/7002 (unmatched decreases), CREDIT 6000{clientId} (client account increases)
+ * 
+ * ATOMIC: Uses Firebase multi-path update to ensure ALL OR NONE
  */
 async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
     try {
         const unmatchedAccount = recordType === 'cash' ? '7001' : '7002';
         const clientAccountId = `6000${clientId}`;
-        console.log(`🔄 Transferring record ${recordId} from ${unmatchedAccount} to client account ${clientAccountId}`);
-        
-        // STEP 1: Ensure client account exists and is NOT a group account
-        const clientAccRef = ref(db, `accounts/${clientAccountId}`);
-        const clientAccSnapshot = await get(clientAccRef);
-        
-        if (!clientAccSnapshot.exists()) {
-            console.log(`📋 Creating client account ${clientAccountId} for ${client.name}`);
-            await set(clientAccRef, {
-                id: clientAccountId,
-                name: client.name,
-                type: 'Liabilities',
-                isGroup: false,
-                currency: 'USD',
-                parentId: '6000',
-                createdAt: new Date().toISOString()
-            });
-        } else {
-            // Account exists - ensure it's NOT a group account (so it can accept postings)
-            const existingAcc = clientAccSnapshot.val();
-            if (existingAcc.isGroup === true) {
-                console.log(`⚠️ Client account ${clientAccountId} was a GROUP - converting to POSTABLE account`);
-                await update(clientAccRef, { isGroup: false });
-            }
-        }
+        console.log(`🔄 ATOMIC TRANSFER: Record ${recordId} from ${unmatchedAccount} to ${clientAccountId}`);
         
         // Fetch the record to get its details
-        const recordRef = recordType === 'cash' 
-            ? ref(db, `cash_records/${recordId}`)
-            : ref(db, `modern_usdt_records/${recordId}`);
-        const recordSnapshot = await get(recordRef);
+        const recordPath = recordType === 'cash' ? 'cash_records' : 'modern_usdt_records';
+        const recordSnapshot = await get(ref(db, `${recordPath}/${recordId}`));
         
         if (!recordSnapshot.exists()) {
-            console.error(`Record not found: ${recordId}`);
-            return { success: false };
+            console.error(`❌ Record not found: ${recordId}`);
+            return { success: false, error: 'Record not found' };
         }
 
         const record = recordSnapshot.val() as any;
         const amount = recordType === 'cash' ? record.amountusd : record.amount;
-        const date = new Date().toISOString();
+        
+        if (!amount || amount <= 0) {
+            console.error(`❌ Invalid amount for record ${recordId}: ${amount}`);
+            return { success: false, error: 'Invalid amount' };
+        }
 
-        // STEP 2: Create transfer entry between TWO LIABILITY ACCOUNTS ONLY
-        // DEBIT: 7001/7002 (unmatched liability decreases - we no longer owe unmatched)
-        // CREDIT: 6000{clientId} (client liability increases - we owe this client)
-        const transferRef = push(ref(db, 'journal_entries'));
+        const date = new Date().toISOString();
         const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
         
         // Calculate balances BEFORE the transfer
-        const debitBalanceBefore = await calculateAccountBalanceBefore(unmatchedAccount, record.date);
-        const creditBalanceBefore = await calculateAccountBalanceBefore(clientAccountId, record.date);
+        const [debitBalanceBefore, creditBalanceBefore] = await Promise.all([
+            calculateAccountBalanceBefore(unmatchedAccount, record.date),
+            calculateAccountBalanceBefore(clientAccountId, record.date)
+        ]);
         
-        const transferEntry: Omit<JournalEntry, 'id'> = {
+        // Generate new journal entry key
+        const journalKey = push(ref(db, 'journal_entries')).key;
+        
+        if (!journalKey) {
+            console.error(`❌ Failed to generate journal entry key`);
+            return { success: false, error: 'Failed to generate key' };
+        }
+
+        // ATOMIC UPDATE: Build multi-path update object
+        const atomicUpdates: { [path: string]: any } = {};
+        
+        // 1. Ensure client account exists (create if needed)
+        atomicUpdates[`accounts/${clientAccountId}`] = {
+            id: clientAccountId,
+            name: client.name,
+            type: 'Liabilities',
+            isGroup: false,
+            currency: 'USD',
+            parentId: '6000',
+            createdAt: date
+        };
+        
+        // 2. Create transfer journal entry
+        // DEBIT: 7001/7002 (unmatched liability decreases)
+        // CREDIT: 6000{clientId} (client liability increases)
+        atomicUpdates[`journal_entries/${journalKey}`] = {
             date: record.date,
             description: `Transfer ${recordType.toUpperCase()} Rec #${recordId} to ${client.name}`,
             debit_account: unmatchedAccount,
@@ -754,24 +758,47 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             createdAt: date,
             debit_account_name: unmatchedName,
             credit_account_name: client.name,
+            related_record_id: recordId,
+            related_record_type: recordType,
+            entry_type: 'transfer'
         };
-        await set(transferRef, transferEntry);
-        console.log(`✅ Transfer entry created: DEBIT ${unmatchedAccount} $${amount} (${debitBalanceBefore} → ${debitBalanceBefore - amount}), CREDIT ${clientAccountId} $${amount} (${creditBalanceBefore} → ${creditBalanceBefore + amount})`);
+        
+        // 3. Update record with client info
+        atomicUpdates[`${recordPath}/${recordId}/clientId`] = clientId;
+        atomicUpdates[`${recordPath}/${recordId}/clientName`] = client.name;
+        atomicUpdates[`${recordPath}/${recordId}/assignedAt`] = date;
+        
+        // Execute atomic update
+        await update(ref(db), atomicUpdates);
+        
+        console.log(`✅ ATOMIC TRANSFER COMPLETE:`);
+        console.log(`   DEBIT ${unmatchedAccount}: $${amount} (${debitBalanceBefore} → ${debitBalanceBefore - amount})`);
+        console.log(`   CREDIT ${clientAccountId}: $${amount} (${creditBalanceBefore} → ${creditBalanceBefore + amount})`);
+        console.log(`   Journal Entry: ${journalKey}`);
 
-        // Log the transfer
-        await logAction('TRANSFER_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `Transfer to ${client.name}` }, {
-            recordId,
-            recordType,
-            from: unmatchedAccount,
-            to: clientAccountId,
-            clientId,
-            clientName: client.name,
-            amount
-        });
+        // Log the transfer (non-critical, separate from atomic update)
+        try {
+            await logAction('TRANSFER_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `Transfer to ${client.name}` }, {
+                recordId,
+                recordType,
+                journalEntryId: journalKey,
+                from: unmatchedAccount,
+                to: clientAccountId,
+                clientId,
+                clientName: client.name,
+                amount,
+                debitBalanceBefore,
+                debitBalanceAfter: debitBalanceBefore - amount,
+                creditBalanceBefore,
+                creditBalanceAfter: creditBalanceBefore + amount
+            });
+        } catch (logError) {
+            console.warn('Non-critical: Failed to log transfer action', logError);
+        }
 
-        return { success: true };
+        return { success: true, journalEntryId: journalKey };
     } catch (error) {
-        console.error(`❌ Error transferring record ${recordId}:`, error);
+        console.error(`❌ ATOMIC TRANSFER FAILED for record ${recordId}:`, error);
         return { success: false, error: String(error) };
     }
 }
@@ -821,60 +848,93 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
 }
 
 /**
- * When assigning a previously unassigned record to a client
- * Move journal entries from 7000 to client account
+ * When assigning a record to a client
+ * If confirmed and unassigned → Transfer from 7001/7002 to client account (ATOMIC)
+ * Otherwise just update record with client info
+ * 
+ * ATOMIC GUARANTEE: Transfer includes record update in same multi-path write
  */
 export async function assignRecordToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string) {
     try {
+        console.log(`📋 ASSIGN RECORD: ${recordId} (${recordType}) → Client ${clientId}`);
+        
         // Fetch client
         const clientSnapshot = await get(ref(db, `clients/${clientId}`));
         if (!clientSnapshot.exists()) {
+            console.error(`❌ Client not found: ${clientId}`);
             return { success: false, message: 'Client not found.' };
         }
         const client = clientSnapshot.val() as Client;
 
         // Fetch record
-        const recordRef = recordType === 'cash'
-            ? ref(db, `cash_records/${recordId}`)
-            : ref(db, `modern_usdt_records/${recordId}`);
-        const recordSnapshot = await get(recordRef);
+        const recordPath = recordType === 'cash' ? 'cash_records' : 'modern_usdt_records';
+        const recordSnapshot = await get(ref(db, `${recordPath}/${recordId}`));
         
         if (!recordSnapshot.exists()) {
+            console.error(`❌ Record not found: ${recordId}`);
             return { success: false, message: 'Record not found.' };
         }
 
         const record = recordSnapshot.val() as any;
         const wasUnassigned = !record.clientId;
+        const amount = recordType === 'cash' ? record.amountusd : record.amount;
+        
+        console.log(`📊 Record state: status=${record.status}, wasUnassigned=${wasUnassigned}, amount=$${amount}`);
 
-        // Update record with client info
-        await update(recordRef, { clientId, clientName: client.name });
-
-        // Log assignment
-        await logAction('ASSIGN_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `${recordType.toUpperCase()} Record Assignment` }, {
-            recordType,
-            recordId,
-            clientId,
-            clientName: client.name,
-            amount: recordType === 'cash' ? record.amountusd : record.amount,
-            wasUnassigned,
-            recordStatus: record.status
-        });
-
-        // If confirmed, transfer from 7000/7002 to client
-        if (record.status === 'Confirmed') {
-            console.log(`🔄 TRANSFER TRIGGERED: Assigning record ${recordId} to client`);
+        // If confirmed AND was unassigned, use ATOMIC transfer
+        // Transfer handles BOTH journal entry + record update in single atomic operation
+        if (record.status === 'Confirmed' && wasUnassigned) {
+            console.log(`🔄 ATOMIC TRANSFER: Record was unassigned, creating transfer entry`);
             const transferResult = await transferFromUnassignedToClient(recordId, recordType, clientId, client);
-            console.log(`✅ Transfer result: ${JSON.stringify(transferResult)}`);
+            
+            if (!transferResult.success) {
+                console.error(`❌ Transfer failed:`, transferResult.error);
+                return { success: false, message: `Transfer failed: ${transferResult.error}` };
+            }
+            
+            console.log(`✅ ATOMIC TRANSFER COMPLETE: Journal entry ${transferResult.journalEntryId}`);
+            // NOTE: Record update already happened inside transferFromUnassignedToClient atomically
         } else {
-            console.log(`⏭️  TRANSFER SKIPPED: status=${record.status}`);
+            // Non-atomic cases: just update record (no journal entry needed)
+            // Case 1: Record already has a client (reassignment)
+            // Case 2: Record not confirmed yet
+            if (record.status === 'Confirmed' && !wasUnassigned) {
+                console.log(`📝 Record already assigned, just updating client info`);
+            } else {
+                console.log(`⏭️ Record not confirmed (${record.status}), just updating client info`);
+            }
+            
+            await update(ref(db, `${recordPath}/${recordId}`), { 
+                clientId, 
+                clientName: client.name,
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        // Log assignment (non-critical)
+        try {
+            await logAction('ASSIGN_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `${recordType.toUpperCase()} Record Assignment` }, {
+                recordType,
+                recordId,
+                clientId,
+                clientName: client.name,
+                amount,
+                wasUnassigned,
+                recordStatus: record.status,
+                transferCreated: record.status === 'Confirmed' && wasUnassigned
+            });
+        } catch (logError) {
+            console.warn('Non-critical: Failed to log assignment', logError);
         }
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
+        revalidatePath('/');
+        
         return { success: true, message: 'Record assigned to client.' };
     } catch (error) {
-        console.error('Error assigning record to client:', error);
+        console.error('❌ Error assigning record to client:', error);
         return { success: false, message: 'Failed to assign record.' };
     }
 }
