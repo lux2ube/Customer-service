@@ -735,6 +735,10 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         const transferRef = push(ref(db, 'journal_entries'));
         const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
         
+        // Calculate balances BEFORE the transfer
+        const debitBalanceBefore = await calculateAccountBalanceBefore(unmatchedAccount, record.date);
+        const creditBalanceBefore = await calculateAccountBalanceBefore(clientAccountId, record.date);
+        
         const transferEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
             description: `Transfer ${recordType.toUpperCase()} Rec #${recordId} to ${client.name}`,
@@ -743,12 +747,16 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             debit_amount: amount,
             credit_amount: amount,
             amount_usd: amount,
+            debit_account_balance_before: debitBalanceBefore,
+            debit_account_balance_after: debitBalanceBefore - amount,
+            credit_account_balance_before: creditBalanceBefore,
+            credit_account_balance_after: creditBalanceBefore + amount,
             createdAt: date,
             debit_account_name: unmatchedName,
             credit_account_name: client.name,
         };
         await set(transferRef, transferEntry);
-        console.log(`✅ Transfer entry created: DEBIT ${unmatchedAccount} $${amount}, CREDIT ${clientAccountId} $${amount}`);
+        console.log(`✅ Transfer entry created: DEBIT ${unmatchedAccount} $${amount} (${debitBalanceBefore} → ${debitBalanceBefore - amount}), CREDIT ${clientAccountId} $${amount} (${creditBalanceBefore} → ${creditBalanceBefore + amount})`);
 
         // Log the transfer
         await logAction('TRANSFER_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `Transfer to ${client.name}` }, {
