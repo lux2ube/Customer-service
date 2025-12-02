@@ -307,11 +307,11 @@ export interface TransactionFlag {
 export interface BscApiSetting {
     id: string;
     name: string;
-    apiKey: string;
     walletAddress: string;
     accountId: string;
     createdAt: string;
     lastSyncedBlock?: number;
+    apiKey?: string; // Legacy field, no longer required (Ankr RPC is pre-configured)
 }
 
 // Kept for legacy compatibility but new records use the unified types

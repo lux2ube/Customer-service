@@ -12,7 +12,6 @@ export type BscApiFormState = {
     name?: string[];
     accountId?: string[];
     walletAddress?: string[];
-    apiKey?: string[];
   };
   message?: string;
   error?: boolean;
@@ -21,8 +20,7 @@ export type BscApiFormState = {
 const BscApiSettingSchema = z.object({
   name: z.string().min(1, { message: "Name is required." }),
   accountId: z.string().min(1, { message: "An account must be selected." }),
-  walletAddress: z.string().startsWith('0x', { message: "Wallet address must start with 0x."}),
-  apiKey: z.string().min(1, { message: "API key is required." }),
+  walletAddress: z.string().min(42, { message: "Valid wallet address required." }).startsWith('0x', { message: "Wallet address must start with 0x."}),
   lastSyncedBlock: z.coerce.number().optional(),
 });
 

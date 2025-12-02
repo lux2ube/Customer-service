@@ -7,14 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead } from '@/components/ui/table';
-import { Save, Trash2, DatabaseZap } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { useActionState } from 'react';
-import { createBscApiSetting, deleteBscApiSetting, migrateExistingBscApi } from '@/lib/actions';
+import { createBscApiSetting, deleteBscApiSetting } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { BscApiSetting, Account } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import { format } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,15 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 function SubmitButton({ pending }: { pending: boolean }) {
     return (
         <Button type="submit" disabled={pending}>
-            {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Setting</>}
-        </Button>
-    );
-}
-
-function MigrateButton({ pending }: { pending: boolean }) {
-    return (
-        <Button type="submit" variant="outline" disabled={pending}>
-            {pending ? 'Migrating...' : <><DatabaseZap className="mr-2 h-4 w-4" />Migrate Old Setting</>}
+            {pending ? 'Saving...' : <><Save className="mr-2 h-4 w-4" />Save Configuration</>}
         </Button>
     );
 }
@@ -52,7 +43,6 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
     const [selectedAccountId, setSelectedAccountId] = React.useState<string>('');
 
     const [addState, addFormAction, addPending] = useActionState(createBscApiSetting, undefined);
-    const [migrateState, migrateFormAction, migratePending] = useActionState(migrateExistingBscApi, undefined);
 
     React.useEffect(() => {
         const settingsRef = ref(db, 'bsc_apis/');
@@ -78,16 +68,6 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
         }
     }, [addState, addPending, toast]);
 
-    React.useEffect(() => {
-        if (migrateState && !migratePending) {
-            if (migrateState.error) {
-                toast({ variant: 'destructive', title: 'Error', description: migrateState.message });
-            } else if (migrateState.message) {
-                toast({ title: 'Success', description: migrateState.message });
-            }
-        }
-    }, [migrateState, migratePending, toast]);
-
     const handleDeleteClick = (item: BscApiSetting) => {
         setItemToDelete(item);
     };
@@ -109,8 +89,8 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
             <Card>
                 <form action={addFormAction} ref={formRef}>
                     <CardHeader>
-                        <CardTitle>Add New BSC API Configuration</CardTitle>
-                        <CardDescription>Configure Etherscan API v2 for BSC transaction monitoring</CardDescription>
+                        <CardTitle>Add New Wallet Configuration</CardTitle>
+                        <CardDescription>Configure BSC wallet for USDT transaction monitoring (powered by Ankr)</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -137,13 +117,9 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                             <Label htmlFor="walletAddress">Wallet Address</Label>
                             <Input id="walletAddress" name="walletAddress" placeholder="0x..." required />
                         </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="apiKey">Etherscan API Key</Label>
-                            <Input id="apiKey" name="apiKey" type="password" placeholder="Get from etherscan.io" required />
-                        </div>
                         <div className="space-y-2">
-                            <Label htmlFor="lastSyncedBlock">Last Synced Block</Label>
-                            <Input id="lastSyncedBlock" name="lastSyncedBlock" type="number" placeholder="Block number to start syncing from" />
+                            <Label htmlFor="lastSyncedBlock">Last Synced Block (Optional)</Label>
+                            <Input id="lastSyncedBlock" name="lastSyncedBlock" type="number" placeholder="Leave empty to sync from today" />
                         </div>
                     </CardContent>
                     <CardFooter className="flex justify-end">
@@ -154,7 +130,7 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Existing API Configurations</CardTitle>
+                    <CardTitle>Existing Wallet Configurations</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="rounded-md border">
@@ -182,17 +158,12 @@ export function BscApiManager({ initialSettings, usdtAccounts }: { initialSettin
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No BSC API configurations found.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No wallet configurations found.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
                     </div>
                 </CardContent>
-                <CardFooter>
-                     <form action={migrateFormAction}>
-                        <MigrateButton pending={migratePending} />
-                    </form>
-                </CardFooter>
             </Card>
 
             <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
