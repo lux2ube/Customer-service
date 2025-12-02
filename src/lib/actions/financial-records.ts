@@ -103,6 +103,19 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
         const recordRef = ref(db, `/cash_records/${newId}`);
         await set(recordRef, stripUndefined(recordData));
 
+        // Log cash record creation
+        await logAction('CREATE_CASH_RECORD', { type: 'cash_record', id: newId, name: `Cash ${type} - ${amount} ${account.currency}` }, {
+            type,
+            amount,
+            currency: account.currency,
+            amountusd,
+            accountId: bankAccountId,
+            accountName: account.name,
+            clientId: clientId || 'Unassigned',
+            clientName: clientName || 'Unassigned',
+            status: 'Confirmed'
+        });
+
         // Auto-create journal entry since record is confirmed by default
         const client = clientSnapshot?.exists() ? (clientSnapshot.val() as Client) : null;
         await createJournalEntriesForConfirmedCashRecord({ ...recordData, id: newId }, client);
@@ -178,6 +191,19 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
 
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(receiptData));
+
+        // Log USDT receipt creation
+        await logAction('CREATE_USDT_RECEIPT', { type: 'usdt_record', id: newId, name: `USDT Receipt - ${amount} USDT` }, {
+            amount,
+            currency: 'USDT',
+            clientId,
+            clientName,
+            accountId: cryptoWalletId,
+            accountName: wallet.name,
+            walletAddress,
+            txHash: txid,
+            status: 'Confirmed'
+        });
 
         // Auto-create journal entry since record is confirmed by default
         const client = (clientSnapshot.val() as Client);
@@ -285,6 +311,19 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         const recordRef = ref(db, `/modern_usdt_records/${newId}`);
         await set(recordRef, stripUndefined(paymentData));
 
+        // Log USDT payment creation
+        await logAction('CREATE_USDT_PAYMENT', { type: 'usdt_record', id: newId, name: `USDT Payment - ${amount} USDT` }, {
+            amount,
+            currency: 'USDT',
+            clientId: clientId || 'Unassigned',
+            clientName: clientName || 'Unassigned',
+            accountId,
+            accountName,
+            recipientAddress,
+            txHash: txid,
+            status: 'Confirmed'
+        });
+
         // Auto-create journal entry since record is confirmed by default
         if (clientId) {
             const clientSnapshot = await get(ref(db, `clients/${clientId}`));
@@ -354,7 +393,20 @@ export async function cancelCashPayment(recordId: string) {
         if (!snapshot.exists()) {
             return { success: false, message: "Record not found." };
         }
+        
+        const record = snapshot.val() as CashRecord;
         await update(recordRef, { status: 'Cancelled' });
+        
+        // Log cancellation
+        await logAction('CANCEL_CASH_PAYMENT', { type: 'cash_record', id: recordId, name: `Cash ${record.type}` }, {
+            previousStatus: record.status,
+            newStatus: 'Cancelled',
+            amount: record.amount,
+            currency: record.currency,
+            amountusd: record.amountusd,
+            clientId: record.clientId || 'Unassigned'
+        });
+        
         revalidatePath('/modern-cash-records');
         return { success: true, message: "Payment cancelled." };
     } catch (error) {
@@ -601,6 +653,15 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
         // Update status
         await update(recordRef, { status: newStatus });
 
+        // Log status change
+        await logAction('UPDATE_CASH_RECORD_STATUS', { type: 'cash_record', id: recordId, name: `Cash ${record.type}` }, {
+            oldStatus,
+            newStatus,
+            amount: record.amount,
+            currency: record.currency,
+            clientId: record.clientId || 'Unassigned'
+        });
+
         // If changing to "Confirmed", create journal entry
         if (newStatus === 'Confirmed' && oldStatus !== 'Confirmed') {
             const clientSnapshot = record.clientId ? await get(ref(db, `clients/${record.clientId}`)) : null;
@@ -703,6 +764,14 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
         // Update status
         await update(recordRef, { status: newStatus });
 
+        // Log status change
+        await logAction('UPDATE_USDT_RECORD_STATUS', { type: 'usdt_record', id: recordId, name: `USDT ${record.type}` }, {
+            oldStatus,
+            newStatus,
+            amount: record.amount,
+            clientId: record.clientId || 'Unassigned'
+        });
+
         // If changing to "Confirmed", create journal entry
         if (newStatus === 'Confirmed' && oldStatus !== 'Confirmed') {
             const clientSnapshot = record.clientId ? await get(ref(db, `clients/${record.clientId}`)) : null;
@@ -748,6 +817,17 @@ export async function assignRecordToClient(recordId: string, recordType: 'cash' 
 
         // Update record with client info
         await update(recordRef, { clientId, clientName: client.name });
+
+        // Log assignment
+        await logAction('ASSIGN_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `${recordType.toUpperCase()} Record Assignment` }, {
+            recordType,
+            recordId,
+            clientId,
+            clientName: client.name,
+            amount: recordType === 'cash' ? record.amountusd : record.amount,
+            wasUnassigned,
+            recordStatus: record.status
+        });
 
         // If was unassigned and confirmed, transfer from 7000 to client
         if (wasUnassigned && record.status === 'Confirmed') {
