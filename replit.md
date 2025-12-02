@@ -8,6 +8,23 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
+### December 2, 2025 - Double-Entry Accounting & Balance Transfer Fix
+- **Fixed Client Balance Not Updating**: Resolved critical issue where client balances stayed at $0 after assigning records
+  - Implemented atomic Firebase multi-path updates for "all-or-none" guarantee
+  - Transfer entries now created atomically with record assignment
+  - Both 7001/7002 (unmatched) and 6000{clientId} (client) accounts updated together
+- **Fixed Client Search in Reports**: Changed `usdt_records` path to `modern_usdt_records`
+  - Client Balance Detail Report now correctly finds USDT records
+  - Search filtering works properly for all clients
+- **Improved Transfer Logic**:
+  - DEBIT 7001/7002 (unmatched decreases) → CREDIT 6000{clientId} (client increases)
+  - Balance tracking with before/after fields on all journal entries
+  - Proper wasUnassigned detection for triggering transfers
+- **Strict Search Engine Blocking**:
+  - robots.txt blocks all major search engines (Google, Bing, DuckDuckGo, Baidu, Yandex, etc.)
+  - HTTP headers: X-Robots-Tag noindex/nofollow/noarchive/nocache
+  - Additional security headers: X-Frame-Options DENY, Referrer-Policy no-referrer
+
 ### November 29, 2025 - Modern USDT Records Complete Fix
 - **Fixed Auto-Match Unassigned Button**: Now matches records to clients using BOTH wallet address storage methods:
   - Check 1: Direct `bep20_addresses` array in client profile
