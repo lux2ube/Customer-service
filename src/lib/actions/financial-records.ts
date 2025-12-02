@@ -681,9 +681,8 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
 
 /**
  * Transfer journal entries from 7001/7002 (unmatched) to client account when assigned
- * STEP 1: Ensure client account (6000{clientId}) exists
- * STEP 2: Create reversing entry on 7001/7002
- * STEP 3: Create new entry on client account
+ * SIMPLE TRANSFER: Only involves two LIABILITY accounts, NO bank account
+ * Entry: DEBIT 7001/7002 (unmatched decreases), CREDIT 6000{clientId} (client account increases)
  */
 async function transferFromUnassignedToClient(recordId: string, recordType: 'cash' | 'usdt', clientId: string, client: Client) {
     try {
@@ -730,45 +729,26 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         const amount = recordType === 'cash' ? record.amountusd : record.amount;
         const date = new Date().toISOString();
 
-        // STEP 2: Create reversing entry on unmatched account (to offset original entry)
-        // Original entry had: DEBIT bank, CREDIT 7001
-        // Reversing entry: DEBIT 7001, CREDIT bank (opposite)
-        const reversingRef = push(ref(db, 'journal_entries'));
+        // STEP 2: Create transfer entry between TWO LIABILITY ACCOUNTS ONLY
+        // DEBIT: 7001/7002 (unmatched liability decreases - we no longer owe unmatched)
+        // CREDIT: 6000{clientId} (client liability increases - we owe this client)
+        const transferRef = push(ref(db, 'journal_entries'));
         const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
         
-        // For INFLOW: Original was DEBIT bank, CREDIT 7001. Reverse: DEBIT 7001, CREDIT bank
-        // For OUTFLOW: Original was DEBIT 7001, CREDIT bank. Reverse: DEBIT bank, CREDIT 7001
-        const reversingEntry: Omit<JournalEntry, 'id'> = {
+        const transferEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
-            description: `[Reversal] ${recordType.toUpperCase()} Rec #${recordId} (Assigned to ${client.name})`,
-            debit_account: record.type === 'inflow' ? unmatchedAccount : record.accountId,
-            credit_account: record.type === 'inflow' ? record.accountId : unmatchedAccount,
+            description: `Transfer ${recordType.toUpperCase()} Rec #${recordId} to ${client.name}`,
+            debit_account: unmatchedAccount,
+            credit_account: clientAccountId,
             debit_amount: amount,
             credit_amount: amount,
             amount_usd: amount,
             createdAt: date,
-            debit_account_name: record.type === 'inflow' ? unmatchedName : record.accountName,
-            credit_account_name: record.type === 'inflow' ? record.accountName : unmatchedName,
+            debit_account_name: unmatchedName,
+            credit_account_name: client.name,
         };
-        await set(reversingRef, reversingEntry);
-        console.log(`✅ Reversing entry created: ${unmatchedAccount} debited $${amount}`);
-
-        // STEP 3: Create new entry on client account
-        const newRef = push(ref(db, 'journal_entries'));
-        const newEntry: Omit<JournalEntry, 'id'> = {
-            date: record.date,
-            description: `${recordType.toUpperCase()} ${record.type === 'inflow' ? 'Receipt' : 'Payment'} - Rec #${recordId} | ${client.name}`,
-            debit_account: record.type === 'inflow' ? record.accountId : clientAccountId,
-            credit_account: record.type === 'inflow' ? clientAccountId : record.accountId,
-            debit_amount: amount,
-            credit_amount: amount,
-            amount_usd: amount,
-            createdAt: date,
-            debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
-            credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
-        };
-        await set(newRef, newEntry);
-        console.log(`✅ Created entry to assign $${amount} to client ${client.name} (Account: ${clientAccountId})`);
+        await set(transferRef, transferEntry);
+        console.log(`✅ Transfer entry created: DEBIT ${unmatchedAccount} $${amount}, CREDIT ${clientAccountId} $${amount}`);
 
         // Log the transfer
         await logAction('TRANSFER_RECORD_TO_CLIENT', { type: `${recordType}_record`, id: recordId, name: `Transfer to ${client.name}` }, {
