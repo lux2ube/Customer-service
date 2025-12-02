@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { z } from 'zod';
@@ -9,8 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
 import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
-import type { JournalEntry, Account, ModernUsdtRecord, UsdtRecord, Client } from '../types';
-
+import type { JournalEntry, Account, UsdtRecord, Client } from '../types';
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const USDT_ABI = [
@@ -60,6 +57,34 @@ function getRpcUrl() {
     return rpcUrl;
 }
 
+async function calculateAccountBalanceBefore(accountId: string, beforeDate?: string): Promise<number> {
+    try {
+        const journalSnapshot = await get(ref(db, 'journal_entries'));
+        if (!journalSnapshot.exists()) return 0;
+
+        const allEntries = journalSnapshot.val();
+        let balance = 0;
+
+        for (const entryId in allEntries) {
+            const entry = allEntries[entryId] as JournalEntry;
+            
+            if (beforeDate && new Date(entry.date) >= new Date(beforeDate)) continue;
+
+            if (entry.debit_account === accountId) {
+                balance += entry.debit_amount;
+            }
+            if (entry.credit_account === accountId) {
+                balance -= entry.credit_amount;
+            }
+        }
+
+        return Math.round(balance * 100) / 100;
+    } catch (error) {
+        console.error(`Error calculating balance for account ${accountId}:`, error);
+        return 0;
+    }
+}
+
 export async function getWalletDetails(): Promise<WalletDetailsState> {
     const mnemonic = process.env.TRUST_WALLET_MNEMONIC;
     
@@ -99,7 +124,6 @@ export async function getWalletDetails(): Promise<WalletDetailsState> {
 
 function escapeTelegramMarkdown(text: string): string {
   if (!text) return '';
-  // Escape characters for MarkdownV2
   const charsToEscape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
   return String(text).replace(new RegExp(`[\\${charsToEscape.join('\\')}]`, 'g'), '\\$&');
 }
@@ -128,17 +152,14 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         return { error: true, message: 'Could not generate request ID.' };
     }
     
-    const updates: {[key: string]: any} = {};
-    updates[`/send_requests/${requestId}`] = {
+    await set(ref(db, `send_requests/${requestId}`), {
         to: recipientAddress,
         amount: amount,
         status: 'pending',
         timestamp: Date.now(),
         creditAccountId: creditAccountId,
         clientId: clientId,
-    };
-
-    await update(ref(db), updates);
+    });
 
     try {
         const rpcUrl = getRpcUrl();
@@ -167,14 +188,15 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         const client = clientSnapshot.exists() ? { id: clientId, ...clientSnapshot.val() } as Client : null;
         const clientName = client ? client.name : 'Unknown Client';
         
-        // Fetch recording account details for denormalization
         const creditAccountSnapshot = await get(ref(db, `accounts/${creditAccountId}`));
         const creditAccountName = creditAccountSnapshot.exists() ? (creditAccountSnapshot.val() as Account).name : creditAccountId;
         
-        // Create an outflow record in modern_usdt_records
+        const updates: {[key: string]: any} = {};
+        const dateNow = new Date().toISOString();
+        
         const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
         const outflowRecord: Omit<UsdtRecord, 'id'> = {
-            date: new Date().toISOString(),
+            date: dateNow,
             type: 'outflow',
             source: 'Manual',
             status: 'Confirmed',
@@ -185,12 +207,11 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
             amount: amount,
             txHash: tx.hash,
             clientWalletAddress: recipientAddress,
-            notes: 'Sent from Wallet Page',
-            createdAt: new Date().toISOString(),
+            notes: 'Auto-sent from USDT Sender Wallet',
+            createdAt: dateNow,
         };
-        updates[`/records/usdt/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
+        updates[`/modern_usdt_records/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
 
-        // --- Save new address to client profile if needed ---
         if (isNewAddress && client && serviceProviderId) {
             const serviceProvidersSnapshot = await get(ref(db, `serviceProviders/${serviceProviderId}`));
             if (serviceProvidersSnapshot.exists()) {
@@ -203,14 +224,12 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
                     details: { Address: recipientAddress }
                 };
                 
-                // Avoid adding duplicates
-                const isAlreadySaved = existingClientProviders.some(p => p.details.Address === recipientAddress && p.providerId === serviceProviderId);
+                const isAlreadySaved = existingClientProviders.some((p: any) => p.details?.Address === recipientAddress && p.providerId === serviceProviderId);
                 if (!isAlreadySaved) {
                     updates[`/clients/${clientId}/serviceProviders`] = [...existingClientProviders, newProviderEntry];
                 }
             }
         }
-
 
         const message = `
 ✅ *USDT Sent Successfully*
@@ -222,21 +241,33 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         `;
         await sendTelegramNotification(message);
 
-        // Journal Entry for Auto Payment
         if (client) {
             const clientAccountId = `6000${client.id}`;
+            
+            const [debitBalanceBefore, creditBalanceBefore] = await Promise.all([
+                calculateAccountBalanceBefore(clientAccountId, dateNow),
+                calculateAccountBalanceBefore(creditAccountId, dateNow)
+            ]);
+            
+            const debitBalanceAfter = debitBalanceBefore + amount;
+            const creditBalanceAfter = creditBalanceBefore - amount;
+            
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
-                date: new Date().toISOString(),
-                description: `Auto USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
+                date: dateNow,
+                description: `USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
                 debit_account: clientAccountId,
                 credit_account: creditAccountId,
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
-                createdAt: new Date().toISOString(),
+                createdAt: dateNow,
                 debit_account_name: clientName,
-                credit_account_name: creditAccountName
+                credit_account_name: creditAccountName,
+                debit_account_balance_before: debitBalanceBefore,
+                debit_account_balance_after: debitBalanceAfter,
+                credit_account_balance_before: creditBalanceBefore,
+                credit_account_balance_after: creditBalanceAfter,
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         }
@@ -245,6 +276,7 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
 
         revalidatePath('/wallet');
         revalidatePath('/modern-usdt-records');
+        revalidatePath('/accounting/journal');
 
         return { success: true, message: `Transaction successful! Hash: ${tx.hash}`, newRecordId: newUsdtRecordId };
 
@@ -257,7 +289,6 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         return { error: true, message: `Transaction failed: ${errorMessage}` };
     }
 }
-
 
 export type WalletSettingsState = {
     success?: boolean;
