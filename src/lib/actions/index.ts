@@ -8,7 +8,8 @@ export {
     createAccount,
     deleteAccount,
     updateAccountPriority,
-    setupClientParentAccount
+    setupClientParentAccount,
+    fixAccount7000
 } from './account';
 
 // Journal Entries

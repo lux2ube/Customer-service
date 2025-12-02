@@ -101,6 +101,43 @@ export async function createAccount(accountId: string | null, prevState: Account
     redirect('/accounting/chart-of-accounts');
 }
 
+/**
+ * Fix account 7000 (Unassigned Liabilities) to be a posting account, not a group
+ */
+export async function fixAccount7000() {
+    try {
+        const accountRef = ref(db, 'accounts/7000');
+        const snapshot = await get(accountRef);
+        
+        if (!snapshot.exists()) {
+            // Create it if doesn't exist
+            await set(accountRef, {
+                id: '7000',
+                name: 'Unassigned Receipts/Payments',
+                type: 'Liabilities',
+                isGroup: false,
+                createdAt: new Date().toISOString(),
+                priority: 0
+            });
+            console.log('✅ Created account 7000 as posting account');
+        } else {
+            // Update existing to not be group
+            await update(accountRef, {
+                name: 'Unassigned Receipts/Payments',
+                isGroup: false
+            });
+            console.log('✅ Fixed account 7000 - set isGroup to false');
+        }
+
+        revalidatePath('/accounting/chart-of-accounts');
+        revalidatePath('/');
+        return { success: true, message: 'Account 7000 fixed - now accepting transactions' };
+    } catch (error) {
+        console.error('Error fixing account 7000:', error);
+        return { success: false, message: 'Failed to fix account 7000' };
+    }
+}
+
 export async function deleteAccount(accountId: string) {
     if (!accountId) {
         return { message: 'Invalid account ID.' };
