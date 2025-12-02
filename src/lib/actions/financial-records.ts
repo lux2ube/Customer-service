@@ -192,8 +192,8 @@ export type UsdtManualReceiptState = {
 const UsdtManualReceiptSchema = z.object({
   date: z.string({ invalid_type_error: 'Please select a date.' }),
   cryptoWalletId: z.string().min(1, 'Please select a crypto wallet.'),
-  clientId: z.string().min(1, 'Please select a client.'),
-  clientName: z.string().min(1, 'Client name is required.'),
+  clientId: z.string().nullable().optional(),
+  clientName: z.string().nullable().optional(),
   amount: z.coerce.number().gt(0, 'Amount must be greater than zero.'),
   walletAddress: z.string().optional(),
   txid: z.string().optional(),
@@ -211,13 +211,18 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         const data = validatedFields.data;
         const { date, clientId, clientName, cryptoWalletId, amount, txid, walletAddress, notes, status } = data;
         
-        const [walletSnapshot, clientSnapshot] = await Promise.all([
-            get(ref(db, `accounts/${cryptoWalletId}`)),
-            get(ref(db, `clients/${clientId}`))
-        ]);
-        
+        // Fetch wallet (always required)
+        const walletSnapshot = await get(ref(db, `accounts/${cryptoWalletId}`));
         if (!walletSnapshot.exists()) return { message: 'Crypto Wallet not found.', success: false };
-        if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
+        
+        // Fetch client only if clientId provided
+        let clientSnapshot = null;
+        let client: Client | null = null;
+        if (clientId) {
+            clientSnapshot = await get(ref(db, `clients/${clientId}`));
+            if (!clientSnapshot.exists()) return { message: 'Client not found.', success: false };
+            client = { ...clientSnapshot.val() as Client, id: clientId };
+        }
 
         const wallet = walletSnapshot.val() as Account;
         const newId = recordId || await getNextSequentialId('modernUsdtRecordId');
@@ -235,8 +240,12 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         }
         
         const receiptData = {
-            date: date!, type: 'inflow' as const, source: 'Manual' as const, status: 'Confirmed' as const,
-            clientId: clientId!, clientName: clientName!, accountId: cryptoWalletId!,
+            date: date!, type: 'inflow' as const, 
+            source: existingRecord.source || 'Manual' as const, 
+            status: 'Confirmed' as const,
+            clientId: clientId || null, 
+            clientName: clientName || null, 
+            accountId: cryptoWalletId!,
             accountName: wallet.name, amount: amount!, clientWalletAddress: walletAddress,
             txHash: txid, notes, 
             createdAt: existingRecord.createdAt || new Date().toISOString(),
@@ -250,8 +259,8 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         await logAction(recordId ? 'UPDATE_USDT_RECEIPT' : 'CREATE_USDT_RECEIPT', { type: 'usdt_record', id: newId, name: `USDT Receipt - ${amount} USDT` }, {
             amount,
             currency: 'USDT',
-            clientId,
-            clientName,
+            clientId: clientId || 'Unassigned',
+            clientName: clientName || 'Unassigned',
             accountId: cryptoWalletId,
             accountName: wallet.name,
             walletAddress,
@@ -264,10 +273,11 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         // CRITICAL JOURNAL ENTRY LOGIC (same as cash):
         // Case 1: EDIT and was unassigned and now has client → TRANSFER (no new wallet debit!)
         // Case 2: EDIT and already had client → NO new journal (just updated record)
-        // Case 3: NEW record → create journal entry normally
-        const client = { ...clientSnapshot.val() as Client, id: clientId! };
+        // Case 3: NEW record with client → create journal entry with client
+        // Case 4: NEW record without client → create journal entry to unassigned (7002)
+        // Case 5: EDIT from Pending to Confirmed → create normal journal entry
         
-        if (recordId && wasUnassigned) {
+        if (recordId && wasUnassigned && clientId && client) {
             // TRANSFER: Was unassigned (7002), now assigned to client
             console.log(`🔄 USDT RECEIPT EDIT TRANSFER: Record ${recordId} was unassigned, transferring from 7002 to 6000${clientId}`);
             const transferResult = await transferFromUnassignedToClient(newId, 'usdt', clientId, client, true);
@@ -279,12 +289,19 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
         } else if (recordId && existingRecord.clientId) {
             // EDIT: Already had client, no new journal entry needed
             console.log(`📝 USDT RECEIPT EDIT: Record ${recordId} already had client, no new journal entry`);
+        } else if (recordId && !wasUnassigned && !existingRecord.clientId && clientId && client) {
+            // EDIT: Record was Pending (not confirmed), now confirmed with client
+            console.log(`📝 USDT RECEIPT EDIT: Record ${recordId} was Pending, now Confirmed with client`);
+            await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
         } else if (!recordId) {
-            // NEW: Create journal entry normally
+            // NEW: Create journal entry normally (with client or unassigned)
             await createJournalEntriesForConfirmedUsdtRecord({ ...receiptData, id: newId }, client);
         }
 
-        await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
+        // Notify client only if we have client info
+        if (clientId && clientName) {
+            await notifyClientTransaction(clientId, clientName, { ...receiptData, currency: 'USDT', amountusd: amount });
+        }
 
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
