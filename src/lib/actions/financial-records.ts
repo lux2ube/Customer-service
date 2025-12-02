@@ -860,13 +860,13 @@ export async function assignRecordToClient(recordId: string, recordType: 'cash' 
             recordStatus: record.status
         });
 
-        // If was unassigned and confirmed, transfer from 7000 to client
-        if (wasUnassigned && record.status === 'Confirmed') {
-            console.log(`🔄 TRANSFER TRIGGERED: Record ${recordId} was unassigned, now assigning to client`);
+        // If confirmed, transfer from 7000/7002 to client
+        if (record.status === 'Confirmed') {
+            console.log(`🔄 TRANSFER TRIGGERED: Assigning record ${recordId} to client`);
             const transferResult = await transferFromUnassignedToClient(recordId, recordType, clientId, client);
             console.log(`✅ Transfer result: ${JSON.stringify(transferResult)}`);
         } else {
-            console.log(`⏭️  TRANSFER SKIPPED: wasUnassigned=${wasUnassigned}, status=${record.status}`);
+            console.log(`⏭️  TRANSFER SKIPPED: status=${record.status}`);
         }
 
         revalidatePath('/modern-cash-records');
