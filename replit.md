@@ -39,7 +39,7 @@ Preferred communication style: Simple, everyday language.
 
 **Firebase Services**: Realtime Database for data, Storage for files.
 **AI Integration**: Google AI (Gemini) via Genkit for SMS parsing, requiring `GEMINI_API_KEY`.
-**Blockchain Integration**: Etherscan API v2 for monitoring USDT transactions on Binance Smart Chain (chainid: 56), utilizing ethers.js for wallet validation.
+**Blockchain Integration**: Ankr Premium RPC for monitoring USDT transactions on Binance Smart Chain (chainid: 56), utilizing ethers.js for wallet validation. Syncs from `lastSyncedBlock` for incremental updates.
 **Third-Party Services**: MEXC API SDK for crypto exchange rates, Telegram Bot API for notifications, and external webhook-based SMS gateways.
 **Development Tools**: TypeScript, ESLint, Patch-package, html2canvas.
 
@@ -47,6 +47,5 @@ Preferred communication style: Simple, everyday language.
 -   `GEMINI_API_KEY`
 -   `NEXT_PUBLIC_FIREBASE_*` (Firebase configuration)
 -   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
--   `BSC_RPC_URL`
+-   `ANKR_BSC_RPC_URL` (Ankr Premium RPC endpoint for BSC USDT sync)
 -   `TRUST_WALLET_MNEMONIC`
--   Etherscan API key (stored in database `/bsc_apis`)

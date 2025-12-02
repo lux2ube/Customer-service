@@ -43,90 +43,69 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             return { message: `API Configuration with ID "${apiId}" not found.`, error: true };
         }
         const setting: BscApiSetting = apiSettingSnapshot.val();
-        const { apiKey, walletAddress, accountId, name: configName, lastSyncedBlock = 0 } = setting;
+        const { walletAddress, accountId, name: configName, lastSyncedBlock = 0 } = setting;
         
-        if (!apiKey || !walletAddress) {
-            return { message: `API config "${configName}" is missing an API key or wallet address.`, error: true };
+        if (!walletAddress) {
+            return { message: `API config "${configName}" is missing a wallet address.`, error: true };
         }
 
-        // Use free BSC RPC providers with fallback support
-        let fetchedTransactions: any[] = [];
-        
-        // Try multiple free RPC providers in order of preference
-        const rpcProviders = [
-            'https://rpc.ankr.com/bsc',                // Ankr - MORE permissive with queries
-            'https://bsc-rpc.publicnode.com',          // PublicNode - good uptime
-            'https://bsc-dataseed1.bnbchain.org:443',  // Official BNB Chain
-            'https://bsc-dataseed2.bnbchain.org:443',  // Official BNB Chain backup
-            'https://bsc.publicnode.com',              // PublicNode fallback
-        ];
-        
-        let provider: ethers.JsonRpcProvider | null = null;
-        let lastError: any = null;
-        
-        for (const rpcUrl of rpcProviders) {
-            try {
-                provider = new ethers.JsonRpcProvider(rpcUrl);
-                // Test connection with a simple call
-                await provider.getBlockNumber();
-                console.log(`✓ Connected to RPC: ${rpcUrl}`);
-                break;
-            } catch (e: any) {
-                console.log(`✗ Failed to connect to ${rpcUrl}: ${e.message}`);
-                lastError = e;
-                provider = null;
-                continue;
-            }
+        // Use Ankr as the official BSC RPC provider (from environment variable)
+        const ANKR_RPC_URL = process.env.ANKR_BSC_RPC_URL;
+        if (!ANKR_RPC_URL) {
+            return { message: 'Ankr RPC URL not configured. Please set ANKR_BSC_RPC_URL environment variable.', error: true };
         }
         
-        if (!provider) {
-            return { 
-                message: `Failed to connect to any BSC RPC provider. Last error: ${lastError?.message || 'Unknown error'}`, 
-                error: true 
-            };
+        let fetchedTransactions: any[] = [];
+        let provider: ethers.JsonRpcProvider | null = null;
+        
+        try {
+            provider = new ethers.JsonRpcProvider(ANKR_RPC_URL);
+            await provider.getBlockNumber();
+            console.log(`✓ Connected to Ankr BSC RPC`);
+        } catch (e: any) {
+            console.log(`✗ Failed to connect to Ankr: ${e.message}`);
+            return { message: `Failed to connect to Ankr RPC: ${e.message}`, error: true };
         }
         
         try {
-            
             // Get current block number
             let currentBlock: number;
             try {
                 currentBlock = await provider.getBlockNumber();
             } catch (e: any) {
-                return { 
-                    message: `Failed to get current block number: ${e.message}`, 
-                    error: true 
-                };
+                return { message: `Failed to get current block number: ${e.message}`, error: true };
             }
             
-            // Free RPC limitation: only query recent blocks (last ~1000 blocks = ~60 minutes)
-            const MAX_LOOKBACK = 1000;
+            // Calculate start block based on lastSyncedBlock or today's start
+            let queryStartBlock: number;
             
-            // Calculate start block
-            let queryStartBlock = lastSyncedBlock > 0 ? lastSyncedBlock : (currentBlock - MAX_LOOKBACK);
-            
-            // If startDate provided, calculate block from date (BSC ~3 seconds per block)
             if (startDate) {
+                // If startDate provided, calculate block from date (BSC ~3 seconds per block)
                 const startTimestamp = new Date(startDate).getTime() / 1000;
                 const currentTimestamp = Math.floor(Date.now() / 1000);
                 
-                // Check if date is in the future
                 if (startTimestamp > currentTimestamp) {
                     return { message: `Start date cannot be in the future. Please select a past date.`, error: true };
                 }
                 
                 const secondsDiff = currentTimestamp - startTimestamp;
                 const blocksDiff = Math.floor(secondsDiff / 3);
-                const calculatedBlock = Math.max(0, currentBlock - blocksDiff);
-                
-                // If calculated block is too old for free RPC, warn user
-                if (calculatedBlock < currentBlock - MAX_LOOKBACK) {
-                    console.log(`⚠️ Date ${startDate} is too far in the past. Free RPC can only query last ${MAX_LOOKBACK} blocks (~60 minutes).`);
-                    console.log(`   Using most recent ${MAX_LOOKBACK} blocks instead.`);
-                }
-                
-                queryStartBlock = Math.max(calculatedBlock, currentBlock - MAX_LOOKBACK);
-                console.log(`📅 Syncing from date ${startDate}: calculated as block ${calculatedBlock}, adjusted to ${queryStartBlock}`);
+                queryStartBlock = Math.max(0, currentBlock - blocksDiff);
+                console.log(`📅 Syncing from date ${startDate}: starting at block ${queryStartBlock}`);
+            } else if (lastSyncedBlock > 0) {
+                // Continue from last synced block
+                queryStartBlock = lastSyncedBlock + 1;
+                console.log(`📦 Continuing from last synced block: ${lastSyncedBlock}`);
+            } else {
+                // First sync: start from today's beginning
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000);
+                const currentTimestamp = Math.floor(Date.now() / 1000);
+                const secondsSinceMidnight = currentTimestamp - todayStartTimestamp;
+                const blocksSinceMidnight = Math.floor(secondsSinceMidnight / 3);
+                queryStartBlock = currentBlock - blocksSinceMidnight;
+                console.log(`🌅 First sync: starting from today's beginning at block ${queryStartBlock}`);
             }
             
             console.log(`🔍 BSC Sync for wallet ${walletAddress}`);
@@ -142,42 +121,66 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             const toFilter = usdtContract.filters.Transfer(null, walletAddress);
             const fromFilter = usdtContract.filters.Transfer(walletAddress, null);
             
-            // Fetch events in VERY small batches with long delays to avoid rate limits
-            // Official RPC is aggressive with rate limiting, so be very conservative
-            const BATCH_SIZE = 50; // Query just 50 blocks at a time
+            // Ankr supports larger batches than free RPCs (500 blocks per query)
+            const BATCH_SIZE = 500;
             const toEvents: any[] = [];
             const fromEvents: any[] = [];
+            const totalBatches = Math.ceil((currentBlock - queryStartBlock) / BATCH_SIZE);
+            let batchNum = 0;
             
-            // Query in smaller batches with long delays, and SEQUENTIALLY (not parallel)
             for (let blockStart = queryStartBlock; blockStart < currentBlock; blockStart += BATCH_SIZE) {
+                batchNum++;
                 const blockEnd = Math.min(blockStart + BATCH_SIZE, currentBlock);
                 
                 try {
-                    console.log(`   Querying blocks ${blockStart}-${blockEnd}...`);
+                    console.log(`   [${batchNum}/${totalBatches}] Querying blocks ${blockStart}-${blockEnd}...`);
                     
-                    // Query sequentially (one at a time) not in parallel to reduce server load
-                    const batch1 = await usdtContract.queryFilter(toFilter, blockStart, blockEnd);
+                    // Query in parallel for speed (Ankr handles this well)
+                    const [batchTo, batchFrom] = await Promise.all([
+                        usdtContract.queryFilter(toFilter, blockStart, blockEnd),
+                        usdtContract.queryFilter(fromFilter, blockStart, blockEnd),
+                    ]);
                     
-                    // Long delay between queries
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    toEvents.push(...batchTo);
+                    fromEvents.push(...batchFrom);
                     
-                    const batch2 = await usdtContract.queryFilter(fromFilter, blockStart, blockEnd);
+                    if (batchTo.length > 0 || batchFrom.length > 0) {
+                        console.log(`      Found ${batchTo.length} in, ${batchFrom.length} out`);
+                    }
                     
-                    toEvents.push(...batch1);
-                    fromEvents.push(...batch2);
-                    
-                    // Long delay between batches
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    // Small delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 } catch (e: any) {
-                    console.log(`   ⚠️ Batch ${blockStart}-${blockEnd} failed: ${e.message}`);
-                    // Try fallback RPC by returning error
-                    throw new Error(`Batch query failed: ${e.message}`);
+                    console.log(`   ⚠️ Batch ${blockStart}-${blockEnd} failed: ${e.message}, retrying with smaller range...`);
+                    
+                    // Retry with smaller batches if Ankr rejects
+                    const midBlock = Math.floor((blockStart + blockEnd) / 2);
+                    try {
+                        const [batchTo1, batchFrom1] = await Promise.all([
+                            usdtContract.queryFilter(toFilter, blockStart, midBlock),
+                            usdtContract.queryFilter(fromFilter, blockStart, midBlock),
+                        ]);
+                        toEvents.push(...batchTo1);
+                        fromEvents.push(...batchFrom1);
+                        
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                        const [batchTo2, batchFrom2] = await Promise.all([
+                            usdtContract.queryFilter(toFilter, midBlock, blockEnd),
+                            usdtContract.queryFilter(fromFilter, midBlock, blockEnd),
+                        ]);
+                        toEvents.push(...batchTo2);
+                        fromEvents.push(...batchFrom2);
+                    } catch (retryError: any) {
+                        console.log(`   ❌ Retry also failed: ${retryError.message}`);
+                        throw new Error(`Batch query failed after retry: ${retryError.message}`);
+                    }
                 }
             }
             
             console.log(`✓ Found ${toEvents.length} incoming + ${fromEvents.length} outgoing USDT events`);
             if (toEvents.length === 0 && fromEvents.length === 0) {
-                console.log(`   → Wallet has no recent USDT transactions. Send a test USDT transfer and sync again.`);
+                console.log(`   → No new USDT transactions since block ${queryStartBlock}.`);
             }
             
             // Combine and sort events
@@ -188,7 +191,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             
             // Convert events to transaction objects
             fetchedTransactions = await Promise.all(allEvents.map(async (event) => {
-                const block = await provider.getBlock(event.blockNumber);
+                const block = await provider!.getBlock(event.blockNumber);
                 
                 const from = event.args?.from || '';
                 const to = event.args?.to || '';
@@ -205,8 +208,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 };
             }));
         } catch (error: any) {
-            console.error("❌ BSC PublicNode RPC Error:", error);
-            throw new Error(`Failed to fetch from BSC public node: ${error.message}`);
+            console.error("❌ Ankr BSC RPC Error:", error);
+            throw new Error(`Failed to fetch from Ankr: ${error.message}`);
         }
 
         if (fetchedTransactions.length === 0) {

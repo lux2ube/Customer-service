@@ -56,23 +56,52 @@ async function testAnkrSync() {
         console.log('\n4. Fetching USDT Transfer events for today...');
         console.log('   (This may take a moment...)');
         
-        const BATCH_SIZE = 2000;
+        const BATCH_SIZE = 500;
         const toEvents = [];
         const fromEvents = [];
         
+        const totalBatches = Math.ceil((currentBlock - startBlock) / BATCH_SIZE);
+        let batchNum = 0;
+        
         for (let blockStart = startBlock; blockStart < currentBlock; blockStart += BATCH_SIZE) {
+            batchNum++;
             const blockEnd = Math.min(blockStart + BATCH_SIZE, currentBlock);
-            console.log(`   Querying blocks ${blockStart}-${blockEnd}...`);
+            console.log(`   [${batchNum}/${totalBatches}] Querying blocks ${blockStart}-${blockEnd}...`);
             
-            const [batchTo, batchFrom] = await Promise.all([
-                usdtContract.queryFilter(toFilter, blockStart, blockEnd),
-                usdtContract.queryFilter(fromFilter, blockStart, blockEnd),
-            ]);
+            try {
+                const [batchTo, batchFrom] = await Promise.all([
+                    usdtContract.queryFilter(toFilter, blockStart, blockEnd),
+                    usdtContract.queryFilter(fromFilter, blockStart, blockEnd),
+                ]);
+                
+                toEvents.push(...batchTo);
+                fromEvents.push(...batchFrom);
+                
+                if (batchTo.length > 0 || batchFrom.length > 0) {
+                    console.log(`      Found ${batchTo.length} in, ${batchFrom.length} out`);
+                }
+            } catch (e) {
+                console.log(`      ⚠️ Batch failed, retrying with smaller range...`);
+                const midBlock = Math.floor((blockStart + blockEnd) / 2);
+                
+                const [batchTo1, batchFrom1] = await Promise.all([
+                    usdtContract.queryFilter(toFilter, blockStart, midBlock),
+                    usdtContract.queryFilter(fromFilter, blockStart, midBlock),
+                ]);
+                toEvents.push(...batchTo1);
+                fromEvents.push(...batchFrom1);
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                const [batchTo2, batchFrom2] = await Promise.all([
+                    usdtContract.queryFilter(toFilter, midBlock, blockEnd),
+                    usdtContract.queryFilter(fromFilter, midBlock, blockEnd),
+                ]);
+                toEvents.push(...batchTo2);
+                fromEvents.push(...batchFrom2);
+            }
             
-            toEvents.push(...batchTo);
-            fromEvents.push(...batchFrom);
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
         
         console.log(`\n   ✓ Found ${toEvents.length} incoming transfers`);
