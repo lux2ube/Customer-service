@@ -1,7 +1,10 @@
+# STRICT RESTRICTIONS: Block all search engines and crawlers
+# This is a private, sensitive financial system - NO indexing allowed
+
 User-agent: *
 Disallow: /
 
-# Explicitly block all search engines from indexing sensitive financial data
+# Explicitly block all major search engines
 User-agent: Googlebot
 Disallow: /
 
@@ -13,3 +16,22 @@ Disallow: /
 
 User-agent: DuckDuckBot
 Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: Yandexbot
+Disallow: /
+
+User-agent: ia_archiver
+Disallow: /
+
+User-agent: Sogou
+Disallow: /
+
+# Block all archive services
+User-agent: Archive.org_bot
+Disallow: /
+
+# Crawl delay for any compliant bot
+Crawl-delay: 0
