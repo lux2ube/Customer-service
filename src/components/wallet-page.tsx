@@ -159,66 +159,83 @@ function SendForm({ recordingAccountId, serviceProviders }: { recordingAccountId
         }
     };
 
+    const isNewAddress = React.useMemo(() => {
+        if (!selectedClient || !addressInput || !activeProvider) return false;
+        const existingAddresses = clientCryptoAddresses.map(sp => sp.details.Address?.toLowerCase());
+        return !existingAddresses.includes(addressInput.toLowerCase());
+    }, [selectedClient, addressInput, clientCryptoAddresses, activeProvider]);
+
+    const canSubmit = recordingAccountId && selectedClient && addressInput && activeProvider;
+
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Send USDT</CardTitle>
-                <CardDescription>Select a client or paste an address, then enter the amount to send.</CardDescription>
+                <CardDescription>Select a client and enter recipient address and amount to send.</CardDescription>
             </CardHeader>
             <form ref={formRef} action={formAction}>
-                 <input type="hidden" name="creditAccountId" value={recordingAccountId} />
+                <input type="hidden" name="creditAccountId" value={recordingAccountId} />
+                <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
+                <input type="hidden" name="isNewAddress" value={isNewAddress ? 'true' : 'false'} />
+                <input type="hidden" name="serviceProviderId" value={activeProvider?.id || ''} />
                 <CardContent className="space-y-4">
-                     <div className="space-y-2">
-                        <Label htmlFor="client">Client</Label>
+                    <div className="space-y-2">
+                        <Label htmlFor="client">Client <span className="text-destructive">*</span></Label>
                         <ClientSelector selectedClient={selectedClient} onSelect={handleClientSelect} />
+                        {!selectedClient && state?.errors?.clientId && (
+                            <p className="text-destructive text-sm">Please select a client</p>
+                        )}
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Recipient Address</Label>
+                        <Label>Recipient Address <span className="text-destructive">*</span></Label>
                         <div className="flex items-center gap-2">
                             <Input
                                 name="recipientAddress"
-                                placeholder="Or paste address here..."
+                                placeholder="Paste or enter BSC address..."
                                 value={addressInput}
                                 onChange={(e) => setAddressInput(e.target.value)}
                                 className="font-mono text-xs"
                             />
-                             <Button type="button" variant="outline" size="icon" onClick={handlePaste}>
+                            <Button type="button" variant="outline" size="icon" onClick={handlePaste}>
                                 <ClipboardPaste className="h-4 w-4" />
                             </Button>
                         </div>
                         {state?.errors?.recipientAddress && <p className="text-destructive text-sm">{state.errors.recipientAddress[0]}</p>}
+                        {isNewAddress && selectedClient && (
+                            <p className="text-xs text-muted-foreground">This address will be saved to {selectedClient.name}'s profile.</p>
+                        )}
                     </div>
 
                     {selectedClient && clientCryptoAddresses.length > 0 && (
-                         <div className="space-y-2 pl-2">
-                             <Label>Choose from client's saved addresses for this provider:</Label>
-                             <RadioGroup
+                        <div className="space-y-2 pl-2">
+                            <Label>Or choose from saved addresses:</Label>
+                            <RadioGroup
                                 onValueChange={(value) => {
                                     setSelectedAddress(value);
                                     setAddressInput(value);
                                 }}
                                 value={selectedAddress}
                                 className="space-y-2"
-                             >
-                                 {clientCryptoAddresses.map(sp => (
-                                     <div key={sp.details.Address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
-                                         <RadioGroupItem value={sp.details.Address} id={sp.details.Address} />
-                                         <Label htmlFor={sp.details.Address} className="font-mono text-xs break-all">{sp.details.Address}</Label>
-                                     </div>
-                                 ))}
-                             </RadioGroup>
-                         </div>
+                            >
+                                {clientCryptoAddresses.map(sp => (
+                                    <div key={sp.details.Address} className="flex items-center space-x-2 p-2 border rounded-md has-[[data-state=checked]]:bg-muted">
+                                        <RadioGroupItem value={sp.details.Address} id={sp.details.Address} />
+                                        <Label htmlFor={sp.details.Address} className="font-mono text-xs break-all">{sp.details.Address}</Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        </div>
                     )}
                     
                     <div className="space-y-2">
-                        <Label htmlFor="amount">Amount (USDT)</Label>
+                        <Label htmlFor="amount">Amount (USDT) <span className="text-destructive">*</span></Label>
                         <Input id="amount" name="amount" type="number" step="any" placeholder="e.g., 100.00" required />
-                         {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
+                        {state?.errors?.amount && <p className="text-destructive text-sm">{state.errors.amount[0]}</p>}
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <SendButton disabled={!recordingAccountId || !activeProvider} />
+                    <SendButton disabled={!canSubmit} />
                 </CardFooter>
             </form>
         </Card>

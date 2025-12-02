@@ -30,11 +30,12 @@ export type SendRequestState = {
     success?: boolean;
     error?: boolean;
     message?: string;
-    newRecordId?: string; // Add this to return the new record ID
+    newRecordId?: string;
     errors?: {
         recipientAddress?: string[];
         amount?: string[];
         creditAccountId?: string[];
+        clientId?: string[];
     };
 };
 
