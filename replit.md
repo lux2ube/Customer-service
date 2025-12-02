@@ -8,22 +8,33 @@ The system is designed to handle financial operations for a currency exchange bu
 
 ## Recent Changes
 
-### December 2, 2025 - Double-Entry Accounting & Balance Transfer Fix
-- **Fixed Client Balance Not Updating**: Resolved critical issue where client balances stayed at $0 after assigning records
-  - Implemented atomic Firebase multi-path updates for "all-or-none" guarantee
-  - Transfer entries now created atomically with record assignment
-  - Both 7001/7002 (unmatched) and 6000{clientId} (client) accounts updated together
+### December 2, 2025 - CRITICAL: Client Balance Fix (6000undefined Bug)
+- **ROOT CAUSE FOUND AND FIXED**: Firebase `snapshot.val()` returns data WITHOUT the record's key (ID)
+  - When fetching client with `get(ref(db, 'clients/{clientId}'))`, `.val()` returns client data but NOT `client.id`
+  - Journal entries were being created with `6000${client.id}` = `6000undefined`
+  - This caused ALL client balance lookups on `6000{actualClientId}` to find 0 entries
+- **FIX APPLIED**: All places where client is fetched now explicitly add the ID:
+  ```javascript
+  // Before (BROKEN): const client = clientSnapshot.val() as Client;
+  // After (FIXED): const client = { ...clientSnapshot.val() as Client, id: clientId };
+  ```
+- **Locations Fixed** (6 total in financial-records.ts):
+  - createCashReceipt (line 124)
+  - createUsdtManualReceipt (line 214)
+  - createUsdtPayment (line 336)
+  - updateCashRecordStatus (line 675)
+  - updateUsdtRecordStatus (line 846)
+  - assignRecordToClient (line 876)
+- **CHECKPOINT RESULTS**: 9/10 tests passed
+  - New cash receipts now credit correct account (60001003113, not 6000undefined)
+  - Client balance API now returns correct values ($45.60 with 3 entries for test client)
+  - 50 good entries now exist alongside 61 legacy bad entries
+- **Legacy Entries**: Old entries with `6000undefined` remain (pre-fix), need manual cleanup or migration
+
+### December 2, 2025 (Earlier) - Atomic Transfers & Search Fixes
+- **Atomic Firebase Updates**: Multi-path updates for "all-or-none" guarantee
 - **Fixed Client Search in Reports**: Changed `usdt_records` path to `modern_usdt_records`
-  - Client Balance Detail Report now correctly finds USDT records
-  - Search filtering works properly for all clients
-- **Improved Transfer Logic**:
-  - DEBIT 7001/7002 (unmatched decreases) → CREDIT 6000{clientId} (client increases)
-  - Balance tracking with before/after fields on all journal entries
-  - Proper wasUnassigned detection for triggering transfers
-- **Strict Search Engine Blocking**:
-  - robots.txt blocks all major search engines (Google, Bing, DuckDuckGo, Baidu, Yandex, etc.)
-  - HTTP headers: X-Robots-Tag noindex/nofollow/noarchive/nocache
-  - Additional security headers: X-Frame-Options DENY, Referrer-Policy no-referrer
+- **Strict Search Engine Blocking**: robots.txt + X-Robots-Tag headers
 
 ### November 29, 2025 - Modern USDT Records Complete Fix
 - **Fixed Auto-Match Unassigned Button**: Now matches records to clients using BOTH wallet address storage methods:
