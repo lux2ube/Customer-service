@@ -730,12 +730,17 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         const amount = recordType === 'cash' ? record.amountusd : record.amount;
         const date = new Date().toISOString();
 
-        // STEP 2: Create reversing entry to remove from unmatched account
+        // STEP 2: Create reversing entry on unmatched account (to offset original entry)
+        // Original entry had: DEBIT bank, CREDIT 7001
+        // Reversing entry: DEBIT 7001, CREDIT bank (opposite)
         const reversingRef = push(ref(db, 'journal_entries'));
         const unmatchedName = recordType === 'cash' ? 'Unmatched Cash' : 'Unmatched USDT';
+        
+        // For INFLOW: Original was DEBIT bank, CREDIT 7001. Reverse: DEBIT 7001, CREDIT bank
+        // For OUTFLOW: Original was DEBIT 7001, CREDIT bank. Reverse: DEBIT bank, CREDIT 7001
         const reversingEntry: Omit<JournalEntry, 'id'> = {
             date: record.date,
-            description: `[Reversal] ${recordType.toUpperCase()} - Rec #${recordId} | Assigned to ${client.name}`,
+            description: `[Reversal] ${recordType.toUpperCase()} Rec #${recordId} (Assigned to ${client.name})`,
             debit_account: record.type === 'inflow' ? unmatchedAccount : record.accountId,
             credit_account: record.type === 'inflow' ? record.accountId : unmatchedAccount,
             debit_amount: amount,
@@ -746,7 +751,7 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             credit_account_name: record.type === 'inflow' ? record.accountName : unmatchedName,
         };
         await set(reversingRef, reversingEntry);
-        console.log(`✅ Created reversing entry to remove $${amount} from ${unmatchedAccount}`);
+        console.log(`✅ Reversing entry created: ${unmatchedAccount} debited $${amount}`);
 
         // STEP 3: Create new entry on client account
         const newRef = push(ref(db, 'journal_entries'));
