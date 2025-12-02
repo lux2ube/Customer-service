@@ -691,9 +691,10 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
         const clientAccountId = `6000${clientId}`;
         console.log(`🔄 Transferring record ${recordId} from ${unmatchedAccount} to client account ${clientAccountId}`);
         
-        // STEP 1: Ensure client account exists
+        // STEP 1: Ensure client account exists and is NOT a group account
         const clientAccRef = ref(db, `accounts/${clientAccountId}`);
         const clientAccSnapshot = await get(clientAccRef);
+        
         if (!clientAccSnapshot.exists()) {
             console.log(`📋 Creating client account ${clientAccountId} for ${client.name}`);
             await set(clientAccRef, {
@@ -705,6 +706,13 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
                 parentId: '6000',
                 createdAt: new Date().toISOString()
             });
+        } else {
+            // Account exists - ensure it's NOT a group account (so it can accept postings)
+            const existingAcc = clientAccSnapshot.val();
+            if (existingAcc.isGroup === true) {
+                console.log(`⚠️ Client account ${clientAccountId} was a GROUP - converting to POSTABLE account`);
+                await update(clientAccRef, { isGroup: false });
+            }
         }
         
         // Fetch the record to get its details
