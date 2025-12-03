@@ -15,7 +15,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { ArrowRight, ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, TrendingDown, TrendingUp } from 'lucide-react';
 
 function isAssetAccount(accountId: string): boolean {
   return accountId.startsWith('1');
@@ -23,6 +23,18 @@ function isAssetAccount(accountId: string): boolean {
 
 function isLiabilityAccount(accountId: string): boolean {
   return accountId.startsWith('6') || accountId.startsWith('7');
+}
+
+function getAccountChange(accountId: string, isDebitSide: boolean): 'increase' | 'decrease' {
+  const isAsset = isAssetAccount(accountId);
+  const isLiability = isLiabilityAccount(accountId);
+  
+  if (isAsset) {
+    return isDebitSide ? 'increase' : 'decrease';
+  } else if (isLiability) {
+    return isDebitSide ? 'decrease' : 'increase';
+  }
+  return isDebitSide ? 'increase' : 'decrease';
 }
 
 export function JournalTable() {
@@ -77,46 +89,37 @@ export function JournalTable() {
                   <TableCell className="font-medium">{entry.description}</TableCell>
                   <TableCell>
                       {(() => {
-                        const debitIsAsset = isAssetAccount(entry.debit_account);
-                        const creditIsAsset = isAssetAccount(entry.credit_account);
-                        const debitIsLiability = isLiabilityAccount(entry.debit_account);
-                        const creditIsLiability = isLiabilityAccount(entry.credit_account);
-                        
                         const debitName = entry.debit_account_name || entry.debit_account;
                         const creditName = entry.credit_account_name || entry.credit_account;
                         
-                        let senderName = creditName;
-                        let receiverName = debitName;
-                        let flowType: 'inflow' | 'outflow' | 'transfer' = 'transfer';
-                        
-                        if (creditIsAsset && debitIsLiability) {
-                          senderName = creditName;
-                          receiverName = debitName;
-                          flowType = 'outflow';
-                        } else if (debitIsAsset && creditIsLiability) {
-                          senderName = creditName;
-                          receiverName = debitName;
-                          flowType = 'inflow';
-                        }
+                        const debitChange = getAccountChange(entry.debit_account, true);
+                        const creditChange = getAccountChange(entry.credit_account, false);
                         
                         return (
-                          <div className="flex items-center gap-2">
-                            <div className="text-right">
-                               <div className="font-medium flex items-center gap-1">
-                                 {flowType === 'outflow' && <Badge variant="destructive" className="text-xs">OUT</Badge>}
-                                 {flowType === 'inflow' && <Badge variant="default" className="text-xs bg-green-600">IN</Badge>}
-                                 {senderName}
-                               </div>
-                               <div className="font-mono text-sm text-muted-foreground">
-                                    {new Intl.NumberFormat().format(entry.debit_amount)}
-                               </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {debitChange === 'decrease' ? (
+                                <TrendingDown className="h-4 w-4 text-red-500" />
+                              ) : (
+                                <TrendingUp className="h-4 w-4 text-green-500" />
+                              )}
+                              <span className="font-medium">{debitName}</span>
+                              <Badge variant={debitChange === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${debitChange === 'increase' ? 'bg-green-600' : ''}`}>
+                                {debitChange === 'decrease' ? '↓ Decrease' : '↑ Increase'}
+                              </Badge>
+                              <span className="font-mono text-sm">${new Intl.NumberFormat().format(entry.debit_amount)}</span>
                             </div>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                               <div className="font-medium">{receiverName}</div>
-                               <div className="font-mono text-sm text-muted-foreground">
-                                    {new Intl.NumberFormat().format(entry.credit_amount)}
-                               </div>
+                            <div className="flex items-center gap-2">
+                              {creditChange === 'decrease' ? (
+                                <TrendingDown className="h-4 w-4 text-red-500" />
+                              ) : (
+                                <TrendingUp className="h-4 w-4 text-green-500" />
+                              )}
+                              <span className="font-medium">{creditName}</span>
+                              <Badge variant={creditChange === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${creditChange === 'increase' ? 'bg-green-600' : ''}`}>
+                                {creditChange === 'decrease' ? '↓ Decrease' : '↑ Increase'}
+                              </Badge>
+                              <span className="font-mono text-sm">${new Intl.NumberFormat().format(entry.credit_amount)}</span>
                             </div>
                           </div>
                         );

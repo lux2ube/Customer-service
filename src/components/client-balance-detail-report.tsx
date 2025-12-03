@@ -219,23 +219,19 @@ export function ClientBalanceDetailReport() {
                           {entry.description}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          {entry.isDebit ? (
-                            <span>DR: {entry.debitAccountName} → CR: {entry.creditAccountName}</span>
-                          ) : (
-                            <span>DR: {entry.debitAccountName} → CR: {entry.creditAccountName}</span>
-                          )}
+                          <span>From: {entry.debitAccountName} → To: {entry.creditAccountName}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
                         {entry.isDebit ? (
                           <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
                             <ArrowUpRight className="h-3 w-3" />
-                            DR
+                            Decrease
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
                             <ArrowDownLeft className="h-3 w-3" />
-                            CR
+                            Increase
                           </span>
                         )}
                       </TableCell>

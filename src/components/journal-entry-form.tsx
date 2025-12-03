@@ -173,17 +173,17 @@ export function JournalEntryForm() {
 
                 <div className="grid md:grid-cols-2 gap-4 items-start">
                     <div className="space-y-1.5">
-                        <Label>From (Debit)</Label>
+                        <Label>From Account</Label>
                         <AccountSelector 
                             name="debit_account" 
                             accounts={accounts} 
                             onAccountSelect={handleDebitSelect}
-                            placeholder="Select a source account..."
+                            placeholder="Select source account..."
                         />
                         {state?.errors?.debit_account && <p className="text-sm text-destructive">{state.errors.debit_account[0]}</p>}
                     </div>
                      <div className="space-y-1.5">
-                        <Label htmlFor="debit_amount">Debit Amount ({debitAccount?.currency || '...'})</Label>
+                        <Label htmlFor="debit_amount">Amount ({debitAccount?.currency || '...'})</Label>
                         <Input 
                             id="debit_amount" 
                             name="debit_amount" 
@@ -204,17 +204,17 @@ export function JournalEntryForm() {
 
                 <div className="grid md:grid-cols-2 gap-4 items-start">
                      <div className="space-y-1.5">
-                        <Label>To (Credit)</Label>
+                        <Label>To Account</Label>
                         <AccountSelector 
                             name="credit_account" 
                             accounts={accounts} 
                             onAccountSelect={handleCreditSelect}
-                            placeholder="Select a destination account..."
+                            placeholder="Select destination account..."
                         />
                         {state?.errors?.credit_account && <p className="text-sm text-destructive">{state.errors.credit_account[0]}</p>}
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="credit_amount">Credit Amount ({creditAccount?.currency || '...'})</Label>
+                        <Label htmlFor="credit_amount">Amount ({creditAccount?.currency || '...'})</Label>
                         <Input 
                             id="credit_amount" 
                             name="credit_amount" 
