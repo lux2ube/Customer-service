@@ -8,6 +8,14 @@ Customer Central is a comprehensive financial transaction management system buil
 
 Preferred communication style: Simple, everyday language.
 
+**CRITICAL UI PREFERENCE - NO ACCOUNTING JARGON:**
+- Never use "Debit" or "Credit" terminology in the UI
+- Use only "INCREASE" and "DECREASE" for all user-facing displays
+- Transaction display rule:
+  - **PAYMENT (payout, outflow, send)**: Both accounts show DECREASE
+  - **RECEIPT (inflow, receive, deposit)**: Both accounts show INCREASE
+- Journal table detects transaction type from description keywords to apply correct display
+
 ## System Architecture
 
 ### Frontend Architecture

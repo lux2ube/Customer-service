@@ -17,24 +17,14 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { ArrowDown, ArrowUp, TrendingDown, TrendingUp } from 'lucide-react';
 
-function isAssetAccount(accountId: string): boolean {
-  return accountId.startsWith('1');
+function isPaymentTransaction(description: string): boolean {
+  const desc = description.toLowerCase();
+  return desc.includes('payout') || desc.includes('payment') || desc.includes('outflow') || desc.includes('send');
 }
 
-function isLiabilityAccount(accountId: string): boolean {
-  return accountId.startsWith('6') || accountId.startsWith('7');
-}
-
-function getAccountChange(accountId: string, isDebitSide: boolean): 'increase' | 'decrease' {
-  const isAsset = isAssetAccount(accountId);
-  const isLiability = isLiabilityAccount(accountId);
-  
-  if (isAsset) {
-    return isDebitSide ? 'increase' : 'decrease';
-  } else if (isLiability) {
-    return isDebitSide ? 'decrease' : 'increase';
-  }
-  return isDebitSide ? 'increase' : 'decrease';
+function isReceiptTransaction(description: string): boolean {
+  const desc = description.toLowerCase();
+  return desc.includes('receipt') || desc.includes('inflow') || desc.includes('receive') || desc.includes('deposit');
 }
 
 export function JournalTable() {
@@ -91,33 +81,41 @@ export function JournalTable() {
                       {(() => {
                         const debitName = entry.debit_account_name || entry.debit_account;
                         const creditName = entry.credit_account_name || entry.credit_account;
+                        const description = entry.description || '';
                         
-                        const debitChange = getAccountChange(entry.debit_account, true);
-                        const creditChange = getAccountChange(entry.credit_account, false);
+                        const isPayment = isPaymentTransaction(description);
+                        const isReceipt = isReceiptTransaction(description);
+                        
+                        let change: 'increase' | 'decrease' = 'decrease';
+                        if (isReceipt) {
+                          change = 'increase';
+                        } else if (isPayment) {
+                          change = 'decrease';
+                        }
                         
                         return (
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              {debitChange === 'decrease' ? (
+                              {change === 'decrease' ? (
                                 <TrendingDown className="h-4 w-4 text-red-500" />
                               ) : (
                                 <TrendingUp className="h-4 w-4 text-green-500" />
                               )}
                               <span className="font-medium">{debitName}</span>
-                              <Badge variant={debitChange === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${debitChange === 'increase' ? 'bg-green-600' : ''}`}>
-                                {debitChange === 'decrease' ? '↓ Decrease' : '↑ Increase'}
+                              <Badge variant={change === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${change === 'increase' ? 'bg-green-600' : ''}`}>
+                                {change === 'decrease' ? '↓ Decrease' : '↑ Increase'}
                               </Badge>
                               <span className="font-mono text-sm">${new Intl.NumberFormat().format(entry.debit_amount)}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {creditChange === 'decrease' ? (
+                              {change === 'decrease' ? (
                                 <TrendingDown className="h-4 w-4 text-red-500" />
                               ) : (
                                 <TrendingUp className="h-4 w-4 text-green-500" />
                               )}
                               <span className="font-medium">{creditName}</span>
-                              <Badge variant={creditChange === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${creditChange === 'increase' ? 'bg-green-600' : ''}`}>
-                                {creditChange === 'decrease' ? '↓ Decrease' : '↑ Increase'}
+                              <Badge variant={change === 'decrease' ? 'destructive' : 'default'} className={`text-xs ${change === 'increase' ? 'bg-green-600' : ''}`}>
+                                {change === 'decrease' ? '↓ Decrease' : '↑ Increase'}
                               </Badge>
                               <span className="font-mono text-sm">${new Intl.NumberFormat().format(entry.credit_amount)}</span>
                             </div>
