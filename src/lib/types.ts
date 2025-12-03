@@ -188,7 +188,8 @@ export interface Account {
     parentId?: string | null;
     currency?: string | null;
     priority?: number;
-    // Balance fields will be calculated properties, not stored directly
+    balance?: number; // Running balance updated with each journal entry
+    lastBalanceUpdate?: string; // ISO timestamp of last balance update
 }
 
 export interface JournalEntry {

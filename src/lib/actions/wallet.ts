@@ -6,7 +6,7 @@ import { push, ref, set, update, get } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import { findClientByAddress } from './client';
-import { sendTelegramNotification, getNextSequentialId, stripUndefined } from './helpers';
+import { sendTelegramNotification, getNextSequentialId, stripUndefined, getAccountBalanceUpdates } from './helpers';
 import type { JournalEntry, Account, UsdtRecord, Client } from '../types';
 
 const USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -278,6 +278,10 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
                 credit_account_balance_after: walletBalanceAfter,
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+            
+            // Update account balances atomically with journal entry
+            const balanceUpdates = await getAccountBalanceUpdates(clientAccountId, creditAccountId, amount, dateNow);
+            Object.assign(updates, balanceUpdates);
         }
 
         await update(ref(db), updates);

@@ -8,7 +8,7 @@ import { ref, set, get, remove, update, query, orderByChild, equalTo, limitToLas
 import { revalidatePath } from 'next/cache';
 import { ethers } from 'ethers';
 import type { Client, Account, Settings, Transaction, BscApiSetting, UsdtRecord, JournalEntry, ModernUsdtRecord } from '../types';
-import { stripUndefined, getNextSequentialId, notifyClientTransaction } from './helpers';
+import { stripUndefined, getNextSequentialId, notifyClientTransaction, BalanceTracker } from './helpers';
 import { findClientByAddress } from './client';
 
 export type SyncState = { message?: string; error?: boolean; } | undefined;
@@ -224,28 +224,49 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         let highestBlock = lastSyncedBlock;
         let newRecordsCount = 0;
         let skippedCount = 0;
-
+        
+        // Pre-process transactions to collect all account IDs for balance tracking
+        const transactionsToProcess: Array<{
+            tx: any;
+            existingClient: Client | null;
+            syncedAmount: number;
+            isIncoming: boolean;
+            clientWalletAddress: string;
+        }> = [];
+        
+        const accountIdsForBalances = new Set<string>([accountId, '7002']);
+        
         for (const tx of fetchedTransactions) {
             const txBlockNumber = parseInt(tx.blockNumber);
-            
-            // Skip transactions from the exact lastSyncedBlock (already processed)
             if (txBlockNumber <= lastSyncedBlock && lastSyncedBlock > 0) {
                 skippedCount++;
                 continue;
             }
-
-            highestBlock = Math.max(highestBlock, txBlockNumber);
             
             const syncedAmount = parseFloat(tx.value) / (10 ** USDT_DECIMALS);
             if (syncedAmount <= 0.01) {
                 skippedCount++;
                 continue;
             }
-
+            
             const isIncoming = tx.to.toLowerCase() === walletAddress.toLowerCase();
             const clientWalletAddress = isIncoming ? tx.from : tx.to;
-            
             const existingClient = await findClientByAddress(clientWalletAddress);
+            
+            if (existingClient) {
+                accountIdsForBalances.add(`6000${existingClient.id}`);
+            }
+            
+            transactionsToProcess.push({ tx, existingClient, syncedAmount, isIncoming, clientWalletAddress });
+        }
+        
+        // Initialize balance tracker with all accounts that will be affected
+        const balanceTracker = new BalanceTracker(new Date().toISOString());
+        await balanceTracker.loadAccounts([...accountIdsForBalances]);
+
+        for (const { tx, existingClient, syncedAmount, isIncoming, clientWalletAddress } of transactionsToProcess) {
+            const txBlockNumber = parseInt(tx.blockNumber);
+            highestBlock = Math.max(highestBlock, txBlockNumber);
 
             // Generate USDT1, USDT2, etc. ID for modern_usdt_records collection
             const newRecordId = await getNextSequentialId('modernUsdtRecordId');
@@ -254,7 +275,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 date: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
                 type: isIncoming ? 'inflow' : 'outflow',
                 source: 'BSCScan',
-                status: 'Confirmed', // All records confirmed by default
+                status: 'Confirmed',
                 clientId: existingClient ? existingClient.id : null,
                 clientName: existingClient ? existingClient.name : 'Unassigned',
                 accountId: accountId,
@@ -266,23 +287,23 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 createdAt: new Date().toISOString(),
             };
             
-            // Store in modern_usdt_records collection with USDT1, USDT2, etc. as document ID
             updates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: txBlockNumber };
 
-            // Create journal entry for ALL transactions (assigned or unassigned)
             const journalRef = push(ref(db, 'journal_entries'));
             
             if (existingClient) {
-                // ASSIGNED: Journal entry with client liability account (6000{clientId})
                 const clientAccountId = `6000${existingClient.id}`;
                 const journalDescription = `Synced USDT ${newTxData.type} from ${configName} for ${existingClient.name}`;
                 const clientNameForJournal = existingClient.name || `Client ${existingClient.id}`;
 
+                const debitAcc = newTxData.type === 'inflow' ? accountId : clientAccountId;
+                const creditAcc = newTxData.type === 'inflow' ? clientAccountId : accountId;
+
                 const journalEntry: Omit<JournalEntry, 'id'> = {
                     date: newTxData.date,
                     description: journalDescription,
-                    debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
-                    credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                    debit_account: debitAcc,
+                    credit_account: creditAcc,
                     debit_amount: newTxData.amount,
                     credit_amount: newTxData.amount,
                     amount_usd: newTxData.amount,
@@ -291,20 +312,23 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                     credit_account_name: newTxData.type === 'inflow' ? clientNameForJournal : cryptoWalletName,
                 };
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+                
+                // Track balance changes (accumulates correctly for multiple entries)
+                balanceTracker.addJournalEntry(debitAcc, creditAcc, newTxData.amount);
 
                 await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
             } else {
-                // UNASSIGNED: Route to liability account 7002 (Unassigned USDT Liability)
                 const unassignedUsdtAccountId = '7002';
                 const journalDescription = `Unassigned USDT ${newTxData.type} from ${configName} - wallet: ${clientWalletAddress.slice(0, 10)}...`;
+
+                const debitAcc = newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId;
+                const creditAcc = newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId;
 
                 const journalEntry: Omit<JournalEntry, 'id'> = {
                     date: newTxData.date,
                     description: journalDescription,
-                    // For inflow: DEBIT wallet (asset increases), CREDIT 7002 (liability increases - we owe this unassigned amount)
-                    // For outflow: DEBIT 7002 (liability decreases), CREDIT wallet (asset decreases)
-                    debit_account: newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId,
-                    credit_account: newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId,
+                    debit_account: debitAcc,
+                    credit_account: creditAcc,
                     debit_amount: newTxData.amount,
                     credit_amount: newTxData.amount,
                     amount_usd: newTxData.amount,
@@ -313,10 +337,17 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                     credit_account_name: newTxData.type === 'inflow' ? 'Unassigned USDT Liability' : cryptoWalletName,
                 };
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+                
+                // Track balance changes (accumulates correctly for multiple entries)
+                balanceTracker.addJournalEntry(debitAcc, creditAcc, newTxData.amount);
             }
 
             newRecordsCount++;
         }
+
+        // Get all accumulated balance updates
+        const balanceUpdates = balanceTracker.getBalanceUpdates();
+        Object.assign(updates, balanceUpdates);
 
         // Update lastSyncedBlock to the highest block number processed
         if (highestBlock > lastSyncedBlock) {

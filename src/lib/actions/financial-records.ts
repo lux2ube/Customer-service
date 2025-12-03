@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider } from '../types';
-import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification, notifyClientTransaction } from './helpers';
+import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification, notifyClientTransaction, getAccountBalanceUpdates } from './helpers';
 import { redirect } from 'next/navigation';
 
 
@@ -630,7 +630,15 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
                 debit_account_name: debitAcc === '7001' ? 'Unmatched Cash' : record.accountName,
                 credit_account_name: creditAcc === '7001' ? 'Unmatched Cash' : record.accountName,
             };
-            await set(journalRef, entry);
+            
+            // Combine journal entry and balance updates in single atomic update
+            const balanceUpdates = await getAccountBalanceUpdates(debitAcc, creditAcc, record.amountusd, date);
+            const atomicUpdates: { [path: string]: any } = {
+                [`journal_entries/${journalRef.key}`]: entry,
+                ...balanceUpdates
+            };
+            await update(ref(db), atomicUpdates);
+            
             console.log(`✅ Journal entry created for unmatched cash record ${record.id} → account 7001`);
             return { success: true };
         }
@@ -662,7 +670,14 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
             credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
         };
 
-        await set(journalRef, entry);
+        // Combine journal entry and balance updates in single atomic update
+        const balanceUpdates = await getAccountBalanceUpdates(debitAcc, creditAcc, record.amountusd, date);
+        const atomicUpdates: { [path: string]: any } = {
+            [`journal_entries/${journalRef.key}`]: entry,
+            ...balanceUpdates
+        };
+        await update(ref(db), atomicUpdates);
+        
         console.log(`✅ Journal entry created for confirmed cash record ${record.id}`);
         return { success: true };
     } catch (error) {
@@ -722,7 +737,15 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
                 debit_account_name: debitAcc === '7002' ? 'Unmatched USDT' : record.accountName,
                 credit_account_name: creditAcc === '7002' ? 'Unmatched USDT' : record.accountName,
             };
-            await set(journalRef, entry);
+            
+            // Combine journal entry and balance updates in single atomic update
+            const balanceUpdates = await getAccountBalanceUpdates(debitAcc, creditAcc, record.amount, date);
+            const atomicUpdates: { [path: string]: any } = {
+                [`journal_entries/${journalRef.key}`]: entry,
+                ...balanceUpdates
+            };
+            await update(ref(db), atomicUpdates);
+            
             console.log(`✅ Journal entry created for unmatched USDT record ${record.id} → account 7002`);
             return { success: true };
         }
@@ -754,7 +777,14 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
             credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
         };
 
-        await set(journalRef, entry);
+        // Combine journal entry and balance updates in single atomic update
+        const balanceUpdates = await getAccountBalanceUpdates(debitAcc, creditAcc, record.amount, date);
+        const atomicUpdates: { [path: string]: any } = {
+            [`journal_entries/${journalRef.key}`]: entry,
+            ...balanceUpdates
+        };
+        await update(ref(db), atomicUpdates);
+        
         console.log(`✅ Journal entry created for confirmed USDT record ${record.id}`);
         return { success: true };
     } catch (error) {
@@ -894,7 +924,11 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
             entry_type: 'transfer'
         };
         
-        // 3. Update record with client info (skip if already updated by caller)
+        // 3. Update account balances atomically with journal entry
+        const balanceUpdates = await getAccountBalanceUpdates(unmatchedAccount, clientAccountId, amount, date);
+        Object.assign(atomicUpdates, balanceUpdates);
+        
+        // 4. Update record with client info (skip if already updated by caller)
         if (!skipRecordUpdate) {
             atomicUpdates[`${recordPath}/${recordId}/clientId`] = clientId;
             atomicUpdates[`${recordPath}/${recordId}/clientName`] = client.name;
