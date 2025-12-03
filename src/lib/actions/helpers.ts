@@ -184,16 +184,18 @@ export async function notifyClientTransaction(
         const journalQuery = query(ref(db, 'journal_entries'));
         const journalSnapshot = await get(journalQuery);
         
+        // Calculate balance using stored_balance = debits - credits convention
+        // For liability accounts: debit INCREASES balance, credit DECREASES balance
         let balance = 0;
         if (journalSnapshot.exists()) {
             const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
             for (const key in allEntries) {
                 const entry = allEntries[key];
-                 if (entry.credit_account === clientAccountId) {
-                    balance += entry.amount_usd;
-                }
                 if (entry.debit_account === clientAccountId) {
-                    balance -= entry.amount_usd;
+                    balance += entry.amount_usd; // Debit increases stored balance
+                }
+                if (entry.credit_account === clientAccountId) {
+                    balance -= entry.amount_usd; // Credit decreases stored balance
                 }
             }
         }
