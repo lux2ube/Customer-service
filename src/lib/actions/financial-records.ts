@@ -488,7 +488,20 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
                         });
                     }
                     
-                    await update(clientRef, { serviceProviders });
+                    // For Crypto providers, also sync Address to bep20_addresses for unified lookup
+                    const updateData: Record<string, any> = { serviceProviders };
+                    if (providerData.type === 'Crypto' && detailsObj.Address) {
+                        const normalizedAddress = detailsObj.Address.toLowerCase().trim();
+                        const existingAddresses: string[] = client.bep20_addresses || [];
+                        const normalizedExisting = existingAddresses.map((a: string) => a.toLowerCase());
+                        
+                        if (!normalizedExisting.includes(normalizedAddress)) {
+                            updateData.bep20_addresses = [...existingAddresses, detailsObj.Address.trim()];
+                            console.log(`Added address ${detailsObj.Address} to bep20_addresses for client ${clientId}`);
+                        }
+                    }
+                    
+                    await update(clientRef, updateData);
                     updatedServiceProviders = serviceProviders;
                     console.log(`Stored provider details for client ${clientId}, provider ${providerId}`);
                 } else {
