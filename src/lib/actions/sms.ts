@@ -301,10 +301,12 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
             };
             updates[`/cash_records/${newRecordId}`] = stripUndefined(newRecord);
             
-            // Create journal entry: Asset account <-> 7001
+            // Create journal entry: 7001 <-> Asset account
+            // INFLOW (receipt): Debit 7001 (liability UP), Credit bank
+            // OUTFLOW (payment): Credit 7001 (liability DOWN), Debit bank
             const journalRef = push(ref(db, 'journal_entries'));
-            const debitAcc = recordType === 'inflow' ? msg.accountId : unmatchedCashAccountId;
-            const creditAcc = recordType === 'inflow' ? unmatchedCashAccountId : msg.accountId;
+            const debitAcc = recordType === 'inflow' ? unmatchedCashAccountId : msg.accountId;
+            const creditAcc = recordType === 'inflow' ? msg.accountId : unmatchedCashAccountId;
             
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: recordDate,
@@ -315,8 +317,8 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 credit_amount: msg.amountusd,
                 amount_usd: msg.amountusd,
                 createdAt: recordDate,
-                debit_account_name: recordType === 'inflow' ? msg.account.name : 'Unmatched Cash USD',
-                credit_account_name: recordType === 'inflow' ? 'Unmatched Cash USD' : msg.account.name,
+                debit_account_name: recordType === 'inflow' ? 'Unmatched Cash USD' : msg.account.name,
+                credit_account_name: recordType === 'inflow' ? msg.account.name : 'Unmatched Cash USD',
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
             
@@ -386,10 +388,10 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         const journalRef = push(ref(db, 'journal_entries'));
         
         // Transfer from 7001 to client liability:
-        // Inflow (we received money): DEBIT 7001 (reduce unmatched liability), CREDIT client liability (increase what we owe client)
-        // Outflow (we paid money): DEBIT client liability (reduce what we owe), CREDIT 7001 (reduce unmatched liability)
-        const debitAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
-        const creditAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+        // Inflow (we received money): CREDIT 7001 (reduce unmatched, was debited before), DEBIT client (increase client liability)
+        // Outflow (we paid money): DEBIT 7001 (reduce unmatched, was credited before), CREDIT client (reduce client liability)
+        const debitAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+        const creditAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
         
         const journalEntry: Omit<JournalEntry, 'id'> = {
             date: transferDate,
@@ -400,8 +402,8 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
             credit_amount: amount,
             amount_usd: amount,
             createdAt: transferDate,
-            debit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
-            credit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+            debit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+            credit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
         };
         
         // Track balance changes
@@ -648,10 +650,10 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             // Create transfer journal entry: 7001 -> Client Liability
             const journalRef = push(ref(db, 'journal_entries'));
             
-            // Inflow: DEBIT 7001 (reduce unmatched), CREDIT client liability (increase)
-            // Outflow: DEBIT client liability (reduce), CREDIT 7001 (reduce unmatched)
-            const debitAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
-            const creditAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+            // Inflow: DEBIT client (increase client liability), CREDIT 7001 (reduce unmatched)
+            // Outflow: CREDIT client (reduce client liability), DEBIT 7001 (reduce unmatched)
+            const debitAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+            const creditAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
             
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: transferDate,
@@ -662,8 +664,8 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
                 credit_amount: amount,
                 amount_usd: amount,
                 createdAt: transferDate,
-                debit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
-                credit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+                debit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+                credit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
             };
             
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;

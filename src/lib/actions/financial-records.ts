@@ -605,9 +605,11 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
         const date = new Date().toISOString();
 
         // If unassigned, record goes to account 7001 (unmatched cash USD)
+        // INFLOW (receipt): Debit 7001 (liability UP), Credit bank (asset records credit)
+        // OUTFLOW (payment): Credit 7001 (liability DOWN), Debit bank
         if (!record.clientId || !client) {
-            const debitAcc = record.type === 'inflow' ? record.accountId : '7001';
-            const creditAcc = record.type === 'inflow' ? '7001' : record.accountId;
+            const debitAcc = record.type === 'inflow' ? '7001' : record.accountId;
+            const creditAcc = record.type === 'inflow' ? record.accountId : '7001';
             
             const [debitBefore, creditBefore] = await Promise.all([
                 calculateAccountBalanceBefore(debitAcc, record.date),
@@ -627,8 +629,8 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
                 credit_account_balance_before: creditBefore,
                 credit_account_balance_after: creditBefore - record.amountusd,
                 createdAt: date,
-                debit_account_name: debitAcc === '7001' ? 'Unmatched Cash' : record.accountName,
-                credit_account_name: creditAcc === '7001' ? 'Unmatched Cash' : record.accountName,
+                debit_account_name: record.type === 'inflow' ? 'Unmatched Cash' : record.accountName,
+                credit_account_name: record.type === 'inflow' ? record.accountName : 'Unmatched Cash',
             };
             
             // Combine journal entry and balance updates in single atomic update
@@ -644,9 +646,11 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
         }
 
         // If assigned, normal client account entry
+        // INFLOW (receipt): Debit client (liability UP), Credit bank (asset records credit)
+        // OUTFLOW (payment): Credit client (liability DOWN), Debit bank
         const clientAccountId = `6000${client.id}`;
-        const debitAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
-        const creditAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        const debitAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        const creditAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
         
         const [debitBefore, creditBefore] = await Promise.all([
             calculateAccountBalanceBefore(debitAcc, record.date),
@@ -666,8 +670,8 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
             credit_account_balance_before: creditBefore,
             credit_account_balance_after: creditBefore - record.amountusd,
             createdAt: date,
-            debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
-            credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
+            debit_account_name: record.type === 'inflow' ? client.name : record.accountName,
+            credit_account_name: record.type === 'inflow' ? record.accountName : client.name,
         };
 
         // Combine journal entry and balance updates in single atomic update
@@ -689,7 +693,7 @@ async function createJournalEntriesForConfirmedCashRecord(record: CashRecord & {
 /**
  * When a USDT record is confirmed, create journal entries with balance tracking
  * UNASSIGNED: Record to 7002 (unmatched USDT) until assigned to client
- * ASSIGNED: DEBIT wallet account (asset ↑), CREDIT client account (liability ↓)
+ * ASSIGNED: INFLOW debits client (liability UP), OUTFLOW credits client (liability DOWN)
  */
 async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & { id: string }, client: Client | null) {
     try {
@@ -712,9 +716,11 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
         const date = new Date().toISOString();
 
         // If unassigned, record goes to account 7002 (unmatched USDT)
+        // INFLOW (receipt): Debit 7002 (liability UP), Credit wallet
+        // OUTFLOW (payment): Credit 7002 (liability DOWN), Debit wallet
         if (!record.clientId || !client) {
-            const debitAcc = record.type === 'inflow' ? record.accountId : '7002';
-            const creditAcc = record.type === 'inflow' ? '7002' : record.accountId;
+            const debitAcc = record.type === 'inflow' ? '7002' : record.accountId;
+            const creditAcc = record.type === 'inflow' ? record.accountId : '7002';
             
             const [debitBefore, creditBefore] = await Promise.all([
                 calculateAccountBalanceBefore(debitAcc, record.date),
@@ -734,8 +740,8 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
                 credit_account_balance_before: creditBefore,
                 credit_account_balance_after: creditBefore - record.amount,
                 createdAt: date,
-                debit_account_name: debitAcc === '7002' ? 'Unmatched USDT' : record.accountName,
-                credit_account_name: creditAcc === '7002' ? 'Unmatched USDT' : record.accountName,
+                debit_account_name: record.type === 'inflow' ? 'Unmatched USDT' : record.accountName,
+                credit_account_name: record.type === 'inflow' ? record.accountName : 'Unmatched USDT',
             };
             
             // Combine journal entry and balance updates in single atomic update
@@ -751,9 +757,11 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
         }
 
         // If assigned, normal client account entry
+        // INFLOW (receipt): Debit client (liability UP), Credit wallet
+        // OUTFLOW (payment): Credit client (liability DOWN), Debit wallet
         const clientAccountId = `6000${client.id}`;
-        const debitAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
-        const creditAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        const debitAcc = record.type === 'inflow' ? clientAccountId : record.accountId;
+        const creditAcc = record.type === 'inflow' ? record.accountId : clientAccountId;
         
         const [debitBefore, creditBefore] = await Promise.all([
             calculateAccountBalanceBefore(debitAcc, record.date),
@@ -773,8 +781,8 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
             credit_account_balance_before: creditBefore,
             credit_account_balance_after: creditBefore - record.amount,
             createdAt: date,
-            debit_account_name: record.type === 'inflow' ? record.accountName : client.name,
-            credit_account_name: record.type === 'inflow' ? client.name : record.accountName,
+            debit_account_name: record.type === 'inflow' ? client.name : record.accountName,
+            credit_account_name: record.type === 'inflow' ? record.accountName : client.name,
         };
 
         // Combine journal entry and balance updates in single atomic update

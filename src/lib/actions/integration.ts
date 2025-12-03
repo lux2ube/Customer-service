@@ -324,8 +324,13 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 const journalDescription = `Synced USDT ${newTxData.type} from ${configName} for ${existingClient.name}`;
                 const clientNameForJournal = existingClient.name || `Client ${existingClient.id}`;
 
-                const debitAcc = newTxData.type === 'inflow' ? accountId : clientAccountId;
-                const creditAcc = newTxData.type === 'inflow' ? clientAccountId : accountId;
+                // INFLOW (receipt from client): Debit client (liability UP), Credit wallet (asset UP via credit reversal)
+                // OUTFLOW (payment to client): Credit client (liability DOWN), Debit wallet (asset DOWN via debit)
+                // Convention: stored_balance = debits - credits. For client liabilities displayed as positive:
+                //   - Debit increases displayed balance (we owe them more)
+                //   - Credit decreases displayed balance (we owe them less)
+                const debitAcc = newTxData.type === 'inflow' ? clientAccountId : accountId;
+                const creditAcc = newTxData.type === 'inflow' ? accountId : clientAccountId;
 
                 const journalEntry: Omit<JournalEntry, 'id'> = {
                     date: newTxData.date,
@@ -336,8 +341,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                     credit_amount: newTxData.amount,
                     amount_usd: newTxData.amount,
                     createdAt: new Date().toISOString(),
-                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : clientNameForJournal,
-                    credit_account_name: newTxData.type === 'inflow' ? clientNameForJournal : cryptoWalletName,
+                    debit_account_name: newTxData.type === 'inflow' ? clientNameForJournal : cryptoWalletName,
+                    credit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : clientNameForJournal,
                 };
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
                 
@@ -349,8 +354,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 const unassignedUsdtAccountId = '7002';
                 const journalDescription = `Unassigned USDT ${newTxData.type} from ${configName} - wallet: ${clientWalletAddress.slice(0, 10)}...`;
 
-                const debitAcc = newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId;
-                const creditAcc = newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId;
+                // Same logic for unassigned USDT liability (7002)
+                const debitAcc = newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId;
+                const creditAcc = newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId;
 
                 const journalEntry: Omit<JournalEntry, 'id'> = {
                     date: newTxData.date,
@@ -361,8 +367,8 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                     credit_amount: newTxData.amount,
                     amount_usd: newTxData.amount,
                     createdAt: new Date().toISOString(),
-                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : 'Unassigned USDT Liability',
-                    credit_account_name: newTxData.type === 'inflow' ? 'Unassigned USDT Liability' : cryptoWalletName,
+                    debit_account_name: newTxData.type === 'inflow' ? 'Unassigned USDT Liability' : cryptoWalletName,
+                    credit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : 'Unassigned USDT Liability',
                 };
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
                 
@@ -522,11 +528,12 @@ export async function syncBscCsv(prevState: SyncState, formData: FormData): Prom
                     const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
                     const journalRef = push(ref(db, 'journal_entries'));
 
+                    // Same logic: Inflow (receipt) debits client (liability UP), outflow (payment) credits client (liability DOWN)
                     const journalEntry: Omit<JournalEntry, 'id'> = {
                         date: newTxData.date,
                         description: journalDescription,
-                        debit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
-                        credit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                        debit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                        credit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
                         debit_amount: newTxData.amount,
                         credit_amount: newTxData.amount,
                         amount_usd: newTxData.amount,
