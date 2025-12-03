@@ -20,10 +20,16 @@ Preferred communication style: Simple, everyday language.
 
 **Core Design Principle**: Double-Entry Bookkeeping, ensuring every financial transaction creates balanced journal entries and maintains an immutable audit trail.
 
-**Balance Convention**: `stored_balance = debits - credits` for ALL account types. For client liability accounts (6000x series):
-- **INFLOW (receipt from client)**: DEBIT client account → stored balance INCREASES (we owe them more)
-- **OUTFLOW (payment to client)**: CREDIT client account → stored balance DECREASES (we owe them less)
+**Balance Convention**: `stored_balance = debits - credits` for ALL account types.
+
+For client liability accounts (6000x series), stored as NEGATIVE values (e.g., -26,061 means we owe $26,061):
+- **INFLOW (receipt from client)**: CREDIT client account → stored DECREASES (more negative = we owe them MORE)
+- **OUTFLOW (payment to client)**: DEBIT client account → stored INCREASES (less negative = we owe them LESS)
 - This convention applies to all liability accounts including 7001 (Unmatched Cash USD) and 7002 (Unmatched USDT)
+
+For asset accounts (1xxx series), stored as POSITIVE values:
+- **Receipt into asset**: DEBIT asset → stored INCREASES (we have more)
+- **Payment from asset**: CREDIT asset → stored DECREASES (we have less)
 **Data Flow Pattern**: "Record-First Workflow" where raw financial movements (from manual entry, SMS, or blockchain monitoring) are captured as Records. Records transition through statuses (Pending → Matched → Used/Confirmed → Cancelled), Transactions wrap Records for business meaning, and Journal Entries are automatically created.
 
 **Key Workflows**:

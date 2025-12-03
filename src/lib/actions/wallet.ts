@@ -244,28 +244,27 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         if (client) {
             const clientAccountId = `6000${client.id}`;
             
-            // USDT Payout TO client:
-            // DEBIT client liability (6000{id}) → reduces what we owe them (we paid them)
-            // CREDIT wallet asset → reduces our USDT balance (we spent it)
-            // For Liabilities: Balance = CREDITS - DEBITS (so DEBIT decreases liability)
-            // For Assets: Balance = DEBITS - CREDITS (so CREDIT decreases asset)
+            // USDT Payout TO client (OUTFLOW):
+            // Convention: stored_balance = debits - credits for ALL accounts
+            // Liabilities stored as NEGATIVE. Payout reduces what we owe = stored becomes less negative.
+            // DEBIT liability → stored INCREASES (less negative = owe less) ✓
+            // CREDIT asset → stored DECREASES (less USDT) ✓
             const [clientBalanceBefore, walletBalanceBefore] = await Promise.all([
                 calculateAccountBalanceBefore(clientAccountId, dateNow),
                 calculateAccountBalanceBefore(creditAccountId, dateNow)
             ]);
             
-            // calculateAccountBalanceBefore returns DEBITS - CREDITS for all accounts
-            // When we DEBIT client: new_balance = (DEBITS + amount) - CREDITS = before + amount
-            // When we CREDIT wallet: new_balance = DEBITS - (CREDITS + amount) = before - amount
-            const clientBalanceAfter = clientBalanceBefore + amount; // DEBIT increases the calculated balance
-            const walletBalanceAfter = walletBalanceBefore - amount; // CREDIT decreases the calculated balance
+            // DEBIT client: stored += amount (liability becomes less negative = owe less)
+            // CREDIT wallet: stored -= amount (asset decreases = less USDT)
+            const clientBalanceAfter = clientBalanceBefore + amount;
+            const walletBalanceAfter = walletBalanceBefore - amount;
             
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: dateNow,
                 description: `USDT Payout to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
-                debit_account: clientAccountId, // DEBIT: Client liability (reduces what we owe)
-                credit_account: creditAccountId, // CREDIT: Wallet asset (reduces our USDT)
+                debit_account: clientAccountId, // DEBIT: Client liability (owe them less)
+                credit_account: creditAccountId, // CREDIT: Wallet asset (less USDT)
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
