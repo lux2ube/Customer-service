@@ -60,7 +60,7 @@ export function ClientUsdtRecordsTable({ records, loading, selectedIds, onSelect
                         </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
-                        <TableHead>Wallet</TableHead>
+                        <TableHead>Client Wallet</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>

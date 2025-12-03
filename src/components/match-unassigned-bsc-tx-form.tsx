@@ -78,7 +78,9 @@ export function MatchUnassignedBscTxForm({ client, onTxMatched, setIsOpen }: Mat
                     <span className="font-semibold">{record.amount.toLocaleString()} USDT</span>
                     <span className="text-xs text-muted-foreground">{format(new Date(record.date), 'PP')}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">From: {record.clientWalletAddress || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {record.type === 'inflow' ? 'From' : 'To'}: {record.clientWalletAddress || 'N/A'}
+                  </p>
                 </div>
                 <Button size="sm" onClick={() => handleMatch(record)}>
                     <Check className="mr-2 h-4 w-4" /> Match
