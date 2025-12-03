@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { push, ref, set, update, get, remove } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
 import type { Account } from '../types';
-import { stripUndefined, logAction } from './helpers';
+import { stripUndefined, logAction, rebuildAllAccountBalances as rebuildBalancesInternal } from './helpers';
 import { redirect } from 'next/navigation';
 
 // --- Chart of Accounts Actions ---
@@ -313,4 +313,12 @@ export async function setupClientParentAccount(prevState: SetupState, formData: 
         console.error("Client parent account setup error:", e);
         return { message: e.message || 'An unknown error occurred during setup.', error: true };
     }
+}
+
+/**
+ * Server action wrapper to rebuild all account balances from journal entries.
+ * This recalculates balances using the stored balance = debits - credits convention.
+ */
+export async function rebuildAccountBalances(): Promise<{ success: boolean; message: string; accountsUpdated: number }> {
+    return rebuildBalancesInternal();
 }

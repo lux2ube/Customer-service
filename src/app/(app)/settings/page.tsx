@@ -15,7 +15,7 @@ import type { Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save } from 'lucide-react';
-import { updateApiSettings, rebuildAllAccountBalances, type RateFormState } from '@/lib/actions';
+import { updateApiSettings, rebuildAccountBalances, type RateFormState } from '@/lib/actions';
 import { RefreshCw } from 'lucide-react';
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
@@ -67,7 +67,7 @@ function BalanceManagementCard() {
     const handleRebuildBalances = async () => {
         setRebuilding(true);
         try {
-            const result = await rebuildAllAccountBalances();
+            const result = await rebuildAccountBalances();
             if (result.success) {
                 toast({ 
                     title: "Balances Rebuilt", 

@@ -75,6 +75,23 @@ export function ClientBalanceDetailReport() {
         }
 
         allEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        // Always calculate running balance from entries for consistency
+        // Project convention: stored balance = debits - credits for ALL accounts
+        // For client liability accounts (6000x):
+        //   - DEBIT increases balance (money owed to client increases - they gave us money)
+        //   - CREDIT decreases balance (money paid to client - we gave them money)
+        let runningBalance = 0;
+        for (const entry of allEntries) {
+          entry.balanceBefore = runningBalance;
+          if (entry.isDebit) {
+            entry.balanceAfter = runningBalance + entry.amount;
+          } else {
+            entry.balanceAfter = runningBalance - entry.amount;
+          }
+          runningBalance = entry.balanceAfter;
+        }
+        
         setEntries(allEntries);
       } catch (error) {
         console.error('Error loading entries:', error);

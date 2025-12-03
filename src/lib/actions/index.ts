@@ -9,7 +9,8 @@ export {
     deleteAccount,
     updateAccountPriority,
     setupClientParentAccount,
-    fixAccount7000
+    fixAccount7000,
+    rebuildAccountBalances
 } from './account';
 
 // Journal Entries
@@ -123,7 +124,6 @@ export {
 
 // Balance Management & Helpers
 export {
-    rebuildAllAccountBalances,
     getAccountBalanceUpdates,
     BalanceTracker,
 } from './helpers';
