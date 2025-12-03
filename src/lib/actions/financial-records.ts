@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { db } from '../firebase';
 import { ref, set, get, push, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { revalidatePath } from 'next/cache';
-import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider } from '../types';
+import type { Client, Account, UsdtRecord, JournalEntry, CashRecord, FiatRate, ServiceProvider, ClientServiceProvider } from '../types';
 import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotification, notifyClientTransaction, getAccountBalanceUpdates } from './helpers';
 import { redirect } from 'next/navigation';
 
@@ -326,6 +326,7 @@ export type UsdtPaymentState = {
   message?: string;
   success?: boolean;
   newRecordId?: string;
+  updatedClientServiceProviders?: ClientServiceProvider[];
 } | undefined;
 
 
@@ -460,6 +461,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         }
 
         // Store provider details in client profile if present
+        let updatedServiceProviders: ClientServiceProvider[] | undefined;
         if (clientId && recipientDetails && providerId && providerData) {
             try {
                 const detailsObj = JSON.parse(recipientDetails);
@@ -468,10 +470,10 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
                 
                 if (clientSnapshot.exists()) {
                     const client = clientSnapshot.val();
-                    const serviceProviders = client.serviceProviders || [];
+                    const serviceProviders: ClientServiceProvider[] = client.serviceProviders || [];
                     
                     // Check if this provider already exists for the client
-                    const existingIndex = serviceProviders.findIndex((sp: any) => sp.providerId === providerId);
+                    const existingIndex = serviceProviders.findIndex((sp) => sp.providerId === providerId);
                     
                     if (existingIndex >= 0) {
                         // Update existing provider details
@@ -487,6 +489,7 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
                     }
                     
                     await update(clientRef, { serviceProviders });
+                    updatedServiceProviders = serviceProviders;
                     console.log(`Stored provider details for client ${clientId}, provider ${providerId}`);
                 } else {
                     console.warn(`Client ${clientId} not found for storing provider details`);
@@ -503,7 +506,12 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
         revalidatePath('/'); // For asset balance card
-        return { success: true, message: 'USDT manual payment recorded successfully.', newRecordId: newId };
+        return { 
+            success: true, 
+            message: 'USDT manual payment recorded successfully.', 
+            newRecordId: newId,
+            updatedClientServiceProviders: updatedServiceProviders,
+        };
     } catch (e: any) {
         console.error("Error creating manual USDT payment:", e);
         return { message: 'Database Error: Could not record payment.', success: false };

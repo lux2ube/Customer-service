@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import * as React from 'react';
@@ -20,6 +18,7 @@ import {
 import { db } from '@/lib/firebase';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useProviderAutoFill } from '@/hooks/use-provider-auto-fill';
 import { createUsdtManualPayment, type UsdtPaymentState } from '@/lib/actions/financial-records';
 import { searchClients } from '@/lib/actions/client';
 
@@ -35,6 +34,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
+import { Badge } from './ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from './ui/select';
@@ -43,7 +43,6 @@ import {
 } from './ui/command';
 
 
-// ----------------- Submit Button -----------------
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
   const { pending } = useFormStatus();
    return (
@@ -59,7 +58,7 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
      </Button>
    );
 }
-  // ----------------- Client Selector -----------------
+
 function ClientSelector({
   selectedClient,
   onSelect,
@@ -72,12 +71,12 @@ function ClientSelector({
   const [searchResults, setSearchResults] = React.useState<Client[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
    const debounceRef = React.useRef<NodeJS.Timeout | null>(null);
-   // Keep input value synced with selected client
-  React.useEffect(() => {
+  
+   React.useEffect(() => {
     setInputValue(selectedClient?.name || '');
   }, [selectedClient]);
-   // Search clients with debounce
-  React.useEffect(() => {
+  
+   React.useEffect(() => {
     if (inputValue.length < 2) {
       setSearchResults([]);
       return;
@@ -93,12 +92,15 @@ function ClientSelector({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [inputValue]);
+  
    const getPhone = (phone: string | string[] | undefined) =>
      Array.isArray(phone) ? phone.join(', ') : phone || '';
+  
    const handleSelect = (client: Client) => {
     onSelect(client);
     setOpen(false);
   };
+  
    return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -150,15 +152,15 @@ function ClientSelector({
     </Popover>
   );
 }
-  // ----------------- Main Form -----------------
+
 export function UsdtManualPaymentForm({
    record,
    clients,
-   clientFromProps, // Client passed in from another component
-   onFormSubmit, // Callback for when form is submitted
+   clientFromProps,
+   onFormSubmit,
  }: {
    record?: UsdtRecord;
-   clients?: Client[]; // Make clients optional for embedded use case
+   clients?: Client[];
    clientFromProps?: Client;
    onFormSubmit?: () => void;
  }) {
@@ -168,47 +170,39 @@ export function UsdtManualPaymentForm({
    const actionWithId = createUsdtManualPayment.bind(null, record?.id || null);
   const [state, formAction] = useActionState<UsdtPaymentState, FormData>(actionWithId, undefined);
     useFormHotkeys(formRef);
-   // ----------------- Local State -----------------
-  const [date, setDate] = React.useState<Date | undefined>(
+  
+   const [date, setDate] = React.useState<Date | undefined>(
     record?.date ? parseISO(record.date) : undefined
   );
   const [selectedClient, setSelectedClient] = React.useState<Client | null>(
     () => clientFromProps || (clients?.find(c => c.id === record?.clientId)) || null
   );
   const [accountId, setAccountId] = React.useState(record?.accountId || '');
-  const [recipientAddress, setRecipientAddress] = React.useState(record?.clientWalletAddress || '');
   const [amount, setAmount] = React.useState(record?.amount?.toString() || '');
   const [txHash, setTxHash] = React.useState(record?.txHash || '');
   const [status, setStatus] = React.useState<string>(record?.status || 'Confirmed');
   const [notes, setNotes] = React.useState(record?.notes || '');
-   // Wallets state
-  const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
+  
+   const [cryptoWallets, setCryptoWallets] = React.useState<Account[]>([]);
   const [loadingWallets, setLoadingWallets] = React.useState(true);
   const [serviceProviders, setServiceProviders] = React.useState<ServiceProvider[]>([]);
   const [loadingProviders, setLoadingProviders] = React.useState(true);
-   // Get service provider for selected account
-  const selectedAccountProvider = React.useMemo(() => {
-    if (!accountId) return null;
-    return serviceProviders.find(sp => sp.accountIds.includes(accountId)) || null;
-  }, [accountId, serviceProviders]);
+  
+  const { state: autoFillState, updateField, getRecipientDetails, isReady, refreshClient } = useProviderAutoFill(
+    selectedClient,
+    accountId,
+    serviceProviders
+  );
 
-  // Check if BEP20 address field should be shown
-  const shouldShowBep20Address = React.useMemo(() => {
-    if (!selectedAccountProvider) return true; // Default to showing if no provider
-    return selectedAccountProvider.cryptoFormula?.includes('Address') ?? true;
-  }, [selectedAccountProvider]);
-
-   // ----------------- Effects -----------------
-  // Load wallets from Firebase
-  React.useEffect(() => {
+   React.useEffect(() => {
     setLoadingWallets(true);
     const accountsRef = ref(db, 'accounts');
      const unsubscribe = onValue(accountsRef, (snapshot) => {
       if (snapshot.exists()) {
         const allAccountsData: Record<string, Account> = snapshot.val();
-        const allAccounts: Account[] = Object.entries(allAccountsData).map(([id, data]) => ({
-            id,
+        const allAccounts: Account[] = Object.entries(allAccountsData).map(([accountKey, data]) => ({
             ...(data as Account),
+            id: accountKey,
         }));
         setCryptoWallets(allAccounts.filter(acc => !acc.isGroup && acc.currency === 'USDT'));
       }
@@ -217,7 +211,6 @@ export function UsdtManualPaymentForm({
      return () => unsubscribe();
   }, []);
 
-  // Load service providers from Firebase
   React.useEffect(() => {
     setLoadingProviders(true);
     const providersRef = ref(db, 'serviceProviders');
@@ -230,14 +223,22 @@ export function UsdtManualPaymentForm({
     });
     return () => unsubscribe();
   }, []);
-   // Initialize new record with today's date
-  React.useEffect(() => {
+  
+   React.useEffect(() => {
     if (!record) setDate(new Date());
   }, [record]);
-   // Handle form result
-  React.useEffect(() => {
+  
+   React.useEffect(() => {
     if (state?.success) {
       toast({ title: 'Success', description: state.message });
+      
+      if (state.updatedClientServiceProviders && selectedClient) {
+        refreshClient({
+          ...selectedClient,
+          serviceProviders: state.updatedClientServiceProviders,
+        });
+      }
+      
       if (onFormSubmit) {
         onFormSubmit();
       }
@@ -248,7 +249,6 @@ export function UsdtManualPaymentForm({
         setDate(new Date());
         if (!clientFromProps) setSelectedClient(null);
         setAccountId('');
-        setRecipientAddress('');
         setAmount('');
         setTxHash('');
         setStatus('Confirmed');
@@ -257,13 +257,24 @@ export function UsdtManualPaymentForm({
     } else if (state?.message) {
       toast({ title: 'Error', description: state.message, variant: 'destructive' });
     }
-  }, [state, toast, record, router, clientFromProps, onFormSubmit]);
+  }, [state, toast, record, router, clientFromProps, onFormSubmit, selectedClient, refreshClient]);
+  
    const isEditing = !!record;
    const isEmbedded = !!clientFromProps;
-   // ----------------- Render -----------------
-  return (
-    <form action={formAction} ref={formRef}>
+  
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    const formElement = e.currentTarget;
+    const detailsInput = formElement.querySelector('input[name="recipientDetails"]') as HTMLInputElement;
+    if (detailsInput) {
+      detailsInput.value = getRecipientDetails();
+    }
+  };
+
+   return (
+    <form action={formAction} ref={formRef} onSubmit={handleSubmit}>
       <input type="hidden" name="source" value={record?.source || 'Manual'} />
+      <input type="hidden" name="recipientDetails" value={getRecipientDetails()} />
+      
        <Card className={isEmbedded ? "border-none shadow-none" : ""}>
         {!isEmbedded && (
             <CardHeader>
@@ -278,10 +289,8 @@ export function UsdtManualPaymentForm({
             </CardHeader>
         )}
          <CardContent className="space-y-4 pt-6">
-          {/* Date + Client */}
           {!isEmbedded && (
             <div className="grid md:grid-cols-2 gap-4">
-                {/* Date */}
                 <div className="space-y-2">
                 <Label>Date</Label>
                 <Popover>
@@ -307,7 +316,6 @@ export function UsdtManualPaymentForm({
                     </PopoverContent>
                 </Popover>
                 </div>
-                {/* Client */}
                 <div className="space-y-2">
                 <Label htmlFor="clientId">Paid To (Client)</Label>
                 <ClientSelector
@@ -322,7 +330,6 @@ export function UsdtManualPaymentForm({
           <input type="hidden" name="clientId" value={selectedClient?.id || ''} />
           <input type="hidden" name="clientName" value={selectedClient?.name || ''} />
 
-           {/* Wallet */}
           <div className="space-y-2">
             <Label htmlFor="accountId">Paid From (System Wallet)</Label>
             <Select
@@ -353,32 +360,50 @@ export function UsdtManualPaymentForm({
                 )}
               </SelectContent>
             </Select>
+            {autoFillState.providerName && (
+                <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className="text-xs">
+                        {autoFillState.providerName}
+                    </Badge>
+                    {autoFillState.hasSavedDetails && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Auto-filled
+                        </Badge>
+                    )}
+                </div>
+            )}
             {state?.errors?.accountId && (
               <p className="text-sm text-destructive">
                 {state.errors.accountId[0]}
               </p>
             )}
           </div>
-           {/* Recipient Address - only show if service provider requires it */}
-          {shouldShowBep20Address && (
-            <div className="space-y-2">
-              <Label htmlFor="recipientAddress">Recipient BEP20 Address</Label>
+          
+          {autoFillState.formulaFields.map(field => (
+            <div key={field} className="space-y-2">
+              <Label htmlFor={`detail_${field}`}>
+                {field}
+                {autoFillState.hasSavedDetails && autoFillState.fieldValues[field] && (
+                  <span className="text-xs text-muted-foreground ml-2">(saved)</span>
+                )}
+              </Label>
               <Input
-                 id="recipientAddress"
-                 name="recipientAddress"
-                 placeholder="0x..."
-                 required
-                 value={recipientAddress}
-                 onChange={(e) => setRecipientAddress(e.target.value)}
-               />
-              {state?.errors?.recipientAddress && (
-                <p className="text-sm text-destructive">
-                  {state.errors.recipientAddress[0]}
-                </p>
-              )}
+                id={`detail_${field}`}
+                name={`detail_${field}`}
+                placeholder={`Enter recipient's ${field}`}
+                required
+                value={autoFillState.fieldValues[field] || ''}
+                onChange={(e) => updateField(field, e.target.value)}
+              />
             </div>
+          ))}
+          {accountId && autoFillState.formulaFields.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No payment formula is set for this provider. Add one in Service Provider settings.
+            </p>
           )}
-           {/* Amount + TxHash */}
+          
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Amount (USDT)</Label>
@@ -409,7 +434,7 @@ export function UsdtManualPaymentForm({
                />
             </div>
           </div>
-           {/* Status + Notes */}
+          
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Status</Label>
