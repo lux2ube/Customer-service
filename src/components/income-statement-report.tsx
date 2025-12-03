@@ -4,16 +4,20 @@
 import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { format, startOfYear, endOfDay, parseISO, startOfDay } from 'date-fns';
+import { format, endOfDay, parseISO, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Account, JournalEntry } from '@/lib/types';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow, TableFooter } from '@/components/ui/table';
 import { Separator } from './ui/separator';
 import { ExportButton } from './export-button';
+import { db } from '@/lib/firebase';
+import { ref, get } from 'firebase/database';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface ReportRow {
     accountName: string;
@@ -30,19 +34,49 @@ interface CalculatedReport {
 }
 
 export function IncomeStatementReport({ initialAccounts, initialJournalEntries }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[] }) {
-    const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
-        from: startOfYear(new Date()),
-        to: new Date(),
-    });
+    const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+    const [periodStartDate, setPeriodStartDate] = React.useState<Date | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const settingsRef = ref(db, 'settings/financialPeriodStartDate');
+                const snapshot = await get(settingsRef);
+                if (snapshot.exists()) {
+                    const periodStart = new Date(snapshot.val());
+                    setPeriodStartDate(periodStart);
+                    setDateRange({
+                        from: periodStart,
+                        to: new Date(),
+                    });
+                } else {
+                    setDateRange({
+                        from: new Date(new Date().getFullYear(), 0, 1),
+                        to: new Date(),
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                setDateRange({
+                    from: new Date(new Date().getFullYear(), 0, 1),
+                    to: new Date(),
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadSettings();
+    }, []);
 
     const formatCurrency = (value: number) => {
-        // Show negative numbers in parentheses for accounting format
         const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(value));
         return value < 0 ? `(${formatted})` : formatted;
     }
     
     const calculatedData = React.useMemo((): CalculatedReport => {
-        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
+        const periodStart = periodStartDate ? startOfDay(periodStartDate) : new Date(0);
+        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : periodStart;
         const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
         const revenueAccounts = initialAccounts.filter(acc => acc.type === 'Income');
@@ -57,15 +91,13 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
         initialJournalEntries.forEach(entry => {
             const entryDate = parseISO(entry.date);
             if (entryDate >= fromDate && entryDate <= toDate) {
-                // Revenue accounts are increased by credits
                 if (revenueAccountIds.has(entry.credit_account)) {
                     revenueTotals[entry.credit_account] = (revenueTotals[entry.credit_account] || 0) + entry.amount_usd;
                 }
                 if (revenueAccountIds.has(entry.debit_account)) {
-                     revenueTotals[entry.debit_account] = (revenueTotals[entry.debit_account] || 0) - entry.amount_usd;
+                    revenueTotals[entry.debit_account] = (revenueTotals[entry.debit_account] || 0) - entry.amount_usd;
                 }
 
-                // Expense accounts are increased by debits
                 if (expenseAccountIds.has(entry.debit_account)) {
                     expenseTotals[entry.debit_account] = (expenseTotals[entry.debit_account] || 0) + entry.amount_usd;
                 }
@@ -81,8 +113,8 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                 accountName: acc.name,
                 amount: revenueTotals[acc.id] || 0,
             }))
-            .filter(row => row.amount !== 0)
-            .sort((a,b) => a.accountId.localeCompare(b.accountId));
+            .filter(row => Math.abs(row.amount) > 0.01)
+            .sort((a, b) => b.amount - a.amount);
 
         const expenseRows: ReportRow[] = expenseAccounts
             .map(acc => ({
@@ -90,8 +122,8 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                 accountName: acc.name,
                 amount: expenseTotals[acc.id] || 0,
             }))
-            .filter(row => row.amount !== 0)
-            .sort((a,b) => a.accountId.localeCompare(b.accountId));
+            .filter(row => Math.abs(row.amount) > 0.01)
+            .sort((a, b) => b.amount - a.amount);
 
         const totalRevenue = revenueRows.reduce((sum, row) => sum + row.amount, 0);
         const totalExpenses = expenseRows.reduce((sum, row) => sum + row.amount, 0);
@@ -99,22 +131,26 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
 
         return { revenueRows, totalRevenue, expenseRows, totalExpenses, netIncome };
 
-    }, [dateRange, initialAccounts, initialJournalEntries]);
+    }, [dateRange, periodStartDate, initialAccounts, initialJournalEntries]);
     
     const exportableData = React.useMemo(() => {
         const { revenueRows, expenseRows, totalRevenue, totalExpenses, netIncome } = calculatedData;
         return [
-            ...revenueRows.map(row => ({ type: 'Revenue', ...row, amount: row.amount.toFixed(2) })),
-            ...expenseRows.map(row => ({ type: 'Expense', ...row, amount: row.amount.toFixed(2) })),
-            { type: '---', accountId: 'TOTAL_REVENUE', accountName: 'Total Revenue', amount: totalRevenue.toFixed(2) },
-            { type: '---', accountId: 'TOTAL_EXPENSES', accountName: 'Total Expenses', amount: totalExpenses.toFixed(2) },
-            { type: '---', accountId: 'NET_INCOME', accountName: 'Net Income', amount: netIncome.toFixed(2) },
+            ...revenueRows.map(row => ({ category: 'Revenue', ...row, amount: row.amount.toFixed(2) })),
+            ...expenseRows.map(row => ({ category: 'Expense', ...row, amount: row.amount.toFixed(2) })),
+            { category: '---', accountId: 'TOTAL_REVENUE', accountName: 'Total Revenue', amount: totalRevenue.toFixed(2) },
+            { category: '---', accountId: 'TOTAL_EXPENSES', accountName: 'Total Expenses', amount: totalExpenses.toFixed(2) },
+            { category: '---', accountId: 'NET_INCOME', accountName: 'Net Income', amount: netIncome.toFixed(2) },
         ];
     }, [calculatedData]);
 
+    if (loading) {
+        return <div className="p-4">Loading report settings...</div>;
+    }
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
                 <Popover>
                     <PopoverTrigger asChild>
                         <Button
@@ -152,16 +188,38 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                     data={exportableData}
                     filename={`income-statement-${dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : 'start'}-to-${dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : 'end'}`}
                     headers={{
-                        type: "Type",
+                        category: "Category",
                         accountId: "Account ID",
                         accountName: "Account Name",
                         amount: "Amount (USD)",
                     }}
                 />
+                {periodStartDate && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Badge variant="outline" className="gap-1">
+                                    <Info className="h-3 w-3" />
+                                    Period: {format(periodStartDate, "MMM dd, yyyy")}
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Data from the current financial period starting {format(periodStartDate, "MMMM dd, yyyy")}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
             </div>
             <Card>
                 <CardHeader>
                     <CardTitle>Income Statement</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                        {dateRange?.from && dateRange?.to ? (
+                            `For the period ${format(dateRange.from, "MMMM dd, yyyy")} to ${format(dateRange.to, "MMMM dd, yyyy")}`
+                        ) : (
+                            'Select a date range'
+                        )}
+                    </p>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-8">
@@ -172,7 +230,7 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                                     {calculatedData.revenueRows.length > 0 ? calculatedData.revenueRows.map(row => (
                                         <TableRow key={row.accountId}>
                                             <TableCell className="pl-8">{row.accountName}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(row.amount)}</TableCell>
+                                            <TableCell className="text-right font-mono text-green-600">{formatCurrency(row.amount)}</TableCell>
                                         </TableRow>
                                     )) : (
                                         <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No revenue recorded in this period.</TableCell></TableRow>
@@ -181,7 +239,7 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                                 <TableFooter>
                                     <TableRow className="bg-muted/50 font-bold">
                                         <TableCell>Total Revenue</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(calculatedData.totalRevenue)}</TableCell>
+                                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(calculatedData.totalRevenue)}</TableCell>
                                     </TableRow>
                                 </TableFooter>
                             </Table>
@@ -196,7 +254,7 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                                     {calculatedData.expenseRows.length > 0 ? calculatedData.expenseRows.map(row => (
                                         <TableRow key={row.accountId}>
                                             <TableCell className="pl-8">{row.accountName}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(row.amount)}</TableCell>
+                                            <TableCell className="text-right font-mono text-red-600">{formatCurrency(row.amount)}</TableCell>
                                         </TableRow>
                                     )) : (
                                         <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No expenses recorded in this period.</TableCell></TableRow>
@@ -205,7 +263,7 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                                 <TableFooter>
                                      <TableRow className="bg-muted/50 font-bold">
                                         <TableCell>Total Expenses</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(calculatedData.totalExpenses)}</TableCell>
+                                        <TableCell className="text-right font-mono text-red-600">{formatCurrency(calculatedData.totalExpenses)}</TableCell>
                                     </TableRow>
                                 </TableFooter>
                             </Table>
@@ -217,7 +275,7 @@ export function IncomeStatementReport({ initialAccounts, initialJournalEntries }
                         <h3 className="text-lg font-bold">Net Income</h3>
                         <p className={cn(
                             "text-lg font-bold font-mono",
-                            calculatedData.netIncome >= 0 ? "text-primary" : "text-destructive"
+                            calculatedData.netIncome >= 0 ? "text-green-600" : "text-destructive"
                         )}>
                             {formatCurrency(calculatedData.netIncome)}
                         </p>

@@ -4,14 +4,18 @@
 import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { format, endOfDay, parseISO } from 'date-fns';
+import { format, endOfDay, parseISO, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Account, JournalEntry } from '@/lib/types';
 import { Table, TableBody, TableCell, TableRow, TableFooter } from '@/components/ui/table';
 import { ExportButton } from './export-button';
+import { db } from '@/lib/firebase';
+import { ref, get } from 'firebase/database';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface ReportRow {
     accountId: string;
@@ -30,7 +34,6 @@ interface CalculatedReport {
     totalEquity: number;
 }
 
-// Helper function to build the tree structure for hierarchical display
 const buildAccountTree = (accounts: Account[]) => {
     const accountMap = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as Account[] }]));
     const tree: any[] = [];
@@ -47,17 +50,35 @@ const buildAccountTree = (accounts: Account[]) => {
 
 export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: { initialAccounts: Account[], initialJournalEntries: JournalEntry[] }) {
     const [date, setDate] = React.useState<Date | undefined>(new Date());
+    const [periodStartDate, setPeriodStartDate] = React.useState<Date | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const settingsRef = ref(db, 'settings/financialPeriodStartDate');
+                const snapshot = await get(settingsRef);
+                if (snapshot.exists()) {
+                    setPeriodStartDate(new Date(snapshot.val()));
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadSettings();
+    }, []);
 
     const formatCurrency = (value: number) => {
-        // Show negative numbers in parentheses for accounting format
         const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(value));
         return value < 0 ? `(${formatted})` : formatted;
     }
     
     const calculatedData = React.useMemo((): CalculatedReport => {
         const toDate = date ? endOfDay(date) : new Date();
+        const fromDate = periodStartDate ? startOfDay(periodStartDate) : new Date(0);
 
-        // 1. Calculate balances for all non-group accounts from journal entries
         const leafBalances: Record<string, number> = {};
         initialAccounts.forEach(acc => {
             if (!acc.isGroup) leafBalances[acc.id] = 0;
@@ -65,13 +86,12 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
 
         initialJournalEntries.forEach(entry => {
             const entryDate = parseISO(entry.date);
-            if (entryDate <= toDate) {
+            if (entryDate >= fromDate && entryDate <= toDate) {
                 if (leafBalances[entry.debit_account] !== undefined) leafBalances[entry.debit_account] += entry.amount_usd;
                 if (leafBalances[entry.credit_account] !== undefined) leafBalances[entry.credit_account] -= entry.amount_usd;
             }
         });
 
-        // 2. Aggregate balances up to parent groups
         const allBalances = { ...leafBalances };
         const accountTree = buildAccountTree(initialAccounts);
 
@@ -87,19 +107,15 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
         }
         accountTree.forEach(aggregateBalances);
         
-        // 3. Calculate Net Income for the period to add to Equity
         let netIncome = 0;
         const incomeAccountIds = new Set(initialAccounts.filter(a => a.type === 'Income').map(a => a.id));
         const expenseAccountIds = new Set(initialAccounts.filter(a => a.type === 'Expenses').map(a => a.id));
         
         Object.entries(leafBalances).forEach(([accountId, balance]) => {
-            // Income accounts have a credit balance (negative in our system). To make it positive revenue, we negate it.
             if (incomeAccountIds.has(accountId)) netIncome -= balance;
-            // Expense accounts have a debit balance (positive). To make it a positive expense to subtract, we use it as is.
             if (expenseAccountIds.has(accountId)) netIncome -= balance;
         });
 
-        // 4. Build final report rows
         const buildRows = (type: Account['type']): ReportRow[] => {
             const typeAccounts = initialAccounts.filter(a => a.type === type);
             const typeTree = buildAccountTree(typeAccounts);
@@ -107,9 +123,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
             
             const processNode = (account: any, level: number) => {
                 const balance = allBalances[account.id] || 0;
-                // Only show accounts with a balance, or group accounts
                 if (Math.abs(balance) > 0.001 || account.isGroup) {
-                    // For display, Liability and Equity credit balances should be positive
                     const displayAmount = (type === 'Liabilities' || type === 'Equity') ? -balance : balance;
                     rows.push({
                         accountId: account.id,
@@ -129,7 +143,6 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
         const liabilityRows = buildRows('Liabilities');
         let equityRows = buildRows('Equity');
 
-        // Add Net Income to Equity section
         if (Math.abs(netIncome) > 0.001) {
             equityRows.push({ accountId: 'net-income', accountName: 'Retained Earnings (Net Income)', isGroup: false, level: 1, amount: netIncome });
         }
@@ -145,7 +158,7 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
         const totalEquity = equityBaseTotal + netIncome;
         
         return { assetRows, totalAssets, liabilityRows, totalLiabilities, equityRows, totalEquity };
-    }, [date, initialAccounts, initialJournalEntries]);
+    }, [date, periodStartDate, initialAccounts, initialJournalEntries]);
 
     const exportableData = React.useMemo(() => {
         const { assetRows, liabilityRows, equityRows, totalAssets, totalLiabilities, totalEquity } = calculatedData;
@@ -158,11 +171,11 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
             { accountName: 'Assets', amount: '' },
             ...assetRows.map(formatForExport),
             { accountName: 'Total Assets', amount: totalAssets.toFixed(2) },
-            { accountName: '', amount: '' }, // spacer
+            { accountName: '', amount: '' },
             { accountName: 'Liabilities', amount: '' },
             ...liabilityRows.map(formatForExport),
             { accountName: 'Total Liabilities', amount: totalLiabilities.toFixed(2) },
-            { accountName: '', amount: '' }, // spacer
+            { accountName: '', amount: '' },
             { accountName: 'Equity', amount: '' },
             ...equityRows.map(formatForExport),
             { accountName: 'Total Equity', amount: totalEquity.toFixed(2) },
@@ -176,12 +189,20 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
             <h3 className="text-lg font-semibold mb-2 px-4">{title}</h3>
             <Table>
                 <TableBody>
-                    {rows.map(row => (
-                        <TableRow key={row.accountId} className={cn(row.isGroup && 'bg-muted/50')}>
-                            <TableCell style={{ paddingLeft: `${1 + row.level * 1.5}rem` }} className={cn(row.isGroup && 'font-bold')}>{row.accountName}</TableCell>
-                            <TableCell className="text-right font-mono">{!row.isGroup ? formatCurrency(row.amount) : ''}</TableCell>
+                    {rows.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={2} className="text-center text-muted-foreground h-16">
+                                No {title.toLowerCase()} recorded.
+                            </TableCell>
                         </TableRow>
-                    ))}
+                    ) : (
+                        rows.map(row => (
+                            <TableRow key={row.accountId} className={cn(row.isGroup && 'bg-muted/50')}>
+                                <TableCell style={{ paddingLeft: `${1 + row.level * 1.5}rem` }} className={cn(row.isGroup && 'font-bold')}>{row.accountName}</TableCell>
+                                <TableCell className="text-right font-mono">{!row.isGroup ? formatCurrency(row.amount) : ''}</TableCell>
+                            </TableRow>
+                        ))
+                    )}
                 </TableBody>
                 <TableFooter>
                     <TableRow className="bg-card-foreground/10 font-bold">
@@ -193,9 +214,13 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
         </div>
     );
 
+    if (loading) {
+        return <div className="p-4">Loading report settings...</div>;
+    }
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
                 <Popover>
                     <PopoverTrigger asChild>
                         <Button variant={"outline"} className={cn("w-[300px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
@@ -215,6 +240,21 @@ export function BalanceSheetReport({ initialAccounts, initialJournalEntries }: {
                         amount: "Amount (USD)",
                     }}
                 />
+                {periodStartDate && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Badge variant="outline" className="gap-1">
+                                    <Info className="h-3 w-3" />
+                                    Period: {format(periodStartDate, "MMM dd, yyyy")}
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Only showing entries from the current financial period</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
             </div>
             <Card>
                 <CardHeader>

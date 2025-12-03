@@ -5,11 +5,6 @@ import {
     AreaChart, 
     BookCopy, 
     BookText, 
-    Building2, 
-    CalendarClock, 
-    Gauge, 
-    History, 
-    Hourglass, 
     LineChart, 
     List, 
     Scale, 
@@ -26,76 +21,51 @@ const financialStatements = [
     },
     {
         title: "Balance Sheet",
-        description: "Displays your company’s assets, liabilities, and equity at a single point in time, showing overall financial health and stability.",
+        description: "Displays your company's assets, liabilities, and equity at a single point in time, showing overall financial health.",
         icon: <Scale className="h-6 w-6 text-muted-foreground" />,
         href: "/reports/balance-sheet",
     },
     {
         title: "Trial Balance",
-        description: "Summarizes all account debits and credits on a specific date to verify the ledger is balanced.",
+        description: "Summarizes all account increases and decreases to verify the ledger is balanced.",
         icon: <BookCopy className="h-6 w-6 text-muted-foreground" />,
         href: "/reports/trial-balance",
+    },
+    {
+        title: "Cash Flow Statement",
+        description: "Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.",
+        icon: <AreaChart className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/cash-flow",
     },
 ];
 
 const clientReports = [
     {
         title: "Client Balance Summary",
-        description: "Shows total credits, debits, and outstanding balances for each client, helping identify top clients and opportunities for growth.",
+        description: "Shows total received, paid, and outstanding balances for each client.",
         icon: <Users className="h-6 w-6 text-muted-foreground" />,
         href: "/reports/client-balance-summary",
     },
     {
         title: "Client Balance Detail",
-        description: "Shows all records for a client with journal entries and running balance before/after each transaction.",
+        description: "Shows all transactions for a client with running balance before/after each entry.",
         icon: <List className="h-6 w-6 text-muted-foreground" />,
         href: "/reports/client-balance-detail",
-    },
-    {
-        title: "Accounts Receivable Aging",
-        description: "Lists outstanding receivables by client, showing how long invoices have been unpaid.",
-        icon: <Hourglass className="h-6 w-6 text-muted-foreground" />,
-    },
-    {
-        title: "Client Payment Performance",
-        description: "Analyzes payment behavior showing average days to pay, on-time payment rates, and late payment patterns for each client.",
-        icon: <Gauge className="h-6 w-6 text-muted-foreground" />,
-    },
-];
-
-const vendorReports = [
-     {
-        title: "Accounts Payable Aging",
-        description: "Lists outstanding payables by vendor, showing how long invoices have been unpaid.",
-        icon: <CalendarClock className="h-6 w-6 text-muted-foreground" />,
-    },
-    {
-        title: "Vendor Balance Summary",
-        description: "Shows total billed amounts, payments made, and outstanding balances for each vendor, helping track payment obligations and vendor relationships.",
-        icon: <Building2 className="h-6 w-6 text-muted-foreground" />,
-    },
-    {
-        title: "Vendor Payment Performance",
-        description: "Analyzes payment behavior showing average days to pay, on-time payment rates, and late payment patterns for each vendor.",
-        icon: <History className="h-6 w-6 text-muted-foreground" />,
     },
 ];
 
 const detailedReports = [
     {
         title: "Account Balances",
-        description: "Lists all accounts and their balances, including starting, debit, credit, net movement, and ending balances.",
+        description: "Lists all accounts and their balances, including increases, decreases, and net movement.",
         icon: <List className="h-6 w-6 text-muted-foreground" />,
-    },
-    {
-        title: "Cash Flow Statement",
-        description: "Tracks cash inflows and outflows, giving insight into liquidity and cash management over a period.",
-        icon: <AreaChart className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/account-balances",
     },
     {
         title: "Account Transactions",
-        description: "A record of all transactions, essential for monitoring and reconciling financial activity in the ledger.",
+        description: "View detailed transaction history for any account with running balances.",
         icon: <BookText className="h-6 w-6 text-muted-foreground" />,
+        href: "/reports/account-transactions",
     },
 ];
 
@@ -130,31 +100,23 @@ export default function ReportsPage() {
             <div className="space-y-12">
                 <section>
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Financial Statements</h2>
-                    <p className="text-sm text-muted-foreground mb-6">Key financial statements that provide an overview of your company’s financial health and performance.</p>
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <p className="text-sm text-muted-foreground mb-6">Key financial statements that provide an overview of your company's financial health and performance.</p>
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                         {financialStatements.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
 
                 <section>
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Client Reports</h2>
-                     <p className="text-sm text-muted-foreground mb-6">Reports that provide detailed information on your company’s client transactions and balances.</p>
+                     <p className="text-sm text-muted-foreground mb-6">Reports that provide detailed information on your company's client transactions and balances.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {clientReports.map((report) => <ReportCard key={report.title} report={report} />)}
-                    </div>
-                </section>
-                
-                <section>
-                    <h2 className="text-xl font-semibold tracking-tight mb-4">Vendor Reports</h2>
-                    <p className="text-sm text-muted-foreground mb-6">Reports that provide detailed information on your company’s vendor transactions and balances.</p>
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {vendorReports.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>
                 </section>
 
                 <section>
                     <h2 className="text-xl font-semibold tracking-tight mb-4">Detailed Reports</h2>
-                    <p className="text-sm text-muted-foreground mb-6">Detailed reports that provide a comprehensive view of your company’s financial transactions and account balances.</p>
+                    <p className="text-sm text-muted-foreground mb-6">Detailed reports that provide a comprehensive view of your company's financial transactions and account balances.</p>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {detailedReports.map((report) => <ReportCard key={report.title} report={report} />)}
                     </div>

@@ -10,31 +10,52 @@ import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, ChevronsUpDown, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Check, ChevronsUpDown, ArrowUpRight, ArrowDownLeft, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from './ui/badge';
+import { format, parseISO, startOfDay } from 'date-fns';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { ExportButton } from './export-button';
 
 interface DetailedEntry {
   journalId: string;
   date: string;
   description: string;
-  debitAccount: string;
-  debitAccountName: string;
-  creditAccount: string;
-  creditAccountName: string;
+  otherAccount: string;
+  otherAccountName: string;
   amount: number;
   balanceBefore: number;
   balanceAfter: number;
-  isDebit: boolean;
+  isIncrease: boolean;
 }
 
 export function ClientBalanceDetailReport() {
   const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
   const [entries, setEntries] = React.useState<DetailedEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [periodStartDate, setPeriodStartDate] = React.useState<Date | null>(null);
+  const [loadingSettings, setLoadingSettings] = React.useState(true);
 
   React.useEffect(() => {
-    if (!selectedClient) {
+    const loadSettings = async () => {
+      try {
+        const settingsRef = ref(db, 'settings/financialPeriodStartDate');
+        const snapshot = await get(settingsRef);
+        if (snapshot.exists()) {
+          setPeriodStartDate(new Date(snapshot.val()));
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  React.useEffect(() => {
+    if (!selectedClient || loadingSettings) {
       setEntries([]);
       return;
     }
@@ -46,15 +67,17 @@ export function ClientBalanceDetailReport() {
         const journalRef = ref(db, 'journal_entries');
         const journalSnapshot = await get(journalRef);
         const allEntries: DetailedEntry[] = [];
+        const periodStart = periodStartDate ? startOfDay(periodStartDate) : new Date(0);
 
         if (journalSnapshot.exists()) {
           Object.entries(journalSnapshot.val()).forEach(([journalId, entry]: any) => {
+            const entryDate = parseISO(entry.date);
+            if (entryDate < periodStart) return;
+
             const isDebit = entry.debit_account === clientAccountId;
             const isCredit = entry.credit_account === clientAccountId;
             
             if (isDebit || isCredit) {
-              // Get the correct amount based on which side the client is on
-              // For debit entries, use debit_amount; for credit entries, use credit_amount
               const entryAmount = isDebit 
                 ? (entry.debit_amount || entry.amount_usd || 0)
                 : (entry.credit_amount || entry.amount_usd || 0);
@@ -63,18 +86,14 @@ export function ClientBalanceDetailReport() {
                 journalId,
                 date: entry.date,
                 description: entry.description || '',
-                debitAccount: entry.debit_account,
-                debitAccountName: entry.debit_account_name || entry.debit_account,
-                creditAccount: entry.credit_account,
-                creditAccountName: entry.credit_account_name || entry.credit_account,
+                otherAccount: isDebit ? entry.credit_account : entry.debit_account,
+                otherAccountName: isDebit 
+                  ? (entry.credit_account_name || entry.credit_account)
+                  : (entry.debit_account_name || entry.debit_account),
                 amount: entryAmount,
-                balanceBefore: isDebit 
-                  ? (entry.debit_account_balance_before ?? 0) 
-                  : (entry.credit_account_balance_before ?? 0),
-                balanceAfter: isDebit
-                  ? (entry.debit_account_balance_after ?? 0)
-                  : (entry.credit_account_balance_after ?? 0),
-                isDebit,
+                balanceBefore: 0,
+                balanceAfter: 0,
+                isIncrease: isDebit,
               });
             }
           });
@@ -82,15 +101,10 @@ export function ClientBalanceDetailReport() {
 
         allEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        // Always calculate running balance from entries for consistency
-        // Project convention: stored balance = debits - credits for ALL accounts
-        // For client liability accounts (6000x):
-        //   - DEBIT increases balance (money owed to client increases - they gave us money)
-        //   - CREDIT decreases balance (money paid to client - we gave them money)
         let runningBalance = 0;
         for (const entry of allEntries) {
           entry.balanceBefore = runningBalance;
-          if (entry.isDebit) {
+          if (entry.isIncrease) {
             entry.balanceAfter = runningBalance + entry.amount;
           } else {
             entry.balanceAfter = runningBalance - entry.amount;
@@ -107,7 +121,7 @@ export function ClientBalanceDetailReport() {
     };
 
     loadEntries();
-  }, [selectedClient]);
+  }, [selectedClient, periodStartDate, loadingSettings]);
 
   const finalBalance = entries.length > 0 ? entries[entries.length - 1].balanceAfter : 0;
 
@@ -129,22 +143,76 @@ export function ClientBalanceDetailReport() {
     }
   };
 
+  const exportableData = React.useMemo(() => {
+    return entries.map((entry, index) => ({
+      index: index + 1,
+      date: formatDate(entry.date),
+      description: entry.description,
+      otherAccount: entry.otherAccountName,
+      type: entry.isIncrease ? 'INCREASE' : 'DECREASE',
+      amount: entry.amount.toFixed(2),
+      balanceBefore: entry.balanceBefore.toFixed(2),
+      balanceAfter: entry.balanceAfter.toFixed(2),
+    }));
+  }, [entries]);
+
+  if (loadingSettings) {
+    return <div className="p-4">Loading settings...</div>;
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Client Balance Detail Report</CardTitle>
-          <CardDescription>
-            Select a client to view all their journal entries with running balance
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Client Balance Detail Report</CardTitle>
+              <CardDescription>
+                Select a client to view all their transactions with running balance
+              </CardDescription>
+            </div>
+            {periodStartDate && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="gap-1">
+                      <Info className="h-3 w-3" />
+                      Period: {format(periodStartDate, "MMM dd, yyyy")}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Only showing entries from the current financial period</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Select Client</label>
-            <ClientSelector 
-              selectedClient={selectedClient} 
-              onSelect={setSelectedClient} 
-            />
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-2 flex-1 min-w-[250px]">
+              <label className="text-sm font-medium">Select Client</label>
+              <ClientSelector 
+                selectedClient={selectedClient} 
+                onSelect={setSelectedClient} 
+              />
+            </div>
+            {selectedClient && entries.length > 0 && (
+              <ExportButton 
+                data={exportableData}
+                filename={`client-balance-detail-${selectedClient.name.replace(/\s+/g, '-')}-${format(new Date(), 'yyyy-MM-dd')}`}
+                headers={{
+                  index: "#",
+                  date: "Date",
+                  description: "Description",
+                  otherAccount: "Counter Account",
+                  type: "Type",
+                  amount: "Amount (USD)",
+                  balanceBefore: "Balance Before",
+                  balanceAfter: "Balance After",
+                }}
+              />
+            )}
           </div>
 
           {selectedClient && !loading && (
@@ -155,14 +223,14 @@ export function ClientBalanceDetailReport() {
                 <div className="text-xs text-muted-foreground font-mono">6000{selectedClient.id}</div>
               </div>
               <div className="p-4 bg-primary/10 rounded-lg">
-                <div className="text-sm text-muted-foreground">Current Balance</div>
+                <div className="text-sm text-muted-foreground">Current Balance (We Owe Client)</div>
                 <div className={cn(
                   "text-2xl font-bold",
                   finalBalance >= 0 ? "text-primary" : "text-destructive"
                 )}>
                   ${formatCurrency(finalBalance)}
                 </div>
-                <div className="text-xs text-muted-foreground">{entries.length} journal entries</div>
+                <div className="text-xs text-muted-foreground">{entries.length} transactions</div>
               </div>
             </div>
           )}
@@ -181,7 +249,7 @@ export function ClientBalanceDetailReport() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground text-center py-8">
-              No journal entries found for {selectedClient.name}
+              No transactions found for {selectedClient.name} in the current period
             </p>
           </CardContent>
         </Card>
@@ -190,7 +258,7 @@ export function ClientBalanceDetailReport() {
       {!loading && selectedClient && entries.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Journal Entries</CardTitle>
+            <CardTitle className="text-base">Transaction History</CardTitle>
             <CardDescription>All transactions affecting {selectedClient.name}'s balance</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -201,7 +269,7 @@ export function ClientBalanceDetailReport() {
                     <TableHead className="w-[50px]">#</TableHead>
                     <TableHead className="w-[140px]">Date</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="w-[80px] text-center">Type</TableHead>
+                    <TableHead className="w-[100px] text-center">Type</TableHead>
                     <TableHead className="w-[110px] text-right">Amount</TableHead>
                     <TableHead className="w-[110px] text-right">Balance Before</TableHead>
                     <TableHead className="w-[110px] text-right">Balance After</TableHead>
@@ -219,19 +287,19 @@ export function ClientBalanceDetailReport() {
                           {entry.description}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          <span>From: {entry.debitAccountName} → To: {entry.creditAccountName}</span>
+                          {entry.isIncrease ? 'From' : 'To'}: {entry.otherAccountName}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        {entry.isDebit ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
-                            <ArrowUpRight className="h-3 w-3" />
-                            Decrease
-                          </span>
-                        ) : (
+                        {entry.isIncrease ? (
                           <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
                             <ArrowDownLeft className="h-3 w-3" />
-                            Increase
+                            INCREASE
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                            <ArrowUpRight className="h-3 w-3" />
+                            DECREASE
                           </span>
                         )}
                       </TableCell>

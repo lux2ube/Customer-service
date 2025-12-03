@@ -7,34 +7,54 @@ import { Table, TableBody, TableCell, TableRow, TableHeader, TableHead, TableFoo
 import type { JournalEntry, Client, Account } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Info, TrendingUp, TrendingDown } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ExportButton } from './export-button';
+import { db } from '@/lib/firebase';
+import { ref, get } from 'firebase/database';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface ClientSummary {
     clientId: string;
     clientName: string;
-    totalDebits: number;
-    totalCredits: number;
-    netBalance: number;
+    totalReceived: number;
+    totalPaid: number;
+    balance: number;
 }
 
 export function ClientBalanceSummaryReport({ initialJournalEntries, initialClients, initialAccounts }: { initialJournalEntries: JournalEntry[], initialClients: Client[], initialAccounts: Account[] }) {
     const [search, setSearch] = React.useState('');
     const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+    const [periodStartDate, setPeriodStartDate] = React.useState<Date | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const settingsRef = ref(db, 'settings/financialPeriodStartDate');
+                const snapshot = await get(settingsRef);
+                if (snapshot.exists()) {
+                    setPeriodStartDate(new Date(snapshot.val()));
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadSettings();
+    }, []);
 
     const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(value));
     }
     
     const clientSubAccounts = React.useMemo(() => {
-        const clientParent = initialAccounts.find(a => a.id === '6000');
-        if (!clientParent) return new Map<string, string>(); // Map from accountId to clientName
-        
         return new Map(
             initialAccounts
                 .filter(a => a.parentId === '6000')
@@ -42,7 +62,7 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
         );
     }, [initialAccounts]);
     
-     const clientIdToAccountIdMap = React.useMemo(() => {
+    const clientIdToAccountIdMap = React.useMemo(() => {
         const map = new Map<string, string>();
         initialClients.forEach(client => {
             const accountId = `6000${client.id}`;
@@ -55,24 +75,24 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
 
 
     const clientSummaries = React.useMemo(() => {
-        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
+        const periodStart = periodStartDate ? startOfDay(periodStartDate) : new Date(0);
+        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : periodStart;
         const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
         const filteredJournalEntries = initialJournalEntries.filter(entry => {
-            if (!dateRange?.from) return true;
             const entryDate = parseISO(entry.date);
             return entryDate >= fromDate && entryDate <= toDate;
         });
         
-        const summaryMap: Record<string, { clientName: string; debits: number; credits: number }> = {};
+        const summaryMap: Record<string, { clientName: string; received: number; paid: number }> = {};
         
         initialClients.forEach(client => {
             const accountId = clientIdToAccountIdMap.get(client.id);
             if (accountId) {
                 summaryMap[client.id] = {
                     clientName: client.name,
-                    debits: 0,
-                    credits: 0,
+                    received: 0,
+                    paid: 0,
                 };
             }
         });
@@ -84,10 +104,10 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                 if (!summary) return;
 
                 if (`6000${client.id}` === entry.debit_account) {
-                    summary.debits += entry.amount_usd;
+                    summary.received += entry.amount_usd;
                 }
-                 if (`6000${client.id}` === entry.credit_account) {
-                    summary.credits += entry.amount_usd;
+                if (`6000${client.id}` === entry.credit_account) {
+                    summary.paid += entry.amount_usd;
                 }
             }
         });
@@ -97,38 +117,61 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
             return {
                 clientId,
                 clientName: data.clientName,
-                totalDebits: data.debits,
-                totalCredits: data.credits,
-                netBalance: data.credits - data.debits, // For liability accounts, credits are positive
+                totalReceived: data.received,
+                totalPaid: data.paid,
+                balance: data.received - data.paid,
             };
         });
 
-        return summaries.sort((a, b) => b.netBalance - a.netBalance);
+        return summaries
+            .filter(s => Math.abs(s.totalReceived) > 0.01 || Math.abs(s.totalPaid) > 0.01)
+            .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
-    }, [initialJournalEntries, dateRange, initialClients, clientIdToAccountIdMap]);
+    }, [initialJournalEntries, dateRange, periodStartDate, initialClients, clientIdToAccountIdMap]);
 
     const filteredSummaries = React.useMemo(() => {
-         if (!search) return clientSummaries;
-         const lowercasedSearch = search.toLowerCase();
-         return clientSummaries.filter(summary => 
+        if (!search) return clientSummaries;
+        const lowercasedSearch = search.toLowerCase();
+        return clientSummaries.filter(summary => 
             summary.clientName.toLowerCase().includes(lowercasedSearch)
-         );
+        );
     }, [clientSummaries, search]);
 
     const totals = React.useMemo(() => {
         return filteredSummaries.reduce((acc, summary) => {
-            acc.debits += summary.totalDebits;
-            acc.credits += summary.totalCredits;
-            acc.net += summary.netBalance;
+            acc.received += summary.totalReceived;
+            acc.paid += summary.totalPaid;
+            acc.balance += summary.balance;
             return acc;
-        }, { debits: 0, credits: 0, net: 0 });
+        }, { received: 0, paid: 0, balance: 0 });
     }, [filteredSummaries]);
+
+    if (loading) {
+        return <div className="p-4">Loading report settings...</div>;
+    }
 
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Client Balance Summary</CardTitle>
+                    <div className="flex items-center justify-between">
+                        <CardTitle>Client Balance Summary</CardTitle>
+                        {periodStartDate && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Badge variant="outline" className="gap-1">
+                                            <Info className="h-3 w-3" />
+                                            Period: {format(periodStartDate, "MMM dd, yyyy")}
+                                        </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Showing data from the current financial period</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+                    </div>
                     <div className="flex flex-col md:flex-row gap-4 mt-4 items-center">
                         <Input 
                             placeholder="Search by client name..."
@@ -136,7 +179,7 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                             onChange={(e) => setSearch(e.target.value)}
                             className="max-w-sm"
                         />
-                         <Popover>
+                        <Popover>
                             <PopoverTrigger asChild>
                                 <Button
                                     id="date"
@@ -154,7 +197,7 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                                             format(dateRange.from, "LLL dd, y")
                                         )
                                     ) : (
-                                        <span>Pick a date range</span>
+                                        <span>Filter by date range</span>
                                     )}
                                 </Button>
                             </PopoverTrigger>
@@ -171,18 +214,19 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                         </Popover>
                         <ExportButton 
                             data={filteredSummaries.map(s => ({
-                                ...s,
-                                totalDebits: s.totalDebits.toFixed(2),
-                                totalCredits: s.totalCredits.toFixed(2),
-                                netBalance: s.netBalance.toFixed(2),
+                                clientId: s.clientId,
+                                clientName: s.clientName,
+                                totalReceived: s.totalReceived.toFixed(2),
+                                totalPaid: s.totalPaid.toFixed(2),
+                                balance: s.balance.toFixed(2),
                             }))}
                             filename={`client-balance-summary-${dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : 'start'}-to-${dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : 'end'}`}
                             headers={{
                                 clientId: "Client ID",
                                 clientName: "Client Name",
-                                totalCredits: "Total Credits (USD)",
-                                totalDebits: "Total Debits (USD)",
-                                netBalance: "Net Balance (USD)",
+                                totalReceived: "Received from Client (USD)",
+                                totalPaid: "Paid to Client (USD)",
+                                balance: "Balance (USD)",
                             }}
                         />
                     </div>
@@ -192,9 +236,19 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Client Name</TableHead>
-                                <TableHead className="text-right">Total Credits (USD)</TableHead>
-                                <TableHead className="text-right">Total Debits (USD)</TableHead>
-                                <TableHead className="text-right">Net Balance (USD)</TableHead>
+                                <TableHead className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                        <TrendingDown className="h-4 w-4 text-green-600" />
+                                        Received from Client
+                                    </div>
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                        <TrendingUp className="h-4 w-4 text-red-600" />
+                                        Paid to Client
+                                    </div>
+                                </TableHead>
+                                <TableHead className="text-right">Balance (We Owe)</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -202,25 +256,44 @@ export function ClientBalanceSummaryReport({ initialJournalEntries, initialClien
                                 filteredSummaries.map(summary => (
                                     <TableRow key={summary.clientId}>
                                         <TableCell className="font-medium">{summary.clientName}</TableCell>
-                                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(summary.totalCredits)}</TableCell>
-                                        <TableCell className="text-right font-mono text-red-600">{formatCurrency(summary.totalDebits)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(summary.netBalance)}</TableCell>
+                                        <TableCell className="text-right font-mono text-green-600">
+                                            {formatCurrency(summary.totalReceived)}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-red-600">
+                                            {formatCurrency(summary.totalPaid)}
+                                        </TableCell>
+                                        <TableCell className={cn(
+                                            "text-right font-mono font-semibold",
+                                            summary.balance > 0 ? "text-primary" : summary.balance < 0 ? "text-destructive" : ""
+                                        )}>
+                                            {summary.balance > 0 ? '+' : ''}{formatCurrency(summary.balance)}
+                                            {summary.balance !== 0 && (
+                                                <span className="text-xs text-muted-foreground ml-1">
+                                                    {summary.balance > 0 ? '(owed)' : '(overpaid)'}
+                                                </span>
+                                            )}
+                                        </TableCell>
                                     </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={4} className="h-24 text-center">
-                                        No client data found for the selected period.
+                                        No client activity found for the selected period.
                                     </TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
                         <TableFooter>
                             <TableRow className="bg-card-foreground/10 font-bold">
-                                <TableCell>Grand Totals</TableCell>
-                                <TableCell className="text-right font-mono text-green-600">{formatCurrency(totals.credits)}</TableCell>
-                                <TableCell className="text-right font-mono text-red-600">{formatCurrency(totals.debits)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totals.net)}</TableCell>
+                                <TableCell>Grand Totals ({filteredSummaries.length} clients)</TableCell>
+                                <TableCell className="text-right font-mono text-green-600">{formatCurrency(totals.received)}</TableCell>
+                                <TableCell className="text-right font-mono text-red-600">{formatCurrency(totals.paid)}</TableCell>
+                                <TableCell className={cn(
+                                    "text-right font-mono",
+                                    totals.balance > 0 ? "text-primary" : totals.balance < 0 ? "text-destructive" : ""
+                                )}>
+                                    {totals.balance > 0 ? '+' : ''}{formatCurrency(totals.balance)}
+                                </TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
