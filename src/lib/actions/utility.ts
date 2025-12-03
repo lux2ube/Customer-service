@@ -209,7 +209,7 @@ export async function scanClientsWithBlacklist(prevState: ScanState, formData: F
         const updates: { [key: string]: any } = {};
 
         for (const clientId in clientsData) {
-            const client = { id: clientId, ...clientsData[clientId] };
+            const client = { ...clientsData[clientId], id: clientId };
             let needsUpdate = false;
             let currentFlags = client.review_flags || [];
             

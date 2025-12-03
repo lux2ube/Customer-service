@@ -120,3 +120,10 @@ export {
     updateUsdtRecordStatus,
     assignRecordToClient,
 } from './financial-records';
+
+// Balance Management & Helpers
+export {
+    rebuildAllAccountBalances,
+    getAccountBalanceUpdates,
+    BalanceTracker,
+} from './helpers';

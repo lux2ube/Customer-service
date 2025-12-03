@@ -15,7 +15,8 @@ import type { Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save } from 'lucide-react';
-import { updateApiSettings, type RateFormState } from '@/lib/actions';
+import { updateApiSettings, rebuildAllAccountBalances, type RateFormState } from '@/lib/actions';
+import { RefreshCw } from 'lucide-react';
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
     const { pending } = useFormStatus();
@@ -59,6 +60,74 @@ function ApiSettingsForm({ initialSettings }: { initialSettings: Settings }) {
     )
 }
 
+function BalanceManagementCard() {
+    const { toast } = useToast();
+    const [rebuilding, setRebuilding] = React.useState(false);
+    
+    const handleRebuildBalances = async () => {
+        setRebuilding(true);
+        try {
+            const result = await rebuildAllAccountBalances();
+            if (result.success) {
+                toast({ 
+                    title: "Balances Rebuilt", 
+                    description: result.message 
+                });
+            } else {
+                toast({ 
+                    variant: 'destructive', 
+                    title: "Error", 
+                    description: result.message 
+                });
+            }
+        } catch (error: any) {
+            toast({ 
+                variant: 'destructive', 
+                title: "Error", 
+                description: error.message || 'Failed to rebuild balances'
+            });
+        } finally {
+            setRebuilding(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Balance Management</CardTitle>
+                <CardDescription>
+                    Recalculate all account balances from journal entries. Use this to fix any balance discrepancies.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                    This will recalculate balances for all accounts based on journal entries. 
+                    Use this if account balances appear incorrect or after importing data.
+                </p>
+            </CardContent>
+            <CardFooter>
+                <Button 
+                    onClick={handleRebuildBalances} 
+                    disabled={rebuilding}
+                    variant="outline"
+                >
+                    {rebuilding ? (
+                        <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin"/>
+                            Rebuilding...
+                        </>
+                    ) : (
+                        <>
+                            <RefreshCw className="mr-2 h-4 w-4"/>
+                            Rebuild All Balances
+                        </>
+                    )}
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+}
+
 export default function SettingsPage() {
     const [apiSettings, setApiSettings] = React.useState<Settings>({} as Settings);
     const [loading, setLoading] = React.useState(true);
@@ -96,8 +165,9 @@ export default function SettingsPage() {
                 title="Settings"
                 description="Manage system-wide settings and API keys for integrations."
             />
-            <div className="max-w-lg">
+            <div className="max-w-lg space-y-6">
                 <ApiSettingsForm initialSettings={apiSettings} />
+                <BalanceManagementCard />
             </div>
         </>
     );

@@ -82,6 +82,8 @@ export async function createAccount(accountId: string | null, prevState: Account
             await set(newAccountRef, {
                 ...dataForFirebase,
                 priority: count,
+                balance: 0, // Initialize balance to 0 for new accounts
+                lastBalanceUpdate: new Date().toISOString(),
             });
         }
         
@@ -118,7 +120,9 @@ export async function fixAccount7000() {
                 isGroup: false,
                 currency: 'USD',
                 createdAt: new Date().toISOString(),
-                priority: 0
+                priority: 0,
+                balance: 0,
+                lastBalanceUpdate: new Date().toISOString()
             });
             console.log('✅ Created account 7001 (Unmatched Cash)');
         } else {
@@ -142,7 +146,9 @@ export async function fixAccount7000() {
                 isGroup: false,
                 currency: 'USDT',
                 createdAt: new Date().toISOString(),
-                priority: 1
+                priority: 1,
+                balance: 0,
+                lastBalanceUpdate: new Date().toISOString()
             });
             console.log('✅ Created account 7002 (Unmatched USDT)');
         } else {

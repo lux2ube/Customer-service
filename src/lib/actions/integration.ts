@@ -263,8 +263,36 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         // Initialize balance tracker with all accounts that will be affected
         const balanceTracker = new BalanceTracker(new Date().toISOString());
         await balanceTracker.loadAccounts([...accountIdsForBalances]);
+        
+        // Validate critical accounts exist
+        const missingAccounts = balanceTracker.getMissingAccounts();
+        if (missingAccounts.includes(accountId)) {
+            return { message: `Cannot sync: Wallet account ${accountId} is missing. Please create this account first.`, error: true };
+        }
+        if (missingAccounts.includes('7002')) {
+            return { message: `Cannot sync: Account 7002 (Unmatched USDT) is missing. Please create this account first.`, error: true };
+        }
+        // Filter out transactions for clients with missing accounts
+        const validTransactions = transactionsToProcess.filter(({ existingClient }) => {
+            if (existingClient) {
+                const clientAccountId = `6000${existingClient.id}`;
+                if (missingAccounts.includes(clientAccountId)) {
+                    console.warn(`⚠️ USDT Sync: Client ${existingClient.name} missing account ${clientAccountId}, will sync as unassigned`);
+                    return false;
+                }
+            }
+            return true;
+        });
+        
+        // Re-add clients with missing accounts as unassigned
+        const transactionsWithFixedClients = validTransactions.map(tx => ({
+            ...tx,
+            existingClient: tx.existingClient && !missingAccounts.includes(`6000${tx.existingClient.id}`) 
+                ? tx.existingClient 
+                : null
+        }));
 
-        for (const { tx, existingClient, syncedAmount, isIncoming, clientWalletAddress } of transactionsToProcess) {
+        for (const { tx, existingClient, syncedAmount, isIncoming, clientWalletAddress } of transactionsWithFixedClients) {
             const txBlockNumber = parseInt(tx.blockNumber);
             highestBlock = Math.max(highestBlock, txBlockNumber);
 
