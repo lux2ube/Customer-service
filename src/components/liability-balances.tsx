@@ -29,7 +29,9 @@ export function LiabilityBalances() {
                 return;
             }
             const allAccounts: Record<string, Account> = accSnapshot.val();
-            const liabilityAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Liabilities' && !acc.isGroup && (acc.id === '7001' || acc.id === '7002' || acc.id.startsWith('6000')));
+            const liabilityAccounts = Object.entries(allAccounts)
+                .filter(([id, acc]) => acc && acc.type === 'Liabilities' && !acc.isGroup && (id === '7001' || id === '7002' || id.startsWith('6000')))
+                .map(([id, acc]) => ({ ...acc, id }));
 
             const unsubJournal = onValue(journalRef, (journalSnapshot) => {
                 const accountBalances: Record<string, number> = {};

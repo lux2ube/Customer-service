@@ -440,12 +440,14 @@ export async function getAccountBalanceUpdates(
 /**
  * Rebuild all account balances from journal entries.
  * Use this for reconciliation or to fix any drift.
+ * Respects financialPeriodStartDate from settings - only counts entries after that date.
  */
 export async function rebuildAllAccountBalances(): Promise<{ success: boolean; message: string; accountsUpdated: number }> {
     try {
-        const [accountsSnapshot, journalSnapshot] = await Promise.all([
+        const [accountsSnapshot, journalSnapshot, settingsSnapshot] = await Promise.all([
             get(ref(db, 'accounts')),
-            get(ref(db, 'journal_entries'))
+            get(ref(db, 'journal_entries')),
+            get(ref(db, 'settings'))
         ]);
         
         if (!accountsSnapshot.exists()) {
@@ -454,6 +456,11 @@ export async function rebuildAllAccountBalances(): Promise<{ success: boolean; m
         
         const accounts = accountsSnapshot.val() as Record<string, any>;
         const journalEntries = journalSnapshot.exists() ? journalSnapshot.val() as Record<string, JournalEntry> : {};
+        const settings = settingsSnapshot.exists() ? settingsSnapshot.val() : {};
+        
+        const financialPeriodStartDate = settings.financialPeriodStartDate 
+            ? new Date(settings.financialPeriodStartDate) 
+            : null;
         
         // Initialize all balances to 0
         const balances: { [accountId: string]: number } = {};
@@ -461,9 +468,23 @@ export async function rebuildAllAccountBalances(): Promise<{ success: boolean; m
             balances[accountId] = 0;
         }
         
-        // Process all journal entries using project convention: stored balance = debits - credits
+        let entriesProcessed = 0;
+        let entriesSkipped = 0;
+        
+        // Process journal entries using project convention: stored balance = debits - credits
+        // Only process entries after financialPeriodStartDate if it's set
         for (const entryId in journalEntries) {
             const entry = journalEntries[entryId];
+            
+            // Skip entries before the financial period start date
+            if (financialPeriodStartDate) {
+                const entryDate = new Date(entry.createdAt || entry.date);
+                if (entryDate < financialPeriodStartDate) {
+                    entriesSkipped++;
+                    continue;
+                }
+            }
+            
             const debitAccountId = entry.debit_account;
             const creditAccountId = entry.credit_account;
             const amount = entry.amount_usd;
@@ -477,6 +498,7 @@ export async function rebuildAllAccountBalances(): Promise<{ success: boolean; m
             if (accounts[creditAccountId]) {
                 balances[creditAccountId] = (balances[creditAccountId] || 0) - amount;
             }
+            entriesProcessed++;
         }
         
         // Build atomic updates
@@ -494,9 +516,13 @@ export async function rebuildAllAccountBalances(): Promise<{ success: boolean; m
         const { update } = await import('firebase/database');
         await update(ref(db), updates);
         
+        const periodInfo = financialPeriodStartDate 
+            ? ` (from ${financialPeriodStartDate.toLocaleDateString()}, skipped ${entriesSkipped} older entries)` 
+            : '';
+        
         return { 
             success: true, 
-            message: `Rebuilt balances for ${accountsUpdated} accounts from ${Object.keys(journalEntries).length} journal entries`,
+            message: `Rebuilt balances for ${accountsUpdated} accounts from ${entriesProcessed} journal entries${periodInfo}`,
             accountsUpdated 
         };
         
