@@ -265,18 +265,23 @@ export function calculateBalanceDeltas(
 /**
  * Balance tracker for batch processing.
  * Accumulates deltas during a batch and then generates atomic updates.
+ * 
+ * IMPORTANT: Only generates balance updates for accounts that actually exist in Firebase.
+ * Missing accounts are tracked and can be checked via getMissingAccounts().
  */
 export class BalanceTracker {
-    private accountBalances: Map<string, { startingBalance: number; delta: number; type: string }> = new Map();
+    private accountBalances: Map<string, { startingBalance: number; delta: number; type: string; exists: boolean }> = new Map();
     private accountsCache: Map<string, any> = new Map();
     private timestamp: string;
+    private missingAccounts: Set<string> = new Set();
 
     constructor(timestamp: string) {
         this.timestamp = timestamp;
     }
 
     /**
-     * Load account data (call once at start of batch to get current balances)
+     * Load account data (call once at start of batch to get current balances).
+     * Missing accounts are tracked but will NOT have balance updates generated.
      */
     async loadAccounts(accountIds: string[]): Promise<void> {
         const uniqueIds = [...new Set(accountIds)];
@@ -285,15 +290,44 @@ export class BalanceTracker {
         );
         
         for (let i = 0; i < uniqueIds.length; i++) {
+            const accountId = uniqueIds[i];
             if (snapshots[i].exists()) {
                 const account = snapshots[i].val();
-                this.accountsCache.set(uniqueIds[i], account);
-                this.accountBalances.set(uniqueIds[i], {
+                this.accountsCache.set(accountId, account);
+                this.accountBalances.set(accountId, {
                     startingBalance: account.balance || 0,
                     delta: 0,
-                    type: account.type || 'Assets'
+                    type: account.type || 'Assets',
+                    exists: true
+                });
+            } else {
+                // Track missing account - will NOT generate balance updates
+                this.missingAccounts.add(accountId);
+                const inferredType = accountId.startsWith('6') || accountId.startsWith('7') ? 'Liabilities' : 'Assets';
+                this.accountBalances.set(accountId, {
+                    startingBalance: 0,
+                    delta: 0,
+                    type: inferredType,
+                    exists: false
                 });
             }
+        }
+    }
+
+    /**
+     * Check if any accounts were missing during load
+     */
+    getMissingAccounts(): string[] {
+        return [...this.missingAccounts];
+    }
+
+    /**
+     * Validate that all required accounts exist. Throws error if any are missing.
+     */
+    validateAllAccountsExist(description: string = 'operation'): void {
+        if (this.missingAccounts.size > 0) {
+            const missing = [...this.missingAccounts].join(', ');
+            throw new Error(`Cannot complete ${description}: Missing accounts in chart of accounts: ${missing}. Please create these accounts first.`);
         }
     }
 
@@ -301,11 +335,21 @@ export class BalanceTracker {
      * Get account type from cache
      */
     getAccountType(accountId: string): string {
-        return this.accountsCache.get(accountId)?.type || 'Assets';
+        return this.accountsCache.get(accountId)?.type || 
+               (accountId.startsWith('6') || accountId.startsWith('7') ? 'Liabilities' : 'Assets');
     }
 
     /**
-     * Add a journal entry's effect to the tracker
+     * Check if a specific account exists
+     */
+    accountExists(accountId: string): boolean {
+        const entry = this.accountBalances.get(accountId);
+        return entry?.exists ?? false;
+    }
+
+    /**
+     * Add a journal entry's effect to the tracker.
+     * Only tracks deltas for accounts that exist.
      */
     addJournalEntry(debitAccountId: string, creditAccountId: string, amount: number): void {
         const debitType = this.getAccountType(debitAccountId);
@@ -317,26 +361,28 @@ export class BalanceTracker {
             amount
         );
         
-        // Accumulate deltas
+        // Accumulate deltas only for existing accounts
         const debitEntry = this.accountBalances.get(debitAccountId);
-        if (debitEntry) {
+        if (debitEntry && debitEntry.exists) {
             debitEntry.delta += debitDelta;
         }
         
         const creditEntry = this.accountBalances.get(creditAccountId);
-        if (creditEntry) {
+        if (creditEntry && creditEntry.exists) {
             creditEntry.delta += creditDelta;
         }
     }
 
     /**
-     * Generate Firebase update paths for all accumulated balance changes
+     * Generate Firebase update paths for all accumulated balance changes.
+     * Only includes accounts that actually exist in Firebase.
      */
     getBalanceUpdates(): { [path: string]: any } {
         const updates: { [path: string]: any } = {};
         
         for (const [accountId, entry] of this.accountBalances) {
-            if (entry.delta !== 0) {
+            // Only generate updates for accounts that exist
+            if (entry.exists && entry.delta !== 0) {
                 updates[`accounts/${accountId}/balance`] = entry.startingBalance + entry.delta;
                 updates[`accounts/${accountId}/lastBalanceUpdate`] = this.timestamp;
             }

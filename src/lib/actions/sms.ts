@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import type { Client, Account, Settings, SmsEndpoint, NameMatchingRule, CashRecord, FiatRate, SmsParsingRule, Transaction, ClientServiceProvider, JournalEntry } from '../types';
 import { normalizeArabic } from '../utils';
 import { parseSmsWithAi } from '@/ai/flows/parse-sms-flow';
-import { sendTelegramNotification, notifyClientTransaction } from './helpers';
+import { sendTelegramNotification, notifyClientTransaction, BalanceTracker } from './helpers';
 import { format } from 'date-fns';
 import { getNextSequentialId, stripUndefined } from './helpers';
 import { parseSmsWithCustomRules } from '../custom-sms-parser';
@@ -94,7 +94,6 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
     const smsEndpointsRef = ref(db, 'sms_endpoints');
     const chartOfAccountsRef = ref(db, 'accounts');
     const rulesRef = ref(db, 'sms_parsing_rules');
-    const failuresRef = ref(db, 'sms_parsing_failures');
     
     try {
         const fiatRatesSnapshot = await get(query(ref(db, 'rate_history/fiat_rates'), orderByChild('timestamp'), limitToLast(1)));
@@ -144,112 +143,190 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         let duplicateCount = 0;
         let successCount = 0;
         let failedCount = 0;
-
-        const processMessageAndUpdate = async (payload: any, endpointId: string, messageId?: string) => {
-            const endpointMapping = allEndpoints[endpointId];
-            
-            if (messageId) {
-                updates[`/incoming/${endpointId}/${messageId}`] = null;
-            } else {
-                 updates[`/incoming/${endpointId}`] = null;
-            }
-
-            if (!endpointMapping) return;
-
-            const accountId = endpointMapping.accountId;
-            const account = allChartOfAccounts[accountId];
-            
-            if (!account || !account.currency) return;
-
-            let smsBody: string;
-            if (typeof payload === 'object' && payload !== null) {
-                smsBody = payload.body || payload.message || payload.text || '';
-            } else {
-                smsBody = String(payload);
-            }
-            
-            const trimmedSmsBody = smsBody.trim();
-            if (trimmedSmsBody === '') return;
-            
-            if (recentSmsBodies.has(trimmedSmsBody)) {
-                duplicateCount++;
-                return;
-            }
-
-            processedCount++;
-            
-            let parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
-            
-            // If custom rules fail, fall back to AI
-            if (!parsed && apiSettings.gemini_api_key) {
-                parsed = await parseSmsWithAi(trimmedSmsBody, apiSettings.gemini_api_key);
-            }
-            
-            if (parsed && parsed.amount) {
-                successCount++;
-                
-                let amountusd = 0;
-                const currencyCode = account.currency;
-                const rateInfo = currentFiatRates[currencyCode];
-
-                if (currencyCode === 'USD') {
-                    amountusd = parsed.amount;
-                } else if (rateInfo) {
-                    const rate = (parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell) || 0;
-                    if (rate > 0) {
-                        amountusd = parsed.amount / rate;
-                    }
-                }
-
-                const newRecordId = await getNextSequentialId('cashRecordId');
-                const newRecord: Omit<CashRecord, 'id'> = {
-                    date: new Date().toISOString(),
-                    type: parsed.type === 'credit' ? 'inflow' : 'outflow',
-                    source: 'SMS',
-                    status: 'Pending',
-                    clientId: null,
-                    clientName: null,
-                    accountId: accountId,
-                    accountName: account.name,
-                    senderName: parsed.type === 'credit' ? parsed.person : undefined,
-                    recipientName: parsed.type === 'debit' ? parsed.person : undefined,
-                    amount: parsed.amount!,
-                    currency: account.currency!,
-                    amountusd: parseFloat(amountusd.toFixed(2)),
-                    notes: trimmedSmsBody, // Store original SMS in notes
-                    rawSms: trimmedSmsBody, // And in its own field
-                    createdAt: new Date().toISOString(),
-                };
-                updates[`/cash_records/${newRecordId}`] = stripUndefined(newRecord);
-                recentSmsBodies.add(trimmedSmsBody);
-            } else {
-                failedCount++;
-                const failureRef = push(ref(db, `sms_parsing_failures`));
-                // **CRITICAL FIX**: Check if failureRef is not null before using its path
-                if (failureRef.key) {
-                    updates[`/sms_parsing_failures/${failureRef.key}`] = {
-                        rawSms: trimmedSmsBody,
-                        accountId,
-                        accountName: account.name,
-                        failedAt: new Date().toISOString(),
-                    };
-                } else {
-                    console.error("Failed to generate a key for parsing failure log.");
-                }
-            }
+        
+        const unmatchedCashAccountId = '7001';
+        const recordDate = new Date().toISOString();
+        
+        // Phase 1: Collect and parse all messages
+        type ParsedMessage = {
+            endpointId: string;
+            messageId?: string;
+            accountId: string;
+            account: Account;
+            smsBody: string;
+            parsed: { amount: number; type: 'credit' | 'debit'; person?: string };
+            amountusd: number;
         };
-
+        const parsedMessages: ParsedMessage[] = [];
+        const accountIdsForBalances = new Set<string>([unmatchedCashAccountId]);
+        
+        // Helper to extract messages from node
+        const extractMessages = (messagesNode: any, endpointId: string): Array<{ payload: any; messageId?: string }> => {
+            const messages: Array<{ payload: any; messageId?: string }> = [];
+            if (typeof messagesNode === 'object' && messagesNode !== null) {
+                for (const messageId of Object.keys(messagesNode)) {
+                    messages.push({ payload: messagesNode[messageId], messageId });
+                }
+            } else if (typeof messagesNode === 'string') {
+                messages.push({ payload: messagesNode });
+            }
+            return messages;
+        };
+        
+        // Parse all messages first
         for (const endpointId in allIncoming) {
             const messagesNode = allIncoming[endpointId];
-            if (typeof messagesNode === 'object' && messagesNode !== null) {
-                const messagePromises = Object.keys(messagesNode).map(messageId => 
-                    processMessageAndUpdate(messagesNode[messageId], endpointId, messageId)
-                );
-                await Promise.all(messagePromises);
-            } else if (typeof messagesNode === 'string') {
-                await processMessageAndUpdate(messagesNode, endpointId);
+            const messages = extractMessages(messagesNode, endpointId);
+            
+            for (const { payload, messageId } of messages) {
+                const endpointMapping = allEndpoints[endpointId];
+                
+                // Mark for deletion
+                if (messageId) {
+                    updates[`/incoming/${endpointId}/${messageId}`] = null;
+                } else {
+                    updates[`/incoming/${endpointId}`] = null;
+                }
+                
+                if (!endpointMapping) continue;
+                
+                const accountId = endpointMapping.accountId;
+                const account = allChartOfAccounts[accountId];
+                
+                if (!account || !account.currency) continue;
+                
+                let smsBody: string;
+                if (typeof payload === 'object' && payload !== null) {
+                    smsBody = payload.body || payload.message || payload.text || '';
+                } else {
+                    smsBody = String(payload);
+                }
+                
+                const trimmedSmsBody = smsBody.trim();
+                if (trimmedSmsBody === '') continue;
+                
+                if (recentSmsBodies.has(trimmedSmsBody)) {
+                    duplicateCount++;
+                    continue;
+                }
+                
+                processedCount++;
+                
+                let parsed = parseSmsWithCustomRules(trimmedSmsBody, customRules);
+                
+                // If custom rules fail, fall back to AI
+                if (!parsed && apiSettings.gemini_api_key) {
+                    parsed = await parseSmsWithAi(trimmedSmsBody, apiSettings.gemini_api_key);
+                }
+                
+                if (parsed && parsed.amount) {
+                    let amountusd = 0;
+                    const currencyCode = account.currency;
+                    const rateInfo = currentFiatRates[currencyCode];
+
+                    if (currencyCode === 'USD') {
+                        amountusd = parsed.amount;
+                    } else if (rateInfo) {
+                        const rate = (parsed.type === 'credit' ? rateInfo.clientBuy : rateInfo.clientSell) || 0;
+                        if (rate > 0) {
+                            amountusd = parsed.amount / rate;
+                        }
+                    }
+                    
+                    parsedMessages.push({
+                        endpointId,
+                        messageId,
+                        accountId,
+                        account,
+                        smsBody: trimmedSmsBody,
+                        parsed: parsed as { amount: number; type: 'credit' | 'debit'; person?: string },
+                        amountusd: parseFloat(amountusd.toFixed(2))
+                    });
+                    
+                    accountIdsForBalances.add(accountId);
+                    recentSmsBodies.add(trimmedSmsBody);
+                    successCount++;
+                } else {
+                    failedCount++;
+                    const failureRef = push(ref(db, `sms_parsing_failures`));
+                    if (failureRef.key) {
+                        updates[`/sms_parsing_failures/${failureRef.key}`] = {
+                            rawSms: trimmedSmsBody,
+                            accountId,
+                            accountName: account.name,
+                            failedAt: recordDate,
+                        };
+                    }
+                }
             }
         }
+        
+        // Phase 2: Initialize BalanceTracker with all affected accounts
+        const balanceTracker = new BalanceTracker(recordDate);
+        await balanceTracker.loadAccounts([...accountIdsForBalances]);
+        
+        // Validate critical accounts exist (7001 is required, asset accounts should exist)
+        const missingAccounts = balanceTracker.getMissingAccounts();
+        if (missingAccounts.includes('7001')) {
+            return { message: "Cannot process SMS: Account 7001 (Unmatched Cash USD) is missing. Please create this account first.", error: true };
+        }
+        // Log warning for any other missing accounts but continue processing
+        const otherMissing = missingAccounts.filter(id => id !== '7001');
+        if (otherMissing.length > 0) {
+            console.warn(`⚠️ SMS Processing: Some asset accounts missing: ${otherMissing.join(', ')}. Balance updates will be skipped for these.`);
+        }
+        
+        // Phase 3: Create records and journal entries with accumulated balance changes
+        for (const msg of parsedMessages) {
+            const newRecordId = await getNextSequentialId('cashRecordId');
+            const recordType = msg.parsed.type === 'credit' ? 'inflow' : 'outflow';
+            
+            const newRecord: Omit<CashRecord, 'id'> = {
+                date: recordDate,
+                type: recordType,
+                source: 'SMS',
+                status: 'Confirmed',
+                clientId: null,
+                clientName: null,
+                accountId: msg.accountId,
+                accountName: msg.account.name,
+                senderName: msg.parsed.type === 'credit' ? msg.parsed.person : undefined,
+                recipientName: msg.parsed.type === 'debit' ? msg.parsed.person : undefined,
+                amount: msg.parsed.amount,
+                currency: msg.account.currency!,
+                amountusd: msg.amountusd,
+                notes: msg.smsBody,
+                rawSms: msg.smsBody,
+                createdAt: recordDate,
+            };
+            updates[`/cash_records/${newRecordId}`] = stripUndefined(newRecord);
+            
+            // Create journal entry: Asset account <-> 7001
+            const journalRef = push(ref(db, 'journal_entries'));
+            const debitAcc = recordType === 'inflow' ? msg.accountId : unmatchedCashAccountId;
+            const creditAcc = recordType === 'inflow' ? unmatchedCashAccountId : msg.accountId;
+            
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: recordDate,
+                description: `SMS ${recordType === 'inflow' ? 'Receipt' : 'Payment'} (Unmatched) - Rec #${newRecordId}`,
+                debit_account: debitAcc,
+                credit_account: creditAcc,
+                debit_amount: msg.amountusd,
+                credit_amount: msg.amountusd,
+                amount_usd: msg.amountusd,
+                createdAt: recordDate,
+                debit_account_name: recordType === 'inflow' ? msg.account.name : 'Unmatched Cash USD',
+                credit_account_name: recordType === 'inflow' ? 'Unmatched Cash USD' : msg.account.name,
+            };
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+            
+            // Track balance changes (accumulates correctly for multiple entries)
+            balanceTracker.addJournalEntry(debitAcc, creditAcc, msg.amountusd);
+        }
+        
+        // Phase 4: Add accumulated balance updates
+        const balanceUpdates = balanceTracker.getBalanceUpdates();
+        Object.assign(updates, balanceUpdates);
 
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
@@ -286,18 +363,68 @@ export async function linkSmsToClient(recordId: string, clientId: string) {
         const client = clientSnapshot.val() as Client;
         const record = recordSnapshot.val() as CashRecord;
         
-        await update(ref(db, `/cash_records/${recordId}`), {
-            clientId: clientId,
-            clientName: client.name,
-            status: 'Matched'
-        });
+        // Create transfer journal entry: 7001 -> Client Liability (6000{clientId})
+        // This moves the liability from "Unmatched" to the specific client
+        const unmatchedCashAccountId = '7001';
+        const clientAccountId = `6000${clientId}`;
+        const transferDate = new Date().toISOString();
+        const amount = record.amountusd;
+        
+        // Use BalanceTracker for proper atomic handling
+        const balanceTracker = new BalanceTracker(transferDate);
+        await balanceTracker.loadAccounts([unmatchedCashAccountId, clientAccountId]);
+        
+        // Validate required accounts exist
+        const missingAccounts = balanceTracker.getMissingAccounts();
+        if (missingAccounts.includes('7001')) {
+            return { success: false, message: "Cannot link SMS: Account 7001 (Unmatched Cash USD) is missing. Please create this account first." };
+        }
+        if (missingAccounts.includes(clientAccountId)) {
+            return { success: false, message: `Cannot link SMS: Client account ${clientAccountId} is missing. Please ensure the client has a liability account.` };
+        }
+        
+        const journalRef = push(ref(db, 'journal_entries'));
+        
+        // Transfer from 7001 to client liability:
+        // Inflow (we received money): DEBIT 7001 (reduce unmatched liability), CREDIT client liability (increase what we owe client)
+        // Outflow (we paid money): DEBIT client liability (reduce what we owe), CREDIT 7001 (reduce unmatched liability)
+        const debitAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
+        const creditAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+        
+        const journalEntry: Omit<JournalEntry, 'id'> = {
+            date: transferDate,
+            description: `Transfer SMS ${record.type} to ${client.name} - Rec #${recordId}`,
+            debit_account: debitAcc,
+            credit_account: creditAcc,
+            debit_amount: amount,
+            credit_amount: amount,
+            amount_usd: amount,
+            createdAt: transferDate,
+            debit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
+            credit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+        };
+        
+        // Track balance changes
+        balanceTracker.addJournalEntry(debitAcc, creditAcc, amount);
+        const balanceUpdates = balanceTracker.getBalanceUpdates();
+        
+        // Atomic update: record + journal entry + balance updates
+        const updates: { [key: string]: any } = {
+            [`cash_records/${recordId}/clientId`]: clientId,
+            [`cash_records/${recordId}/clientName`]: client.name,
+            [`cash_records/${recordId}/status`]: 'Matched',
+            [`journal_entries/${journalRef.key}`]: journalEntry,
+            ...balanceUpdates
+        };
+        
+        await update(ref(db), updates);
         
         await notifyClientTransaction(clientId, client.name, record);
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/cash-receipts');
         revalidatePath('/sms/match');
-        return { success: true, message: "SMS record linked to client." };
+        return { success: true, message: "SMS record linked to client with transfer journal entry." };
     } catch (e: any) {
         console.error("Error linking SMS to client:", e);
         return { success: false, message: e.message || "An unexpected database error occurred." };
@@ -431,23 +558,32 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
         const allEndpoints: Record<string, SmsEndpoint> = endpointsSnapshot.exists() ? endpointsSnapshot.val() : {};
         const allTransactions: Transaction[] = transactionsSnapshot.exists() ? Object.values(transactionsSnapshot.val()) : [];
 
+        // Filter for SMS records that are Confirmed but not yet assigned to a client
         const smsRecords = Object.entries<CashRecord>(smsRecordsSnapshot.val())
             .map(([id, record]) => ({ ...record, id }))
-            .filter(record => record.source === 'SMS' && !record.clientId);
+            .filter(record => record.source === 'SMS' && !record.clientId && record.status === 'Confirmed');
 
         let matchedCount = 0;
         const updates: { [key: string]: any } = {};
+        const unmatchedCashAccountId = '7001';
+        const transferDate = new Date().toISOString();
+        
+        // Collect all account IDs that will be affected for batch balance tracking
+        const accountIdsForBalances = new Set<string>([unmatchedCashAccountId]);
 
         const ruleFunctions: Record<NameMatchingRule, (name: string, clients: Client[]) => Client[]> = {
             'phone_number': findClientByPhoneNumber,
             'first_and_second': findClientByFirstNameAndSecondName,
             'full_name': findClientByFullName,
             'first_and_last': findClientByFirstNameAndLastName,
-            'part_of_full_name': findClientByFirstNameAndSecondName // Using this as a proxy for part of name
+            'part_of_full_name': findClientByFirstNameAndSecondName
         };
 
         const ruleOrder: NameMatchingRule[] = ['phone_number', 'first_and_second', 'full_name', 'first_and_last', 'part_of_full_name'];
 
+        // First pass: find matches and collect client account IDs
+        const matchResults: Array<{ record: CashRecord & { id: string }; client: Client }> = [];
+        
         for (const record of smsRecords) {
             const personName = record.senderName || record.recipientName;
             if (!personName) continue;
@@ -475,13 +611,72 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
             }
 
             if (bestMatch) {
-                updates[`/cash_records/${record.id}/clientId`] = bestMatch.id;
-                updates[`/cash_records/${record.id}/clientName`] = bestMatch.name;
-                // Status remains Pending - setting clientId = matched/assigned
-                matchedCount++;
+                matchResults.push({ record, client: bestMatch });
+                accountIdsForBalances.add(`6000${bestMatch.id}`);
             }
-
         }
+        
+        // Initialize BalanceTracker for batch processing
+        const balanceTracker = new BalanceTracker(transferDate);
+        await balanceTracker.loadAccounts([...accountIdsForBalances]);
+        
+        // Validate required accounts exist
+        const missingAccounts = balanceTracker.getMissingAccounts();
+        if (missingAccounts.includes('7001')) {
+            return { message: "Cannot match SMS: Account 7001 (Unmatched Cash USD) is missing. Please create this account first.", error: true };
+        }
+        // Filter out match results for clients with missing accounts
+        const validMatchResults = matchResults.filter(({ client }) => {
+            const clientAccountId = `6000${client.id}`;
+            if (missingAccounts.includes(clientAccountId)) {
+                console.warn(`⚠️ SMS Matching: Skipping client ${client.name} (${client.id}) - account ${clientAccountId} missing`);
+                return false;
+            }
+            return true;
+        });
+
+        // Second pass: create updates with journal entries and balance changes
+        for (const { record, client } of validMatchResults) {
+            const clientAccountId = `6000${client.id}`;
+            const amount = record.amountusd;
+            
+            // Update record with client info
+            updates[`/cash_records/${record.id}/clientId`] = client.id;
+            updates[`/cash_records/${record.id}/clientName`] = client.name;
+            updates[`/cash_records/${record.id}/status`] = 'Matched';
+            
+            // Create transfer journal entry: 7001 -> Client Liability
+            const journalRef = push(ref(db, 'journal_entries'));
+            
+            // Inflow: DEBIT 7001 (reduce unmatched), CREDIT client liability (increase)
+            // Outflow: DEBIT client liability (reduce), CREDIT 7001 (reduce unmatched)
+            const debitAcc = record.type === 'inflow' ? unmatchedCashAccountId : clientAccountId;
+            const creditAcc = record.type === 'inflow' ? clientAccountId : unmatchedCashAccountId;
+            
+            const journalEntry: Omit<JournalEntry, 'id'> = {
+                date: transferDate,
+                description: `Auto-match SMS ${record.type} to ${client.name} - Rec #${record.id}`,
+                debit_account: debitAcc,
+                credit_account: creditAcc,
+                debit_amount: amount,
+                credit_amount: amount,
+                amount_usd: amount,
+                createdAt: transferDate,
+                debit_account_name: record.type === 'inflow' ? 'Unmatched Cash USD' : client.name,
+                credit_account_name: record.type === 'inflow' ? client.name : 'Unmatched Cash USD',
+            };
+            
+            updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+            
+            // Track balance changes using BalanceTracker
+            balanceTracker.addJournalEntry(debitAcc, creditAcc, amount);
+            
+            matchedCount++;
+        }
+        
+        // Add accumulated balance updates
+        const balanceUpdates = balanceTracker.getBalanceUpdates();
+        Object.assign(updates, balanceUpdates);
 
         if (matchedCount > 0) {
             await update(ref(db), updates);
@@ -489,7 +684,7 @@ export async function matchSmsToClients(prevState: MatchSmsState, formData: Form
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/sms/match');
-        return { message: `Auto-matching complete. Matched ${matchedCount} records.`, error: false };
+        return { message: `Auto-matching complete. Matched ${matchedCount} records with transfer journal entries.`, error: false };
 
     } catch (e: any) {
         console.error("SMS Auto-matching Error:", e);
