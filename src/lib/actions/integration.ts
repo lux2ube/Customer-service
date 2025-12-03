@@ -269,11 +269,13 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             // Store in modern_usdt_records collection with USDT1, USDT2, etc. as document ID
             updates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: txBlockNumber };
 
+            // Create journal entry for ALL transactions (assigned or unassigned)
+            const journalRef = push(ref(db, 'journal_entries'));
+            
             if (existingClient) {
+                // ASSIGNED: Journal entry with client liability account (6000{clientId})
                 const clientAccountId = `6000${existingClient.id}`;
                 const journalDescription = `Synced USDT ${newTxData.type} from ${configName} for ${existingClient.name}`;
-                const journalRef = push(ref(db, 'journal_entries'));
-                
                 const clientNameForJournal = existingClient.name || `Client ${existingClient.id}`;
 
                 const journalEntry: Omit<JournalEntry, 'id'> = {
@@ -291,6 +293,26 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 updates[`/journal_entries/${journalRef.key}`] = journalEntry;
 
                 await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+            } else {
+                // UNASSIGNED: Route to liability account 7002 (Unassigned USDT Liability)
+                const unassignedUsdtAccountId = '7002';
+                const journalDescription = `Unassigned USDT ${newTxData.type} from ${configName} - wallet: ${clientWalletAddress.slice(0, 10)}...`;
+
+                const journalEntry: Omit<JournalEntry, 'id'> = {
+                    date: newTxData.date,
+                    description: journalDescription,
+                    // For inflow: DEBIT wallet (asset increases), CREDIT 7002 (liability increases - we owe this unassigned amount)
+                    // For outflow: DEBIT 7002 (liability decreases), CREDIT wallet (asset decreases)
+                    debit_account: newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId,
+                    credit_account: newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId,
+                    debit_amount: newTxData.amount,
+                    credit_amount: newTxData.amount,
+                    amount_usd: newTxData.amount,
+                    createdAt: new Date().toISOString(),
+                    debit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : 'Unassigned USDT Liability',
+                    credit_account_name: newTxData.type === 'inflow' ? 'Unassigned USDT Liability' : cryptoWalletName,
+                };
+                updates[`/journal_entries/${journalRef.key}`] = journalEntry;
             }
 
             newRecordsCount++;

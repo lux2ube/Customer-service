@@ -194,7 +194,7 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         const updates: {[key: string]: any} = {};
         const dateNow = new Date().toISOString();
         
-        const newUsdtRecordId = await getNextSequentialId('usdtRecordId');
+        const newUsdtRecordId = await getNextSequentialId('modernUsdtRecordId');
         const outflowRecord: Omit<UsdtRecord, 'id'> = {
             date: dateNow,
             type: 'outflow',
@@ -210,7 +210,7 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
             notes: 'Auto-sent from USDT Sender Wallet',
             createdAt: dateNow,
         };
-        updates[`/modern_usdt_records/${newUsdtRecordId}`] = stripUndefined(outflowRecord);
+        updates[`/modern_usdt_records/${newUsdtRecordId}`] = { id: newUsdtRecordId, ...stripUndefined(outflowRecord) };
 
         if (isNewAddress && client && serviceProviderId) {
             const serviceProvidersSnapshot = await get(ref(db, `serviceProviders/${serviceProviderId}`));
@@ -244,30 +244,38 @@ export async function createSendRequest(prevState: SendRequestState | undefined,
         if (client) {
             const clientAccountId = `6000${client.id}`;
             
-            const [debitBalanceBefore, creditBalanceBefore] = await Promise.all([
+            // USDT Payout TO client:
+            // DEBIT client liability (6000{id}) → reduces what we owe them (we paid them)
+            // CREDIT wallet asset → reduces our USDT balance (we spent it)
+            // For Liabilities: Balance = CREDITS - DEBITS (so DEBIT decreases liability)
+            // For Assets: Balance = DEBITS - CREDITS (so CREDIT decreases asset)
+            const [clientBalanceBefore, walletBalanceBefore] = await Promise.all([
                 calculateAccountBalanceBefore(clientAccountId, dateNow),
                 calculateAccountBalanceBefore(creditAccountId, dateNow)
             ]);
             
-            const debitBalanceAfter = debitBalanceBefore + amount;
-            const creditBalanceAfter = creditBalanceBefore - amount;
+            // calculateAccountBalanceBefore returns DEBITS - CREDITS for all accounts
+            // When we DEBIT client: new_balance = (DEBITS + amount) - CREDITS = before + amount
+            // When we CREDIT wallet: new_balance = DEBITS - (CREDITS + amount) = before - amount
+            const clientBalanceAfter = clientBalanceBefore + amount; // DEBIT increases the calculated balance
+            const walletBalanceAfter = walletBalanceBefore - amount; // CREDIT decreases the calculated balance
             
             const journalRef = push(ref(db, 'journal_entries'));
             const journalEntry: Omit<JournalEntry, 'id'> = {
                 date: dateNow,
-                description: `USDT Payment to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
-                debit_account: clientAccountId,
-                credit_account: creditAccountId,
+                description: `USDT Payout to ${clientName} - Tx: ${tx.hash.slice(0, 10)}...`,
+                debit_account: clientAccountId, // DEBIT: Client liability (reduces what we owe)
+                credit_account: creditAccountId, // CREDIT: Wallet asset (reduces our USDT)
                 debit_amount: amount,
                 credit_amount: amount,
                 amount_usd: amount,
                 createdAt: dateNow,
                 debit_account_name: clientName,
                 credit_account_name: creditAccountName,
-                debit_account_balance_before: debitBalanceBefore,
-                debit_account_balance_after: debitBalanceAfter,
-                credit_account_balance_before: creditBalanceBefore,
-                credit_account_balance_after: creditBalanceAfter,
+                debit_account_balance_before: clientBalanceBefore,
+                debit_account_balance_after: clientBalanceAfter,
+                credit_account_balance_before: walletBalanceBefore,
+                credit_account_balance_after: walletBalanceAfter,
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
         }
