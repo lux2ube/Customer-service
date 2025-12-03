@@ -43,7 +43,7 @@ For asset accounts (1xxx series), stored as POSITIVE values:
 **Key Workflows**:
 -   **SMS Processing**: Incoming SMS are parsed using AI (Google Gemini via Genkit) or custom rules, creating 'Pending' CashRecords. These are then matched to clients, generating appropriate journal entries.
 -   **Cash Transaction Processing**: Supports multi-currency (YER, SAR) inflows and outflows, automated USD conversion, and integration with multiple bank accounts.
--   **USDT Transaction Processing**: Includes manual entry, Etherscan API v2 blockchain synchronization for BSC, wallet address validation, transaction hash tracking, and service provider integration for automated sends. Also supports CSV import of USDT transactions.
+-   **USDT Transaction Processing**: Includes manual entry, Etherscan API v2 blockchain synchronization for BSC, wallet address validation, transaction hash tracking, and service provider integration for automated sends. Also supports CSV import of USDT transactions. Features **Professional Auto-Fill** that remembers client payment details per service provider - when a client selects an account, their previously-saved recipient details (from service provider formula fields) are auto-populated. In-session edits are cached per provider and survive account switching. After submission, the UI refreshes immediately to show updated saved details.
 -   **Accounting System**: Features a Chart of Accounts with hierarchical structure (Assets, Liabilities, Equity, Income, Expenses), automatic client sub-accounts, and generates financial reports.
 
 ### Database Architecture
