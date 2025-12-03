@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import type { Account, JournalEntry } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
@@ -20,28 +20,45 @@ export function LiabilityBalances() {
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
-        const accountsRef = ref(db, 'accounts');
-        const journalRef = ref(db, 'journal_entries');
+        let isFirstLoad = true;
+        
+        const calculateBalances = async () => {
+            try {
+                const [settingsSnap, accountsSnap, journalSnap] = await Promise.all([
+                    get(ref(db, 'settings')),
+                    get(ref(db, 'accounts')),
+                    get(ref(db, 'journal_entries'))
+                ]);
 
-        const unsubAccounts = onValue(accountsRef, (accSnapshot) => {
-            if (!accSnapshot.exists()) {
-                setLoading(false);
-                return;
-            }
-            const allAccounts: Record<string, Account> = accSnapshot.val();
-            const liabilityAccounts = Object.entries(allAccounts)
-                .filter(([id, acc]) => acc && acc.type === 'Liabilities' && !acc.isGroup && (id === '7001' || id === '7002' || id.startsWith('6000')))
-                .map(([id, acc]) => ({ ...acc, id }));
+                const settings = settingsSnap.val() || {};
+                const financialPeriodStartDate = settings.financialPeriodStartDate || null;
 
-            const unsubJournal = onValue(journalRef, (journalSnapshot) => {
+                if (!accountsSnap.exists()) {
+                    setLoading(false);
+                    return;
+                }
+
+                const allAccounts: Record<string, Account> = accountsSnap.val();
+                const liabilityAccounts = Object.entries(allAccounts)
+                    .filter(([id, acc]) => acc && acc.type === 'Liabilities' && !acc.isGroup && (id === '7001' || id === '7002' || id.startsWith('6000')))
+                    .map(([id, acc]) => ({ ...acc, id }));
+
                 const accountBalances: Record<string, number> = {};
                 liabilityAccounts.forEach(acc => accountBalances[acc.id] = 0);
 
-                if (journalSnapshot.exists()) {
-                    const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
+                if (journalSnap.exists()) {
+                    const allEntries: Record<string, JournalEntry> = journalSnap.val();
                     for (const key in allEntries) {
                         const entry = allEntries[key];
-                        // For liability accounts: DEBIT = decrease, CREDIT = increase
+                        
+                        if (financialPeriodStartDate && entry.createdAt) {
+                            const entryDate = new Date(entry.createdAt);
+                            const periodStart = new Date(financialPeriodStartDate);
+                            if (entryDate < periodStart) {
+                                continue;
+                            }
+                        }
+                        
                         if (accountBalances[entry.debit_account] !== undefined) {
                             accountBalances[entry.debit_account] -= entry.debit_amount;
                         }
@@ -66,13 +83,27 @@ export function LiabilityBalances() {
 
                 newBalances.sort((a,b) => a.name.localeCompare(b.name));
                 setBalances(newBalances);
-                setLoading(false);
-            });
+                if (isFirstLoad) {
+                    setLoading(false);
+                    isFirstLoad = false;
+                }
+            } catch (error) {
+                console.error('Error calculating liability balances:', error);
+                if (isFirstLoad) {
+                    setLoading(false);
+                    isFirstLoad = false;
+                }
+            }
+        };
 
-            return () => unsubJournal();
+        calculateBalances();
+
+        const journalRef = ref(db, 'journal_entries');
+        const unsubJournal = onValue(journalRef, () => {
+            calculateBalances();
         });
 
-        return () => unsubAccounts();
+        return () => unsubJournal();
     }, []);
 
     return (

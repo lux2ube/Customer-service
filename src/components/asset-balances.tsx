@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
@@ -25,63 +25,62 @@ export function AssetBalances() {
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
-        const accountsRef = ref(db, 'accounts');
-        const journalRef = ref(db, 'journal_entries');
-        const providersRef = ref(db, 'service_providers');
+        let isFirstLoad = true;
+        
+        const calculateBalances = async () => {
+            try {
+                const [settingsSnap, providersSnap, accountsSnap, journalSnap] = await Promise.all([
+                    get(ref(db, 'settings')),
+                    get(ref(db, 'service_providers')),
+                    get(ref(db, 'accounts')),
+                    get(ref(db, 'journal_entries'))
+                ]);
 
-        const unsubProviders = onValue(providersRef, (provSnapshot) => {
-            const allProviders: Record<string, ServiceProvider> = provSnapshot.val() || {};
-            
-            const unsubAccounts = onValue(accountsRef, (accSnapshot) => {
-                if (!accSnapshot.exists()) {
+                const settings = settingsSnap.val() || {};
+                const financialPeriodStartDate = settings.financialPeriodStartDate || null;
+                const allProviders: Record<string, ServiceProvider> = providersSnap.val() || {};
+
+                if (!accountsSnap.exists()) {
                     setLoading(false);
                     return;
                 }
-                const allAccounts: Record<string, Account> = accSnapshot.val();
+
+                const allAccounts: Record<string, Account> = accountsSnap.val();
                 const assetAccounts = Object.values(allAccounts).filter(acc => acc.type === 'Assets' && !acc.isGroup);
+                
+                const accountBalances: Record<string, number> = {};
+                assetAccounts.forEach(acc => accountBalances[acc.id] = 0);
 
-                const unsubJournal = onValue(journalRef, (journalSnapshot) => {
-                    const accountBalances: Record<string, number> = {};
-                    assetAccounts.forEach(acc => accountBalances[acc.id] = 0);
-
-                    if (journalSnapshot.exists()) {
-                        const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
-                        for (const key in allEntries) {
-                            const entry = allEntries[key];
-                            if (accountBalances[entry.debit_account] !== undefined) {
-                                accountBalances[entry.debit_account] += entry.debit_amount;
-                            }
-                            if (accountBalances[entry.credit_account] !== undefined) {
-                                accountBalances[entry.credit_account] -= entry.credit_amount;
+                if (journalSnap.exists()) {
+                    const allEntries: Record<string, JournalEntry> = journalSnap.val();
+                    for (const key in allEntries) {
+                        const entry = allEntries[key];
+                        
+                        if (financialPeriodStartDate && entry.createdAt) {
+                            const entryDate = new Date(entry.createdAt);
+                            const periodStart = new Date(financialPeriodStartDate);
+                            if (entryDate < periodStart) {
+                                continue;
                             }
                         }
+                        
+                        if (accountBalances[entry.debit_account] !== undefined) {
+                            accountBalances[entry.debit_account] += entry.debit_amount;
+                        }
+                        if (accountBalances[entry.credit_account] !== undefined) {
+                            accountBalances[entry.credit_account] -= entry.credit_amount;
+                        }
                     }
+                }
 
-                    const newGroupedBalances: GroupedBalances = {};
-                    
-                    // Group accounts by provider
-                    Object.values(allProviders).forEach(provider => {
-                        newGroupedBalances[provider.name] = [];
-                        provider.accountIds.forEach(accountId => {
-                            const account = allAccounts[accountId];
-                            if (account && account.type === 'Assets' && !account.isGroup) {
-                                newGroupedBalances[provider.name].push({
-                                    id: account.id,
-                                    name: account.name,
-                                    currency: account.currency || 'N/A',
-                                    balance: accountBalances[account.id] || 0
-                                });
-                            }
-                        });
-                         newGroupedBalances[provider.name].sort((a,b) => a.name.localeCompare(b.name));
-                    });
-
-                    // Handle ungrouped accounts
-                    newGroupedBalances['Other Assets'] = [];
-                    const groupedAccountIds = new Set(Object.values(allProviders).flatMap(p => p.accountIds));
-                    assetAccounts.forEach(account => {
-                        if (!groupedAccountIds.has(account.id)) {
-                             newGroupedBalances['Other Assets'].push({
+                const newGroupedBalances: GroupedBalances = {};
+                
+                Object.values(allProviders).forEach(provider => {
+                    newGroupedBalances[provider.name] = [];
+                    provider.accountIds.forEach(accountId => {
+                        const account = allAccounts[accountId];
+                        if (account && account.type === 'Assets' && !account.isGroup) {
+                            newGroupedBalances[provider.name].push({
                                 id: account.id,
                                 name: account.name,
                                 currency: account.currency || 'N/A',
@@ -89,23 +88,48 @@ export function AssetBalances() {
                             });
                         }
                     });
-                     newGroupedBalances['Other Assets'].sort((a,b) => a.name.localeCompare(b.name));
-                     if (newGroupedBalances['Other Assets'].length === 0) {
-                        delete newGroupedBalances['Other Assets'];
-                     }
-
-
-                    setBalances(newGroupedBalances);
-                    setLoading(false);
+                    newGroupedBalances[provider.name].sort((a,b) => a.name.localeCompare(b.name));
                 });
 
-                return () => unsubJournal();
-            });
-             return () => unsubAccounts();
+                newGroupedBalances['Other Assets'] = [];
+                const groupedAccountIds = new Set(Object.values(allProviders).flatMap(p => p.accountIds));
+                assetAccounts.forEach(account => {
+                    if (!groupedAccountIds.has(account.id)) {
+                        newGroupedBalances['Other Assets'].push({
+                            id: account.id,
+                            name: account.name,
+                            currency: account.currency || 'N/A',
+                            balance: accountBalances[account.id] || 0
+                        });
+                    }
+                });
+                newGroupedBalances['Other Assets'].sort((a,b) => a.name.localeCompare(b.name));
+                if (newGroupedBalances['Other Assets'].length === 0) {
+                    delete newGroupedBalances['Other Assets'];
+                }
+
+                setBalances(newGroupedBalances);
+                if (isFirstLoad) {
+                    setLoading(false);
+                    isFirstLoad = false;
+                }
+            } catch (error) {
+                console.error('Error calculating asset balances:', error);
+                if (isFirstLoad) {
+                    setLoading(false);
+                    isFirstLoad = false;
+                }
+            }
+        };
+
+        calculateBalances();
+
+        const journalRef = ref(db, 'journal_entries');
+        const unsubJournal = onValue(journalRef, () => {
+            calculateBalances();
         });
 
-
-        return () => unsubProviders();
+        return () => unsubJournal();
     }, []);
 
     return (
