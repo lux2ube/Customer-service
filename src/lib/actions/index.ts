@@ -10,7 +10,9 @@ export {
     updateAccountPriority,
     setupClientParentAccount,
     fixAccount7000,
-    rebuildAccountBalances
+    rebuildAccountBalances,
+    rebuildBalancesAction,
+    type RebuildBalanceState
 } from './account';
 
 // Journal Entries

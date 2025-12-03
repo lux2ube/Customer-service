@@ -315,10 +315,24 @@ export async function setupClientParentAccount(prevState: SetupState, formData: 
     }
 }
 
+export type RebuildBalanceState = { success: boolean; message: string; accountsUpdated: number } | undefined;
+
 /**
  * Server action wrapper to rebuild all account balances from journal entries.
  * This recalculates balances using the stored balance = debits - credits convention.
+ * This version is for direct calls.
  */
 export async function rebuildAccountBalances(): Promise<{ success: boolean; message: string; accountsUpdated: number }> {
+    return rebuildBalancesInternal();
+}
+
+/**
+ * Server action wrapper for form submission with useActionState.
+ * This recalculates balances using the stored balance = debits - credits convention.
+ */
+export async function rebuildBalancesAction(
+    prevState: RebuildBalanceState, 
+    formData: FormData
+): Promise<RebuildBalanceState> {
     return rebuildBalancesInternal();
 }

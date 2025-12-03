@@ -53,6 +53,12 @@ export function ClientBalanceDetailReport() {
             const isCredit = entry.credit_account === clientAccountId;
             
             if (isDebit || isCredit) {
+              // Get the correct amount based on which side the client is on
+              // For debit entries, use debit_amount; for credit entries, use credit_amount
+              const entryAmount = isDebit 
+                ? (entry.debit_amount || entry.amount_usd || 0)
+                : (entry.credit_amount || entry.amount_usd || 0);
+              
               allEntries.push({
                 journalId,
                 date: entry.date,
@@ -61,7 +67,7 @@ export function ClientBalanceDetailReport() {
                 debitAccountName: entry.debit_account_name || entry.debit_account,
                 creditAccount: entry.credit_account,
                 creditAccountName: entry.credit_account_name || entry.credit_account,
-                amount: entry.amount_usd || entry.debit_amount || 0,
+                amount: entryAmount,
                 balanceBefore: isDebit 
                   ? (entry.debit_account_balance_before ?? 0) 
                   : (entry.credit_account_balance_before ?? 0),

@@ -15,7 +15,7 @@ import type { Settings } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Save } from 'lucide-react';
-import { updateApiSettings, rebuildAccountBalances, type RateFormState } from '@/lib/actions';
+import { updateApiSettings, rebuildBalancesAction, type RateFormState, type RebuildBalanceState } from '@/lib/actions';
 import { RefreshCw } from 'lucide-react';
 
 function SubmitButton({ children, disabled }: { children: React.ReactNode, disabled?: boolean }) {
@@ -60,71 +60,68 @@ function ApiSettingsForm({ initialSettings }: { initialSettings: Settings }) {
     )
 }
 
+function RebuildSubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button 
+            type="submit"
+            disabled={pending}
+            variant="outline"
+        >
+            {pending ? (
+                <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin"/>
+                    Rebuilding...
+                </>
+            ) : (
+                <>
+                    <RefreshCw className="mr-2 h-4 w-4"/>
+                    Rebuild All Balances
+                </>
+            )}
+        </Button>
+    );
+}
+
 function BalanceManagementCard() {
     const { toast } = useToast();
-    const [rebuilding, setRebuilding] = React.useState(false);
+    const [state, formAction] = useActionState<RebuildBalanceState, FormData>(rebuildBalancesAction, undefined);
     
-    const handleRebuildBalances = async () => {
-        setRebuilding(true);
-        try {
-            const result = await rebuildAccountBalances();
-            if (result.success) {
-                toast({ 
-                    title: "Balances Rebuilt", 
-                    description: result.message 
-                });
-            } else {
-                toast({ 
-                    variant: 'destructive', 
-                    title: "Error", 
-                    description: result.message 
-                });
-            }
-        } catch (error: any) {
+    React.useEffect(() => {
+        if (state?.success) {
+            toast({ 
+                title: "Balances Rebuilt", 
+                description: state.message 
+            });
+        } else if (state?.success === false) {
             toast({ 
                 variant: 'destructive', 
                 title: "Error", 
-                description: error.message || 'Failed to rebuild balances'
+                description: state.message 
             });
-        } finally {
-            setRebuilding(false);
         }
-    };
-
+    }, [state, toast]);
+    
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Balance Management</CardTitle>
-                <CardDescription>
-                    Recalculate all account balances from journal entries. Use this to fix any balance discrepancies.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                    This will recalculate balances for all accounts based on journal entries. 
-                    Use this if account balances appear incorrect or after importing data.
-                </p>
-            </CardContent>
-            <CardFooter>
-                <Button 
-                    onClick={handleRebuildBalances} 
-                    disabled={rebuilding}
-                    variant="outline"
-                >
-                    {rebuilding ? (
-                        <>
-                            <RefreshCw className="mr-2 h-4 w-4 animate-spin"/>
-                            Rebuilding...
-                        </>
-                    ) : (
-                        <>
-                            <RefreshCw className="mr-2 h-4 w-4"/>
-                            Rebuild All Balances
-                        </>
-                    )}
-                </Button>
-            </CardFooter>
-        </Card>
+        <form action={formAction}>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Balance Management</CardTitle>
+                    <CardDescription>
+                        Recalculate all account balances from journal entries. Use this to fix any balance discrepancies.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        This will recalculate balances for all accounts based on journal entries. 
+                        Use this if account balances appear incorrect or after importing data.
+                    </p>
+                </CardContent>
+                <CardFooter>
+                    <RebuildSubmitButton />
+                </CardFooter>
+            </Card>
+        </form>
     );
 }
 
