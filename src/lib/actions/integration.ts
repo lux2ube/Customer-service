@@ -225,6 +225,9 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         let newRecordsCount = 0;
         let skippedCount = 0;
         
+        // Queue notifications for after commit (to not block sync on notification failures)
+        const notificationsToSend: Array<{ clientId: string; clientName: string; txData: any }> = [];
+        
         // Pre-process transactions to collect all account IDs for balance tracking
         const transactionsToProcess: Array<{
             tx: any;
@@ -349,7 +352,12 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
                 // Track balance changes (accumulates correctly for multiple entries)
                 balanceTracker.addJournalEntry(debitAcc, creditAcc, newTxData.amount);
 
-                await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
+                // Queue notification for after commit
+                notificationsToSend.push({
+                    clientId: existingClient.id,
+                    clientName: existingClient.name,
+                    txData: { ...newTxData, currency: 'USDT', amountusd: newTxData.amount }
+                });
             } else {
                 const unassignedUsdtAccountId = '7002';
                 const journalDescription = `Unassigned USDT ${newTxData.type} from ${configName} - wallet: ${clientWalletAddress.slice(0, 10)}...`;
@@ -414,6 +422,15 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
             console.log(`✓ Atomic commit successful: ${newRecordsCount} records + ${journalKeys.length} journal entries saved together`);
+        }
+
+        // Send notifications AFTER successful commit (non-blocking)
+        for (const notification of notificationsToSend) {
+            try {
+                await notifyClientTransaction(notification.clientId, notification.clientName, notification.txData);
+            } catch (notifyError) {
+                console.warn(`⚠️ Notification failed for client ${notification.clientName}, but transaction was saved:`, notifyError);
+            }
         }
 
         revalidatePath('/modern-usdt-records');
