@@ -190,6 +190,9 @@ export interface Account {
     priority?: number;
     balance?: number; // Running balance updated with each journal entry
     lastBalanceUpdate?: string; // ISO timestamp of last balance update
+    openingBalance?: number; // Balance at the start of current period
+    closingBalance?: number; // Balance at the end of last closed period
+    lastClosingDate?: string; // ISO timestamp of last period closing
 }
 
 export interface JournalEntry {

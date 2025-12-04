@@ -62,6 +62,7 @@ const menuItems = [
   { type: 'divider', label: 'Accounting' },
   { href: '/accounting/chart-of-accounts', label: 'Chart of Accounts', icon: Network },
   { href: '/accounting/journal', label: 'Journal', icon: Book },
+  { href: '/accounting/balance-controls', label: 'Balance Controls', icon: Wallet },
   { href: '/exchange-rates', label: 'Exchange Rates', icon: Landmark },
 
   { type: 'divider', label: 'System' },

@@ -12,7 +12,9 @@ export {
     fixAccount7000,
     rebuildAccountBalances,
     rebuildBalancesAction,
-    type RebuildBalanceState
+    updateAccountBalanceSnapshot,
+    type RebuildBalanceState,
+    type BalanceControlState
 } from './account';
 
 // Journal Entries

@@ -326,6 +326,99 @@ export async function rebuildAccountBalances(): Promise<{ success: boolean; mess
     return rebuildBalancesInternal();
 }
 
+// --- Balance Controls Actions ---
+
+export type BalanceControlState = {
+    message?: string;
+    success?: boolean;
+    error?: boolean;
+} | undefined;
+
+const BalanceControlSchema = z.object({
+    accountId: z.string().min(1, { message: "Account is required." }),
+    closingBalance: z.coerce.number({ message: "Closing balance must be a number." }),
+    openingBalance: z.coerce.number({ message: "Opening balance must be a number." }),
+    closingDate: z.string().min(1, { message: "Closing date is required." }),
+});
+
+/**
+ * Update account balance snapshot - sets closing balance, opening balance, and closing date.
+ * Also updates the current balance to match the opening balance for a fresh start.
+ */
+export async function updateAccountBalanceSnapshot(
+    prevState: BalanceControlState,
+    formData: FormData
+): Promise<BalanceControlState> {
+    const rawData = {
+        accountId: formData.get('accountId'),
+        closingBalance: formData.get('closingBalance'),
+        openingBalance: formData.get('openingBalance'),
+        closingDate: formData.get('closingDate'),
+    };
+
+    const validatedFields = BalanceControlSchema.safeParse(rawData);
+
+    if (!validatedFields.success) {
+        return {
+            message: validatedFields.error.errors.map(e => e.message).join(', '),
+            error: true,
+        };
+    }
+
+    const { accountId, closingBalance, openingBalance, closingDate } = validatedFields.data;
+
+    try {
+        const accountRef = ref(db, `accounts/${accountId}`);
+        const snapshot = await get(accountRef);
+
+        if (!snapshot.exists()) {
+            return { message: 'Account not found.', error: true };
+        }
+
+        const existingAccount = snapshot.val() as Account;
+        const now = new Date().toISOString();
+        const closingDateISO = new Date(closingDate).toISOString();
+
+        const updates: { [key: string]: any } = {
+            closingBalance: closingBalance,
+            openingBalance: openingBalance,
+            lastClosingDate: closingDateISO,
+            balance: openingBalance, // Set current balance to opening balance
+            lastBalanceUpdate: now,
+        };
+
+        await update(accountRef, updates);
+
+        await logAction(
+            'update_account_balance_snapshot',
+            { type: 'account', id: accountId, name: existingAccount.name },
+            {
+                closingBalance,
+                openingBalance,
+                closingDate: closingDateISO,
+                previousBalance: existingAccount.balance,
+                previousClosingBalance: existingAccount.closingBalance,
+                previousClosingDate: existingAccount.lastClosingDate,
+            }
+        );
+
+        revalidatePath('/accounting/chart-of-accounts');
+        revalidatePath('/accounting/balance-controls');
+        revalidatePath('/');
+
+        return {
+            message: `Account ${accountId} (${existingAccount.name}) updated successfully. Balance set to ${openingBalance}.`,
+            success: true,
+        };
+    } catch (error: any) {
+        console.error('Error updating account balance snapshot:', error);
+        return {
+            message: error.message || 'Failed to update account balance.',
+            error: true,
+        };
+    }
+}
+
 /**
  * Server action wrapper for form submission with useActionState.
  * This recalculates balances using the stored balance = debits - credits convention.
