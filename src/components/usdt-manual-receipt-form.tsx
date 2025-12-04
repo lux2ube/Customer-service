@@ -165,6 +165,8 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
     
     const isEditing = !!record;
     const isSyncedRecord = isEditing && record.source === 'BSCScan';
+    const isConfirmed = record?.status === 'Confirmed';
+    const isAmountLocked = isEditing && isConfirmed;
 
     return (
         <form action={formAction} ref={formRef}>
@@ -219,7 +221,21 @@ export function UsdtManualReceiptForm({ record, clients, cryptoWallets }: { reco
                     <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount (USDT)</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 500.00" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={isSyncedRecord}/>
+                            <Input 
+                                id="amount" 
+                                name="amount" 
+                                type="number" 
+                                step="any" 
+                                required 
+                                placeholder="e.g., 500.00" 
+                                value={amount} 
+                                onChange={(e) => setAmount(e.target.value)} 
+                                disabled={isSyncedRecord || isAmountLocked}
+                                className={isAmountLocked ? 'bg-muted cursor-not-allowed' : ''}
+                            />
+                            {isAmountLocked && (
+                                <p className="text-xs text-muted-foreground">Amount is locked on confirmed records</p>
+                            )}
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">

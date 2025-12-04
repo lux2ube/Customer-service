@@ -255,6 +255,8 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
     };
 
     const isEditing = !!record;
+    const isConfirmed = record?.status === 'Confirmed';
+    const isAmountLocked = isEditing && isConfirmed;
     const selectedAccount = bankAccounts.find(acc => acc.id === selectedBankAccountId);
 
     if (loadingData && !isEditing) {
@@ -332,13 +334,30 @@ export function CashReceiptForm({ record, onFormSubmit }: { record?: CashRecord,
                      <div className="grid md:grid-cols-2 gap-4">
                          <div className="space-y-2">
                             <Label htmlFor="amount">Amount Received ({selectedAccount?.currency || '...'})</Label>
-                            <Input id="amount" name="amount" type="number" step="any" required placeholder="e.g., 10000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                            <Input 
+                                id="amount" 
+                                name="amount" 
+                                type="number" 
+                                step="any" 
+                                required 
+                                placeholder="e.g., 10000" 
+                                value={amount} 
+                                onChange={(e) => setAmount(e.target.value)} 
+                                disabled={isAmountLocked}
+                                className={isAmountLocked ? 'bg-muted cursor-not-allowed' : ''}
+                            />
+                            {isAmountLocked && (
+                                <p className="text-xs text-muted-foreground">Amount is locked on confirmed records</p>
+                            )}
                             {state?.errors?.amount && <p className="text-sm text-destructive">{state.errors.amount[0]}</p>}
                         </div>
                         <div className="space-y-2">
                             <Label>Equivalent Amount (USD)</Label>
-                            <Input value={amountusd > 0 ? amountusd.toFixed(2) : '0.00'} readOnly disabled />
+                            <Input value={amountusd > 0 ? amountusd.toFixed(2) : '0.00'} readOnly disabled className="bg-muted" />
                             <input type="hidden" name="amountusd" value={amountusd} />
+                            {isAmountLocked && (
+                                <p className="text-xs text-muted-foreground">USD value is locked</p>
+                            )}
                         </div>
                     </div>
 

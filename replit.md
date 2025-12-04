@@ -40,6 +40,10 @@ For asset accounts (1xxx series), stored as POSITIVE values:
 - **Payment from asset**: CREDIT asset → stored DECREASES (we have less)
 **Data Flow Pattern**: "Record-First Workflow" where raw financial movements (from manual entry, SMS, or blockchain monitoring) are captured as Records. Records transition through statuses (Pending → Matched → Used/Confirmed → Cancelled), Transactions wrap Records for business meaning, and Journal Entries are automatically created.
 
+**Record Immutability**: Once a record is Confirmed (has journal entries), the amount and amount_usd fields become immutable. Users cannot edit these values - they are locked to maintain accounting integrity. The UI disables amount fields for confirmed records with a visual indicator.
+
+**Reversal Journal Entries**: When a Confirmed record is changed to Cancelled, the system automatically creates reversal journal entries that undo the effect of the original entries. Reversal entries are marked with "[REVERSAL]" prefix in their description and swap the debit/credit accounts to restore previous balances atomically.
+
 **Key Workflows**:
 -   **SMS Processing**: Incoming SMS are parsed using AI (Google Gemini via Genkit) or custom rules, creating 'Pending' CashRecords. These are then matched to clients, generating appropriate journal entries.
 -   **Cash Transaction Processing**: Supports multi-currency (YER, SAR) inflows and outflows, automated USD conversion, and integration with multiple bank accounts.

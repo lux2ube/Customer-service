@@ -11,6 +11,130 @@ import { stripUndefined, logAction, getNextSequentialId, sendTelegramNotificatio
 import { redirect } from 'next/navigation';
 
 
+/**
+ * IMMUTABILITY CHECK: Returns true if record has journal entries (is confirmed/journaled)
+ * Confirmed records cannot have their amount or amountusd changed
+ */
+async function hasJournalEntries(recordId: string, recordType: 'cash' | 'usdt'): Promise<boolean> {
+    const descPattern = recordType === 'cash' 
+        ? `Rec #${recordId}`
+        : `Rec #${recordId}`;
+    
+    const journalSnapshot = await get(ref(db, 'journal_entries'));
+    if (!journalSnapshot.exists()) return false;
+    
+    const entries = journalSnapshot.val() as Record<string, JournalEntry>;
+    for (const key in entries) {
+        const entry = entries[key];
+        // Check if this entry is related to our record (includes record ID in description)
+        if (entry.description && entry.description.includes(descPattern)) {
+            // Exclude reversal entries from the check - only original entries count
+            if (!entry.description.includes('REVERSAL')) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Creates a reversal journal entry to undo a confirmed record's journal entry
+ * Used when cancelling a confirmed record
+ */
+async function createReversalJournalEntry(recordId: string, recordType: 'cash' | 'usdt'): Promise<{ success: boolean; reversalEntryId?: string; error?: string }> {
+    try {
+        const descPattern = `Rec #${recordId}`;
+        
+        const journalSnapshot = await get(ref(db, 'journal_entries'));
+        if (!journalSnapshot.exists()) {
+            return { success: true }; // No entries to reverse
+        }
+        
+        const entries = journalSnapshot.val() as Record<string, JournalEntry>;
+        const entriesToReverse: Array<{ id: string; entry: JournalEntry }> = [];
+        
+        // Find all original entries for this record (exclude existing reversals)
+        for (const key in entries) {
+            const entry = entries[key];
+            if (entry.description && 
+                entry.description.includes(descPattern) && 
+                !entry.description.includes('REVERSAL')) {
+                entriesToReverse.push({ id: key, entry });
+            }
+        }
+        
+        if (entriesToReverse.length === 0) {
+            console.log(`📋 No journal entries found to reverse for ${recordType} record ${recordId}`);
+            return { success: true };
+        }
+        
+        console.log(`🔄 Creating ${entriesToReverse.length} reversal entries for ${recordType} record ${recordId}`);
+        
+        const date = new Date().toISOString();
+        const atomicUpdates: { [path: string]: any } = {};
+        let lastReversalId = '';
+        
+        for (const { id: originalId, entry: originalEntry } of entriesToReverse) {
+            const reversalRef = push(ref(db, 'journal_entries'));
+            lastReversalId = reversalRef.key!;
+            
+            // Use amount_usd if available, otherwise fall back to debit_amount or credit_amount
+            const reversalAmount = originalEntry.amount_usd || originalEntry.debit_amount || originalEntry.credit_amount || 0;
+            
+            if (reversalAmount <= 0) {
+                console.warn(`⚠️ Skipping reversal for entry ${originalId} - no valid amount found`);
+                continue;
+            }
+            
+            // Reversal swaps debit and credit accounts
+            const reversalEntry: Omit<JournalEntry, 'id'> = {
+                date: date.split('T')[0], // Use today's date for reversal
+                description: `[REVERSAL] ${originalEntry.description}`,
+                debit_account: originalEntry.credit_account, // Swap: credit becomes debit
+                credit_account: originalEntry.debit_account, // Swap: debit becomes credit
+                debit_amount: originalEntry.credit_amount,
+                credit_amount: originalEntry.debit_amount,
+                amount_usd: reversalAmount,
+                createdAt: date,
+                debit_account_name: originalEntry.credit_account_name,
+                credit_account_name: originalEntry.debit_account_name,
+            };
+            
+            atomicUpdates[`journal_entries/${lastReversalId}`] = reversalEntry;
+            
+            // Update balances (swapped accounts = opposite effect)
+            const balanceUpdates = await getAccountBalanceUpdates(
+                originalEntry.credit_account, // Now the debit
+                originalEntry.debit_account,   // Now the credit  
+                reversalAmount, 
+                date
+            );
+            Object.assign(atomicUpdates, balanceUpdates);
+            
+            console.log(`   ↩️ Reversing entry ${originalId}: ${originalEntry.description}`);
+            console.log(`      Original: Debit ${originalEntry.debit_account}, Credit ${originalEntry.credit_account}`);
+            console.log(`      Reversal: Debit ${originalEntry.credit_account}, Credit ${originalEntry.debit_account}`);
+        }
+        
+        // Execute atomic update
+        await update(ref(db), atomicUpdates);
+        
+        console.log(`✅ Created ${entriesToReverse.length} reversal entries for ${recordType} record ${recordId}`);
+        
+        await logAction('CREATE_REVERSAL_JOURNAL', { type: `${recordType}_record`, id: recordId, name: `Reversal for ${recordType} #${recordId}` }, {
+            recordId,
+            recordType,
+            entriesReversed: entriesToReverse.length,
+            reversalEntryIds: entriesToReverse.map(e => e.id)
+        });
+        
+        return { success: true, reversalEntryId: lastReversalId };
+    } catch (error) {
+        console.error(`❌ Error creating reversal journal for ${recordType} record ${recordId}:`, error);
+        return { success: false, error: String(error) };
+    }
+}
+
 // --- Cash Inflow (Receipt) ---
 export type CashReceiptFormState = {
   errors?: {
@@ -66,6 +190,30 @@ export async function createCashReceipt(recordId: string | null, prevState: Cash
                 oldRecord = oldRecordSnapshot.val() as CashRecord;
                 wasUnassigned = !oldRecord.clientId && oldRecord.status === 'Confirmed';
                 console.log(`📝 EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${oldRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
+                
+                // IMMUTABILITY CHECK: If record is confirmed (has journal entries), amount cannot change
+                // Lock amounts when old values exist (even if 0)
+                if (oldRecord.status === 'Confirmed') {
+                    const oldAmount = oldRecord.amount;
+                    const oldAmountUsd = oldRecord.amountusd;
+                    const newAmount = amount ?? 0;
+                    const newAmountUsd = amountusd ?? 0;
+                    
+                    // Check amount change if old amount exists (null means field was never set)
+                    const amountChanged = oldAmount != null && Math.abs(oldAmount - newAmount) > 0.001;
+                    // Check USD change if old USD amount exists
+                    const amountUsdChanged = oldAmountUsd != null && Math.abs(oldAmountUsd - newAmountUsd) > 0.001;
+                    
+                    if (amountChanged || amountUsdChanged) {
+                        console.log(`❌ IMMUTABILITY VIOLATION: Cannot change amount on confirmed record ${recordId}`);
+                        console.log(`   Old amount: ${oldAmount} (USD: ${oldAmountUsd})`);
+                        console.log(`   New amount: ${newAmount} (USD: ${newAmountUsd})`);
+                        return { 
+                            message: 'Cannot change amount on a confirmed record. The amount is locked once journaled.', 
+                            success: false 
+                        };
+                    }
+                }
             }
         }
         
@@ -236,6 +384,25 @@ export async function createUsdtManualReceipt(recordId: string | null, prevState
                 existingRecord = existingSnapshot.val();
                 wasUnassigned = !existingRecord.clientId && existingRecord.status === 'Confirmed';
                 console.log(`📝 USDT RECEIPT EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${existingRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
+                
+                // IMMUTABILITY CHECK: If record is confirmed (has journal entries), amount cannot change
+                // Lock amounts when old values exist (even if 0)
+                if (existingRecord.status === 'Confirmed') {
+                    const oldAmount = existingRecord.amount;
+                    const newAmount = amount ?? 0;
+                    // Check amount change if old amount exists (null means field was never set)
+                    const amountChanged = oldAmount != null && Math.abs(oldAmount - newAmount) > 0.001;
+                    
+                    if (amountChanged) {
+                        console.log(`❌ IMMUTABILITY VIOLATION: Cannot change amount on confirmed USDT receipt ${recordId}`);
+                        console.log(`   Old amount: ${oldAmount} USDT`);
+                        console.log(`   New amount: ${newAmount} USDT`);
+                        return { 
+                            message: 'Cannot change amount on a confirmed record. The amount is locked once journaled.', 
+                            success: false 
+                        };
+                    }
+                }
             }
         }
         
@@ -385,6 +552,25 @@ export async function createUsdtManualPayment(recordId: string | null, prevState
                 existingRecord = existingSnapshot.val();
                 wasUnassigned = !existingRecord.clientId && existingRecord.status === 'Confirmed';
                 console.log(`📝 USDT EDIT MODE: Record ${recordId}, wasUnassigned=${wasUnassigned}, oldClientId=${existingRecord.clientId || 'null'}, newClientId=${clientId || 'null'}`);
+                
+                // IMMUTABILITY CHECK: If record is confirmed (has journal entries), amount cannot change
+                // Lock amounts when old values exist (even if 0)
+                if (existingRecord.status === 'Confirmed') {
+                    const oldAmount = existingRecord.amount;
+                    const newAmount = amount ?? 0;
+                    // Check amount change if old amount exists (null means field was never set)
+                    const amountChanged = oldAmount != null && Math.abs(oldAmount - newAmount) > 0.001;
+                    
+                    if (amountChanged) {
+                        console.log(`❌ IMMUTABILITY VIOLATION: Cannot change amount on confirmed USDT payment ${recordId}`);
+                        console.log(`   Old amount: ${oldAmount} USDT`);
+                        console.log(`   New amount: ${newAmount} USDT`);
+                        return { 
+                            message: 'Cannot change amount on a confirmed record. The amount is locked once journaled.', 
+                            success: false 
+                        };
+                    }
+                }
             }
         }
         
@@ -824,6 +1010,7 @@ async function createJournalEntriesForConfirmedUsdtRecord(record: UsdtRecord & {
 
 /**
  * Update record status and create journal entries if status changes to "Confirmed"
+ * Creates reversal entries if changing from Confirmed to Cancelled
  */
 export async function updateCashRecordStatus(recordId: string, newStatus: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used') {
     try {
@@ -837,8 +1024,19 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
         const record = recordSnapshot.val() as CashRecord;
         const oldStatus = record.status;
 
+        // CRITICAL: If changing from Confirmed to Cancelled, create reversal entries first
+        if (oldStatus === 'Confirmed' && newStatus === 'Cancelled') {
+            console.log(`🔄 Cancelling confirmed cash record ${recordId} - creating reversal entries`);
+            const reversalResult = await createReversalJournalEntry(recordId, 'cash');
+            if (!reversalResult.success) {
+                console.error(`❌ Failed to create reversal entries:`, reversalResult.error);
+                return { success: false, message: `Failed to create reversal entries: ${reversalResult.error}` };
+            }
+            console.log(`✅ Reversal entries created for cash record ${recordId}`);
+        }
+
         // Update status
-        await update(recordRef, { status: newStatus });
+        await update(recordRef, { status: newStatus, updatedAt: new Date().toISOString() });
 
         // Log status change
         await logAction('UPDATE_CASH_RECORD_STATUS', { type: 'cash_record', id: recordId, name: `Cash ${record.type}` }, {
@@ -846,7 +1044,8 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
             newStatus,
             amount: record.amount,
             currency: record.currency,
-            clientId: record.clientId || 'Unassigned'
+            clientId: record.clientId || 'Unassigned',
+            reversalCreated: oldStatus === 'Confirmed' && newStatus === 'Cancelled'
         });
 
         // If changing to "Confirmed", create journal entry
@@ -862,7 +1061,8 @@ export async function updateCashRecordStatus(recordId: string, newStatus: 'Pendi
 
         revalidatePath('/modern-cash-records');
         revalidatePath('/accounting/journal');
-        return { success: true, message: `Cash record status updated to ${newStatus}` };
+        revalidatePath('/');
+        return { success: true, message: `Cash record status updated to ${newStatus}${oldStatus === 'Confirmed' && newStatus === 'Cancelled' ? ' (journal entry reversed)' : ''}` };
     } catch (error) {
         console.error('Error updating cash record status:', error);
         return { success: false, message: 'Failed to update record status.' };
@@ -1001,6 +1201,7 @@ async function transferFromUnassignedToClient(recordId: string, recordType: 'cas
 
 /**
  * Update USDT record status and create journal entries if status changes to "Confirmed"
+ * Creates reversal entries if changing from Confirmed to Cancelled
  */
 export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pending' | 'Confirmed' | 'Cancelled' | 'Used') {
     try {
@@ -1013,17 +1214,28 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
 
         const record = recordSnapshot.val() as UsdtRecord;
         const oldStatus = record.status;
-        const wasUnassigned = !record.clientId;
+
+        // CRITICAL: If changing from Confirmed to Cancelled, create reversal entries first
+        if (oldStatus === 'Confirmed' && newStatus === 'Cancelled') {
+            console.log(`🔄 Cancelling confirmed USDT record ${recordId} - creating reversal entries`);
+            const reversalResult = await createReversalJournalEntry(recordId, 'usdt');
+            if (!reversalResult.success) {
+                console.error(`❌ Failed to create reversal entries:`, reversalResult.error);
+                return { success: false, message: `Failed to create reversal entries: ${reversalResult.error}` };
+            }
+            console.log(`✅ Reversal entries created for USDT record ${recordId}`);
+        }
 
         // Update status
-        await update(recordRef, { status: newStatus });
+        await update(recordRef, { status: newStatus, updatedAt: new Date().toISOString() });
 
         // Log status change
         await logAction('UPDATE_USDT_RECORD_STATUS', { type: 'usdt_record', id: recordId, name: `USDT ${record.type}` }, {
             oldStatus,
             newStatus,
             amount: record.amount,
-            clientId: record.clientId || 'Unassigned'
+            clientId: record.clientId || 'Unassigned',
+            reversalCreated: oldStatus === 'Confirmed' && newStatus === 'Cancelled'
         });
 
         // If changing to "Confirmed", create journal entry
@@ -1039,7 +1251,8 @@ export async function updateUsdtRecordStatus(recordId: string, newStatus: 'Pendi
 
         revalidatePath('/modern-usdt-records');
         revalidatePath('/accounting/journal');
-        return { success: true, message: `USDT record status updated to ${newStatus}` };
+        revalidatePath('/');
+        return { success: true, message: `USDT record status updated to ${newStatus}${oldStatus === 'Confirmed' && newStatus === 'Cancelled' ? ' (journal entry reversed)' : ''}` };
     } catch (error) {
         console.error('Error updating USDT record status:', error);
         return { success: false, message: 'Failed to update record status.' };

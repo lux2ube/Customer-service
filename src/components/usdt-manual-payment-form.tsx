@@ -261,6 +261,8 @@ export function UsdtManualPaymentForm({
   
    const isEditing = !!record;
    const isEmbedded = !!clientFromProps;
+   const isConfirmed = record?.status === 'Confirmed';
+   const isAmountLocked = isEditing && isConfirmed;
   
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     const formElement = e.currentTarget;
@@ -416,7 +418,12 @@ export function UsdtManualPaymentForm({
                  placeholder="e.g., 500.00"
                  value={amount}
                  onChange={(e) => setAmount(e.target.value)}
+                 disabled={isAmountLocked}
+                 className={isAmountLocked ? 'bg-muted cursor-not-allowed' : ''}
                />
+              {isAmountLocked && (
+                <p className="text-xs text-muted-foreground">Amount is locked on confirmed records</p>
+              )}
               {state?.errors?.amount && (
                 <p className="text-sm text-destructive">
                   {state.errors.amount[0]}
