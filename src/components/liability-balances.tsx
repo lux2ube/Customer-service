@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
-import type { Account, JournalEntry } from '@/lib/types';
+import type { Account } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -20,14 +20,7 @@ export function LiabilityBalances() {
 
     const loadBalances = React.useCallback(async () => {
         try {
-            const [settingsSnap, accountsSnap, journalSnap] = await Promise.all([
-                get(ref(db, 'settings')),
-                get(ref(db, 'accounts')),
-                get(ref(db, 'journal_entries'))
-            ]);
-
-            const settings = settingsSnap.val() || {};
-            const financialPeriodStartDate = settings.financialPeriodStartDate ? new Date(settings.financialPeriodStartDate) : null;
+            const accountsSnap = await get(ref(db, 'accounts'));
 
             if (!accountsSnap.exists()) {
                 setBalances([]);
@@ -36,58 +29,22 @@ export function LiabilityBalances() {
             }
 
             const allAccounts: Record<string, Account> = accountsSnap.val();
-            const liabilityAccounts = Object.entries(allAccounts)
-                .filter(([id, acc]) => acc && acc.type === 'Liabilities' && !acc.isGroup && (id === '7001' || id === '7002' || id.startsWith('6000')))
-                .map(([id, acc]) => ({ ...acc, id }));
-
-            const accountBalances: Record<string, number> = {};
-            liabilityAccounts.forEach(acc => {
-                if (acc && acc.id) {
-                    accountBalances[acc.id] = 0;
-                }
-            });
-
-            if (journalSnap.exists()) {
-                const allEntries: Record<string, JournalEntry> = journalSnap.val();
-                for (const key in allEntries) {
-                    const entry = allEntries[key];
-                    if (!entry) continue;
-                    
-                    if (financialPeriodStartDate) {
-                        const entryDate = entry.createdAt ? new Date(entry.createdAt) : null;
-                        if (!entryDate || entryDate < financialPeriodStartDate) {
-                            continue;
-                        }
-                    }
-                    
-                    if (entry.debit_account && accountBalances[entry.debit_account] !== undefined) {
-                        accountBalances[entry.debit_account] -= (entry.debit_amount || 0);
-                    }
-                    if (entry.credit_account && accountBalances[entry.credit_account] !== undefined) {
-                        accountBalances[entry.credit_account] += (entry.credit_amount || 0);
-                    }
-                }
-            }
-
-            const newBalances: LiabilityBalance[] = [];
             
-            liabilityAccounts.forEach(account => {
-                if (!account || !account.id) return;
-                const balance = accountBalances[account.id] || 0;
-                if (account.id === '7001' || account.id === '7002' || (account.id.startsWith('6000') && Math.abs(balance) > 0.01)) {
-                    newBalances.push({
-                        id: account.id,
-                        name: account.name,
-                        balance
-                    });
-                }
-            });
+            // Use stored balance directly from accounts
+            const newBalances: LiabilityBalance[] = Object.entries(allAccounts)
+                .filter(([id, acc]) => acc && acc.type === 'Liabilities' && !acc.isGroup && (id === '7001' || id === '7002' || id.startsWith('6000')))
+                .map(([id, acc]) => ({
+                    id,
+                    name: acc.name,
+                    balance: acc.balance || 0
+                }))
+                .filter(bal => bal.id === '7001' || bal.id === '7002' || Math.abs(bal.balance) > 0.01);
 
             newBalances.sort((a,b) => a.name.localeCompare(b.name));
             setBalances(newBalances);
             setLoading(false);
         } catch (error) {
-            console.error('Error calculating liability balances:', error);
+            console.error('Error loading liability balances:', error);
             setLoading(false);
         }
     }, []);

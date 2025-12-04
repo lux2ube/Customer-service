@@ -83,27 +83,15 @@ export function ChartOfAccountsTable() {
   React.useEffect(() => {
     if (loading) return;
 
-    // 1. Calculate balances for leaf nodes
+    // Use stored balance from accounts directly
     const leafBalances: Record<string, { native: number; usd: number }> = {};
     accounts.forEach(acc => {
       if (!acc.isGroup) {
-        leafBalances[acc.id] = { native: 0, usd: 0 };
+        leafBalances[acc.id] = { native: acc.balance || 0, usd: acc.balance || 0 };
       }
     });
 
-    // Process journal entries - this is the main source of truth for most accounts
-    journalEntries.forEach(entry => {
-      if (leafBalances[entry.debit_account]) {
-        leafBalances[entry.debit_account].native += entry.debit_amount;
-        leafBalances[entry.debit_account].usd += entry.amount_usd;
-      }
-      if (leafBalances[entry.credit_account]) {
-        leafBalances[entry.credit_account].native -= entry.credit_amount;
-        leafBalances[entry.credit_account].usd -= entry.amount_usd;
-      }
-    });
-
-    // 2. Aggregate balances up to parent group accounts
+    // Aggregate balances up to parent group accounts
     const aggregatedBalances = { ...leafBalances };
     const reversedAccounts = [...accounts].reverse(); 
 
@@ -114,13 +102,12 @@ export function ChartOfAccountsTable() {
           return sum + (aggregatedBalances[child.id]?.usd || 0);
         }, 0);
         
-        // Use USD as the native currency for group accounts for consistent aggregation
         aggregatedBalances[account.id] = { native: totalUsd, usd: totalUsd };
       }
     });
     
     setBalances(aggregatedBalances);
-  }, [accounts, transactions, journalEntries, loading]);
+  }, [accounts, loading]);
 
 
   const getBadgeVariant = (type: Account['type']) => {

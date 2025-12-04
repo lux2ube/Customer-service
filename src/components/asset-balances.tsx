@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { db } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
-import type { Account, JournalEntry, ServiceProvider } from '@/lib/types';
+import type { Account, ServiceProvider } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -25,15 +25,11 @@ export function AssetBalances() {
 
     const loadBalances = React.useCallback(async () => {
         try {
-            const [settingsSnap, providersSnap, accountsSnap, journalSnap] = await Promise.all([
-                get(ref(db, 'settings')),
+            const [providersSnap, accountsSnap] = await Promise.all([
                 get(ref(db, 'service_providers')),
-                get(ref(db, 'accounts')),
-                get(ref(db, 'journal_entries'))
+                get(ref(db, 'accounts'))
             ]);
 
-            const settings = settingsSnap.val() || {};
-            const financialPeriodStartDate = settings.financialPeriodStartDate ? new Date(settings.financialPeriodStartDate) : null;
             const allProviders: Record<string, ServiceProvider> = providersSnap.val() || {};
 
             if (!accountsSnap.exists()) {
@@ -43,39 +39,13 @@ export function AssetBalances() {
             }
 
             const allAccounts: Record<string, Account> = accountsSnap.val();
-            const assetAccounts = Object.values(allAccounts).filter(acc => acc && acc.type === 'Assets' && !acc.isGroup);
-            
-            const accountBalances: Record<string, number> = {};
-            assetAccounts.forEach(acc => {
-                if (acc && acc.id) {
-                    accountBalances[acc.id] = 0;
-                }
-            });
-
-            if (journalSnap.exists()) {
-                const allEntries: Record<string, JournalEntry> = journalSnap.val();
-                for (const key in allEntries) {
-                    const entry = allEntries[key];
-                    if (!entry) continue;
-                    
-                    if (financialPeriodStartDate) {
-                        const entryDate = entry.createdAt ? new Date(entry.createdAt) : null;
-                        if (!entryDate || entryDate < financialPeriodStartDate) {
-                            continue;
-                        }
-                    }
-                    
-                    if (entry.debit_account && accountBalances[entry.debit_account] !== undefined) {
-                        accountBalances[entry.debit_account] += (entry.debit_amount || 0);
-                    }
-                    if (entry.credit_account && accountBalances[entry.credit_account] !== undefined) {
-                        accountBalances[entry.credit_account] -= (entry.credit_amount || 0);
-                    }
-                }
-            }
+            const assetAccounts = Object.entries(allAccounts)
+                .filter(([, acc]) => acc && acc.type === 'Assets' && !acc.isGroup)
+                .map(([id, acc]) => ({ ...acc, id }));
 
             const newGroupedBalances: GroupedBalances = {};
             
+            // Group assets by provider, using stored balance directly
             Object.values(allProviders).forEach(provider => {
                 if (!provider || !provider.name || !provider.accountIds) return;
                 newGroupedBalances[provider.name] = [];
@@ -86,13 +56,14 @@ export function AssetBalances() {
                             id: account.id,
                             name: account.name,
                             currency: account.currency || 'N/A',
-                            balance: accountBalances[account.id] || 0
+                            balance: account.balance || 0
                         });
                     }
                 });
                 newGroupedBalances[provider.name].sort((a,b) => a.name.localeCompare(b.name));
             });
 
+            // Handle assets not assigned to any provider
             newGroupedBalances['Other Assets'] = [];
             const groupedAccountIds = new Set(Object.values(allProviders).flatMap(p => p?.accountIds || []));
             assetAccounts.forEach(account => {
@@ -101,7 +72,7 @@ export function AssetBalances() {
                         id: account.id,
                         name: account.name,
                         currency: account.currency || 'N/A',
-                        balance: accountBalances[account.id] || 0
+                        balance: account.balance || 0
                     });
                 }
             });
@@ -113,7 +84,7 @@ export function AssetBalances() {
             setBalances(newGroupedBalances);
             setLoading(false);
         } catch (error) {
-            console.error('Error calculating asset balances:', error);
+            console.error('Error loading asset balances:', error);
             setLoading(false);
         }
     }, []);

@@ -167,41 +167,23 @@ export default function DashboardPage() {
         get(ref(db, 'settings')).then(snap => snap.exists() && setExportableSettings(snap.val()));
 
 
-        // --- Asset Balances ---
+        // --- Asset Balances (using stored balance directly) ---
         unsubs.push(onValue(accountsRef, (accSnapshot) => {
             if (!accSnapshot.exists()) {
                 setAssetBalances([]);
                 return;
             }
             const allAccounts: Record<string, Account> = accSnapshot.val();
-            const assetAccounts = Object.entries(allAccounts)
+            const assetBalancesList = Object.entries(allAccounts)
                 .filter(([, acc]) => acc.type === 'Assets' && !acc.isGroup)
-                .map(([id, acc]) => ({ id, ...acc }));
-
-            unsubs.push(onValue(journalRef, (journalSnapshot) => {
-                const balances: Record<string, number> = {};
-                assetAccounts.forEach(acc => balances[acc.id] = 0);
-
-                if (journalSnapshot.exists()) {
-                    const allEntries: Record<string, JournalEntry> = journalSnapshot.val();
-                    for (const key in allEntries) {
-                        const entry = allEntries[key];
-                        if (balances[entry.debit_account] !== undefined) {
-                            balances[entry.debit_account] += entry.debit_amount;
-                        }
-                        if (balances[entry.credit_account] !== undefined) {
-                            balances[entry.credit_account] -= entry.credit_amount;
-                        }
-                    }
-                }
-                setAssetBalances(assetAccounts.map(acc => ({
-                    id: acc.id,
+                .map(([id, acc]) => ({
+                    id,
                     name: acc.name,
                     currency: acc.currency || 'N/A',
-                    balance: balances[acc.id] || 0,
+                    balance: acc.balance || 0,
                     type: acc.currency === 'USDT' ? 'crypto' : 'fiat'
-                })));
-            }));
+                }));
+            setAssetBalances(assetBalancesList);
         }));
 
 

@@ -75,14 +75,15 @@ export function AccountBalancesReport({ initialAccounts, initialJournalEntries }
         const fromDate = dateRange?.from ? startOfDay(dateRange.from) : periodStart;
         const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
-        const balances: Record<string, { increases: number; decreases: number }> = {};
+        const activity: Record<string, { increases: number; decreases: number }> = {};
         
         initialAccounts.forEach(acc => {
             if (!acc.isGroup) {
-                balances[acc.id] = { increases: 0, decreases: 0 };
+                activity[acc.id] = { increases: 0, decreases: 0 };
             }
         });
 
+        // Calculate activity (increases/decreases) within the date range
         initialJournalEntries.forEach(entry => {
             const entryDate = parseISO(entry.date);
             if (entryDate >= fromDate && entryDate <= toDate) {
@@ -90,35 +91,32 @@ export function AccountBalancesReport({ initialAccounts, initialJournalEntries }
                 const creditAcc = entry.credit_account;
                 const amount = entry.amount_usd;
 
-                if (balances[debitAcc]) {
+                if (activity[debitAcc]) {
                     const accType = initialAccounts.find(a => a.id === debitAcc)?.type;
                     if (accType === 'Assets' || accType === 'Expenses') {
-                        balances[debitAcc].increases += amount;
+                        activity[debitAcc].increases += amount;
                     } else {
-                        balances[debitAcc].decreases += amount;
+                        activity[debitAcc].decreases += amount;
                     }
                 }
-                if (balances[creditAcc]) {
+                if (activity[creditAcc]) {
                     const accType = initialAccounts.find(a => a.id === creditAcc)?.type;
                     if (accType === 'Assets' || accType === 'Expenses') {
-                        balances[creditAcc].decreases += amount;
+                        activity[creditAcc].decreases += amount;
                     } else {
-                        balances[creditAcc].increases += amount;
+                        activity[creditAcc].increases += amount;
                     }
                 }
             }
         });
 
+        // Use stored balance from accounts, show activity from journal entries
         const results: AccountBalance[] = initialAccounts
-            .filter(acc => {
-                if (acc.isGroup) return false;
-                const bal = balances[acc.id];
-                return bal && (Math.abs(bal.increases) > 0.01 || Math.abs(bal.decreases) > 0.01);
-            })
+            .filter(acc => !acc.isGroup)
             .map(acc => {
-                const bal = balances[acc.id];
-                const increases = bal?.increases || 0;
-                const decreases = bal?.decreases || 0;
+                const act = activity[acc.id] || { increases: 0, decreases: 0 };
+                const increases = act.increases;
+                const decreases = act.decreases;
                 const netChange = increases - decreases;
                 
                 return {
@@ -128,9 +126,10 @@ export function AccountBalancesReport({ initialAccounts, initialJournalEntries }
                     increases,
                     decreases,
                     netChange,
-                    endingBalance: netChange,
+                    endingBalance: acc.balance || 0,
                 };
-            });
+            })
+            .filter(bal => Math.abs(bal.endingBalance) > 0.01 || Math.abs(bal.increases) > 0.01 || Math.abs(bal.decreases) > 0.01);
 
         return results.sort((a, b) => a.accountId.localeCompare(b.accountId));
     }, [dateRange, periodStartDate, initialAccounts, initialJournalEntries]);
