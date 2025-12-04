@@ -277,6 +277,11 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
         }
         
         // Phase 3: Create records and journal entries with accumulated balance changes
+        // CRITICAL: All-or-None rule - every record MUST have a corresponding journal entry
+        let recordsCreated = 0;
+        let journalEntriesCreated = 0;
+        const recordToJournalMap: Map<string, string> = new Map();
+        
         for (const msg of parsedMessages) {
             const newRecordId = await getNextSequentialId('cashRecordId');
             const recordType = msg.parsed.type === 'credit' ? 'inflow' : 'outflow';
@@ -300,11 +305,15 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 createdAt: recordDate,
             };
             updates[`/cash_records/${newRecordId}`] = stripUndefined(newRecord);
+            recordsCreated++;
             
             // Create journal entry: 7001 <-> Asset account
             // INFLOW (receipt): Debit 7001 (liability UP), Credit bank
             // OUTFLOW (payment): Credit 7001 (liability DOWN), Debit bank
             const journalRef = push(ref(db, 'journal_entries'));
+            if (!journalRef.key) {
+                throw new Error(`Failed to generate journal entry key for record ${newRecordId}. Aborting batch.`);
+            }
             const debitAcc = recordType === 'inflow' ? unmatchedCashAccountId : msg.accountId;
             const creditAcc = recordType === 'inflow' ? msg.accountId : unmatchedCashAccountId;
             
@@ -321,17 +330,29 @@ export async function processIncomingSms(prevState: ProcessSmsState, formData: F
                 credit_account_name: recordType === 'inflow' ? msg.account.name : 'Unmatched Cash USD',
             };
             updates[`/journal_entries/${journalRef.key}`] = journalEntry;
+            journalEntriesCreated++;
+            recordToJournalMap.set(newRecordId, journalRef.key);
             
             // Track balance changes (accumulates correctly for multiple entries)
             balanceTracker.addJournalEntry(debitAcc, creditAcc, msg.amountusd);
         }
         
-        // Phase 4: Add accumulated balance updates
+        // Phase 4: Validate all-or-none rule BEFORE committing
+        if (recordsCreated !== journalEntriesCreated) {
+            throw new Error(`Data integrity violation: ${recordsCreated} records but ${journalEntriesCreated} journal entries. Aborting batch.`);
+        }
+        if (recordsCreated !== parsedMessages.length) {
+            throw new Error(`Data integrity violation: ${parsedMessages.length} messages but only ${recordsCreated} records created. Aborting batch.`);
+        }
+        
+        // Phase 5: Add accumulated balance updates
         const balanceUpdates = balanceTracker.getBalanceUpdates();
         Object.assign(updates, balanceUpdates);
 
+        // Phase 6: Atomic commit - ALL records, journal entries, and balance updates together
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
+            console.log(`✅ SMS Sync Complete: ${recordsCreated} records with ${journalEntriesCreated} journal entries committed atomically`);
         }
         
         revalidatePath('/modern-cash-records');
