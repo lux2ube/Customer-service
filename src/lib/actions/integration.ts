@@ -379,6 +379,29 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
             newRecordsCount++;
         }
 
+        // PRE-COMMIT VALIDATION: All-or-none integrity check
+        // Count records and journal entries to ensure 1:1 mapping
+        const recordKeys = Object.keys(updates).filter(key => key.startsWith('/modern_usdt_records/'));
+        const journalKeys = Object.keys(updates).filter(key => key.startsWith('/journal_entries/'));
+        
+        if (recordKeys.length !== journalKeys.length) {
+            console.error(`❌ SYNC INTEGRITY VIOLATION: ${recordKeys.length} records but ${journalKeys.length} journal entries`);
+            return { 
+                message: `Sync aborted: Integrity check failed - ${recordKeys.length} records would be created but only ${journalKeys.length} journal entries. All-or-none rule violated.`, 
+                error: true 
+            };
+        }
+        
+        if (recordKeys.length !== newRecordsCount) {
+            console.error(`❌ SYNC COUNT MISMATCH: Expected ${newRecordsCount} records but found ${recordKeys.length} in updates`);
+            return { 
+                message: `Sync aborted: Count mismatch - expected ${newRecordsCount} records but prepared ${recordKeys.length}. All-or-none rule violated.`, 
+                error: true 
+            };
+        }
+        
+        console.log(`✓ Pre-commit validation passed: ${newRecordsCount} records, ${journalKeys.length} journal entries (1:1 mapping verified)`);
+
         // Get all accumulated balance updates
         const balanceUpdates = balanceTracker.getBalanceUpdates();
         Object.assign(updates, balanceUpdates);
@@ -390,6 +413,7 @@ export async function syncBscTransactions(prevState: SyncState, formData: FormDa
 
         if (Object.keys(updates).length > 0) {
             await update(ref(db), updates);
+            console.log(`✓ Atomic commit successful: ${newRecordsCount} records + ${journalKeys.length} journal entries saved together`);
         }
 
         revalidatePath('/modern-usdt-records');
@@ -458,97 +482,173 @@ export async function syncBscCsv(prevState: SyncState, formData: FormData): Prom
         }
         const cryptoWalletName = (walletAccountSnapshot.val() as Account).name || 'Synced USDT Wallet';
 
-        const BATCH_SIZE = 100; // Process 100 rows per batch to avoid timeout
         let newRecordsCount = 0;
         let skippedCount = 0;
         const processedHashes = new Set<string>();
+        
+        // PHASE 1: Parse and prepare all data FIRST (no database writes)
+        const preparedTransactions: Array<{
+            newRecordId: string;
+            newTxData: Omit<ModernUsdtRecord, 'id'>;
+            blockNumber: number;
+            existingClient: Client | null;
+            clientWalletAddress: string;
+        }> = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
 
-        // Process rows in batches
-        for (let startIdx = 1; startIdx < lines.length; startIdx += BATCH_SIZE) {
-            const endIdx = Math.min(startIdx + BATCH_SIZE, lines.length);
-            const batchUpdates: { [key: string]: any } = {};
-            
-            for (let i = startIdx; i < endIdx; i++) {
-                const line = lines[i].trim();
-                if (!line) continue;
+            const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
+            if (values.length < requiredHeaders.length) continue;
 
-                const values = line.match(/"([^"]*)"|([^,]+)/g)?.map((v: string) => v.replace(/^"|"$/g, '').trim()) || [];
-                if (values.length < requiredHeaders.length) continue;
+            const hash = values[headerMap['transaction hash']] || '';
+            const blockNumber = values[headerMap['blockno']] || '0';
+            const timeStamp = values[headerMap['unixtimestamp']] || '0';
+            const from = values[headerMap['from']]?.toLowerCase() || '';
+            const to = values[headerMap['to']]?.toLowerCase() || '';
+            let tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
 
-                const hash = values[headerMap['transaction hash']] || '';
-                const blockNumber = values[headerMap['blockno']] || '0';
-                const timeStamp = values[headerMap['unixtimestamp']] || '0';
-                const from = values[headerMap['from']]?.toLowerCase() || '';
-                const to = values[headerMap['to']]?.toLowerCase() || '';
-                let tokenValue = values[headerMap['tokenvalue']]?.replace(/,/g, '') || '0';
+            if (processedHashes.has(hash)) {
+                skippedCount++;
+                continue;
+            }
+            processedHashes.add(hash);
 
-                if (processedHashes.has(hash)) {
-                    skippedCount++;
-                    continue;
-                }
-                processedHashes.add(hash);
-
-                if (!hash || !from || !to) {
-                    skippedCount++;
-                    continue;
-                }
-
-                const syncedAmount = parseFloat(tokenValue.replace(/,/g, ''));
-                if (syncedAmount <= 0.01) {
-                    skippedCount++;
-                    continue;
-                }
-
-                const isIncoming = to === walletAddress;
-                const clientWalletAddress = isIncoming ? from : to;
-
-                const existingClient = await findClientByAddress(clientWalletAddress);
-                const newRecordId = await getNextSequentialId('modernUsdtRecordId');
-
-                const newTxData: Omit<ModernUsdtRecord, 'id'> = {
-                    date: new Date(parseInt(timeStamp) * 1000).toISOString(),
-                    type: isIncoming ? 'inflow' : 'outflow',
-                    source: 'CSV',
-                    status: 'Confirmed', // All records confirmed by default
-                    clientId: existingClient ? existingClient.id : null,
-                    clientName: existingClient ? existingClient.name : 'Unassigned',
-                    accountId: accountId,
-                    accountName: cryptoWalletName,
-                    amount: syncedAmount,
-                    clientWalletAddress: clientWalletAddress,
-                    txHash: hash,
-                    notes: `Synced from CSV: ${configName}`,
-                    createdAt: new Date().toISOString(),
-                };
-
-                batchUpdates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber: parseInt(blockNumber) };
-
-                if (existingClient) {
-                    const clientAccountId = `6000${existingClient.id}`;
-                    const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
-                    const journalRef = push(ref(db, 'journal_entries'));
-
-                    // Same logic: Inflow (receipt) debits client (liability UP), outflow (payment) credits client (liability DOWN)
-                    const journalEntry: Omit<JournalEntry, 'id'> = {
-                        date: newTxData.date,
-                        description: journalDescription,
-                        debit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
-                        credit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
-                        debit_amount: newTxData.amount,
-                        credit_amount: newTxData.amount,
-                        amount_usd: newTxData.amount,
-                        createdAt: new Date().toISOString(),
-                    };
-                    batchUpdates[`/journal_entries/${journalRef.key}`] = journalEntry;
-                    await notifyClientTransaction(existingClient.id, existingClient.name, { ...newTxData, currency: 'USDT', amountusd: newTxData.amount });
-                }
-
-                newRecordsCount++;
+            if (!hash || !from || !to) {
+                skippedCount++;
+                continue;
             }
 
-            // Write batch to database
-            if (Object.keys(batchUpdates).length > 0) {
-                await update(ref(db), batchUpdates);
+            const syncedAmount = parseFloat(tokenValue.replace(/,/g, ''));
+            if (syncedAmount <= 0.01) {
+                skippedCount++;
+                continue;
+            }
+
+            const isIncoming = to === walletAddress;
+            const clientWalletAddress = isIncoming ? from : to;
+
+            const existingClient = await findClientByAddress(clientWalletAddress);
+            const newRecordId = await getNextSequentialId('modernUsdtRecordId');
+
+            const newTxData: Omit<ModernUsdtRecord, 'id'> = {
+                date: new Date(parseInt(timeStamp) * 1000).toISOString(),
+                type: isIncoming ? 'inflow' : 'outflow',
+                source: 'CSV',
+                status: 'Confirmed',
+                clientId: existingClient ? existingClient.id : null,
+                clientName: existingClient ? existingClient.name : 'Unassigned',
+                accountId: accountId,
+                accountName: cryptoWalletName,
+                amount: syncedAmount,
+                clientWalletAddress: clientWalletAddress,
+                txHash: hash,
+                notes: `Synced from CSV: ${configName}`,
+                createdAt: new Date().toISOString(),
+            };
+
+            preparedTransactions.push({
+                newRecordId,
+                newTxData,
+                blockNumber: parseInt(blockNumber),
+                existingClient,
+                clientWalletAddress,
+            });
+        }
+
+        // PHASE 2: Build all database updates atomically
+        const allUpdates: { [key: string]: any } = {};
+        const notificationsToSend: Array<{ clientId: string; clientName: string; txData: any }> = [];
+
+        for (const { newRecordId, newTxData, blockNumber, existingClient, clientWalletAddress } of preparedTransactions) {
+            allUpdates[`/modern_usdt_records/${newRecordId}`] = { id: newRecordId, ...stripUndefined(newTxData), blockNumber };
+
+            const journalRef = push(ref(db, 'journal_entries'));
+            
+            if (existingClient) {
+                const clientAccountId = `6000${existingClient.id}`;
+                const journalDescription = `Synced USDT ${newTxData.type} from CSV: ${configName} for ${existingClient.name}`;
+
+                const journalEntry: Omit<JournalEntry, 'id'> = {
+                    date: newTxData.date,
+                    description: journalDescription,
+                    debit_account: newTxData.type === 'inflow' ? clientAccountId : accountId,
+                    credit_account: newTxData.type === 'inflow' ? accountId : clientAccountId,
+                    debit_amount: newTxData.amount,
+                    credit_amount: newTxData.amount,
+                    amount_usd: newTxData.amount,
+                    createdAt: new Date().toISOString(),
+                    debit_account_name: newTxData.type === 'inflow' ? existingClient.name : cryptoWalletName,
+                    credit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : existingClient.name,
+                };
+                allUpdates[`/journal_entries/${journalRef.key}`] = journalEntry;
+                
+                // Queue notification for after commit
+                notificationsToSend.push({
+                    clientId: existingClient.id,
+                    clientName: existingClient.name,
+                    txData: { ...newTxData, currency: 'USDT', amountusd: newTxData.amount }
+                });
+            } else {
+                const unassignedUsdtAccountId = '7002';
+                const journalDescription = `Unassigned USDT ${newTxData.type} from CSV: ${configName} - wallet: ${clientWalletAddress.slice(0, 10)}...`;
+
+                const debitAcc = newTxData.type === 'inflow' ? unassignedUsdtAccountId : accountId;
+                const creditAcc = newTxData.type === 'inflow' ? accountId : unassignedUsdtAccountId;
+
+                const journalEntry: Omit<JournalEntry, 'id'> = {
+                    date: newTxData.date,
+                    description: journalDescription,
+                    debit_account: debitAcc,
+                    credit_account: creditAcc,
+                    debit_amount: newTxData.amount,
+                    credit_amount: newTxData.amount,
+                    amount_usd: newTxData.amount,
+                    createdAt: new Date().toISOString(),
+                    debit_account_name: newTxData.type === 'inflow' ? 'Unassigned USDT Liability' : cryptoWalletName,
+                    credit_account_name: newTxData.type === 'inflow' ? cryptoWalletName : 'Unassigned USDT Liability',
+                };
+                allUpdates[`/journal_entries/${journalRef.key}`] = journalEntry;
+            }
+
+            newRecordsCount++;
+        }
+
+        // PHASE 3: PRE-COMMIT VALIDATION - All-or-none integrity check
+        const recordKeys = Object.keys(allUpdates).filter(key => key.startsWith('/modern_usdt_records/'));
+        const journalKeys = Object.keys(allUpdates).filter(key => key.startsWith('/journal_entries/'));
+        
+        if (recordKeys.length !== journalKeys.length) {
+            console.error(`❌ CSV SYNC INTEGRITY VIOLATION: ${recordKeys.length} records but ${journalKeys.length} journal entries`);
+            return { 
+                message: `CSV sync aborted: Integrity check failed - ${recordKeys.length} records would be created but only ${journalKeys.length} journal entries. All-or-none rule violated.`, 
+                error: true 
+            };
+        }
+        
+        if (recordKeys.length !== newRecordsCount) {
+            console.error(`❌ CSV SYNC COUNT MISMATCH: Expected ${newRecordsCount} records but found ${recordKeys.length} in updates`);
+            return { 
+                message: `CSV sync aborted: Count mismatch - expected ${newRecordsCount} records but prepared ${recordKeys.length}. All-or-none rule violated.`, 
+                error: true 
+            };
+        }
+        
+        console.log(`✓ CSV Pre-commit validation passed: ${newRecordsCount} records, ${journalKeys.length} journal entries (1:1 mapping verified)`);
+
+        // PHASE 4: ATOMIC COMMIT - Write everything in one transaction
+        if (Object.keys(allUpdates).length > 0) {
+            await update(ref(db), allUpdates);
+            console.log(`✓ CSV Atomic commit successful: ${newRecordsCount} records + ${journalKeys.length} journal entries saved together`);
+        }
+
+        // PHASE 5: Send notifications AFTER successful commit (non-blocking)
+        for (const notification of notificationsToSend) {
+            try {
+                await notifyClientTransaction(notification.clientId, notification.clientName, notification.txData);
+            } catch (notifyError) {
+                console.warn(`⚠️ Notification failed for client ${notification.clientName}, but transaction was saved:`, notifyError);
             }
         }
 
